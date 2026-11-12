@@ -1,6 +1,6 @@
 # Deploying Potato on HuggingFace Spaces
 
-This guide walks you through deploying Potato as a HuggingFace Space using Docker.
+Deploying Potato as a HuggingFace Space, using Docker.
 
 ## Prerequisites
 

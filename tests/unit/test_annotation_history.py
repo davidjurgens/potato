@@ -180,16 +180,18 @@ class TestAnnotationHistoryManager(unittest.TestCase):
         self.assertEqual(analysis["suspicious_actions"], [])
         self.assertEqual(analysis["fast_actions_count"], 0)
         self.assertEqual(analysis["burst_actions_count"], 0)
-        self.assertEqual(analysis["suspicious_score"], 0)
+        # No gap between two items to measure: unknown, not "Normal".
+        self.assertIsNone(analysis["suspicious_score"])
+        self.assertEqual(analysis["suspicious_level"], "Not enough data")
 
     def test_detect_suspicious_activity_fast_actions(self):
-        """Test suspicious activity detection with fast actions."""
+        """Items started within 0.3s of the previous one are fast."""
         fast_actions = [
             AnnotationAction(
                 action_id=f"fast-{i}",
-                timestamp=self.timestamp + datetime.timedelta(seconds=i),
+                timestamp=self.timestamp + datetime.timedelta(seconds=i * 0.3),
                 user_id="test_user",
-                instance_id="test_instance",
+                instance_id=f"item_{i}",
                 action_type="add_label",
                 schema_name="sentiment",
                 label_name="positive",
@@ -198,7 +200,7 @@ class TestAnnotationHistoryManager(unittest.TestCase):
                 span_data=None,
                 session_id="test_session",
                 client_timestamp=None,
-                server_processing_time_ms=50,  # Very fast
+                server_processing_time_ms=50,
                 metadata={}
             )
             for i in range(3)
@@ -206,7 +208,8 @@ class TestAnnotationHistoryManager(unittest.TestCase):
 
         analysis = AnnotationHistoryManager.detect_suspicious_activity(fast_actions)
 
-        self.assertEqual(analysis["fast_actions_count"], 3)
+        # Two gaps between three items, both 0.3s.
+        self.assertEqual(analysis["fast_actions_count"], 2)
         self.assertGreater(analysis["suspicious_score"], 0)
         self.assertIn("suspicious_level", analysis)
 
@@ -215,9 +218,9 @@ class TestAnnotationHistoryManager(unittest.TestCase):
         burst_actions = [
             AnnotationAction(
                 action_id=f"burst-{i}",
-                timestamp=self.timestamp + datetime.timedelta(seconds=i*0.5),  # Very close together
+                timestamp=self.timestamp + datetime.timedelta(seconds=i*1.0),  # 1s per item
                 user_id="test_user",
-                instance_id="test_instance",
+                instance_id=f"item_{i}",
                 action_type="add_label",
                 schema_name="sentiment",
                 label_name="positive",

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# The `video` annotation type: a player rendered inside the form, the same clip
+# on every item. Use it for a stimulus everyone judges -- an instruction video,
+# a reference recording -- not for per-item media.
+#
+# For a different clip per item, put the URL in the data and render it with
+# `instance_display.fields[].type: video`. For marking moments or tracking
+# objects, use `annotation_type: video_annotation` (see ../video-annotation/).
+#
+# Run from the repo root:
+#   python potato/flask_server.py start examples/video/video-player/config.yaml -p 8000
+
+annotation_task_name: "Video Player"
+task_dir: .
+output_annotation_dir: annotation_output/
+
+data_files:
+  - data/clips.json
+
+item_properties:
+  id_key: id
+  text_key: question
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  # Display only -- it asks nothing. `video_path` takes a URL or a path served
+  # from `media_directory`; a local path that does not exist warns and renders
+  # anyway, because the file may be served from somewhere else.
+  - annotation_type: video
+    name: stimulus
+    description: "Watch this before answering."
+    video_path: https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4
+    controls: true
+    muted: true
+
+  - annotation_type: radio
+    name: depicted
+    description: "Does the clip show what the caption claims?"
+    labels: ["Yes", "No", Unclear]   # unquoted Yes/No are YAML booleans
+    humanize_labels: false
+    sequential_key_binding: true
+    label_requirement: {required: true}

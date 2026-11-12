@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Spreadsheet Row Annotation Example
 # Demonstrates annotating tabular data with row-based classification
 
 annotation_task_name: "Data Quality Annotation"
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:
@@ -54,7 +55,7 @@ annotation_schemes:
   - annotation_type: text
     name: notes
     description: "Additional notes about data quality"
-    text_box_single_line: false
+    multiline: true
 
 # User configuration
 user_config:

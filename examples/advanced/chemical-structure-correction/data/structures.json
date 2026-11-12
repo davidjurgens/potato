@@ -1,0 +1,37 @@
+[
+  {
+    "id": "fig1_aspirin",
+    "note": "Compound 1 as printed. The recogniser read one heteroatom wrongly.",
+    "page_image": "fig1_aspirin.png",
+    "recognised_smiles": "CC(=O)Oc1ccccc1C(=O)N",
+    "true_smiles": "CC(=O)Oc1ccccc1C(=O)O"
+  },
+  {
+    "id": "fig2_paracetamol",
+    "note": "Compound 2 as printed.",
+    "page_image": "fig2_paracetamol.png",
+    "recognised_smiles": "CC(=O)Nc1ccc(O)cc1",
+    "true_smiles": "CC(=O)Nc1ccc(O)cc1"
+  },
+  {
+    "id": "fig3_caffeine",
+    "note": "Compound 3 as printed. Count the N-methyl groups.",
+    "page_image": "fig3_caffeine.png",
+    "recognised_smiles": "Cn1cnc2c1c(=O)[nH]c(=O)n2C",
+    "true_smiles": "Cn1cnc2c1c(=O)n(C)c(=O)n2C"
+  },
+  {
+    "id": "fig4_ibuprofen",
+    "note": "Compound 4 as printed.",
+    "page_image": "fig4_ibuprofen.png",
+    "recognised_smiles": "CC(C)Cc1ccc(cc1)C(C)C=O",
+    "true_smiles": "CC(C)Cc1ccc(cc1)C(C)C(=O)O"
+  },
+  {
+    "id": "fig5_alanine",
+    "note": "Compound 5 as printed. Check the wedge.",
+    "page_image": "fig5_alanine.png",
+    "recognised_smiles": "C[C@H](C(=O)O)N",
+    "true_smiles": "C[C@@H](C(=O)O)N"
+  }
+]

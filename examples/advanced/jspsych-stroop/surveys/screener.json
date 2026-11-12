@@ -1,0 +1,17 @@
+[
+  {
+    "name": "age",
+    "annotation_type": "number",
+    "description": "What is your age in years?",
+    "min_value": 0,
+    "max_value": 120,
+    "label_requirement": {"required": true}
+  },
+  {
+    "name": "colour_vision",
+    "annotation_type": "radio",
+    "description": "Do you have difficulty telling red, green or blue apart?",
+    "labels": ["Yes", "No"],
+    "label_requirement": {"required": true}
+  }
+]

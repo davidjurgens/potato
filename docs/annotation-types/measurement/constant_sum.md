@@ -8,7 +8,8 @@ Constant sum (also called budget allocation) is a measurement technique from mar
 
 - Annotators receive a fixed budget (e.g., 100 points)
 - They enter values for each category using number inputs or sliders
-- The UI enforces the constraint that all values sum exactly to the total
+- The UI caps each entry so the budget cannot be exceeded, and shows the running total
+- A scheme marked `required` cannot be left part-allocated: Next is blocked until the values sum to the total, and the message says how far off they are
 - Remaining budget is displayed as a running counter
 
 This approach elicits relative importance judgments and prevents scale-usage bias (the tendency to rate everything high or low when using independent scales).
@@ -125,5 +126,5 @@ Values are string-encoded integers. The sum of all values equals `total_points`.
 
 - [Soft Label](soft_label.md) — percentage-based probability distribution
 - [Best-Worst Scaling](../comparison/bws.md) — comparative ranking without explicit scores
-- [Slider](../schemas_and_templates.md#slider) — single continuous slider
+- [Slider](../schemas_and_templates.md#5-slider-slider) — single continuous slider
 - [Schema Gallery](../schemas_and_templates.md) — all annotation types with examples

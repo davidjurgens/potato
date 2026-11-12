@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Incentivized elicitation: belief reports paid by the binarized scoring rule,
+# a Holt & Laury (2002) price list and a BDM bid, with bonuses computed after
+# each participant finishes.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/incentivized-elicitation/config.yaml -p 8000
+#
+# Compute the bonuses (dry run; nothing is paid):
+#   python -m potato.export --config examples/advanced/incentivized-elicitation/config.yaml \
+#       --format incentives --output out/incentives
+# writes bonuses.csv (every draw, for audit) and bonuses_prolific.csv.
+annotation_task_name: Incentivized elicitation
+task_dir: .
+output_annotation_dir: annotation_output/
+# The price list and the BDM bid are on the poststudy page. Without this
+# key, auto-export and the CSV/TSV exports leave their answers out.
+export_include_phase_data: true
+
+data_files: [data/events.json]
+item_properties:
+  id_key: id
+  text_key: text
+
+# One belief question per item: the probability that the event happens.
+annotation_schemes:
+  - annotation_type: belief_elicitation
+    name: forecast
+    description: How likely is it that this happens?
+    mode: point
+    left_label: Certainly not
+    right_label: Certainly
+    instructions: >-
+      Move the slider to your probability. You may win $2.00: the closer your
+      report is to what happens, the higher your chance of winning.
+    label_requirement: {required: true}
+
+phases:
+  order: [instructions, annotation, poststudy]
+  instructions: {type: instructions, title: How you are paid, file: pages/instructions.jsonl}
+  annotation:   {type: annotation}
+  poststudy:    {type: poststudy, title: Two more decisions, file: pages/decisions.json}
+
+incentives:
+  enabled: true
+  currency: USD
+  # Change this before a real study and keep it out of public repositories:
+  # with it, nobody can work out the draws in advance from the code.
+  seed: CHANGE-ME-this-example-seed-is-public   # replace before paying; validate warns until you do
+  pay: one_random_item          # one decision, drawn at random, is paid
+  max_bonus: 6.00
+  rules:
+    - scheme: forecast
+      method: bsr
+      prize: 2.00
+      outcome_field: outcome    # never sent to the page; fill it in once the events happen
+    - scheme: risk
+      method: mpl_random_row
+    - scheme: voucher
+      method: bdm
+      endowment: 5.00
+      item_value: 3.00          # the voucher pays $3.00 to whoever buys it
+      draw: {min: 0, max: 5, step: 0.25}
+
+user_config: {allow_all_users: true}
+# On Prolific, log participants in from the study URL so their Prolific id is
+# recorded and the bonus file can name them:
+# login: {type: url_direct, url_argument: PROLIFIC_PID}

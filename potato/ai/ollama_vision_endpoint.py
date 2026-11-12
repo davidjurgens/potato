@@ -1,14 +1,14 @@
 """
 Ollama Vision AI Endpoint
 
-This module provides integration with Ollama vision models for local
+Integration with Ollama vision models for local
 visual AI inference. Supports LLaVA, Llama 3.2 Vision, BakLLaVA, and Qwen-VL models.
 """
 
 import base64
 import json
 import logging
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -54,7 +54,7 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
     - model: Vision model to use (default: llava:latest)
     - base_url: Ollama server URL (default: http://localhost:11434)
     - timeout: Request timeout in seconds (default: 120)
-    - max_tokens: Maximum response tokens (default: 500)
+    - max_tokens: Maximum response tokens (default: 800)
     - temperature: Sampling temperature (default: 0.1)
     """
 
@@ -68,7 +68,15 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
         text_classification=True,
         image_classification=True,
         rationale_generation=True,
-        keyword_extraction=False,  # Keywords don't apply to images
+        # True, and gated per item rather than per endpoint. These are
+        # language models; they extract keywords from text as well as their
+        # text-only siblings do. `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`, so declaring False here
+        # said "no keywords, ever" -- and the capability filter runs per item,
+        # so on a text-only task through a vision endpoint the Keyword button
+        # was simply absent and only two of the three assistants were
+        # reachable.
+        keyword_extraction=True,
     )
 
     def _initialize_client(self) -> None:
@@ -77,7 +85,7 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
             import ollama
         except ImportError:
             raise AIEndpointRequestError(
-                "ollama package is required. Install it with: pip install ollama"
+                "ollama package is required. Install it with: pip install 'potato-annotation[ai]'"
             )
 
         timeout = self.ai_config.get("timeout", 120)  # Vision models can be slower
@@ -107,7 +115,7 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
         """Get the default vision model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard text query (falls back to text-only mode).
 
@@ -123,9 +131,12 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
                 model=self.model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
-                format=output_format.model_json_schema(),
+                format=(output_format.model_json_schema()
+                        if hasattr(output_format, "model_json_schema") else None),
                 think=False,
             )
+
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'))
 
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:
@@ -143,6 +154,35 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
 
         except Exception as e:
             raise AIEndpointRequestError(f"Ollama query failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn text chat as free text, without a format schema.
+
+        The base class's fallback called query(prompt) without an
+        output_format and failed on every message.
+        """
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={
+                    'temperature': self.temperature,
+                    'num_predict': self.max_tokens,
+                },
+                think=self.ai_config.get('think', False),
+            )
+
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'),
+                                    where="chat reply")
+
+            message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
+            if message is None:
+                raise AIEndpointRequestError("No message in Ollama chat response")
+
+            content = message.get('content') if hasattr(message, 'get') else getattr(message, 'content', None)
+            return content or ""
+        except Exception as e:
+            raise AIEndpointRequestError(f"Ollama vision chat request failed: {e}")
 
     def query_with_image(
         self,
@@ -196,6 +236,9 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
             logger.debug(f"Ollama vision response type: {type(response)}")
 
             # Extract content from response
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'),
+                                    where="image response")
+
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:
                 raise AIEndpointRequestError("No message in Ollama vision response")

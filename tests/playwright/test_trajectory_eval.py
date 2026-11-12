@@ -4,8 +4,6 @@ Tests rendering, interaction, and persistence using navigate-away-and-back
 (not page refresh, which gives false positives due to browser form caching).
 """
 
-import json
-import os
 import pytest
 
 try:
@@ -18,11 +16,15 @@ from tests.playwright.test_base import BasePlaywrightTest
 
 
 def _make_server(make_server):
-    """Create a server with trajectory_eval schema and step data."""
-    from tests.helpers.test_utils import create_test_directory
+    """Create a server with trajectory_eval schema and step data.
 
-    test_dir = create_test_directory("pw_traj_eval")
-    data_file = os.path.join(test_dir, "data.jsonl")
+    The items must be handed to ``make_server``. An earlier version wrote them
+    to a data file in its own directory and then called ``make_server(schemes)``,
+    which builds a *different* directory with the default text-only rows — so
+    the server served items with no ``steps``, the client rendered no step
+    cards, and every test in this file waited 10s for a selector that could
+    never appear.
+    """
     items = [
         {
             "id": "trace_001",
@@ -42,9 +44,6 @@ def _make_server(make_server):
             ],
         },
     ]
-    with open(data_file, "w") as f:
-        for item in items:
-            f.write(json.dumps(item) + "\n")
 
     schemes = [
         {
@@ -64,7 +63,7 @@ def _make_server(make_server):
             "show_score": True,
         }
     ]
-    return make_server(schemes)
+    return make_server(schemes, items=items)
 
 
 @pytest.mark.playwright

@@ -37,6 +37,19 @@ logger = logging.getLogger(__name__)
 solo_mode_bp = Blueprint('solo_mode', __name__, url_prefix='/solo')
 
 
+@solo_mode_bp.context_processor
+def _codebook_tray_flag():
+    """Render the codebook tray on solo pages only when a codebook is
+    configured. codebook.js no longer probes /api/codebook to decide; the
+    tray's presence in the page is the gate, as on the annotation page."""
+    try:
+        from potato.codebook.api import codebook_enabled
+        from potato.flask_server import config as _config
+        return {'codebook_ui_enabled': bool(codebook_enabled(_config))}
+    except Exception:
+        return {'codebook_ui_enabled': False}
+
+
 def solo_mode_required(f):
     """Decorator to ensure Solo Mode is enabled and initialized."""
     @wraps(f)
@@ -72,57 +85,15 @@ def api_login_required(f):
     return decorated_function
 
 
-def same_origin_required(f):
-    """CSRF protection for state-changing API routes.
-
-    Rejects requests whose Origin or Referer header doesn't match the host.
-    Browsers automatically attach these headers; cross-origin forms cannot
-    forge them. This is a lightweight CSRF defense without requiring token
-    machinery wired into every JS call site.
-
-    Allows requests with no Origin/Referer (server-to-server, curl from
-    admins with X-API-Key) since those aren't subject to CSRF.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        origin = request.headers.get('Origin')
-        referer = request.headers.get('Referer')
-        host = request.host_url.rstrip('/')
-
-        # If neither header is present, this isn't a browser request — allow.
-        if not origin and not referer:
-            return f(*args, **kwargs)
-
-        if origin and not origin.startswith(host):
-            return jsonify({'error': 'Cross-origin request rejected'}), 403
-        if referer and not referer.startswith(host):
-            return jsonify({'error': 'Cross-origin request rejected'}), 403
-
-        return f(*args, **kwargs)
-    return decorated_function
+from potato.server_utils.origin_check import same_origin_required
 
 
-def admin_required(f):
-    """Require a valid admin API key (X-API-Key header) for destructive ops.
+# Admin gate for destructive ops (forced phase transitions, refinement approval,
+# etc.). Routed through the shared RBAC layer so the shared admin API key remains
+# a superuser bypass (unchanged behavior) while role-based admins also pass.
+from potato.server_utils.rbac import require_permission, Permission
 
-    Bypasses the standard session login; used for endpoints that can corrupt
-    workflow state (forced phase transitions, refinement approval, etc.).
-    Falls back to allowing in debug mode via the existing admin key system.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Lazy import to avoid circular dependencies at module load.
-        from potato.server_utils.admin_key import validate_admin_api_key
-        from potato.flask_server import config as _config
-
-        api_key = (
-            request.headers.get('X-API-Key')
-            or session.get('admin_api_key')
-        )
-        if not validate_admin_api_key(api_key, _config):
-            return jsonify({'error': 'Admin authentication required'}), 403
-        return f(*args, **kwargs)
-    return decorated_function
+admin_required = require_permission(Permission.VIEW_ADMIN_DASHBOARD)
 
 
 def _stamp_codebook_provenance(instance_id: str, username: str) -> None:
@@ -274,18 +245,39 @@ def setup():
 
         if task_description:
             manager.set_task_description(task_description)
-            # An explicit configured prompt wins over the derived wrapper, so a
+            # An explicit configured prompt (solo_mode.initial_prompt) wins, so a
             # project can ship the exact base prompt the LLM should see (the
-            # codebook block is appended to it at label time).
+            # codebook block is appended to it at label time). Otherwise
+            # "Generate prompt": the revision model writes the first prompt from
+            # the description and the schemes. Without one (or if it gives
+            # nothing back) the description is wrapped as before, and the
+            # version says so.
             configured_prompt = manager.app_config.get('solo_mode', {}).get('initial_prompt')
-            prompt_text = configured_prompt or (
-                f"Label the following text according to this task: {task_description}"
-            )
-            manager.create_prompt_version(
-                prompt_text,
-                created_by='user_setup',
-                source_description='Initial prompt from task description'
-            )
+            drafted = None
+            if not configured_prompt:
+                try:
+                    drafted = manager.prompt_manager.draft_prompt(task_description)
+                except Exception:
+                    logger.exception("Solo setup: prompt synthesis failed")
+            if configured_prompt:
+                manager.create_prompt_version(
+                    configured_prompt,
+                    created_by='user_setup',
+                    source_description='Initial prompt from solo_mode.initial_prompt')
+            elif drafted is not None:
+                prompt_text, explanation = drafted
+                manager.create_prompt_version(
+                    prompt_text, created_by='llm_synthesis',
+                    source_description=("Written by the revision model from the task "
+                                        f"description. {explanation}").strip())
+            else:
+                manager.create_prompt_version(
+                    f"Label the following text according to this task: {task_description}",
+                    created_by='user_setup',
+                    source_description=(
+                        'Initial prompt from task description, not rewritten: '
+                        + (getattr(manager.prompt_manager, 'last_draft_failure', None)
+                           or 'no revision model answered')))
             manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
             return redirect(url_for('solo_mode.prompt_editor'))
 
@@ -367,6 +359,9 @@ def prompt_editor():
             'version': pv.version,
             'prompt': pv.prompt_text,
             'source': pv.created_by,
+            # Why this version reads as it does: the editor showed only the
+            # source, so a fallback prompt never said why it was one.
+            'note': pv.source_description,
             'timestamp': pv.created_at.isoformat(),
         })
 
@@ -393,6 +388,7 @@ def prompt_editor():
         prompt_history=prompt_history,
         phase=current_phase.name.lower(),
         preview_instance_id=preview_instance_id,
+        gold_configured=bool(manager.config.gold.file),
     )
 
 
@@ -432,8 +428,10 @@ def edge_cases():
                     pass
                 return redirect(url_for('solo_mode.contrast_sets'))
 
-            # The form posts normally (no JS/AJAX), so redirect back to render
-            # the next unlabeled case instead of dumping raw JSON to the page.
+            # The edge-cases form is a native (non-AJAX) POST, so redirect back
+            # to the page to render the next unlabeled case. Returning JSON here
+            # left the user staring at raw {"success": ...} text with no way
+            # forward through the UI.
             return redirect(url_for('solo_mode.edge_cases'))
 
         return redirect(url_for('solo_mode.edge_cases'))
@@ -685,8 +683,15 @@ def annotate():
         annotation = request.form.get('annotation')
 
         if instance_id and annotation:
-            # Record human annotation
-            manager.record_human_annotation(instance_id, annotation, user_id)
+            # The page says whether it showed the LLM's suggestion before this
+            # answer, and whether the answer came from the Accept button. An
+            # older page that sends neither leaves the blind/shown split alone.
+            visible = request.form.get('suggestion_visible')
+            manager.record_human_annotation(
+                instance_id, annotation, user_id,
+                suggestion_visible=(None if visible is None else visible == '1'),
+                accepted_suggestion=request.form.get('accepted_suggestion') == '1',
+            )
             _stamp_codebook_provenance(instance_id, user_id)
             _link_codebook_code(instance_id, annotation, user_id)
 
@@ -696,10 +701,32 @@ def annotate():
                 session['disagreement_instance'] = instance_id
                 return redirect(url_for('solo_mode.disagreements'))
 
+            # The agreement gate. It used to run only once the human had no
+            # items left, so a study that reached the threshold kept serving
+            # the human items the LLM was meant to take over.
+            if manager.check_and_advance_to_autonomous():
+                return redirect(url_for('solo_mode.status'))
+
+            # Periodic review of low-confidence LLM labels (due every
+            # periodic_review_interval fresh LLM labels).
+            if manager.check_and_enter_periodic_review():
+                return redirect(url_for('solo_mode.review'))
+
+            # Review of newly-clustered edge-case rule categories.
+            if manager.check_and_enter_rule_review():
+                return redirect(url_for('solo_mode.rule_review'))
+
             # Get next instance
             return redirect(url_for('solo_mode.annotate'))
 
         return jsonify({'error': 'Missing instance_id or annotation'}), 400
+
+    # The threshold can also be crossed by LLM labels compared against
+    # earlier human labels in the background, between two page loads.
+    if (manager.check_and_advance_to_autonomous()
+            or manager.get_current_phase() == SoloPhase.AUTONOMOUS_LABELING):
+        # Once the LLM has taken over, the annotate page stops serving items.
+        return redirect(url_for('solo_mode.status'))
 
     # Get next instance ID — or a specific one requested via ?instance_id=,
     # which is how the codebook tray's review-worklist "Go" button (and the
@@ -788,6 +815,7 @@ def annotate():
         instance=instance,
         instance_id=instance_id,
         labels=labels,
+        annotation_type=manager.get_annotation_type(),
         phase=manager.get_current_phase().name.lower(),
         stats=manager.get_annotation_stats(user_id),
         nav=nav,
@@ -875,6 +903,12 @@ def llm_suggestion():
     instance_id = request.args.get('instance_id')
     if not instance_id:
         return jsonify({'error': 'Missing instance_id'}), 400
+
+    # A blind item withholds the suggestion until the human has answered
+    # (solo_mode.suggestions); fetching it here would undo the blinding.
+    if (not manager.suggestion_visible_before_label(instance_id)
+            and instance_id not in manager.human_labeled_ids):
+        return jsonify({'available': False, 'blind': True})
 
     suggestion = manager.get_or_create_llm_suggestion(instance_id)
     if suggestion is None:
@@ -1153,8 +1187,16 @@ def review():
     instances = manager.get_instances_for_review()
 
     if not instances:
-        # Reset review counter and return to annotation
+        # Reset review counter and return to annotation.
         manager.validation_tracker.reset_periodic_review_counter()
+        if manager.get_current_phase() == SoloPhase.PERIODIC_REVIEW:
+            try:
+                manager.advance_to_phase(
+                    SoloPhase.ACTIVE_ANNOTATION,
+                    reason="Periodic review complete",
+                )
+            except ValueError:
+                pass
         return redirect(url_for('solo_mode.annotate'))
 
     # Get available labels
@@ -1214,7 +1256,6 @@ def validation():
     # here; get_validation_samples() only returns instance_id/text so the
     # human's judgment is independent, not anchored on the LLM's answer.
     samples = manager.get_validation_samples()
-    current_sample = samples[0] if samples else None
 
     # Reveal the previous instance's comparison once, then clear it —
     # it should only appear immediately after the submission that produced it.
@@ -1222,6 +1263,16 @@ def validation():
 
     # Get progress
     progress = manager.get_validation_progress()
+
+    # Nothing left to validate (e.g. the human already labeled every instance,
+    # so there are no LLM-only samples): complete the workflow instead of
+    # dead-ending on an empty "Validation Complete" page with no way forward.
+    if (not samples and progress.get('remaining', 0) == 0
+            and manager.get_current_phase() == SoloPhase.FINAL_VALIDATION):
+        manager.advance_to_phase(SoloPhase.COMPLETED)
+        return redirect(url_for('solo_mode.status'))
+
+    current_sample = samples[0] if samples else None
 
     # Get available labels
     labels = manager.get_available_labels()
@@ -1282,6 +1333,18 @@ def rule_review():
     approved = ecr.get_approved_categories()
     rejected = ecr.get_rejected_categories()
     stats = ecr.get_stats()
+
+    # Nothing left to review — don't strand the user on an empty page in the
+    # RULE_REVIEW phase; hand back to active annotation.
+    if not pending and manager.get_current_phase() == SoloPhase.RULE_REVIEW:
+        try:
+            manager.advance_to_phase(
+                SoloPhase.ACTIVE_ANNOTATION,
+                reason="No rule categories pending",
+            )
+        except ValueError:
+            pass
+        return redirect(url_for('solo_mode.annotate'))
 
     # Build category details with member rules
     categories_with_rules = []
@@ -1356,6 +1419,7 @@ def status():
         agreement_metrics=manager.get_agreement_metrics(),
         llm_stats=manager.get_llm_labeling_stats(),
         validation_progress=manager.get_validation_progress(),
+        anchoring=manager.get_anchoring_stats(),
         edge_case_rule_stats=edge_case_rule_stats,
         pending_categories=pending_categories,
         approved_count=approved_count,
@@ -1369,6 +1433,7 @@ def status():
 # =============================================================================
 
 @solo_mode_bp.route('/api/status')
+@api_login_required
 @solo_mode_required
 def api_status():
     """Get comprehensive Solo Mode status."""
@@ -1383,6 +1448,9 @@ def api_status():
         'validation_progress': manager.get_validation_progress(),
         'should_end_human_annotation': manager.should_end_human_annotation(),
         'codebook_relabel_progress': manager.get_codebook_relabel_progress(),
+        'curriculum': manager.get_curriculum_status(),
+        'anchoring': manager.get_anchoring_stats(),
+        'spend_refusal': manager.get_spend_refusal(),
     })
 
 
@@ -1438,6 +1506,7 @@ def api_current_agreement():
 
 
 @solo_mode_bp.route('/api/prompts')
+@api_login_required
 @solo_mode_required
 def api_prompts():
     """Get prompt version history."""
@@ -1461,6 +1530,7 @@ def api_prompts():
 
 
 @solo_mode_bp.route('/api/predictions')
+@api_login_required
 @solo_mode_required
 def api_predictions():
     """Get all LLM predictions."""
@@ -1498,13 +1568,12 @@ def api_advance_phase():
 
     force = bool(payload.get('force', False))
     if force:
-        from potato.server_utils.admin_key import validate_admin_api_key
-        from potato.flask_server import config as _config
-        api_key = (
-            request.headers.get('X-API-Key')
-            or session.get('admin_api_key')
-        )
-        if not validate_admin_api_key(api_key, _config):
+        # Route through RBAC so the shared key/debug superuser AND role-based
+        # admins are honored; preserves the force-specific 403 message.
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        if not get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session
+        ):
             return jsonify({
                 'error': 'force=True requires admin authentication',
             }), 403
@@ -1577,7 +1646,19 @@ def api_start_labeling():
     success = manager.start_background_labeling()
     if success:
         return jsonify({'success': True, 'message': 'LLM labeling started'})
+    refusal = manager.get_spend_refusal()
+    if refusal:
+        # 402: refused for money, so the page's response.ok check sees it.
+        return jsonify({'success': False, 'message': refusal}), 402
     return jsonify({'success': False, 'message': 'Already running or failed to start'})
+
+
+@solo_mode_bp.route('/api/spend')
+@api_login_required
+@solo_mode_required
+def api_spend():
+    """AI spend for this project: total, cap, estimate for what is left."""
+    return jsonify(get_solo_mode_manager().get_spend_summary())
 
 @solo_mode_bp.route('/api/optimize-prompt', methods=['POST'])
 @api_login_required
@@ -1611,6 +1692,7 @@ def api_optimize_prompt():
 
 
 @solo_mode_bp.route('/api/disagreements')
+@api_login_required
 @solo_mode_required
 def api_disagreements():
     """Get all disagreements and their status.
@@ -1634,6 +1716,7 @@ def api_disagreements():
 
 
 @solo_mode_bp.route('/api/edge-cases')
+@api_login_required
 @solo_mode_required
 def api_edge_cases():
     """Get edge case status."""
@@ -1650,6 +1733,7 @@ def api_edge_cases():
 
 
 @solo_mode_bp.route('/api/rules')
+@api_login_required
 @solo_mode_required
 def api_rules():
     """Get all edge case rules and their status."""
@@ -1664,6 +1748,7 @@ def api_rules():
 
 
 @solo_mode_bp.route('/api/rules/categories')
+@api_login_required
 @solo_mode_required
 def api_rules_categories():
     """Get aggregated edge case rule categories."""
@@ -1739,6 +1824,7 @@ def api_rules_cluster():
 
 
 @solo_mode_bp.route('/api/rules/viz-data')
+@api_login_required
 @solo_mode_required
 def api_rules_viz_data():
     """Return 2D-projected rule embeddings for D3 scatter plot visualization."""
@@ -1803,6 +1889,7 @@ def api_rules_viz_data():
 
 
 @solo_mode_bp.route('/api/confusion-analysis')
+@api_login_required
 @solo_mode_required
 def api_confusion_analysis():
     """Get full confusion analysis with enriched patterns and heatmap data."""
@@ -1942,6 +2029,7 @@ def api_confusion_suggest_guideline():
 
 
 @solo_mode_bp.route('/api/refinement-status')
+@api_login_required
 @solo_mode_required
 def api_refinement_status():
     """Get refinement loop status and cycle history."""
@@ -1969,6 +2057,7 @@ def api_refinement_trigger():
 
 
 @solo_mode_bp.route('/api/reannotation-report')
+@api_login_required
 @solo_mode_required
 def api_reannotation_report():
     """Get before/after accuracy report for re-annotated instances."""
@@ -2017,6 +2106,7 @@ def api_debug_full_reset():
 
 
 @solo_mode_bp.route('/api/refinement/log')
+@api_login_required
 @solo_mode_required
 def api_refinement_log():
     """Get the full log of refinement cycles (validated framework only).
@@ -2030,6 +2120,7 @@ def api_refinement_log():
 
 
 @solo_mode_bp.route('/api/refinement/pending')
+@api_login_required
 @solo_mode_required
 def api_refinement_pending():
     """Get refinement candidates awaiting admin approval.
@@ -2082,6 +2173,7 @@ def api_refinement_reject():
 
 
 @solo_mode_bp.route('/api/refinement/strategies')
+@api_login_required
 @solo_mode_required
 def api_refinement_strategies():
     """List available refinement strategies and their metadata."""
@@ -2093,6 +2185,7 @@ def api_refinement_strategies():
 
 
 @solo_mode_bp.route('/api/labeling-functions')
+@api_login_required
 @solo_mode_required
 def api_labeling_functions():
     """Get all labeling functions and their stats."""
@@ -2151,6 +2244,7 @@ def api_labeling_function_toggle(function_id):
 
 
 @solo_mode_bp.route('/api/labeling-functions/stats')
+@api_login_required
 @solo_mode_required
 def api_labeling_functions_stats():
     """Get labeling function statistics."""
@@ -2159,6 +2253,7 @@ def api_labeling_functions_stats():
 
 
 @solo_mode_bp.route('/api/disagreement-explorer')
+@api_login_required
 @solo_mode_required
 def api_disagreement_explorer():
     """Get disagreement explorer data with scatter plots and label breakdowns."""
@@ -2174,6 +2269,7 @@ def api_disagreement_explorer():
 
 
 @solo_mode_bp.route('/api/disagreement-timeline')
+@api_login_required
 @solo_mode_required
 def api_disagreement_timeline():
     """Get temporal disagreement trend data."""
@@ -2189,7 +2285,85 @@ def api_disagreement_timeline():
         return jsonify({'error': 'An internal error occurred'}), 500
 
 
+@solo_mode_bp.route('/api/gold')
+@api_login_required
+@solo_mode_required
+def api_gold_status():
+    """The gold set, and each prompt version's score against it."""
+    return jsonify(get_solo_mode_manager().get_gold_status())
+
+
+@solo_mode_bp.route('/api/gold/evaluate', methods=['POST'])
+@api_login_required
+@same_origin_required
+@solo_mode_required
+def api_gold_evaluate():
+    """Score a prompt version (default: the current one) against the gold set."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    version = data.get('prompt_version')
+    try:
+        job = manager.start_gold_evaluation(
+            None if version in (None, '') else int(version))
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'job': job.to_dict()}), 202
+
+
+@solo_mode_bp.route('/api/prompt/try', methods=['POST'])
+@api_login_required
+@same_origin_required
+@solo_mode_required
+def api_prompt_try():
+    """Label a few unlabelled items with a prompt before the full run."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    prompt_text = data.get('prompt')
+    if prompt_text is not None and not str(prompt_text).strip():
+        return jsonify({'error': 'The prompt is empty'}), 400
+    try:
+        job = manager.start_prompt_trial(int(data.get('n', 10)), prompt_text)
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'job': job.to_dict()}), 202
+
+
+@solo_mode_bp.route('/api/sensitivity', methods=['POST'])
+@api_login_required
+@same_origin_required
+@solo_mode_required
+def api_sensitivity():
+    """Label the same items under paraphrases of the prompt and compare."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job = get_solo_mode_manager().start_sensitivity_check(
+            int(data.get('n_variants', 4)), int(data.get('n_items', 20)))
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'job': job.to_dict()}), 202
+
+
+@solo_mode_bp.route('/api/sensitivity/latest')
+@api_login_required
+@solo_mode_required
+def api_sensitivity_latest():
+    """The most recent sensitivity check, or null."""
+    return jsonify({'job': get_solo_mode_manager().get_latest_job('sensitivity')})
+
+
+@solo_mode_bp.route('/api/jobs/<job_id>')
+@api_login_required
+@solo_mode_required
+def api_job(job_id):
+    """Progress and result of a gold evaluation or trial."""
+    job = get_solo_mode_manager().get_job(job_id)
+    if job is None:
+        return jsonify({'error': 'No such job'}), 404
+    return jsonify(job)
+
+
 @solo_mode_bp.route('/api/export')
+@admin_required
 @solo_mode_required
 def api_export():
     """Export all Solo Mode data."""

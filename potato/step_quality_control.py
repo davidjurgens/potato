@@ -42,16 +42,17 @@ class StepGoldStandard:
         self.tolerance = tolerance
 
     def check(self, annotator_label: str) -> bool:
-        """Check if the annotator's label matches the gold standard."""
-        if self.tolerance == 0:
-            return annotator_label == self.expected_label
-        # For numeric labels, allow tolerance
+        """Check if the annotator's label matches the gold standard.
+
+        Numbers compare as numbers: a gold file written ``"expected_label": 3``
+        (an int) never equalled the stored string "3".
+        """
         try:
             expected = float(self.expected_label)
             actual = float(annotator_label)
             return abs(expected - actual) <= self.tolerance
         except (ValueError, TypeError):
-            return annotator_label == self.expected_label
+            return str(annotator_label) == str(self.expected_label)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -261,6 +262,28 @@ class StepQualityControlManager:
                 "total": 0, "correct": 0, "accuracy": 0.0
             })
         return dict(self._performance)
+
+    def score_annotations(self, annotations: Dict[str, Dict[str, Any]]) -> None:
+        """Check every stored step annotation that has a gold standard.
+
+        ``annotations`` is ``{instance_id: {annotator_id: stored annotation}}``,
+        the shape the step-agreement endpoint reads. Nothing called
+        ``check_step_annotation`` outside the tests, and the endpoint built a
+        fresh manager per request, so the summary always reported 0 checks.
+        Scoring from storage on request needs no wiring into the save path
+        and cannot drift from what annotators actually saved.
+        """
+        from potato.step_agreement import _extract_step_annotations
+
+        self._performance = {}
+        for instance_id, golds in self._gold_by_instance.items():
+            for annotator_id, stored in (annotations.get(instance_id) or {}).items():
+                for gs in golds:
+                    steps = _extract_step_annotations(stored, gs.scheme_name)
+                    if gs.step_index in steps:
+                        self.check_step_annotation(
+                            instance_id, gs.step_index, gs.scheme_name,
+                            annotator_id, steps[gs.step_index])
 
     def get_quality_summary(self) -> Dict[str, Any]:
         """Get overall quality control summary."""

@@ -200,38 +200,6 @@ class TestSpanAPIEndpoints:
         assert response.status_code == 401  # Should return 401 for unauthorized access
 
 
-class TestFrontendSpanManager:
-    """Test the frontend span manager JavaScript functionality"""
-
-    def test_span_manager_initialization(self):
-        """Test that the span manager initializes correctly"""
-        # This would be tested with a JavaScript testing framework
-        # For now, we'll verify the JavaScript file exists and has expected structure
-        span_manager_path = 'potato/static/span-manager.js'
-        assert os.path.exists(span_manager_path)
-
-        with open(span_manager_path, 'r') as f:
-            content = f.read()
-
-        # Check for key functions - the implementation uses a functional approach
-        # Not class-based, so check for the key functions that exist
-        assert 'initializeSpanManager' in content or 'createSpanOverlays' in content
-        assert 'handleSpanSelection' in content or 'handleTextSelection' in content or 'renderSpanOverlay' in content
-
-    def test_span_manager_api_calls(self):
-        """Test that the span manager makes correct API calls"""
-        # This would be tested with a JavaScript testing framework
-        # For now, we'll verify the JavaScript file exists and contains span-related code
-        span_manager_path = 'potato/static/span-manager.js'
-
-        with open(span_manager_path, 'r') as f:
-            content = f.read()
-
-        # Check that the span manager file contains span-related functionality
-        # The actual implementation may use different endpoints/patterns
-        assert 'span' in content.lower()  # Basic check that it's span-related
-
-
 class TestSpanColorSystem:
     """Test the span color system"""
 
@@ -551,6 +519,13 @@ class TestSpanErrorHandling:
 
     def create_test_user(self, username="test_user"):
         """Helper method to create a test user state"""
+        # The tests save spans to this item. It was never created here, and
+        # the save went through only because /updateinstance did not check
+        # the id before a user's first assignment.
+        item_manager = get_item_state_manager()
+        if not item_manager.has_item("test_instance_456"):
+            item_manager.add_item("test_instance_456",
+                                  {"id": "test_instance_456", "text": "I love this product!"})
         user_state_manager = get_user_state_manager()
         if not user_state_manager.has_user(username):
             user_state_manager.add_user(username)

@@ -7,11 +7,11 @@ agent backend before submitting trajectory ratings.
 :class:`InteractiveSessionRunner` plays the user side of that chat: it asks
 a small "persona" LLM to generate user messages, posts them to the server's
 ``/agent_chat/send`` route, and finishes with ``/agent_chat/finish`` so the
-captured conversation is written into the instance data.
+server stores the captured conversation for this simulated user and item.
 
-After the runner returns, the regular annotation pipeline (e.g.
-:class:`AgentSimulatorStrategy`) picks up the freshly populated
-``conversation`` field and produces ratings.
+After the runner returns, the simulator puts the conversation on its own copy
+of the instance's ``conversation`` field, and the regular annotation pipeline
+(e.g. :class:`AgentSimulatorStrategy`) produces ratings from it.
 """
 
 from __future__ import annotations

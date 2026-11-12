@@ -1,0 +1,68 @@
+{
+  "text": " So the question I get asked most often is whether you need diarization at all. It depends entirely on what you're measuring. If your unit of analysis is the speaker, then yes, obviously. But a lot of studies are really about the content, and there the speaker label is decoration. The trap is that diarization looks cheap, so people turn it on by default, and then they trust labels that were never checked.",
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.0,
+      "end": 5.8,
+      "text": " So the question I get asked most often is whether you need diarization at all.",
+      "avg_logprob": -0.21,
+      "no_speech_prob": 0.01,
+      "words": [
+        {"word": " So", "start": 0.0, "end": 0.24, "probability": 0.99},
+        {"word": " the", "start": 0.24, "end": 0.38, "probability": 0.99},
+        {"word": " question", "start": 0.38, "end": 0.82, "probability": 0.98},
+        {"word": " I", "start": 0.82, "end": 0.95, "probability": 0.99},
+        {"word": " get", "start": 0.95, "end": 1.18, "probability": 0.97},
+        {"word": " asked", "start": 1.18, "end": 1.52, "probability": 0.98},
+        {"word": " most", "start": 1.52, "end": 1.84, "probability": 0.96},
+        {"word": " often", "start": 1.84, "end": 2.31, "probability": 0.99},
+        {"word": " is", "start": 2.31, "end": 2.55, "probability": 0.98},
+        {"word": " whether", "start": 2.55, "end": 2.95, "probability": 0.97},
+        {"word": " you", "start": 2.95, "end": 3.12, "probability": 0.99},
+        {"word": " need", "start": 3.12, "end": 3.44, "probability": 0.98},
+        {"word": " diarization", "start": 3.44, "end": 4.62, "probability": 0.88},
+        {"word": " at", "start": 4.62, "end": 4.85, "probability": 0.99},
+        {"word": " all.", "start": 4.85, "end": 5.8, "probability": 0.99}
+      ]
+    },
+    {
+      "id": 1,
+      "seek": 0,
+      "start": 5.8,
+      "end": 10.4,
+      "text": " It depends entirely on what you're measuring.",
+      "avg_logprob": -0.18,
+      "no_speech_prob": 0.01
+    },
+    {
+      "id": 2,
+      "seek": 0,
+      "start": 10.4,
+      "end": 16.2,
+      "text": " If your unit of analysis is the speaker, then yes, obviously.",
+      "avg_logprob": -0.24,
+      "no_speech_prob": 0.01
+    },
+    {
+      "id": 3,
+      "seek": 1620,
+      "start": 16.2,
+      "end": 23.9,
+      "text": " But a lot of studies are really about the content, and there the speaker label is decoration.",
+      "avg_logprob": -0.27,
+      "no_speech_prob": 0.02
+    },
+    {
+      "id": 4,
+      "seek": 2390,
+      "start": 23.9,
+      "end": 33.5,
+      "text": " The trap is that diarization looks cheap, so people turn it on by default, and then they trust labels that were never checked.",
+      "avg_logprob": -0.3,
+      "no_speech_prob": 0.02
+    }
+  ],
+  "language": "en"
+}

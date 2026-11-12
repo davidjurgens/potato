@@ -1,0 +1,12 @@
+[{"id":"t1","task":"Find weather in NYC and book a table",
+  "steps":[
+    {"agent":"Agent","content":"I'll check the weather.","tool_calls":[{"name":"get_weather","args":{"city":"New York","units":"metric"}}]},
+    {"agent":"Tool","content":"22C, sunny"},
+    {"agent":"Agent","content":"Now book a table.","tool_calls":[{"name":"book_table","args":{"restaurant":"","time":"7pm"}}]},
+    {"agent":"Tool","content":"Error: restaurant required"}
+  ]},
+ {"id":"t2","task":"Calculate 15% tip on $80",
+  "steps":[
+    {"agent":"Agent","content":"Computing tip.","tool_calls":[{"name":"calculator","args":{"expression":"80 * 0.15"}}]},
+    {"agent":"Tool","content":"12"}
+  ]}]

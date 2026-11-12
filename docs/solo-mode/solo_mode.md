@@ -1,10 +1,12 @@
 # Solo Mode
 
-Solo Mode enables a single annotator to efficiently label large datasets with LLM assistance through collaborative annotation.
+One annotator plus an LLM, labeling a dataset that would normally need a team.
+
+> **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](../ai-intelligence/huggingface_models.md) for wiring `solo_mode.labeling_models[]` to an HF-hosted model.
 
 ## Overview
 
-Solo Mode provides a streamlined workflow where a human annotator works alongside an LLM to annotate data. The system learns from human feedback, progressively improving its predictions until the human can step back and let the LLM complete the remaining annotations autonomously.
+A human annotator and an LLM work the same queue. The LLM proposes, the human corrects, and each correction feeds back into the prompt. As the two converge, the human hands over more of the queue until the LLM finishes the rest on its own.
 
 ### Key Features
 
@@ -33,7 +35,7 @@ solo_mode:
   # Models for labeling (tried in order)
   labeling_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
       api_key: "${ANTHROPIC_API_KEY}"
     - endpoint_type: "openai"
       model: "gpt-4o-mini"
@@ -42,23 +44,24 @@ solo_mode:
   # Models for prompt revision
   revision_models:
     - endpoint_type: "anthropic"
-      model: "claude-3-5-sonnet-20241022"
+      model: "claude-haiku-4-5-20251001"
 
   # Uncertainty estimation strategy
   uncertainty:
     strategy: "direct_confidence"  # Options: direct_confidence, direct_uncertainty, token_entropy, sampling_diversity
-    num_samples: 5                 # For sampling_diversity
-    sampling_temperature: 1.0      # For sampling_diversity
+    sampling_diversity:            # Read only for sampling_diversity, and only under this block
+      num_samples: 5
+      temperature: 1.0
 
   # Thresholds
   thresholds:
     end_human_annotation_agreement: 0.90    # Required agreement rate to stop human annotation
-    minimum_validation_sample: 50           # Minimum comparisons before ending
+    minimum_validation_sample: 50           # Minimum compared items before ending (an item re-labelled under a new prompt still counts once)
     confidence_low: 0.5                     # Low confidence threshold
     confidence_high: 0.8                    # High confidence threshold
     periodic_review_interval: 100           # Review LLM labels every N instances
 
-  # Instance selection weights (must sum to 1.0)
+  # Instance selection weights (normalized to sum to 1.0, with a warning, if they do not)
   instance_selection:
     low_confidence_weight: 0.4    # Prioritize uncertain instances
     diversity_weight: 0.3         # Prioritize diverse instances
@@ -79,12 +82,17 @@ solo_mode:
 
 ## Workflow Phases
 
-Solo Mode progresses through the following phases:
+Solo Mode progresses through twelve phases, plus a terminal `completed`
+state. The phase machine is `SoloPhase` in `potato/solo_mode/phase_controller.py`;
+not every path visits every phase.
 
 ### 1. Setup
-- Enter task description
-- Upload data file
-- Generate initial prompt
+- Enter task description. The setup page has no data upload: items come from
+  the config's `data_files`.
+- Generate initial prompt: a revision model (`revision_models`) writes it from
+  the description and the schemes. Without one, or if it gives nothing back,
+  the description itself becomes the first prompt, and the prompt history
+  says so.
 
 ### 2. Prompt Review
 - Review and edit the generated prompt
@@ -116,20 +124,37 @@ Solo Mode progresses through the following phases:
 - Decide on correct label
 - Improve understanding of edge cases
 
-### 8. Periodic Review
+### 8. Active Annotation
+- The main annotation phase
+- The human labels prioritized instances while the LLM labels in the background
+- Returns here from periodic review, rule review, and a failed final validation
+
+### 9. Periodic Review
 - Periodically review low-confidence LLM labels
 - Approve or correct predictions
 - Maintain quality during autonomous phase
 
-### 9. Autonomous Labeling
-- Agreement threshold reached
-- LLM completes remaining instances
-- Human monitors progress
+### 10. Rule Review
+- Review the edge case rules discovered from low-confidence labels
+- Approve or reject each clustered rule category
+- Send the prompt back for revision if the rules point at a larger problem
 
-### 10. Final Validation
+### 11. Autonomous Labeling
+- Starts when agreement reaches `end_human_annotation_agreement` over at least
+  `minimum_validation_sample` compared items. The check runs after every human
+  label and on every load of the annotate page, so the hand-over happens even
+  if the human still has items queued. From then on the annotate page sends
+  the human to the status page.
+- The LLM labels the remaining instances. `max_parallel_labels` does not apply
+  in this phase, because there is no human left to stay level with.
+- Human monitors progress
+- A server restart in this phase resumes labelling where it stopped.
+
+### 12. Final Validation
 - Validate sample of LLM-only labels
 - Confirm quality meets standards
 - Export final dataset
+- Failing validation returns the project to active annotation
 
 ## Uncertainty Estimation
 
@@ -165,9 +190,14 @@ Runs the LLM multiple times at high temperature and measures label diversity. Mo
 ```yaml
 uncertainty:
   strategy: "sampling_diversity"
-  num_samples: 5
-  sampling_temperature: 1.0
+  sampling_diversity:
+    num_samples: 5
+    temperature: 1.0
 ```
+
+`num_samples` and `temperature` are read only from the nested
+`sampling_diversity` block. Flat `uncertainty.num_samples` or
+`uncertainty.sampling_temperature` keys are ignored.
 
 ## Instance Selection
 
@@ -192,7 +222,11 @@ instance_selection:
 
 ## API Endpoints
 
-Solo Mode provides API endpoints for monitoring and control:
+Solo Mode provides API endpoints for monitoring and control. Every endpoint
+needs a logged-in session; an anonymous request gets 401. `GET /solo/api/export`
+needs admin access instead: the `X-API-Key` header with `admin_api_key`, or a
+role that can view the admin dashboard. It returns every annotation and the
+full prompt history.
 
 ### Status
 ```
@@ -220,11 +254,30 @@ POST /solo/api/resume-labeling
 POST /solo/api/optimize-prompt
 ```
 
+### Spend, evaluation and jobs
+```
+GET  /solo/api/spend
+GET  /solo/api/gold
+POST /solo/api/gold/evaluate
+POST /solo/api/prompt/try
+POST /solo/api/sensitivity
+GET  /solo/api/sensitivity/latest
+GET  /solo/api/jobs/<id>
+```
+The POST routes start a background job and return it with HTTP 202. Poll
+`/solo/api/jobs/<id>` for `done` of `total` and the result. See
+[Gold Set and Trials](solo_mode_advanced.md#gold-set-and-trials) and
+[Prompt Sensitivity](solo_mode_advanced.md#prompt-sensitivity).
+
 ### Export
 ```
 GET /solo/api/export
 ```
-Exports all annotations and predictions.
+Exports all annotations and predictions. Admin only.
+
+```bash
+curl -H "X-API-Key: $ADMIN_KEY" http://localhost:8000/solo/api/export
+```
 
 ## Best Practices
 
@@ -258,6 +311,12 @@ Key advanced capabilities include:
 - **Confidence routing** for cascading instances through cheap-to-expensive model tiers
 - **Automated refinement loops** that analyze confusion patterns and revise prompts
 - **Schema-specific agreement thresholds** for Likert, multiselect, text, and span annotations
+- **Blind suggestions**, which measure how much seeing the LLM's answer moves yours, and hand over on blind agreement
+- **A spend cap** that refuses a labeling run before it would pass `ai_budget.cap_usd`, and a **response cache** so a repeated call is not paid for twice
+- **Decision models** (Laya, Jev, OpenJev) that label fixed-choice schemes in one pass, as a fast first tier
+- **Gold-set scoring and trials** of a prompt before the full run, and a **prompt-sensitivity** check
+- **A labeling jury**, in which several models vote on each item
+- **Curriculum ordering**, which starts you on the items the LLM found easiest
 
 For full configuration details, see [Solo Mode Advanced Features](solo_mode_advanced.md).
 

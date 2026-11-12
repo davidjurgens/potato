@@ -25,6 +25,112 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+#: Keys every annotation scheme carries, whatever its type. Enforced by
+#: ``validate_annotation_scheme()``.
+UNIVERSAL_REQUIRED_FIELDS = frozenset({"annotation_type", "name", "description"})
+
+#: Keys every annotation scheme *accepts*, whatever its type, because a shared
+#: helper — not the per-type generator — reads them. Declaring these once here
+#: keeps 60-odd registry entries from repeating them, and keeps the generated
+#: JSON Schema honest about what a config may contain.
+#:
+#:   label_requirement, required  -> schemas/identifier_utils.py
+#:                                   generate_validation_attribute()
+#:   layout                       -> identifier_utils.generate_layout_attributes()
+#:   humanize_labels              -> identifier_utils.get_label_display_text()
+#:   display_logic                -> SchemaRegistry._wrap_with_display_logic()
+#:   turn_level, turn_binding,
+#:   turn_label                   -> server_utils/turn_annotations.py
+#:   session_level                -> sessions/service.py
+#:   ai_support                   -> ai/ai_cache.py (visual hints on any scheme),
+#:                                   config_module keyword_highlight check
+#:   keybinding_strategy          -> schemas/keybinding_allocator.py
+#:
+#: ``turn_*`` and ``session_level`` are only *supported* on a subset of types
+#: (config_module raises for the rest); they are listed here because any scheme
+#: may legally name them and be told so by the validator rather than by an
+#: editor underlining a key the schema never heard of.
+UNIVERSAL_OPTIONAL_FIELDS = frozenset({
+    "label_requirement",
+    "required",
+    "layout",
+    "humanize_labels",
+    "display_logic",
+    "turn_level",
+    "turn_binding",
+    "turn_label",
+    "session_level",
+    "ai_support",
+    "keybinding_strategy",
+})
+
+#: Keys the *server* writes onto a scheme dict before handing it to a generator.
+#: They are read by schema modules but must never be documented as config: a
+#: user setting them is at best ignored and at worst corrupts rendering.
+#:
+#:   annotation_id    <- server_utils/front_end.py, preview_cli.py
+#:   _allocated_keys  <- schemas/keybinding_allocator.py
+#:   label2value      <- flask_server.py (AI prelabel rendering)
+#:   codebook_guidance<- codebook/schema_bridge.py
+INTERNAL_SCHEME_FIELDS = frozenset({
+    "annotation_id",
+    "_allocated_keys",
+    "label2value",
+    "codebook_guidance",
+})
+
+#: Keys a dict-form label (``labels: [{name: ..., ...}]``) may carry on every
+#: type that takes dict labels. Some of these the page does not use on every
+#: type, but they are read for any scheme elsewhere:
+#:
+#:   name                     -> every generator
+#:   description, tooltip     -> export/codebook_exporter.py,
+#:                               labeling_engine/schemes.label_descriptions
+#:   color                    -> export/codebook_exporter.py, export/cvat_exporter.py
+#:   parent                   -> export/codebook_exporter.py, export/qdpx_exporter.py
+#:                               (the code tree a QDPX import brings in)
+LABEL_BASE_FIELDS = frozenset({"name", "description", "tooltip", "color", "parent"})
+
+#: identifier_utils.display_label_text: the visible text of an option.
+_LABEL_DISPLAY_FIELDS = frozenset({"displayed_label", "text", "label"})
+
+#: Per type, the label keys it reads beyond LABEL_BASE_FIELDS. config_module
+#: warns about any other key on a dict label, so `--strict` fails on it. Each
+#: set was taken from the generator, its page script and the exporters that
+#: read the type's label config; a key read nowhere for a type is absent even
+#: if another type reads it (`key_value` does nothing on select, confidence,
+#: likert or microscopy, whose keys are positional or absent).
+LABEL_FIELDS = {
+    "radio": frozenset({"key_value", "tooltip_file"}) | _LABEL_DISPLAY_FIELDS,
+    # A slider with labels renders as radio.
+    "slider": frozenset({"key_value", "tooltip_file"}) | _LABEL_DISPLAY_FIELDS,
+    "multiselect": frozenset({"key_value", "tooltip_file", "videopath"}) | _LABEL_DISPLAY_FIELDS,
+    "likert": _LABEL_DISPLAY_FIELDS,
+    "span": frozenset({"key_value", "tooltip_file", "abbreviation"}) | _LABEL_DISPLAY_FIELDS,
+    # label_id and supercategory: export/cv_utils.py (COCO categories).
+    "image_annotation": frozenset({"key_value", "label_id", "supercategory"}),
+    "volume_annotation": frozenset({"key_value", "dicom"}),
+    "audio_annotation": frozenset({"key_value"}),
+    "video_annotation": frozenset({"key_value"}),
+    "spectrogram_annotation": frozenset({"key_value"}),
+    "spatial_annotation": frozenset({"key_value"}),
+    "soft_label": frozenset({"tooltip_file"}),
+    "constant_sum": frozenset({"tooltip_file"}),
+    "ranking": frozenset({"tooltip_file"}),
+    "triad_test": frozenset({"text"}),
+    "microscopy": frozenset(),
+    "select": frozenset(),
+    "confidence": frozenset(),
+}
+
+#: Types whose labels must be strings: a dict label raised (text) or was
+#: printed on the page as its Python repr (multirate, pairwise, pure_display).
+STRING_LABEL_TYPES = frozenset({"text", "multirate", "pairwise", "pure_display"})
+
+#: Types that check their own label keys and raise on unknown ones.
+SELF_VALIDATED_LABEL_TYPES = frozenset({"interval_label", "geo_annotation", "viewer_selection"})
+
+
 @dataclass
 class SchemaDefinition:
     """
@@ -36,6 +142,25 @@ class SchemaDefinition:
         required_fields: List of required configuration fields
         optional_fields: List of optional configuration fields
         supports_keybindings: Whether this schema type supports keyboard shortcuts
+        single_select: Whether this type renders SEVERAL inputs carrying DIFFERENT
+            ``label_name`` values for one logical answer, of which at most one may
+            persist. Only ``radio``, ``likert`` and ``confidence`` qualify: each of
+            their options becomes its own ``Label(schema, option)`` key, so a changed
+            answer would otherwise accumulate beside the old one (GH #167).
+
+            This is NOT "the schema stores one value". Types like ``select``,
+            ``slider`` and the JSON-blob types emit a single fixed ``label_name``
+            ("select-one", "slider", "_data", ...), so re-answering simply overwrites
+            the same key and they must stay False. Types whose options are hidden
+            inputs gated on ``data-modified``/``data-server-set`` (``pairwise``,
+            ``bws``) must also stay False — the client does not reliably re-send
+            them, so clearing could drop real data.
+
+            Labels in ``NON_EXCLUSIVE_LABEL_NAMES`` (see
+            ``potato.server_utils.schema_exclusivity``) are exempt from the
+            resulting purge — notably ``free_response``, which ``radio`` legitimately
+            stores alongside the chosen option. ``bad_text`` is NOT exempt: it is a
+            genuine member of the likert radio group.
         description: Human-readable description of the schema type
     """
     name: str
@@ -43,6 +168,7 @@ class SchemaDefinition:
     required_fields: List[str] = field(default_factory=list)
     optional_fields: List[str] = field(default_factory=list)
     supports_keybindings: bool = True
+    single_select: bool = False
     description: str = ""
 
 
@@ -188,6 +314,7 @@ class SchemaRegistry:
                 "required_fields": schema.required_fields,
                 "optional_fields": schema.optional_fields,
                 "supports_keybindings": schema.supports_keybindings,
+                "single_select": schema.single_select,
             }
             for schema in sorted(self._schemas.values(), key=lambda s: s.name)
         ]
@@ -213,6 +340,41 @@ class SchemaRegistry:
         """
         return sorted(self._schemas.keys())
 
+    def get_single_select_types(self) -> List[str]:
+        """
+        Get the annotation types that may persist at most one label per schema.
+
+        See ``SchemaDefinition.single_select`` for what qualifies. Callers should
+        prefer :mod:`potato.server_utils.schema_exclusivity`, which resolves a
+        schema *name* to its type first.
+
+        Returns:
+            Sorted list of single-select annotation type names
+        """
+        return sorted(
+            name for name, schema in self._schemas.items() if schema.single_select
+        )
+
+    def get_accepted_fields(self, name: str) -> Optional[set]:
+        """
+        Every config key a scheme of this type may legally carry.
+
+        The union of the type's own required and optional fields with the
+        universal ones read by shared helpers. Returns None for an unregistered
+        type so callers can tell "no such type" from "type accepts nothing".
+
+        Args:
+            name: The schema type name
+
+        Returns:
+            Set of accepted key names, or None if the type is not registered
+        """
+        schema = self._schemas.get(name)
+        if schema is None:
+            return None
+        return (set(schema.required_fields) | set(schema.optional_fields)
+                | set(UNIVERSAL_REQUIRED_FIELDS) | set(UNIVERSAL_OPTIONAL_FIELDS))
+
 
 # Global registry instance
 schema_registry = SchemaRegistry()
@@ -236,6 +398,12 @@ def _register_builtin_schemas():
     from .pure_display import generate_pure_display_layout
     from .video import generate_video_layout
     from .image_annotation import generate_image_annotation_layout
+    from .episode_annotation import generate_episode_annotation_layout
+    from .rollout_evaluation import generate_rollout_evaluation_layout
+    from .grounding_eval import generate_grounding_eval_layout
+    from .region_caption import generate_region_caption_layout
+    from .spatial_annotation import generate_spatial_annotation_layout
+    from .volume_annotation import generate_volume_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
     from .pairwise import generate_pairwise_layout
@@ -243,6 +411,7 @@ def _register_builtin_schemas():
     from .tree_annotation import generate_tree_annotation_layout
     from .triage import generate_triage_layout
     from .event_annotation import generate_event_annotation_layout
+    from .multi_document_event import generate_multi_document_event_layout
     from .tiered_annotation import generate_tiered_annotation_layout
     from .bws import generate_bws_layout
     from .soft_label import generate_soft_label_layout
@@ -256,11 +425,44 @@ def _register_builtin_schemas():
     from .extractive_qa import generate_extractive_qa_layout
     from .rubric_eval import generate_rubric_eval_layout
     from .text_edit import generate_text_edit_layout
+    from .cloze import generate_cloze_layout
+    from .listening_test import generate_listening_test_layout
+    from .interval_label import generate_interval_label_layout
+    from .microscopy import generate_microscopy_layout
+    from .viewer_selection import generate_viewer_selection_layout
+    from .chemical_structure import generate_chemical_structure_layout
+    from .peak_picking import generate_peak_picking_layout
+    from .spectrogram_annotation import generate_spectrogram_annotation_layout
+    from .geo_annotation import generate_geo_annotation_layout
+    from .ego_network import generate_ego_network_layout
+    from .free_list import generate_free_list_layout
+    from .triad_test import generate_triad_test_layout
+    from .incentive_schemes import (generate_price_list_layout, generate_bdm_layout,
+                                    generate_belief_elicitation_layout)
+    from .interlinear_gloss import generate_interlinear_gloss_layout
+    from .survey_experiments import (generate_list_experiment_layout,
+                                     generate_randomized_response_layout)
     from .error_span import generate_error_span_layout
     from .card_sort import generate_card_sort_layout
     from .conjoint import generate_conjoint_layout
     from .trajectory_eval import generate_trajectory_eval_layout
+    from .trajectory_edit import generate_trajectory_edit_layout
     from .process_reward import generate_process_reward_layout
+    from .failure_attribution import generate_failure_attribution_layout
+    from .tool_call_review import generate_tool_call_review_layout
+    from .consensus_tracking import generate_consensus_tracking_layout
+    from .context_attribution import generate_context_attribution_layout
+    from .agent_scorecard import generate_agent_scorecard_layout
+    from .handoff_review import generate_handoff_review_layout
+    from .agent_interaction_graph import generate_agent_interaction_graph_layout
+    from .gui_trajectory import generate_gui_trajectory_layout
+    from .voice_interaction import generate_voice_interaction_layout
+    from .multimodal_reasoning import generate_multimodal_reasoning_layout
+    from .speech_transcript import generate_speech_transcript_layout
+    from .tool_contention import generate_tool_contention_layout
+    from .temporal_grounding import generate_temporal_grounding_layout
+    from .emergent_behavior import generate_emergent_behavior_layout
+    from .table_grid import generate_table_grid_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -268,15 +470,16 @@ def _register_builtin_schemas():
             name="radio",
             generator=generate_radio_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field"],
+            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order", "lextale", "label_source"],
             supports_keybindings=True,
+            single_select=True,
             description="Single-choice radio button selection"
         ),
         SchemaDefinition(
             name="multiselect",
             generator=generate_multiselect_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field"],
+            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order", "label_source"],
             supports_keybindings=True,
             description="Multiple-choice checkbox selection"
         ),
@@ -284,7 +487,7 @@ def _register_builtin_schemas():
             name="multirate",
             generator=generate_multirate_layout,
             required_fields=["name", "description", "options", "labels"],
-            optional_fields=["label_requirement"],
+            optional_fields=["label_requirement", "options_from_data", "display_config", "arrangement", "randomize_order", "option_randomization"],
             supports_keybindings=False,
             description="Rate multiple items on a scale"
         ),
@@ -292,23 +495,204 @@ def _register_builtin_schemas():
             name="likert",
             generator=generate_likert_layout,
             required_fields=["name", "description", "min_label", "max_label", "size"],
-            optional_fields=["label_requirement"],
+            optional_fields=["label_requirement", "labels", "displaying_score", "bad_text_label", "sequential_key_binding"],
             supports_keybindings=True,
+            single_select=True,
             description="Likert scale rating"
         ),
         SchemaDefinition(
             name="text",
             generator=generate_textbox_layout,
             required_fields=["name", "description"],
-            optional_fields=["label_requirement", "placeholder", "rows"],
+            optional_fields=["label_requirement", "placeholder", "rows", "labels", "multiline", "textarea", "cols", "min_chars", "show_char_count", "collapsible", "target_schema", "display_config", "allow_paste"],
             supports_keybindings=False,
             description="Free-form text input"
+        ),
+        SchemaDefinition(
+            name="cloze",
+            generator=generate_cloze_layout,
+            required_fields=["name", "description"],
+            optional_fields=["text", "source_field", "answer_field", "scoring",
+                             "input_width", "label_requirement", "tolerance"],
+            supports_keybindings=False,
+            description="Fill-in-the-blank passage, scored against an answer key kept on the server"
+        ),
+        SchemaDefinition(
+            name="list_experiment",
+            generator=generate_list_experiment_layout,
+            required_fields=["name", "description", "items", "sensitive_item", "treatment"],
+            optional_fields=["sensitive_position", "count_prompt", "label_requirement"],
+            supports_keybindings=False,
+            description="List experiment (item count technique) for a sensitive question"
+        ),
+        SchemaDefinition(
+            name="randomized_response",
+            generator=generate_randomized_response_layout,
+            required_fields=["name", "description"],
+            optional_fields=["method", "question", "randomizer", "p_truth", "p_yes", "p_no",
+                             "nonsensitive_statement", "nonsensitive_prevalence",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Randomized response (forced response, crosswise) for a sensitive question"
+        ),
+        SchemaDefinition(
+            name="price_list",
+            generator=generate_price_list_layout,
+            required_fields=["name", "description"],
+            optional_fields=["preset", "rows", "scale", "currency", "single_switch", "option_labels",
+                             "amount_now", "amounts_later", "delay_label", "now_label",
+                             "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Multiple price list: choose option A or B in each row (Holt & Laury preset, time preference)"
+        ),
+        SchemaDefinition(
+            name="bdm",
+            generator=generate_bdm_layout,
+            required_fields=["name", "description", "max"],
+            optional_fields=["min", "step", "input", "currency", "bid_label", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Becker-DeGroot-Marschak bid: the most the participant would pay"
+        ),
+        SchemaDefinition(
+            name="belief_elicitation",
+            generator=generate_belief_elicitation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["mode", "bins", "step", "left_label", "right_label", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Probability report (0-100) or a distribution over bins that sums to 100"
+        ),
+        SchemaDefinition(
+            name="spectrogram_annotation",
+            generator=generate_spectrogram_annotation_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["source_field", "min_freq", "max_freq", "fft_size", "colormap",
+                             "height", "min_boxes", "max_boxes", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Time-frequency boxes drawn on a spectrogram of the item's audio (bioacoustics)"
+        ),
+        SchemaDefinition(
+            name="viewer_selection",
+            generator=generate_viewer_selection_layout,
+            required_fields=["name", "description", "viewer_field"],
+            optional_fields=["labels", "min_selections", "max_selections", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Selection made in a viewer display (residues in a protein_structure, "
+                        "features and locus in a genome_locus), with optional labels"
+        ),
+        SchemaDefinition(
+            name="chemical_structure",
+            generator=generate_chemical_structure_layout,
+            required_fields=["name", "description"],
+            optional_fields=["prefill_field", "prefill_format", "answer_field", "rdkit",
+                             "require_valid", "allow_empty", "editor_height",
+                             "show_identifiers", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Draw or correct a chemical structure (OpenChemLib editor); stores "
+                        "molfile V3000, canonical SMILES and, with RDKit.js, the InChIKey"
+        ),
+        SchemaDefinition(
+            name="peak_picking",
+            generator=generate_peak_picking_layout,
+            required_fields=["name", "description", "viewer_field"],
+            optional_fields=["peak_fields", "region_fields", "min_peaks", "max_peaks",
+                             "require_review", "allow_manual", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Peaks and integrated regions picked on a spectrum display, with "
+                        "suggested peaks to accept or reject and per-peak fields"
+        ),
+        SchemaDefinition(
+            name="interval_label",
+            generator=generate_interval_label_layout,
+            required_fields=["name", "description", "labels", "signal_field"],
+            optional_fields=["mode", "epoch_length", "channel_scope", "auto_advance",
+                             "allow_overlap", "next_key", "previous_key", "pre_annotations",
+                             "preannotation_field", "preannotation_labels",
+                             "require_all_epochs", "min_annotations", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Label intervals and point events on a time_series signal; free or fixed-epoch mode"
+        ),
+        SchemaDefinition(
+            name="listening_test",
+            generator=generate_listening_test_layout,
+            required_fields=["name", "description"],
+            optional_fields=["method", "stimuli_field", "reference_field", "condition_field",
+                             "hidden_reference",
+                             "anchors", "loop", "require_full_playback", "require_all_played",
+                             "require_one_at_100", "allow_replay", "scale_labels",
+                             "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Listening tests: MUSHRA, BS.1116, ACR, DCR, CCR, ABX and P.835, with blinded stimuli"
+        ),
+        SchemaDefinition(
+            name="microscopy",
+            generator=generate_microscopy_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["image_key", "labels_key", "label_image", "cell_labels", "tools",
+                             "channels", "tile_size", "max_pixels", "label_max_side",
+                             "min_rois", "min_cells", "height", "instructions",
+                             "label_requirement"],
+            supports_keybindings=False,
+            description="Multichannel microscopy (OME-Zarr, OME-TIFF): channel contrast, "
+                        "z/t, ROIs and per-cell classes from a label image"
+        ),
+        SchemaDefinition(
+            name="geo_annotation",
+            generator=generate_geo_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["task", "labels", "tools", "feature_text", "basemap", "basemap_field",
+                             "preannotation_field", "coordinate_order", "projection", "center",
+                             "zoom", "height", "snapping", "min_features", "max_features",
+                             "require_all_regions", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Maps: draw labelled points, lines and polygons, pin places, or label regions (OpenLayers)"
+        ),
+        SchemaDefinition(
+            name="free_list",
+            generator=generate_free_list_layout,
+            required_fields=["name", "description"],
+            optional_fields=["min_items", "max_items", "time_limit_s", "allow_duplicates",
+                             "normalize", "placeholder", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Free list: items typed one at a time, in order, with timings (cultural domain analysis)"
+        ),
+        SchemaDefinition(
+            name="triad_test",
+            generator=generate_triad_test_layout,
+            required_fields=["name", "description"],
+            optional_fields=["labels", "items_field", "design", "max_triads", "question",
+                             "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Triad test: which of three items is most different, over a balanced set of triads"
+        ),
+        SchemaDefinition(
+            name="ego_network",
+            generator=generate_ego_network_layout,
+            required_fields=["name", "description", "stages"],
+            optional_fields=["stage_layout", "label_requirement"],
+            supports_keybindings=False,
+            description="Personal (ego) network: name generators, per-person questions, dyad census and a sociogram"
+        ),
+        SchemaDefinition(
+            name="interlinear_gloss",
+            generator=generate_interlinear_gloss_layout,
+            required_fields=["name", "description"],
+            optional_fields=["source_field", "morphemes_field", "gloss_field", "translation_field",
+                             "tiers", "abbreviations", "language", "metalanguage",
+                             "show_translation", "instructions", "label_requirement"],
+            supports_keybindings=False,
+            description="Interlinear glossed text: morpheme segmentation and glosses aligned per word (Leipzig rules)"
         ),
         SchemaDefinition(
             name="number",
             generator=generate_number_layout,
             required_fields=["name", "description"],
-            optional_fields=["min", "max", "step", "label_requirement"],
+            optional_fields=["min", "max", "step", "label_requirement", "min_value", "max_value", "custom_css", "tooltip", "tooltip_file"],
             supports_keybindings=False,
             description="Numeric input field"
         ),
@@ -316,7 +700,7 @@ def _register_builtin_schemas():
             name="slider",
             generator=generate_slider_layout,
             required_fields=["name", "description", "min_value", "max_value", "starting_value"],
-            optional_fields=["step", "label_requirement"],
+            optional_fields=["step", "label_requirement", "labels", "show_labels", "maxTick"],
             supports_keybindings=False,
             description="Slider for selecting a value in a range"
         ),
@@ -324,7 +708,7 @@ def _register_builtin_schemas():
             name="span",
             generator=generate_span_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking", "show_span_labels"],
+            optional_fields=["sequential_key_binding", "bad_text_label", "title", "allow_discontinuous", "entity_linking", "show_span_labels", "target_field", "columns", "displaying_score", "codebook", "label_source"],
             supports_keybindings=True,
             description="Text span annotation/highlighting with optional entity linking to knowledge bases"
         ),
@@ -332,7 +716,7 @@ def _register_builtin_schemas():
             name="select",
             generator=generate_select_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["label_requirement", "option_randomization", "dynamic_options", "dynamic_options_field"],
+            optional_fields=["label_requirement", "option_randomization", "dynamic_options", "dynamic_options_field", "use_predefined_labels", "codebook", "randomize_order"],
             supports_keybindings=False,
             description="Dropdown selection"
         ),
@@ -356,23 +740,80 @@ def _register_builtin_schemas():
             name="image_annotation",
             generator=generate_image_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify"],
+            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over", "viewer", "tiles", "segmentation", "instance_masks", "text_prompt", "skeletons", "mask_mode", "attributes", "label_source"],
             supports_keybindings=True,
             description="Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
+        ),
+        SchemaDefinition(
+            name="spatial_annotation",
+            generator=generate_spatial_annotation_layout,
+            required_fields=["name", "description", "tools", "labels"],
+            optional_fields=["source_field", "calibration_field", "color_mode", "point_size", "max_points", "lod", "point_budget", "min_screen_size", "max_loaded_nodes", "mpr", "slab_thickness", "default_box_height", "fit_box_height", "brush_size", "min_annotations", "max_annotations", "attributes"],
+            supports_keybindings=True,
+            description="3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
+        ),
+        SchemaDefinition(
+            name="volume_annotation",
+            generator=generate_volume_annotation_layout,
+            required_fields=["name", "description", "labels"],
+            optional_fields=["tools", "views", "source_field", "prefill_rtstruct_field",
+                             "display_tags", "allow_identifying_tags", "default_window",
+                             "window_presets", "brush_size"],
+            supports_keybindings=True,
+            description="3D medical volumes (DICOM series, NIfTI): three linked slice views, window/level, brush masks with interpolation, boxes and polygons; NIfTI and DICOM SEG export"
+        ),
+        SchemaDefinition(
+            name="episode_annotation",
+            generator=generate_episode_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["source_field", "episode_field", "layers", "phases", "outcomes", "failure_causes", "reward_range", "series_shown", "max_lanes", "min_phases", "max_phases"],
+            supports_keybindings=True,
+            description="Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation"
+        ),
+        SchemaDefinition(
+            name="rollout_evaluation",
+            generator=generate_rollout_evaluation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["streams", "manifest_field", "prompt_field", "intervention_field", "intervention_time_field", "fps", "layers", "violation_types", "severities", "cf_verdicts", "rubric", "blind", "shuffle", "require_clean", "max_violations"],
+            supports_keybindings=True,
+            description="World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility"
+        ),
+        SchemaDefinition(
+            name="grounding_eval",
+            generator=generate_grounding_eval_layout,
+            required_fields=["name", "description"],
+            optional_fields=["region_type", "expression_source",
+                             "expressions_field", "caption_field",
+                             "predictions_field", "label", "verdicts",
+                             "require_all"],
+            supports_keybindings=False,
+            description="Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer"
+        ),
+        SchemaDefinition(
+            name="region_caption",
+            generator=generate_region_caption_layout,
+            required_fields=["name", "description"],
+            optional_fields=["placeholder", "min_length", "max_length",
+                             "require_all", "agreement_distance"],
+            supports_keybindings=False,
+            description="Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions"
         ),
         SchemaDefinition(
             name="audio_annotation",
             generator=generate_audio_annotation_layout,
             required_fields=["name", "description"],
-            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "zoom_enabled", "playback_rate_control"],
+            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "zoom_enabled", "playback_rate_control", "waveform", "spectrogram", "spectrogram_options", "source_field"],
             supports_keybindings=True,
             description="Audio segmentation and annotation with waveform visualization"
         ),
         SchemaDefinition(
             name="video_annotation",
             generator=generate_video_annotation_layout,
-            required_fields=["name", "description"],
-            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options"],
+            # `labels` is required in every one of the five modes -- the
+            # generator raises without it -- so declaring it optional meant
+            # `validate --strict` passed a config that could not render.
+            required_fields=["name", "description", "labels"],
+            optional_fields=["mode", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options", "ai_support", "source_field", "propagation", "attributes"],
             supports_keybindings=True,
             description="Video annotation with temporal segments, frame classification, keyframes, and object tracking"
         ),
@@ -388,7 +829,7 @@ def _register_builtin_schemas():
             name="pairwise",
             generator=generate_pairwise_layout,
             required_fields=["name", "description"],
-            optional_fields=["mode", "items_key", "items", "show_labels", "labels", "allow_tie", "tie_label", "sequential_key_binding", "scale", "label_requirement"],
+            optional_fields=["mode", "items_key", "items", "show_labels", "labels", "allow_tie", "tie_label", "sequential_key_binding", "scale", "label_requirement", "dimensions", "justification", "randomize_order"],
             supports_keybindings=True,
             description="Pairwise comparison of two items (binary selection or scale rating)"
         ),
@@ -425,10 +866,18 @@ def _register_builtin_schemas():
             description="N-ary event annotation with triggers and typed arguments"
         ),
         SchemaDefinition(
+            name="multi_document_event",
+            generator=generate_multi_document_event_layout,
+            required_fields=["name", "description", "slots"],
+            optional_fields=["allow_annotator_create", "template_name"],
+            supports_keybindings=False,
+            description="Cross-document event annotation: template slots filled with evidence from many documents"
+        ),
+        SchemaDefinition(
             name="tiered_annotation",
             generator=generate_tiered_annotation_layout,
             required_fields=["name", "description", "tiers", "source_field"],
-            optional_fields=["media_type", "tier_height", "show_tier_labels", "collapsed_tiers", "zoom_enabled", "playback_rate_control", "overview_height"],
+            optional_fields=["media_type", "tier_height", "show_tier_labels", "collapsed_tiers", "zoom_enabled", "playback_rate_control", "overview_height", "transcript_field", "transcript_tier", "audio_key", "turns_key", "speaker_key", "text_key"],
             supports_keybindings=True,
             description="Hierarchical multi-tier annotation for audio/video (ELAN-style)"
         ),
@@ -454,6 +903,10 @@ def _register_builtin_schemas():
             required_fields=["name", "description"],
             optional_fields=["target_schema", "scale_type", "scale_points", "labels", "min_value", "max_value", "step", "left_label", "right_label"],
             supports_keybindings=False,
+            # scale_type: likert renders one radio per point (label_name "1".."N");
+            # scale_type: slider renders a single "confidence_level" label, where the
+            # purge is a harmless no-op. One flag covers both modes.
+            single_select=True,
             description="Confidence rating meta-annotation for any primary annotation"
         ),
         SchemaDefinition(
@@ -492,7 +945,7 @@ def _register_builtin_schemas():
             name="hierarchical_multiselect",
             generator=generate_hierarchical_multiselect_layout,
             required_fields=["name", "description", "taxonomy"],
-            optional_fields=["auto_select_children", "auto_select_parent", "show_search", "max_selections"],
+            optional_fields=["auto_select_children", "auto_select_parent", "show_search", "max_selections", "taxonomy_preset", "tooltips", "taxonomy_file", "show_codes"],
             supports_keybindings=False,
             description="Hierarchical tree-structured multi-label selection"
         ),
@@ -500,7 +953,7 @@ def _register_builtin_schemas():
             name="vas",
             generator=generate_vas_layout,
             required_fields=["name", "description"],
-            optional_fields=["left_label", "right_label", "min_value", "max_value", "show_value"],
+            optional_fields=["left_label", "right_label", "min_value", "max_value", "show_value", "precision"],
             supports_keybindings=False,
             description="Continuous visual analog scale for fine-grained magnitude estimation"
         ),
@@ -532,7 +985,7 @@ def _register_builtin_schemas():
             name="error_span",
             generator=generate_error_span_layout,
             required_fields=["name", "description", "error_types"],
-            optional_fields=["severities", "show_score", "max_score"],
+            optional_fields=["severities", "show_score", "max_score", "source_field"],
             supports_keybindings=False,
             description="MQM-style error span annotation with typed severity for quality evaluation"
         ),
@@ -564,9 +1017,137 @@ def _register_builtin_schemas():
             name="process_reward",
             generator=generate_process_reward_layout,
             required_fields=["name", "description"],
-            optional_fields=["steps_key", "step_text_key", "mode"],
+            optional_fields=["steps_key", "step_text_key", "mode", "allow_neutral", "inline_with_trace", "ai_prelabel", "require_verification", "reward_labels"],
             supports_keybindings=False,
-            description="Binary per-step process reward signals for PRM training"
+            description="Per-step process reward signals for PRM training"
+        ),
+        SchemaDefinition(
+            name="failure_attribution",
+            generator=generate_failure_attribution_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "agents"],
+            supports_keybindings=False,
+            description="Multi-agent failure attribution: responsible agent + decisive step + reason"
+        ),
+        SchemaDefinition(
+            name="tool_call_review",
+            generator=generate_tool_call_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "verdict_options"],
+            supports_keybindings=False,
+            description="Per-tool-call correctness review (right tool / args / ordering)"
+        ),
+        SchemaDefinition(
+            name="consensus_tracking",
+            generator=generate_consensus_tracking_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "acts", "linked_acts", "hint"],
+            supports_keybindings=False,
+            description="Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals"
+        ),
+        SchemaDefinition(
+            name="context_attribution",
+            generator=generate_context_attribution_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "acts", "linked_acts", "hint"],
+            supports_keybindings=False,
+            description="Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn"
+        ),
+        SchemaDefinition(
+            name="agent_scorecard",
+            generator=generate_agent_scorecard_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "agents", "agent_dimensions", "team_dimensions", "milestones", "scale"],
+            supports_keybindings=False,
+            description="Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style)"
+        ),
+        SchemaDefinition(
+            name="handoff_review",
+            generator=generate_handoff_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "flags", "quality_scale"],
+            supports_keybindings=False,
+            description="Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality"
+        ),
+        SchemaDefinition(
+            name="agent_interaction_graph",
+            generator=generate_agent_interaction_graph_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key"],
+            supports_keybindings=False,
+            description="Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges"
+        ),
+        SchemaDefinition(
+            name="gui_trajectory",
+            generator=generate_gui_trajectory_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "screenshot_key", "action_key", "coord_space", "verdict_options"],
+            supports_keybindings=False,
+            description="Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding"
+        ),
+        SchemaDefinition(
+            name="voice_interaction",
+            generator=generate_voice_interaction_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "audio_key", "speaker_key", "user_speakers", "overlap_labels", "rating_scale", "text_key"],
+            supports_keybindings=False,
+            description="Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification"
+        ),
+        SchemaDefinition(
+            name="multimodal_reasoning",
+            generator=generate_multimodal_reasoning_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "type_key", "verdict_options"],
+            supports_keybindings=False,
+            description="Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating"
+        ),
+        SchemaDefinition(
+            name="speech_transcript",
+            generator=generate_speech_transcript_layout,
+            required_fields=["name", "description"],
+            optional_fields=["segments_key", "audio_key", "error_types", "allow_correction", "turns_key", "speaker_key", "text_key"],
+            supports_keybindings=False,
+            description="Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
+        ),
+        SchemaDefinition(
+            name="tool_contention",
+            generator=generate_tool_contention_layout,
+            required_fields=["name", "description"],
+            optional_fields=["calls_key", "agent_key", "resource_key", "contention_labels"],
+            supports_keybindings=False,
+            description="Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification"
+        ),
+        SchemaDefinition(
+            name="temporal_grounding",
+            generator=generate_temporal_grounding_layout,
+            required_fields=["name", "description"],
+            optional_fields=["video_key", "events_key", "duration"],
+            supports_keybindings=False,
+            description="Video temporal grounding: mark gold event intervals with live IoU vs predicted"
+        ),
+        SchemaDefinition(
+            name="emergent_behavior",
+            generator=generate_emergent_behavior_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "behaviors", "allow_note"],
+            supports_keybindings=False,
+            description="Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift"
+        ),
+        SchemaDefinition(
+            name="table_grid",
+            generator=generate_table_grid_layout,
+            required_fields=["name", "description"],
+            optional_fields=["image_key", "rows_key", "cols_key", "default_rows", "default_cols", "roles"],
+            supports_keybindings=False,
+            description="Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty)"
+        ),
+        SchemaDefinition(
+            name="trajectory_edit",
+            generator=generate_trajectory_edit_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "step_text_key", "editable_fields", "show_diff", "show_edit_distance", "allow_reset", "require_reason_on_edit", "edit_final_answer", "final_answer_key"],
+            supports_keybindings=False,
+            description="Per-step trajectory correction/editing for SFT/DPO training data"
         ),
         SchemaDefinition(
             name="code_review",

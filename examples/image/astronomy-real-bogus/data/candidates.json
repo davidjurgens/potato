@@ -1,0 +1,62 @@
+[
+  {
+    "id": "cand-001",
+    "summary": "cand-001: ra 150.11920, dec +2.20583, band r",
+    "candidate": {
+      "science": {
+        "path": "cutouts/cand-001_sci.fits",
+        "interval": "percentile",
+        "stretch": "asinh"
+      },
+      "reference": {
+        "path": "cutouts/cand-001_ref.fits",
+        "interval": "percentile",
+        "stretch": "asinh"
+      },
+      "difference": "cutouts/cand-001_diff.fits",
+      "ra": 150.1192,
+      "dec": 2.20583,
+      "size": 48,
+      "light_curve": "lightcurves/cand-001.csv"
+    }
+  },
+  {
+    "id": "cand-002",
+    "summary": "cand-002: ra 150.20410, dec +2.31027, band g",
+    "candidate": {
+      "science": "cutouts/cand-002_sci.fits",
+      "reference": "cutouts/cand-002_ref.fits",
+      "difference": "cutouts/cand-002_diff.fits",
+      "ra": 150.2041,
+      "dec": 2.31027,
+      "size": 48,
+      "light_curve": "lightcurves/cand-002.csv"
+    }
+  },
+  {
+    "id": "cand-003",
+    "summary": "cand-003: ra 150.05570, dec +2.15012, band r",
+    "candidate": {
+      "science": "cutouts/cand-003_sci.fits",
+      "reference": "cutouts/cand-003_ref.fits",
+      "difference": "cutouts/cand-003_diff.fits",
+      "x": 48.0,
+      "y": 48.0,
+      "size": 48,
+      "light_curve": "lightcurves/cand-003.csv"
+    }
+  },
+  {
+    "id": "cand-004",
+    "summary": "cand-004: ra 149.98730, dec +2.27741, band g",
+    "candidate": {
+      "science": "cutouts/cand-004_sci.fits.gz",
+      "reference": "cutouts/cand-004_ref.fits.gz",
+      "difference": "cutouts/cand-004_diff.fits.gz",
+      "ra": 149.9873,
+      "dec": 2.27741,
+      "size": "40 arcsec",
+      "light_curve": "lightcurves/cand-004.csv"
+    }
+  }
+]

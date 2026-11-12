@@ -54,6 +54,44 @@ class DisplayDefinition:
     description: str = ""
     lazy_populated: bool = False
 
+    def __post_init__(self):
+        """Take ``optional_fields`` from the renderer, which is what runs.
+
+        ``BaseDisplay.get_display_options()`` merges the *renderer's*
+        ``optional_fields``; this dataclass's copy only feeds ``list_displays()``,
+        the generated JSON schema and the docs. So a key the renderer reads and
+        this definition omits is an option that works but that no author, editor
+        or agent can discover -- and a default declared in both that disagrees is
+        documentation that contradicts the product.
+
+        Both had happened. 14 of 24 displays hid 44 working options between them
+        (``pdf`` alone hid 15, including ``ocr`` and ``link_schema``), and
+        ``agent_trace.step_type_colors`` and ``eval_trace.pane_labels`` were
+        published as ``None`` while the renderer supplied real defaults.
+
+        Reading the renderer removes the copy rather than asking anyone to keep
+        it in step. Keys declared only here still survive, for the entries whose
+        renderer is a bare callable with no such attribute.
+        """
+        renderer_fields = getattr(self.renderer, "optional_fields", None)
+        if isinstance(renderer_fields, dict):
+            merged = dict(renderer_fields)
+            for key, value in (self.optional_fields or {}).items():
+                merged.setdefault(key, value)
+            self.optional_fields = merged
+
+
+#: Display types that accept ``span_target: true`` without satisfying the
+#: standard ``.text-content`` contract, because they anchor spans themselves.
+#: Each declares ``supports_span_target = False`` on its renderer -- correctly,
+#: since that flag is about the standard contract -- and then emits its own
+#: ``span-target-<type>`` class and handles the offsets.
+#:
+#:   pdf         - anchors into the PDF.js text layer
+#:   spreadsheet - anchors per cell rather than by character offset
+#:   agent_trace - anchors per step, using the step id
+CUSTOM_SPAN_TARGET_TYPES = frozenset({"pdf", "spreadsheet", "agent_trace"})
+
 
 class DisplayRegistry:
     """
@@ -213,7 +251,12 @@ class DisplayRegistry:
 
     def get_span_target_types(self) -> List[str]:
         """
-        Get all display type names that support span annotation.
+        Display types that support the standard span contract.
+
+        "Standard" means the renderer wraps its content in the
+        ``.text-content`` element that span offsets are measured against.
+        This is narrower than the set of types that accept a ``span_target``
+        field -- see :meth:`get_span_target_capable_types`.
 
         Returns:
             List of type names where supports_span_target is True
@@ -223,6 +266,20 @@ class DisplayRegistry:
             if self.type_supports_span_target(name):
                 types.append(name)
         return sorted(types)
+
+    def get_span_target_capable_types(self) -> List[str]:
+        """
+        Every display type that accepts ``span_target: true``.
+
+        The standard-contract types, plus the ones in
+        :data:`CUSTOM_SPAN_TARGET_TYPES` that implement their own anchoring.
+        Config validation must use this rather than
+        :meth:`get_span_target_types`, and rather than a list of its own --
+        a second hardcoded list is how ``eval_trace`` and ``coding_trace``
+        came to be rejected by the validator while declaring support in the
+        registry.
+        """
+        return sorted(set(self.get_span_target_types()) | CUSTOM_SPAN_TARGET_TYPES)
 
     def list_displays(self) -> List[Dict[str, Any]]:
         """
@@ -333,6 +390,7 @@ def _register_builtin_displays():
     Called automatically when this module is imported.
     """
     from .text_display import TextDisplay
+    from .depth_display import DepthDisplay
     from .image_display import ImageDisplay
     from .video_display import VideoDisplay
     from .audio_display import AudioDisplay
@@ -343,24 +401,30 @@ def _register_builtin_displays():
     from .spreadsheet_display import SpreadsheetDisplay
     from .code_display import CodeDisplay
     from .conversation_tree_display import ConversationTreeDisplay
+    from .multi_agent_discussion_display import MultiAgentDiscussionDisplay
     from .agent_trace_display import AgentTraceDisplay
+    from .eval_trace_display import EvalTraceDisplay
     from .gallery_display import GalleryDisplay
     from .interactive_chat_display import InteractiveChatDisplay
     from .web_agent_trace_display import WebAgentTraceDisplay
     from .live_agent_display import LiveAgentDisplay
     from .coding_trace_display import CodingTraceDisplay
     from .live_coding_agent_display import LiveCodingAgentDisplay
+    from .cot_trace_display import CotTraceDisplay
+    from .audio_dialogue_display import AudioDialogueDisplay
+    from .protein_structure_display import ProteinStructureDisplay
+    from .genome_locus_display import GenomeLocusDisplay
+    from .time_series_display import TimeSeriesDisplay
+    from .molecule_display import MoleculeDisplay
+    from .spectrum_display import SpectrumDisplay
+    from .image_region_display import ImageRegionDisplay
+    from .fits_cutout_display import FitsCutoutDisplay
 
     displays = [
         DisplayDefinition(
             name="text",
             renderer=TextDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "collapsible": False,
-                "max_height": None,
-                "preserve_whitespace": True,
-            },
             supports_span_target=True,
             description="Plain text content display"
         ),
@@ -368,10 +432,6 @@ def _register_builtin_displays():
             name="html",
             renderer=TextDisplay(allow_html=True),
             required_fields=["key"],
-            optional_fields={
-                "collapsible": False,
-                "max_height": None,
-            },
             supports_span_target=False,
             description="HTML content display (sanitized)"
         ),
@@ -379,27 +439,20 @@ def _register_builtin_displays():
             name="image",
             renderer=ImageDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "max_width": None,
-                "max_height": None,
-                "zoomable": True,
-                "alt_text": "",
-            },
             supports_span_target=False,
             description="Image display with optional zoom"
+        ),
+        DisplayDefinition(
+            name="depth_map",
+            renderer=DepthDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Depth map with windowing, colormap and a metre readout"
         ),
         DisplayDefinition(
             name="video",
             renderer=VideoDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "max_width": None,
-                "max_height": None,
-                "controls": True,
-                "autoplay": False,
-                "loop": False,
-                "muted": False,
-            },
             supports_span_target=False,
             description="Video player display"
         ),
@@ -407,12 +460,6 @@ def _register_builtin_displays():
             name="audio",
             renderer=AudioDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "controls": True,
-                "autoplay": False,
-                "loop": False,
-                "show_waveform": False,
-            },
             supports_span_target=False,
             description="Audio player display"
         ),
@@ -420,23 +467,38 @@ def _register_builtin_displays():
             name="dialogue",
             renderer=DialogueDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "alternating_shading": True,
-                "speaker_extraction": True,
-                "show_turn_numbers": False,
-            },
+            # Must stay in step with DialogueDisplay.optional_fields — that class
+            # attribute is what get_display_options() actually merges, while this
+            # copy feeds the docs and the generated config schema.
             supports_span_target=True,
-            description="Dialogue/conversation turns display"
+            description=(
+                "Dialogue/conversation turns, optionally threaded by reply-to "
+                "with timestamps and per-turn metadata"
+            )
+        ),
+        DisplayDefinition(
+            name="audio_dialogue",
+            renderer=AudioDialogueDisplay(),
+            required_fields=["key"],
+            supports_span_target=True,
+            description="Podcast / interview dialogue: speaker bubbles, per-turn audio playback, ratings, spans, cross-turn linking",
+        ),
+        DisplayDefinition(
+            name="multi_agent_discussion",
+            renderer=MultiAgentDiscussionDisplay(),
+            required_fields=["key"],
+            supports_span_target=True,
+            description="Multi-agent discussion with agent legend, colors, addressees, and filtering"
         ),
         DisplayDefinition(
             name="pairwise",
             renderer=PairwiseDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "cell_width": "50%",
-                "show_labels": True,
-                "vertical_on_mobile": True,
-            },
+            # Must stay in step with PairwiseDisplay.optional_fields -- that
+            # class attribute is what get_display_options() merges, while this
+            # copy feeds the docs and the generated config schema. This one had
+            # drifted twice: the default was still "50%" after the renderer
+            # moved to "auto", and `labels` was documented but never declared.
             supports_span_target=False,
             description="Side-by-side comparison display"
         ),
@@ -444,15 +506,6 @@ def _register_builtin_displays():
             name="pdf",
             renderer=PDFDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "view_mode": "scroll",
-                "max_height": 700,
-                "max_width": None,
-                "text_layer": True,
-                "show_page_controls": True,
-                "initial_page": 1,
-                "zoom": "auto",
-            },
             supports_span_target=False,
             description="PDF document display with PDF.js rendering"
         ),
@@ -460,13 +513,6 @@ def _register_builtin_displays():
             name="document",
             renderer=DocumentDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "collapsible": False,
-                "max_height": None,
-                "show_outline": False,
-                "preserve_structure": True,
-                "style_theme": "default",
-            },
             supports_span_target=True,
             description="Document display for DOCX, Markdown, and other formats"
         ),
@@ -474,17 +520,6 @@ def _register_builtin_displays():
             name="spreadsheet",
             renderer=SpreadsheetDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "annotation_mode": "row",
-                "show_headers": True,
-                "max_height": 400,
-                "max_width": None,
-                "striped": True,
-                "hoverable": True,
-                "sortable": False,
-                "selectable": True,
-                "compact": False,
-            },
             supports_span_target=False,
             description="Spreadsheet/table display with row or cell annotation"
         ),
@@ -492,17 +527,6 @@ def _register_builtin_displays():
             name="code",
             renderer=CodeDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "language": None,
-                "show_line_numbers": True,
-                "max_height": 500,
-                "max_width": None,
-                "wrap_lines": False,
-                "highlight_lines": None,
-                "start_line": 1,
-                "theme": "default",
-                "copy_button": True,
-            },
             supports_span_target=True,
             description="Source code display with syntax highlighting"
         ),
@@ -510,12 +534,9 @@ def _register_builtin_displays():
             name="conversation_tree",
             renderer=ConversationTreeDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "collapsed_depth": 2,
-                "node_style": "card",
-                "show_node_ids": False,
-                "max_depth": None,
-            },
+            # Not a span target: collapsed subtrees make the container's
+            # textContent depend on UI state, so span offsets would shift when a
+            # branch is expanded. Pair it with a `dialogue` field for spans.
             supports_span_target=False,
             description="Conversation tree with collapsible branching nodes"
         ),
@@ -523,30 +544,29 @@ def _register_builtin_displays():
             name="agent_trace",
             renderer=AgentTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_timestamps": False,
-                "collapse_observations": False,
-                "step_type_colors": None,
-                "show_screenshots": True,
-                "show_step_numbers": True,
-                "show_summary": True,
-                "compact": False,
-            },
             supports_span_target=False,
             description="Agent trace display with step cards and type badges"
+        ),
+        DisplayDefinition(
+            name="cot_trace",
+            renderer=CotTraceDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Long chain-of-thought trace: vertical step cards with a sticky progress rail for process-reward verification",
+        ),
+        DisplayDefinition(
+            name="eval_trace",
+            renderer=EvalTraceDisplay(),
+            required_fields=["key"],
+            # Matches EvalTraceDisplay.supports_span_target: the three-pane block
+            # is span-annotatable (offset-based highlight across panes).
+            supports_span_target=True,
+            description="Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
         ),
         DisplayDefinition(
             name="gallery",
             renderer=GalleryDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "layout": "horizontal",
-                "thumbnail_size": 300,
-                "show_captions": True,
-                "zoomable": True,
-                "max_height": 400,
-                "columns": 3,
-            },
             supports_span_target=False,
             description="Scrollable image gallery with captions"
         ),
@@ -554,9 +574,6 @@ def _register_builtin_displays():
             name="interactive_chat",
             renderer=InteractiveChatDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "placeholder_text": "Start chatting with the agent to begin the task.",
-            },
             supports_span_target=True,
             lazy_populated=True,  # conversation is written by /agent_chat/finish
             description="Interactive agent chat with post-interaction trace display"
@@ -565,18 +582,6 @@ def _register_builtin_displays():
             name="web_agent_trace",
             renderer=WebAgentTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_overlays": True,
-                "show_filmstrip": True,
-                "show_thought": True,
-                "show_observation": True,
-                "show_element_info": True,
-                "screenshot_max_width": 800,
-                "screenshot_max_height": 600,
-                "filmstrip_size": 80,
-                "auto_playback": False,
-                "playback_step_delay": 2.0,
-            },
             supports_span_target=False,
             description="Web agent trace viewer with screenshots, SVG overlays, and step navigation"
         ),
@@ -584,17 +589,6 @@ def _register_builtin_displays():
             name="coding_trace",
             renderer=CodingTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_file_tree": True,
-                "diff_view": "unified",
-                "collapse_long_outputs": True,
-                "max_output_lines": 50,
-                "terminal_theme": "dark",
-                "show_step_numbers": True,
-                "show_tool_badges": True,
-                "show_reasoning": True,
-                "compact": False,
-            },
             supports_span_target=True,
             description="Coding agent trace display with diff rendering, terminal blocks, and file tree"
         ),
@@ -602,17 +596,6 @@ def _register_builtin_displays():
             name="live_agent",
             renderer=LiveAgentDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_overlays": True,
-                "show_filmstrip": True,
-                "show_thought": True,
-                "show_controls": True,
-                "allow_takeover": True,
-                "allow_instructions": True,
-                "screenshot_max_width": 900,
-                "screenshot_max_height": 650,
-                "filmstrip_size": 80,
-            },
             supports_span_target=False,
             lazy_populated=True,  # trace populated by live agent session
             description="Live AI agent viewer with real-time screenshots, controls, and interaction"
@@ -621,17 +604,58 @@ def _register_builtin_displays():
             name="live_coding_agent",
             renderer=LiveCodingAgentDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_file_tree": True,
-                "show_reasoning": True,
-                "collapse_long_outputs": True,
-                "max_output_lines": 50,
-                "show_controls": True,
-                "allow_instructions": True,
-            },
             supports_span_target=False,
             lazy_populated=True,  # trace populated by live coding-agent session
             description="Live coding agent viewer with real-time streaming and intervention controls"
+        ),
+        DisplayDefinition(
+            name="protein_structure",
+            renderer=ProteinStructureDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Protein structure (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*, with residue selection"
+        ),
+        DisplayDefinition(
+            name="genome_locus",
+            renderer=GenomeLocusDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Genome locus in igv.js: reference, reads, variants and annotation tracks"
+        ),
+        DisplayDefinition(
+            name="molecule",
+            renderer=MoleculeDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Small molecule from SMILES or molfile (OpenChemLib or RDKit.js), with atom selection"
+        ),
+        DisplayDefinition(
+            name="spectrum",
+            renderer=SpectrumDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Spectrum (NMR, IR, MS from JCAMP-DX, mzML or CSV) with zoom, peak picking and integration"
+        ),
+        DisplayDefinition(
+            name="time_series",
+            renderer=TimeSeriesDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="Multi-channel signal (EDF, WFDB, CSV, Parquet) in uPlot, with zoom, pan and labelled overlays"
+        ),
+        DisplayDefinition(
+            name="image_region",
+            renderer=ImageRegionDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="One rectangle of a larger image (a text line, a word, a figure), cropped in the browser"
+        ),
+        DisplayDefinition(
+            name="fits_cutout",
+            renderer=FitsCutoutDisplay(),
+            required_fields=["key"],
+            supports_span_target=False,
+            description="FITS image cutouts (one image, or science/reference/difference) with an RA/Dec readout and a light curve"
         ),
     ]
 
@@ -643,3 +667,10 @@ def _register_builtin_displays():
 
 # Auto-register built-in displays on import
 _register_builtin_displays()
+
+
+def display_required_bundles(config):
+    """Fetchable browser bundles the config's viewer displays need
+    (potato.vendoring.requirements reads this)."""
+    from .viewer_display import display_required_bundles as _viewer_bundles
+    return _viewer_bundles(config)

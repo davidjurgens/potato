@@ -1,0 +1,137 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Threaded discussion annotation — generic, no ConvoKit involved
+#
+# The `dialogue` display can render ANY branching discussion: a forum thread, a
+# GitHub review, a mailing list, a Slack channel, a chat log. All it needs is a
+# list of turns where each one names the turn it replies to. Nesting depth is
+# derived from `reply_to` — nothing has to precompute it.
+#
+# The data here is a plain hand-written thread whose turns use `id` / `reply_to`.
+# The ConvoKit importer produces the same shape, but nothing about this display
+# is ConvoKit-specific.
+#
+# This example exists to show that a threaded conversation supports the FULL
+# range of annotation at once:
+#
+#   * whole-thread classification    -> `outcome` (radio)
+#   * per-comment classification     -> `comment_type` (radio, turn_level)
+#   * per-comment rating             -> `persuasiveness` (likert, turn_level)
+#   * per-comment free text          -> `comment_note` (text, turn_level, drawer)
+#   * spans anywhere in the thread   -> `evidence` (span)
+#   * links between spans in DIFFERENT comments -> `rebuts` (span_link)
+#
+# Spans and per-comment widgets coexist on the same field: span offsets skip
+# `.turn-anno-slot` subtrees (see shouldSkipForOffsets in potato/static/span-core.js),
+# so widget text never shifts the offsets.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/conversation/threaded-forum/config.yaml -p 8000
+
+annotation_task_name: "Threaded Discussion Annotation"
+
+data_files:
+  - data/thread.jsonl
+
+item_properties:
+  id_key: id
+  text_key: title
+
+task_dir: .
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: title
+      type: text
+      label: "Topic"
+
+    - key: thread
+      type: dialogue
+      label: "Discussion"
+      span_target: true
+      display_options:
+        show_turn_numbers: true
+        # Depth is derived from each turn's `reply_to`; no `depth` key needed.
+        indent_replies: true
+        show_reply_lines: true
+        max_indent_depth: 6
+        show_timestamps: true
+        timestamp_format: relative
+
+annotation_schemes:
+  # --- whole thread ----------------------------------------------------------
+  - annotation_type: radio
+    name: outcome
+    description: "How does this thread resolve?"
+    labels:
+      - consensus
+      - unresolved
+      - escalated
+    sequential_key_binding: true
+
+  # --- per comment: classification -------------------------------------------
+  - annotation_type: radio
+    name: comment_type
+    description: "Type"
+    labels:
+      - proposal
+      - objection
+      - support
+      - question
+    turn_level: true
+    turn_binding:
+      field: thread
+
+  # --- per comment: rating ---------------------------------------------------
+  - annotation_type: likert
+    name: persuasiveness
+    description: "Persuasiveness"
+    size: 5
+    min_label: "Weak"
+    max_label: "Strong"
+    turn_level: true
+    turn_binding:
+      field: thread
+
+  # --- per comment: free text, tucked into a drawer to keep the thread compact
+  - annotation_type: text
+    name: comment_note
+    description: "Note"
+    turn_level: true
+    turn_binding:
+      field: thread
+      placement: drawer
+
+  # --- spans across the thread ----------------------------------------------
+  - annotation_type: span
+    name: evidence
+    description: "Highlight claims and the evidence offered for them"
+    labels:
+      - claim
+      - evidence
+      - concession
+
+  # --- links between spans in different comments -----------------------------
+  # Links join two spans that may sit in DIFFERENT comments: spans are scoped to
+  # the field, not the turn, so one offset space covers the whole thread.
+  - annotation_type: span_link
+    name: argument_links
+    description: "Link a rebuttal to the claim it answers"
+    span_schema: evidence
+    link_types:
+      - name: rebuts
+        directed: true
+        color: "#dc2626"
+        allowed_source_labels: [claim]
+        allowed_target_labels: [claim, evidence]
+      - name: supports
+        directed: true
+        color: "#059669"
+
+user_config:
+  allow_all_users: true

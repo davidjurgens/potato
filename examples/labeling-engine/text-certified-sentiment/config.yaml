@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# The labeling engine on a text classification study.
+#
+# Machines label every review; people label a blind random sample. From that
+# sample the engine certifies a rule for which machine labels to accept, with
+# a stated guarantee, and estimates each label's prevalence with an interval.
+# Whatever the rule does not accept is sent to people to verify.
+#
+#   pip install 'potato-annotation[decision]'   # Laya, the fast first tier
+#   ollama serve && ollama pull llama3.2:3b      # the LLM tier
+#   potato label run examples/labeling-engine/text-certified-sentiment/config.yaml
+#   python potato/flask_server.py start examples/labeling-engine/text-certified-sentiment/config.yaml -p 8000
+#   potato label status examples/labeling-engine/text-certified-sentiment/config.yaml
+
+task_dir: .
+port: 8000
+
+annotation_task_name: "engine-certified-sentiment"
+output_annotation_dir: "annotation_output"
+
+data_files:
+  - data/reviews.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+
+# People are served the engine's requests: blind calibration first, then
+# the items no machine label could be accepted for.
+assignment_strategy: engine
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the overall sentiment of this review?"
+    labels:
+      - name: positive
+        tooltip: "The reviewer is happy with it overall"
+      - name: negative
+        tooltip: "The reviewer is unhappy with it overall"
+      - name: neutral
+        tooltip: "Factual, or genuinely balanced with no overall opinion"
+    sequential_key_binding: true
+
+labeling_engine:
+  enabled: true
+
+  sources:
+    - id: laya
+      kind: decision
+      endpoint_type: laya
+      model: convaiinnovations/laya
+      options:
+        device: cpu
+    - id: llm
+      kind: llm
+      endpoint_type: ollama
+      model: llama3.2:3b
+      base_url: http://localhost:11434
+      max_tokens: 200
+
+  # Laya answers everything in one pass on CPU. Once the dev labels fix a
+  # Laya threshold, the LLM sees only what Laya is not sure enough about, plus
+  # the calibration sample; until then it labels every item. `potato label
+  # status` shows how many more labels Laya's threshold needs.
+  cascade: [laya, llm]
+
+  contracts:
+    # At most 10% of accepted labels wrong, with probability 0.9. A
+    # per-class guarantee (per_class: true) splits the held-out labels three
+    # ways and needs several hundred more of them on this corpus; `potato
+    # label status` reports how many.
+    - id: accuracy
+      kind: selective_risk
+      schema: sentiment
+      error: 0.1
+      confidence: 0.9
+    # Each label's share of the corpus, corrected for the machines' errors.
+    - id: prevalence
+      kind: ppi
+      schema: sentiment
+      confidence: 0.9
+
+  humans:
+    pools: [team]
+    calibration_rate: 0.35
+
+  budgets:
+    human_labels: 400

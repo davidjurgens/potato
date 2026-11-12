@@ -23,17 +23,18 @@ participants (`participant_id`), each tagged with a `condition`
 - **Notes** (right edge): write an analytic memo on the instance or a
   text selection; choose Private or Shared.
 - **Find** (left edge): full-text search the corpus (e.g. `copay`,
-  `transit`) and **Claim** a matching excerpt into your queue.
+  `transit`) and **Claim** a matching excerpt. Claim adds it to the end
+  of your queue without opening it; page forward with Next to reach it.
 - **Cases**: excerpts are auto-grouped by `participant_id`; the admin
   code crosstab can tabulate codes by `condition`.
 
 ## Export
 
 ```bash
-python -m potato.export examples/advanced/qda-mode-example/config.yaml \
-  --format quotation_report --option include_memos=true -o quotations.csv
-python -m potato.export examples/advanced/qda-mode-example/config.yaml \
-  --format codebook -o codebook.csv
+python -m potato.export --config examples/advanced/qda-mode-example/config.yaml \
+  --format quotation_report --option include_memos=true -o ./export/
+python -m potato.export --config examples/advanced/qda-mode-example/config.yaml \
+  --format codebook -o ./export/
 ```
 
 See [docs/advanced/qda.md](../../../docs/advanced/qda.md) for the full guide.

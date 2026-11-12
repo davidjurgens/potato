@@ -37,7 +37,7 @@ result = executor.invoke(
 handler.flush()
 ```
 
-## How It Works
+## From callback to trace
 
 1. The callback handler hooks into LangChain's callback system
 2. It collects all run events (chain, LLM, tool, retriever starts/ends)
@@ -151,5 +151,5 @@ python examples/agent-traces/langchain-integration/demo_agent.py
 
 ## Related Documentation
 
-- [Agent Trace Evaluation](../examples/agent-traces/agent-trace-evaluation/) — annotation schemas for agent evaluation
-- [Webhook Receiver](../potato/trace_ingestion/) — trace ingestion internals
+- [Agent Trace Evaluation](https://github.com/davidjurgens/potato/tree/master/examples/agent-traces/agent-trace-evaluation/) — annotation schemas for agent evaluation
+- [Webhook Receiver](https://github.com/davidjurgens/potato/tree/master/potato/trace_ingestion/) — trace ingestion internals

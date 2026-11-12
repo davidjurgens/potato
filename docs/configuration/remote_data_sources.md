@@ -6,7 +6,8 @@ Potato supports loading annotation data from various remote sources beyond local
 
 The data sources system extends Potato's data loading capabilities with:
 
-- **Multiple source types**: URLs, Google Drive, Dropbox, S3, Hugging Face, Google Sheets, SQL databases
+- **Multiple source types**: URLs, Google Drive, Dropbox, Amazon S3, Google Cloud Storage, Azure Blob Storage, Hugging Face, Google Sheets, SQL databases
+- **Live ingestion**: poll a database table, or an object-store prefix, for new data while the study runs
 - **Partial loading**: Load data in chunks for large datasets
 - **Incremental loading**: Auto-load more data as annotation progresses
 - **Caching**: Cache remote files locally to avoid repeated downloads
@@ -103,7 +104,8 @@ Load from S3 or S3-compatible storage:
 data_sources:
   - type: s3
     bucket: "my-annotation-data"
-    key: "datasets/items.jsonl"
+    key: "datasets/items.jsonl"   # one object, or
+    # prefix: "incoming/"         # every data file under the prefix
     region: "us-east-1"  # Optional, default: us-east-1
     # Optional: explicit credentials (prefer env vars or AWS credentials file)
     access_key_id: "${AWS_ACCESS_KEY_ID}"
@@ -112,7 +114,54 @@ data_sources:
     endpoint_url: "https://minio.example.com"
 ```
 
-**Dependencies**: `pip install boto3`
+**Dependencies**: `pip install "potato-annotation[s3]"` (boto3)
+
+#### Google Cloud Storage
+
+```yaml
+data_sources:
+  - type: gcs
+    bucket: "my-annotation-data"
+    prefix: "incoming/"            # or key: "datasets/items.jsonl"
+    credentials_file: "sa.json"    # Optional: a service-account key file
+    project: "my-project"          # Optional
+    # anonymous: true              # for a public bucket
+```
+
+Without `credentials_file`, the client uses Application Default Credentials:
+`gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or
+the service account attached on Google Cloud.
+
+**Dependencies**: `pip install "potato-annotation[gcs]"` (google-cloud-storage)
+
+#### Azure Blob Storage
+
+```yaml
+data_sources:
+  - type: azure_blob
+    container: "annotation-data"
+    prefix: "incoming/"            # or key: "datasets/items.jsonl"
+    connection_string: "${AZURE_STORAGE_CONNECTION_STRING}"
+    # or:
+    # account_url: "https://myaccount.blob.core.windows.net"
+    # credential: "${AZURE_STORAGE_SAS_TOKEN}"   # SAS token or account key;
+    #                                            # omit for a public container
+```
+
+**Dependencies**: `pip install "potato-annotation[azure]"` (azure-storage-blob)
+
+#### Key or prefix
+
+The three object stores take either `key` or `prefix`, not both:
+
+- `key` reads one object.
+- `prefix` reads every `.json`, `.jsonl`, `.ndjson`, `.csv` and `.tsv` object
+  under the prefix, in key order, and skips anything else (images, READMEs).
+
+The format comes from the file extension, or from the object's content type
+when the extension does not say. As for S3's `endpoint_url`, an Azure
+`account_url` or connection-string endpoint that resolves to a loopback or
+link-local address is refused.
 
 #### Hugging Face Datasets
 
@@ -173,7 +222,184 @@ data_sources:
     text_column: "text"
 ```
 
-**Dependencies**: `pip install sqlalchemy psycopg2-binary` (PostgreSQL) or `pip install sqlalchemy pymysql` (MySQL)
+**Dependencies**: `pip install sqlalchemy psycopg2-binary` (PostgreSQL) or `pip install sqlalchemy pymysql` (MySQL). SQLAlchemy alone is also available as `pip install 'potato-annotation[db]'`.
+
+#### Live Ingestion (Database)
+
+By default a database is read once at startup. Add a `live_ingestion` block and Potato polls it in the background, so rows created *after* the server started become annotatable without a restart.
+
+```yaml
+data_sources:
+  - id: live_instances          # set an explicit id — see the warning below
+    type: database
+    connection_string: "${DATABASE_URL}"
+    query: "SELECT id, text, metadata, created_at FROM instances"
+    live_ingestion:
+      enabled: true
+      poll_interval_seconds: 5
+      cursor_column: created_at
+      tiebreaker_column: id     # defaults to id_column
+```
+
+Polling is cursor-based, not `OFFSET`-based. Offsets are wrong for a table being written to: insert a row near the front and every later page shifts, silently skipping or repeating items.
+
+##### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Turn on background polling for this source |
+| `poll_interval_seconds` | `5.0` | Seconds between polls (0.5–3600) |
+| `cursor_column` | — | Column whose ascending order defines "newer". Required unless the query supplies its own `:cursor` |
+| `tiebreaker_column` | `id_column` | Second sort key, so rows sharing a cursor value are not skipped |
+| `initial_cursor` | none | Where to start on a first run. Required in explicit-`:cursor` mode |
+| `batch_size` | `500` | Maximum rows fetched per poll |
+| `overlap_seconds` | `0.0` | Rewind the cursor by this much before each read. See "Choosing a cursor column" |
+| `safety_lag_seconds` | `0.0` | Refuse to read rows newer than `now - lag`, keeping the cursor behind the write frontier |
+| `backoff_initial_seconds` | `1.0` | First retry delay after a failure |
+| `backoff_max_seconds` | `300.0` | Ceiling on the exponential backoff |
+| `max_consecutive_failures` | `0` | Stop the worker after this many failures in a row. `0` = retry forever |
+| `stop_after_items` | `0` | Stop ingesting after this many items. `0` = unlimited |
+| `replay_on_start` | `true` | Re-read the source from the beginning at startup. See "Restarts" |
+
+##### Choosing a cursor column
+
+**Prefer a monotonic column** — an auto-incrementing `id BIGSERIAL`, or an insert sequence. A wall-clock column like `created_at` is only best-effort: a transaction that began before a poll can commit after it with an earlier timestamp, and the cursor will already have moved past it.
+
+If you must use a timestamp, set `overlap_seconds` (2 is usually plenty). Each poll first fetches the rows from `overlap_seconds` before the cursor up to the cursor, then reads forward from the cursor. Rows fetched twice are dropped by ID deduplication, so the only cost is a little bandwidth. The overlap pass never moves the cursor, so a window holding more rows than `batch_size` still pages through to the end.
+
+The `(cursor, tiebreaker)` pair also matters. With `cursor_column` alone, three rows sharing one timestamp and a batch size of two would leave the third permanently unread. Potato always orders by both and remembers both.
+
+##### Two query modes
+
+**Managed (recommended).** Write a plain `SELECT`; Potato generates the keyset predicate, the ordering and the `LIMIT`:
+
+```sql
+SELECT * FROM ( <your query> ) AS potato_live
+WHERE created_at > :cursor_value
+   OR (created_at = :cursor_value AND id > :cursor_tiebreak)
+ORDER BY created_at, id LIMIT 500
+```
+
+**Explicit.** If your query already contains a `:cursor` placeholder, Potato only binds the value and appends the `LIMIT`. Ordering and tie-breaking become your responsibility, and `initial_cursor` is then required — `col > NULL` matches zero rows, silently and forever:
+
+```yaml
+query: "SELECT id, text, created_at FROM instances WHERE created_at > :cursor ORDER BY created_at, id"
+live_ingestion:
+  enabled: true
+  cursor_column: created_at
+  initial_cursor: "1970-01-01T00:00:00+00:00"
+```
+
+##### Behaviour
+
+- **Deduplication** is by instance ID. A row whose ID is already in the pool is skipped, never overwritten, so existing annotations on it are preserved.
+- **Database failures never crash the server.** A failed poll backs off exponentially (with jitter) and retries; annotation carries on with the items already loaded.
+- **Polling never blocks annotation requests.** The poll thread holds no lock that the request path needs.
+
+##### Restarts
+
+The cursor is persisted to `live_ingestion_state.json` in your `output_annotation_dir`, so the *poller* always resumes where it left off rather than rescanning the table.
+
+The startup read is a separate question. By default (`replay_on_start: true`) Potato re-reads the source from the beginning when it boots, exactly as a non-live `type: database` source does. Deduplication means nothing is added twice, and it keeps the item pool complete — admin views, exports and adjudication all read that pool, so a pool holding only rows that arrived since the last shutdown would misreport the corpus.
+
+Set `replay_on_start: false` for a table too large to rescan on every boot. The pool will then contain only rows newer than the stored cursor; annotations already written to disk are unaffected, but previously loaded items will be missing from admin views and exports.
+
+Either way, a replay never moves the stored cursor backwards, so the poller cannot be made to re-deliver rows it has already passed.
+
+##### Assignment strategy
+
+`live_ingestion` **cannot** be combined with `assignment_strategy: batch`, and Potato rejects that configuration at startup. BATCH only assigns items belonging to a pre-declared cohort, so a live-ingested item would sit in the pool, appear in admin views and exports, and never be offered to a single annotator.
+
+Everything else works. Two notes:
+
+- `category_based` only routes live rows that carry your configured `category_key`; others land in the uncategorized pool.
+- `active_learning`, `diversity_clustering` and `psychometric` fall back to random selection for items they have not scored yet, so newly ingested rows are served immediately and ranked once scores exist. `llm_confidence` serves rows with no prelabel after the prelabelled ones, in the order they arrived.
+
+##### Per-user quota
+
+When `max_annotations_per_user` is unset, Potato normally defaults it to the instance count — but that count is frozen at load time. With live ingestion enabled the default becomes unlimited (`-1`) instead, so later arrivals stay assignable. If you set `max_annotations_per_user` explicitly, that cap still applies to live items, and Potato logs a warning to that effect.
+
+##### Admin API
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/admin/api/data_sources/live` | Status and metrics for every live source |
+| GET | `/admin/api/data_sources/<source_id>/live` | Status for one source |
+| POST | `/admin/api/data_sources/<source_id>/live/poll` | Run one poll immediately |
+
+Each reports `polls_total`, `polls_failed`, `rows_fetched`, `items_added`, `duplicates_skipped`, `consecutive_failures`, `last_error`, `last_poll_at`, `last_cursor` and `is_running`. The same block also appears per source in `GET /admin/api/data_sources`.
+
+##### Limitations
+
+- **An annotator who finishes everything moves on.** When a user has annotated every item currently available to them, they leave the annotation phase and are marked done; rows that arrive afterwards are not offered to them in that session, though any new or still-active annotator receives them normally. This is general Potato behaviour for every runtime source — directory watching and trace ingestion do exactly the same — and is not specific to live ingestion. It matters most when the pool is small relative to the number of annotators.
+- **Single process only.** Potato holds its item pool in memory per process, so running under multiple workers (`gunicorn -w N`) gives each one its own pool, its own poller, and no cross-process deduplication.
+- **The pool grows without bound.** A source producing tens of thousands of rows per hour will keep enlarging the in-memory pool that each annotation request scans. Use `stop_after_items` to cap it.
+- **Automation rules run on the poll thread.** A slow rule action stretches the effective interval; `poll_interval_seconds` is a floor, not a guarantee.
+- **Set an explicit `id`.** Without one, the generated id encodes the source's position in the list, so reordering `data_sources` would point a stored cursor at a different table.
+
+**Example project**: `examples/advanced/live-database-ingestion/`
+
+#### Live Ingestion (Object Stores)
+
+An S3, GCS or Azure source in `prefix` mode can be polled the same way.
+Each object that appears under the prefix adds its rows while the study runs:
+
+```yaml
+data_sources:
+  - id: incoming            # set an id, as for databases
+    type: gcs
+    bucket: "my-annotation-data"
+    prefix: "incoming/"
+    live_ingestion:
+      enabled: true
+      poll_interval_seconds: 30
+```
+
+There is no cursor column to choose. The cursor is each object's
+last-modified time, and rows are taken in the order (modified time, key, row
+number). A poll that stops part-way through a large object resumes at the
+next row of that object.
+
+The other live options (`batch_size`, `safety_lag_seconds`,
+`stop_after_items`, backoff, `replay_on_start`) behave as described above.
+`safety_lag_seconds` holds back objects modified within the lag, which helps
+with a writer that uploads in several steps. `live_ingestion` without a
+`prefix` is refused at startup.
+
+**Write new objects; do not edit old ones.** An object uploaded again gets a
+new modified time, so its rows are read again. Ids already in the item pool
+are dropped as duplicates, so a changed row is not picked up. Add changes as
+new rows with new ids in a new object.
+
+**Large prefixes.** By default each poll lists every object under the prefix
+and reads only the new ones, so the listing grows with the bucket: S3 returns
+1,000 keys per request. If new objects always get keys that sort after the
+old ones (names that start with a timestamp or a sequence number, as most
+pipelines write them), set `listing: after_last_key`:
+
+```yaml
+    prefix: "incoming/"            # keys like incoming/2026-10-19T10-05-00.jsonl
+    live_ingestion:
+      enabled: true
+      listing: after_last_key
+```
+
+Each poll then lists only the keys after the last one read (S3 `StartAfter`,
+GCS `startOffset`), and an object read to its end is not downloaded again.
+Rows are taken in key order, not by modified time, and objects are treated
+as write-once. Two costs follow: an object written later under a key that
+sorts earlier is never read, and an object rewritten under a key already read
+to its end is not read again. A last object with no rows (an empty file, or a
+CSV with only a header) is listed and fetched again on each poll until a later
+key arrives. `overlap_seconds` re-reads a time window, which has no meaning in
+key order, so it is refused with `after_last_key`. In this mode the cursor is
+a key: `initial_cursor` names the key to start after, written in full with
+the prefix, for example `initial_cursor: "incoming/2026-10-01T00-00-00.jsonl"`. Switching a running
+source between the two modes makes its next poll list the prefix from the
+start once; rows already in the pool are dropped as duplicates. Azure's listing
+cannot start after a key, so `after_last_key` is refused for `azure_blob`;
+give each day or batch its own prefix there instead. A restart with
+`replay_on_start` (the default) still lists the whole prefix once.
 
 ### Partial/Incremental Loading
 
@@ -186,6 +412,20 @@ partial_loading:
   batch_size: 500              # Items to load per increment
   auto_load_threshold: 0.8     # Auto-load when 80% annotated
 ```
+
+The read position counts rows read, not items added, so a row with no ID or a
+repeated ID does not make Potato re-read rows or think the source has ended.
+On a restart every row that earlier runs had loaded is read again, so the item
+pool comes back whole, and loading continues from there.
+
+### Bad rows and repeated IDs
+
+A file source parses exactly like `data_files`: CSV and TSV cells are kept as
+written, a UTF-8 byte order mark is ignored, and a malformed JSON line is an
+error naming the line. At startup, a row with no ID and an ID that appears in
+two sources both stop the server, as they do for `data_files`. Rows loaded
+later (by `load_more` or auto-loading) are skipped with a logged error and the
+first row with that ID is kept.
 
 ### Caching
 

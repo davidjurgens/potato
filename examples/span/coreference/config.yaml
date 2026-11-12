@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Simple Coreference Annotation Example
 # Run: python potato/flask_server.py start examples/span/coreference/config.yaml -p 8000
 
@@ -19,6 +20,9 @@ instance_display:
     - key: text
       type: text
       label: "Text"
+      # The mentions are drawn on this field. Without it no text on the page
+      # takes a span, so no mention can be made.
+      span_target: true
 
 annotation_schemes:
   # First, a span schema for identifying mentions
@@ -46,4 +50,4 @@ annotation_schemes:
       highlight_mode: background
 
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl

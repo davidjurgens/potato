@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Whole-slide image annotation (SVS, NDPI, MRXS, and pyramidal TIFF).
+#
+# A slide is served from its own pyramid through openslide, a tile at a time,
+# so a 100,000 x 80,000 px scan opens as fast as this small one. Install the
+# optional dependency first:
+#   pip install potato-annotation[wsi]
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/image/whole-slide/config.yaml -p 8000
+#
+# The slide is synthetic (see generate_slide.py); real slides drop into media/
+# unchanged. Coordinates are stored as fractions of the full-resolution slide,
+# like any image; the slide's microns per pixel is in the tile descriptor
+# (/media/tiles/<slide>.dzi?format=json) for converting them to microns.
+#
+# regions/ holds the same four regions as a QuPath GeoJSON file and an ASAP
+# XML file. Either imports as a correction project with the regions as
+# pre-annotations, and the annotators' regions export back to both formats
+# in level-0 slide pixels (docs/annotation-types/science/clinical_formats.md):
+#   potato import -i examples/image/whole-slide/regions/synthetic_tissue.geojson \
+#       --image-dir examples/image/whole-slide/media -o qupath-project
+#   python -m potato.export -c examples/image/whole-slide/config.yaml -f qupath_geojson -o out/qupath
+#   python -m potato.export -c examples/image/whole-slide/config.yaml -f asap_xml -o out/asap
+
+port: 8000
+annotation_task_name: Whole-slide annotation
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+  - data/slides.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: regions
+    description: "Outline each tissue region; box clusters of nuclei. Zoom in to see them."
+    source_field: image
+    # Required for slides: the default viewer sends the image as one file,
+    # which no browser can open.
+    viewer: deepzoom
+    tiles:
+      tile_size: 254
+      overlap: 1
+      navigator: true
+    tools: [polygon, bbox, landmark]
+    labels:
+      - name: tissue
+        color: "#c0397b"
+      - name: nuclei cluster
+        color: "#5b2c86"
+      - name: artifact
+        color: "#7f8c8d"

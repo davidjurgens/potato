@@ -1,6 +1,6 @@
 # Event Annotation
 
-Event annotation enables the creation of N-ary event structures for information extraction tasks. Events consist of:
+Event annotation builds N-ary event structures for information extraction. An event consists of:
 
 - **Trigger span**: The word or phrase that indicates the event (e.g., "attacked", "hired", "traveled")
 - **Argument spans**: Entity spans with typed semantic roles (e.g., attacker, target, weapon)
@@ -80,6 +80,13 @@ Each argument defines:
 | `entity_types` | list | No | Span labels allowed for this role (empty = any span) |
 | `required` | boolean | No | Whether this argument must be filled (default: false) |
 
+!!! warning "These names must match the span schema"
+    `trigger_labels` and `entity_types` name labels in the scheme `span_schema`
+    points at. A name that does not exist there is now a configuration error,
+    because the flow cannot start without it: the annotator marks a span, picks
+    a role, and nothing happens, with Create Event staying disabled and nothing
+    saying which label was wrong.
+
 #### Visual Display
 
 ```yaml
@@ -145,6 +152,14 @@ Events are stored with the following structure:
 }
 ```
 
+## Agreement
+
+`/admin/iaa` scores event schemes over the spans in `span_schema`, matched by
+offsets. It reports `trigger_f1` (trigger offsets and event type) and
+`argument_f1` (trigger, event type, argument offsets and role) for each pair of
+annotators, pooled over the items both saved, and averages over pairs. The
+figures are not chance-corrected.
+
 ## Complete Example
 
 See the `simple-event-annotation` example in the project hub:
@@ -189,6 +204,6 @@ Multiple events are stacked vertically to avoid overlap.
 
 ## Related Documentation
 
-- [Span Annotation](span_annotation.md) - Required for defining entity spans
+- [Span Annotation](../schemas_and_templates.md#4-text-span-selection-span) - Required for defining entity spans
 - [Span Link](span_linking.md) - Alternative for binary relationships
 - [Coreference Annotation](coreference_annotation.md) - For entity coreference

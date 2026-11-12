@@ -1,0 +1,4 @@
+{"id": "clip_1", "text": "Clip 1", "audio": "/media/clip_1.wav", "condition": "clean"}
+{"id": "clip_2", "text": "Clip 2", "audio": "/media/clip_2.wav", "condition": "noise_10db"}
+{"id": "clip_3", "text": "Clip 3", "audio": "/media/clip_3.wav", "condition": "lowpass_3k"}
+{"id": "clip_4", "text": "Clip 4", "audio": "/media/clip_4.wav", "condition": "clipped"}

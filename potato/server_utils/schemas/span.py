@@ -12,11 +12,18 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content,
-    generate_layout_attributes
+    generate_layout_attributes,
+    display_label_text,
+    bad_text_label_content
 )
 
 
-from item_state_management import SpanAnnotation
+# Absolute, package-qualified: the bare `from item_state_management import ...`
+# form only resolves when potato/ itself is on sys.path (flask_server inserts it),
+# so `python -m potato.validate_cli` and the console script both died importing
+# the registry. It also risked a second SpanAnnotation class with a distinct
+# identity from the one flask_server imports.
+from potato.item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +81,70 @@ def get_span_color(schema, span_label):
             return schema_colors[span_label]
 
     return None
+
+
+def parse_rgb_triple(color):
+    """Parse a colour into the ``(r, g, b)`` string span colours are stored in.
+
+    Hex and ``rgb()`` forms are accepted because that is what people write, but
+    neither can be stored raw: the span chip builds its CSS as
+    ``"rgb" + color``, so a ``#ffcc00`` in the registry renders as
+    ``rgb#ffcc00`` and the chip loses its colour entirely.
+
+    Returns "" for something unreadable. Pure -- no logging -- so config
+    validation can call it and report on its own logger.
+    """
+    value = str(color or "").strip()
+    if not value:
+        return ""
+    if value.startswith("(") and value.endswith(")"):
+        parts = [p.strip() for p in value[1:-1].split(",")]
+        if len(parts) == 3:
+            try:
+                r, g, b = (int(float(p)) for p in parts)
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                return ""
+        return ""
+    if value.startswith("#"):
+        digits = value[1:]
+        if len(digits) == 3:
+            digits = "".join(ch * 2 for ch in digits)
+        if len(digits) == 6:
+            try:
+                r, g, b = (int(digits[i:i + 2], 16) for i in (0, 2, 4))
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                return ""
+        return ""
+    if value.lower().startswith(("rgb(", "rgba(")):
+        try:
+            inner = value[value.index("(") + 1:value.rindex(")")]
+        except ValueError:
+            return ""
+        parts = [p.strip() for p in inner.split(",")]
+        if len(parts) >= 3:
+            try:
+                r, g, b = (int(float(p)) for p in parts[:3])
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                return ""
+    return ""
+
+
+def to_rgb_triple(color, context=""):
+    """parse_rgb_triple, warning when the colour is unreadable.
+
+    Returns "" so the caller falls back to the palette rather than emitting
+    broken CSS.
+    """
+    triple = parse_rgb_triple(color)
+    if not triple and str(color or "").strip():
+        logger.warning(
+            "Ignoring unreadable color %r%s; falling back to the palette. "
+            "Write it as '#rrggbb', 'rgb(r, g, b)' or '(r, g, b)'.",
+            color, f" for {context}" if context else "")
+    return triple
 
 
 def set_span_color(schema, span_label, color):
@@ -177,7 +248,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schematic = f"""
-    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr}{show_labels_attr} {layout_attrs}>
+    <form id="{escape_html_content(scheme_name)}" class="annotation-form span shadcn-span-container" data-annotation-type="span" data-schema-name="{escape_html_content(scheme_name)}" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}"{target_field_attr}{discontinuous_attr}{entity_linking_attr}{show_labels_attr} {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(scheme_name)}">
             <legend class="shadcn-span-title">{escape_html_content(annotation_scheme["description"])}</legend>
@@ -188,6 +259,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
 
     if isinstance(annotation_scheme["labels"], list) and len(annotation_scheme["labels"]) > 0:
         labels = annotation_scheme["labels"]
+    elif annotation_scheme.get("label_source") and not annotation_scheme["labels"]:
+        labels = []  # picker only: chips come from the ontology search
     else:
         labels = [annotation_scheme["labels"]]
 
@@ -221,9 +294,25 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             key_value = label_data.get("key_value", label)
             tooltip = _generate_tooltip(label_data)
 
-        # Check for color mappings
+        # Check for color mappings.
+        #
+        # An inline `color` on the label outranks the palette, and has to be
+        # recorded through set_span_color like any other colour. Without that,
+        # the generator auto-assigned a palette colour and wrote it into
+        # `ui.spans.span_colors`, which /api/colors reads before it looks at
+        # inline colours and only fills a label it has not already seen. The
+        # inline colour was parsed and then masked by a palette entry the
+        # generator had just invented. The author's config had no `ui` block;
+        # this code created one.
+        inline_color = (label_data.get("color")
+                        if isinstance(label_data, dict) else None)
         custom_color = get_span_color(scheme_name, label)
-        if custom_color:
+        inline_triple = to_rgb_triple(
+            inline_color, f"{scheme_name}:{label}") if inline_color else ""
+        if inline_triple:
+            span_color = inline_triple
+            set_span_color(scheme_name, label, span_color)
+        elif custom_color:
             span_color = custom_color
         else:
             # Assign a color from palette
@@ -232,6 +321,23 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             span_color = SPAN_COLOR_PALETTE[idx]
             span_counter += 1
             set_span_color(scheme_name, label, span_color)
+
+        # An explicit key_value, as radio and multiselect honour it. Only the
+        # allocator used to read it, and the allocator runs only for schemes
+        # with sequential keys, so on any other span scheme the documented
+        # key_value did nothing.
+        if isinstance(label_data, Mapping) and label_data.get("key_value") is not None \
+                and label not in allocated_map:
+            # Lowercase: shortcuts are matched without case.
+            shortcut_key = str(label_data["key_value"]).lower()
+            if shortcut_key in key2label:
+                logger.warning(
+                    f"Keyboard input conflict in '{scheme_name}': key '{shortcut_key}' is "
+                    f"already bound to '{key2label[shortcut_key]}', so '{label}' gets no shortcut")
+            else:
+                key2label[shortcut_key] = label
+                label2key[label] = shortcut_key
+                key_bindings.append((shortcut_key, f"{scheme_name}: {label}"))
 
         # Handle keybinding allocation
         if label in allocated_map and label not in label2key:
@@ -245,30 +351,45 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                 "sequential_key_binding" in annotation_scheme
                 and annotation_scheme["sequential_key_binding"]
                 and len(annotation_scheme["labels"]) <= 10
+                and str(i % 10) not in key2label
             ):
                 shortcut_key = str(i % 10)
                 key2label[shortcut_key] = label
                 label2key[label] = shortcut_key
                 key_bindings.append((shortcut_key, f"{scheme_name}: {label}"))
 
-        # Format label content
-        if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
-            label_content = f"{key_value}.{label}"
+        # Format label content.
+        #
+        # `displaying_score` prefixes the chip with the keyboard shortcut, the
+        # way radio does. It used to interpolate `key_value`, which for a plain
+        # string label IS the label -- so every chip read "Defect.Defect", on
+        # the picker the annotator reads before every selection. Use the key
+        # actually allocated, and fall back to the label's position; with
+        # neither, show no prefix rather than a doubled name.
+        visible = display_label_text(label_data, annotation_scheme)
+        if annotation_scheme.get("displaying_score"):
+            prefix = label2key.get(label) or (str(i) if len(labels) <= 10 else "")
+            label_content = f"{prefix}. {visible}" if prefix else visible
         else:
-            label_content = label
+            label_content = visible
 
         # Generate name with span prefix so ingestion code can skip this
         name_with_span = f"span_label:::{scheme_name}"
 
-        # Support abbreviation for label display (from master branch fix)
-        # Users can specify an abbreviation for the label shown above the span
-        if isinstance(label_data, dict) and label_data.get('abbreviation'):
-            label_title = label_data['abbreviation']
-        else:
-            label_title = label_content
+        # `abbreviation` is the text of the chip over a span; span-core.js
+        # reads it from this checkbox. It used to be read into a variable
+        # nothing used.
+        abbreviation_attr = ""
+        if isinstance(label_data, Mapping) and label_data.get("abbreviation"):
+            abbreviation_attr = f'data-abbreviation="{escape_html_content(str(label_data["abbreviation"]))}"'
 
         # Use label as title if span_title is empty
         effective_title = span_title if span_title else label
+
+        # What the page's key handler matches on. Without it no span shortcut,
+        # allocated or explicit, did anything.
+        data_key_attr = (f'data-key="{escape_html_content(label2key[label])}"'
+                         if label in label2key else "")
 
         schematic += f"""
             <div class="shadcn-span-option">
@@ -280,6 +401,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        value="{escape_html_content(key_value)}"
                        onclick="onlyOne(this); changeSpanLabel(this, '{escape_html_content(scheme_name)}', '{escape_html_content(label)}', '{escape_html_content(effective_title)}', '{escape_html_content(span_color)}', '{escape_html_content(target_field)}');"
                        data-target-field="{escape_html_content(target_field)}"
+                       {data_key_attr} {abbreviation_attr}
                        validation="{validation}">
                 <label for="{escape_html_content(scheme_name)}_{escape_html_content(label)}" class="shadcn-span-label" {tooltip}>
                     <span style="background-color:rgb{span_color.replace(')', ',0.4)')};">{escape_html_content(label_content)}</span>
@@ -290,7 +412,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     schematic += "</div>"
 
     # Add optional bad text option
-    if "label_content" in annotation_scheme.get("bad_text_label", {}):
+    bad_text_content = bad_text_label_content(annotation_scheme)
+    if bad_text_content:
         bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "checkbox")
 
         schematic += f"""
@@ -304,7 +427,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        onclick="onlyOne(this)"
                        validation="{validation}">
                 <label for="{bad_text_identifiers['id']}" class="shadcn-span-label">
-                    {escape_html_content(annotation_scheme["bad_text_label"]["label_content"])}
+                    {escape_html_content(bad_text_content)}
                 </label>
             </div>
         """
@@ -314,9 +437,11 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             and annotation_scheme["sequential_key_binding"]
             and len(annotation_scheme["labels"]) <= 10
         ):
-            key_bindings.append(
-                (0, f"{scheme_name}: {annotation_scheme['bad_text_label']['label_content']}")
-            )
+            key_bindings.append((0, f"{scheme_name}: {bad_text_content}"))
+
+    # Ontology-backed labels (label_source): the term search box.
+    from potato.ontology.picker import picker_html
+    schematic += picker_html(annotation_scheme)
 
     schematic += "</fieldset></form>"
     return schematic, key_bindings
@@ -362,13 +487,15 @@ def generate_span_layout(annotation_scheme, horizontal=False):
     return safe_generate_layout(annotation_scheme, _generate_span_layout_internal, horizontal)
 
 
-def render_span_annotations(text, span_annotations, target_field=None):
+def render_span_annotations(text, span_annotations, target_field=None, markup=False):
     """
     Render span annotations into HTML with boundary-based algorithm.
     Supports discontinuous spans with additional_parts.
 
     Args:
-        text (str): The original text to annotate
+        text (str): The original text to annotate. With ``markup=True`` it is
+            sanitized HTML and span offsets count its rendered characters
+            (see span_text.dom_to_markup_offsets); otherwise it is plain text.
         span_annotations: Dictionary of span_id -> span data, or list of SpanAnnotation objects,
                          or field-keyed dict: {field_key: [span_list]}
         target_field (str, optional): Filter spans to only those targeting this field
@@ -386,13 +513,13 @@ def render_span_annotations(text, span_annotations, target_field=None):
             # Field-keyed format - extract spans for target_field
             if target_field:
                 field_spans = span_annotations.get(target_field, [])
-                return render_span_annotations(text, field_spans, target_field=None)
+                return render_span_annotations(text, field_spans, target_field=None, markup=markup)
             else:
                 # No target field specified, flatten all spans
                 all_spans = []
                 for field_spans in span_annotations.values():
                     all_spans.extend(field_spans)
-                return render_span_annotations(text, all_spans, target_field=None)
+                return render_span_annotations(text, all_spans, target_field=None, markup=markup)
 
         # Regular dict format: span_id -> span_data
         sorted_spans = sorted(
@@ -472,63 +599,84 @@ def render_span_annotations(text, span_annotations, target_field=None):
             boundaries.append((part['start'], 'start', span_id, part_data))
             boundaries.append((part['end'], 'end', span_id, part_data))
 
-    # Sort boundaries by position
-    boundaries.sort(key=lambda x: x[0])
+    # Where a text offset falls in the string being marked up. Plain text maps
+    # one to one; sanitized HTML skips tags and counts an entity as the one
+    # character it shows.
+    if markup:
+        from potato.server_utils.span_text import dom_to_markup_offsets
+        open_at, close_at = dom_to_markup_offsets(text)
+        n_chars = len(open_at) - 1
 
-    # Build the rendered text
+        def to_markup(pos, boundary_type):
+            pos = max(0, min(int(pos), n_chars))
+            return open_at[pos] if boundary_type == 'start' else close_at[pos]
+    else:
+        def to_markup(pos, boundary_type):
+            return pos
+
+    # Sort boundaries by position; at one position, close before opening so
+    # adjacent spans do not nest.
+    boundaries.sort(key=lambda x: (x[0], 0 if x[1] == 'end' else 1))
+
+    def open_tag(span_id, span_data):
+        color = get_span_color(span_data['schema'], span_data['name'])
+        if not color:
+            color = "(128, 128, 128)"  # Default gray
+        color_parts = color.strip("()").split(", ")
+        r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
+        hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
+        target_attr = (f' data-target-field="{escape_html_content(span_data.get("target_field", ""))}"'
+                       if span_data.get("target_field") else "")
+        is_discontinuous = span_data.get('_is_discontinuous_part', False) or len(span_data.get('additional_parts', [])) > 0
+        discontinuous_class = ' discontinuous-part' if is_discontinuous else ''
+        discontinuous_attr = ' data-discontinuous="true"' if is_discontinuous else ""
+        kb_id = span_data.get('kb_id', '')
+        kb_source = span_data.get('kb_source', '')
+        kb_label = span_data.get('kb_label', '')
+        kb_attr = ""
+        kb_class = ""
+        if kb_id:
+            kb_attr = f' data-kb-id="{escape_html_content(kb_id)}" data-kb-source="{escape_html_content(kb_source)}"'
+            if kb_label:
+                kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
+            kb_class = ' has-entity-link'
+        return (f'<span class="span-highlight{discontinuous_class}{kb_class}" '
+                f'data-annotation-id="{escape_html_content(str(span_id))}" '
+                f'data-label="{escape_html_content(str(span_data["name"]))}" '
+                f'schema="{escape_html_content(str(span_data["schema"]))}"'
+                f'{target_attr}{discontinuous_attr}{kb_attr} style="background-color: {hex_color};">')
+
+    # Build the rendered text. A span that ends while spans opened after it
+    # are still open (PER 0-10, ORG 6-16: they cross) cannot close without
+    # closing those too, so they are closed and reopened after it. Closing
+    # "the innermost" instead rendered a crossing pair as one span inside the
+    # other. Nested and disjoint spans still render as one element each.
     result = ""
-    current_pos = 0
-    active_spans = []
+    current = 0
+    stack = []  # (span_id, span_data), in opening order
 
     for pos, boundary_type, span_id, span_data in boundaries:
-        # Add text before this boundary
-        if pos > current_pos:
-            result += text[current_pos:pos]
-
+        at = to_markup(pos, boundary_type)
+        if at > current:
+            result += text[current:at]
+            current = at
         if boundary_type == 'start':
-            # Start a new span
-            active_spans.append(span_id)
-            # Get color for this span
-            color = get_span_color(span_data['schema'], span_data['name'])
-            if not color:
-                color = "(128, 128, 128)"  # Default gray
-            # Convert RGB to hex with alpha
-            color_parts = color.strip("()").split(", ")
-            r, g, b = int(color_parts[0]), int(color_parts[1]), int(color_parts[2])
-            hex_color = f"#{r:02x}{g:02x}{b:02x}66"  # 66 = 40% alpha to match label background
-
-            # Add target_field attribute if present
-            target_attr = f' data-target-field="{span_data.get("target_field", "")}"' if span_data.get("target_field") else ""
-
-            # Check if this is a discontinuous span part
-            is_discontinuous = span_data.get('_is_discontinuous_part', False) or len(span_data.get('additional_parts', [])) > 0
-            discontinuous_class = ' discontinuous-part' if is_discontinuous else ''
-            discontinuous_attr = ' data-discontinuous="true"' if is_discontinuous else ""
-
-            # Add KB entity linking attributes
-            kb_id = span_data.get('kb_id', '')
-            kb_source = span_data.get('kb_source', '')
-            kb_label = span_data.get('kb_label', '')
-            kb_attr = ""
-            kb_class = ""
-            if kb_id:
-                kb_attr = f' data-kb-id="{escape_html_content(kb_id)}" data-kb-source="{escape_html_content(kb_source)}"'
-                if kb_label:
-                    kb_attr += f' data-kb-label="{escape_html_content(kb_label)}"'
-                kb_class = ' has-entity-link'
-
-            result += f'<span class="span-highlight{discontinuous_class}{kb_class}" data-annotation-id="{span_id}" data-label="{span_data["name"]}" schema="{span_data["schema"]}"{target_attr}{discontinuous_attr}{kb_attr} style="background-color: {hex_color};">'
-        elif boundary_type == 'end':
-            # End the span
-            result += "</span>"
-            # Remove from active spans
-            active_spans = [s for s in active_spans if s != span_id]
-
-        current_pos = pos
+            stack.append((span_id, span_data))
+            result += open_tag(span_id, span_data)
+            continue
+        part = span_data.get('_is_discontinuous_part', False)
+        k = next((i for i in range(len(stack) - 1, -1, -1)
+                  if stack[i][0] == span_id
+                  and stack[i][1].get('_is_discontinuous_part', False) == part), None)
+        if k is None:
+            continue
+        result += "</span>" * (len(stack) - k)
+        del stack[k]
+        result += "".join(open_tag(sid, sdata) for sid, sdata in stack[k:])
 
     # Add remaining text
-    if current_pos < len(text):
-        result += text[current_pos:]
+    if current < len(text):
+        result += text[current:]
 
     return result
 

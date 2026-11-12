@@ -1,4 +1,10 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Amazon Mechanical Turk Example Configuration
+#
+# NOTE: MTurk closed to new requesters on 2026-07-30 and is in maintenance mode.
+# This example keeps working for existing requester accounts. For new projects,
+# see examples/crowdsourcing/prolific-basic/ and
+# docs/deployment/crowdsourcing-platforms.md for alternatives.
 #
 # This example shows how to configure Potato for deployment on Amazon Mechanical Turk.
 # Workers will be automatically logged in using their MTurk workerId and can submit
@@ -39,7 +45,7 @@ max_annotations_per_item: 3
 # Task directories
 task_dir: .
 output_annotation_dir: annotation_output/mturk-example/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:

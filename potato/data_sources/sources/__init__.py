@@ -70,6 +70,20 @@ def _register_all_sources() -> None:
     except ImportError as e:
         logger.debug(f"GoogleSheetsSource not available: {e}")
 
+    # Google Cloud Storage - requires google-cloud-storage (imported lazily)
+    try:
+        from potato.data_sources.sources.gcs_source import GCSSource
+        register_source_type(SourceType.GCS, GCSSource)
+    except ImportError as e:
+        logger.debug(f"GCSSource not available: {e}")
+
+    # Azure Blob Storage - requires azure-storage-blob (imported lazily)
+    try:
+        from potato.data_sources.sources.azure_blob_source import AzureBlobSource
+        register_source_type(SourceType.AZURE_BLOB, AzureBlobSource)
+    except ImportError as e:
+        logger.debug(f"AzureBlobSource not available: {e}")
+
     # Database source - requires sqlalchemy
     try:
         from potato.data_sources.sources.database_source import DatabaseSource

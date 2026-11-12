@@ -31,12 +31,33 @@
             this.video = options.video;
             this.manager = options.annotationManager;
             this.config = options.config || {};
+            // The scheme's own container, so panel lookups cannot land in
+            // another scheme's markup.
+            this.root = options.root
+                || (this.canvas && this.canvas.closest && this.canvas.closest('.video-annotation-container'))
+                || document;
 
             this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+            // Called after every change to the tracks, so the annotation
+            // manager can save them. It was missing: tracks lived only here
+            // and nothing ever put them in the saved annotation.
+            this.onChange = options.onChange || null;
+            // Per-track attributes (schemas/object_attributes.py), edited in
+            // the panel the generator renders under the track list.
+            this.attributeDefs = Array.isArray(this.config.attributes) ? this.config.attributes : [];
+            this.attributePanel = options.attributePanel || null;
+            this.form = options.form || null;
+            this._loading = false;
             this.tracks = {};  // objectId -> track data
             this.activeTrackId = null;
             this.nextTrackId = 1;
-            this.autoAdvanceFrames = this.config.autoAdvanceFrames || 5;
+            // Per-page part of new track ids. The counter restarts at 1 on
+            // every page, so two annotators in one live session each made a
+            // `track_1`, and the server's merge (by id) kept only one.
+            this.idNonce = Math.random().toString(36).slice(2, 8);
+            // tracking_options.auto_advance_frames: frames to step forward after
+            // a box is drawn, so the next keyframe is one drag away. 0 stays put.
+            this.autoAdvanceFrames = Math.max(0, Number(this.config.autoAdvanceFrames) || 0);
             this.defaultInterpolation = this.config.interpolation || 'linear';
 
             // Interaction state
@@ -59,7 +80,8 @@
          * Create a new track.
          */
         createTrack(label, color) {
-            var id = 'track_' + this.nextTrackId++;
+            var id = 'track_' + this.idNonce + '_' + this.nextTrackId++;
+            while (this.tracks[id]) { id = 'track_' + this.idNonce + '_' + this.nextTrackId++; }
             this.tracks[id] = {
                 id: id,
                 label: label || 'object',
@@ -67,12 +89,15 @@
                 interpolation: this.defaultInterpolation,
                 keyframes: {},
                 startFrame: null,
-                endFrame: null
+                endFrame: null,
+                attributes: (window.ObjectAttributes && this.attributeDefs && this.attributeDefs.length)
+                    ? window.ObjectAttributes.defaults(this.attributeDefs, label || 'object') : {}
             };
             this.activeTrackId = id;
             this.selectedKeyframe = null;
             this._updateCanvasPointerEvents();
             this._renderTrackPanel();
+            this._changed();
             return id;
         }
 
@@ -100,11 +125,14 @@
             if (!track) return;
 
             var frame = this._getCurrentFrame();
+            var previous = track.keyframes[frame];
             track.keyframes[frame] = {
                 frame: frame,
                 time: this.video ? this.video.currentTime : 0,
                 bbox: bbox
             };
+            // Redrawing a keyframe keeps what was set on it (per_keyframe).
+            if (previous && previous.attributes) track.keyframes[frame].attributes = previous.attributes;
 
             // Update track range
             this._updateTrackRange(track);
@@ -114,6 +142,372 @@
 
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
+        }
+
+        /**
+         * Add a keyframe of ANY shape kind to the active track.
+         *
+         * The bbox-only ``addKeyframe`` remains for existing callers; this is
+         * what polygon and mask tracks go through.
+         *
+         * @param {Object} shape - {type, bbox?, points?, rle?}
+         */
+        addShapeKeyframe(shape, atFrame) {
+            if (!this.activeTrackId || !shape) return;
+            var track = this.tracks[this.activeTrackId];
+            if (!track) return;
+
+            // `atFrame`: a frame other than the one showing, for an attribute
+            // committed after playback moved on (see _commitAttributes).
+            var here = atFrame === undefined || atFrame === this._getCurrentFrame();
+            var frame = here ? this._getCurrentFrame() : atFrame;
+            var keyframe = {
+                frame: frame,
+                time: here ? (this.video ? this.video.currentTime : 0) : frame / this._frameRate(),
+                type: shape.type || 'bbox'
+            };
+            if (shape.bbox) keyframe.bbox = shape.bbox;
+            if (shape.points) keyframe.points = shape.points;
+            if (shape.rle) keyframe.rle = shape.rle;
+            var previousKeyframe = track.keyframes[frame];
+            if (previousKeyframe && previousKeyframe.attributes) {
+                keyframe.attributes = previousKeyframe.attributes;
+            }
+
+            // A polygon or mask still needs a bounding box: the timeline, the
+            // label placement and every box-only consumer read it, and
+            // computing it once here beats each of them deriving it.
+            if (!keyframe.bbox && keyframe.points
+                && window.TrackingInterpolationEngine) {
+                keyframe.bbox = window.TrackingInterpolationEngine
+                    ._bboxOfPoints(keyframe.points);
+            }
+
+            track.keyframes[frame] = keyframe;
+            this._updateTrackRange(track);
+            this.selectedKeyframe = { trackId: this.activeTrackId, frame: frame };
+            this._renderTrackPanel();
+            this.renderOverlay();
+            this._changed();
+        }
+
+        /**
+         * Ask the server to track this object through the following frames.
+         *
+         * WHY THE SERVER RUNS THIS AND THE BROWSER RUNS CLICK-TO-SEGMENT
+         * -------------------------------------------------------------
+         * SAM 2's video path is five graphs and 181 MB, and its cost is per
+         * FRAME rather than per click. A hundred frames in WebAssembly is
+         * minutes of a frozen tab; the same loop server-side is seconds on a
+         * GPU. The frames are already on the server, so nothing has to be
+         * uploaded either.
+         *
+         * The result arrives as keyframes on the active track, which the
+         * annotator then scrubs through and corrects. Frames the model reports
+         * as OCCLUDED are left empty rather than filled with a guess — that
+         * distinction is the whole reason to use a model with a memory instead
+         * of carrying a mask forward by re-prompting.
+         *
+         * @param {Object} [options] {frames, video}
+         * @returns {Promise<Object|null>} the server's payload, or null
+         */
+        async propagateForward(options) {
+            options = options || {};
+            if (!this.activeTrackId) {
+                this._propagationStatus('Select a track first.', 'warn');
+                return null;
+            }
+            var track = this.tracks[this.activeTrackId];
+            var frame = this._getCurrentFrame();
+            var keyframe = track && track.keyframes[frame];
+            if (!keyframe || !keyframe.bbox) {
+                this._propagationStatus(
+                    'Draw the object on this frame first — propagation needs '
+                    + 'somewhere to start.', 'warn');
+                return null;
+            }
+
+            var video = this._mediaRelativePath(
+                options.video || this.config.videoPath
+                || (this.video && this.video.currentSrc) || '');
+            if (!video) {
+                this._propagationStatus(
+                    'This project does not say where the video file is, so the '
+                    + 'server cannot read its frames.', 'error');
+                return null;
+            }
+
+            // THREE COORDINATE SPACES MEET HERE, and mixing them produces a
+            // tracker that runs, reports success, and tracks the wrong thing:
+            //
+            //   canvas pixels  - what keyframes hold, because the drawing path
+            //                    builds them from mouse coords on the overlay
+            //   video pixels   - what the model is prompted in
+            //   normalized     - what the server returns, and what every other
+            //                    part of Potato stores
+            //
+            // The canvas is NOT the video's natural size, so the ratio is real
+            // rather than 1.
+            var content = this.videoContentRect();
+            if (!content) {
+                this._propagationStatus(
+                    'The video is still loading. Try again in a moment.', 'warn');
+                return null;
+            }
+
+            // The centre of the drawn box is the prompt. A box prompt would be
+            // more precise, but this export takes points, and the centre of a
+            // hand-drawn box is on the object by construction.
+            var box = keyframe.bbox;
+            var point = [
+                (box.x + box.width / 2 - content.left) / content.scale,
+                (box.y + box.height / 2 - content.top) / (content.scaleY
+                                                          || content.scale),
+                1,
+            ];
+
+            this._propagationStatus('Tracking…', 'busy');
+            var response;
+            try {
+                response = await fetch('/api/track/propagate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video: video,
+                        points: [point],
+                        start_frame: frame,
+                        frames: options.frames || 30,
+                        // The rate THIS timeline counts in. Without it the
+                        // server extracts at whatever it can probe, and every
+                        // returned frame number refers to a different moment.
+                        fps: this.config.videoFps || this.config.fps || null,
+                        schema: this.config.schemaName
+                    })
+                });
+            } catch (error) {
+                this._propagationStatus(
+                    'Could not reach the server to track this object.', 'error');
+                return null;
+            }
+
+            var payload = await response.json().catch(function () { return {}; });
+            if (!response.ok) {
+                this._propagationStatus(
+                    payload.error || 'Tracking failed.', 'error');
+                return null;
+            }
+
+            var added = 0;
+            var occluded = 0;
+            (payload.frames || []).forEach(function (result) {
+                if (!result.visible || !result.rle) { occluded += 1; return; }
+                track.keyframes[result.frame] = {
+                    frame: result.frame,
+                    time: result.frame / this._frameRate(),
+                    type: 'mask',
+                    rle: result.rle,
+                    // Converted into CANVAS pixels, which is the space the
+                    // overlay draws in. Two failures live here: a keyframe
+                    // with no bbox draws nothing at all, and a normalized one
+                    // draws a sub-pixel rectangle in the corner. Both report
+                    // "30 frames tracked" over a video where nothing changed.
+                    bbox: result.bbox ? {
+                        x: content.left + result.bbox.x * content.width,
+                        y: content.top + result.bbox.y * content.height,
+                        width: result.bbox.width * content.width,
+                        height: result.bbox.height * content.height,
+                    } : null,
+                    // Kept as the model gave it, because normalized is what
+                    // gets stored and exported.
+                    bboxNorm: result.bbox || null,
+                    // Marked so the annotator can tell a model's answer from
+                    // their own, and so a later pass can count how many were
+                    // accepted unchanged. Same two keys image shapes use --
+                    // the coarse origin and the model that produced it -- so
+                    // one query answers "what did a model draw here" across
+                    // both.
+                    source: 'ai',
+                    ai_model: 'sam2'
+                };
+                added += 1;
+            }, this);
+
+            this._updateTrackRange(track);
+            this._renderTrackPanel();
+            this.renderOverlay();
+
+            var message = added + ' frame' + (added === 1 ? '' : 's') + ' tracked';
+            if (occluded) {
+                message += ', ' + occluded + ' where the object was hidden';
+            }
+            if (payload.truncated) {
+                // Said out loud: a short answer that reads as complete is the
+                // failure this codebase keeps finding.
+                message += ' (stopped at the ' + payload.max_frames
+                         + '-frame limit of ' + payload.requested_frames
+                         + ' requested)';
+            }
+            this._propagationStatus(message + '. Scrub through and correct '
+                                    + 'anything wrong.');
+            this._changed();
+            return payload;
+        }
+
+        /**
+         * Where the video's PICTURE sits inside the overlay canvas.
+         *
+         * The canvas covers the whole player element; the picture inside it is
+         * letterboxed, because a 480x320 clip in a 828x355 player leaves black
+         * bars either side. Treating canvas coordinates as video coordinates
+         * therefore lands every prompt and every returned box tens of pixels
+         * off, in a way that looks like a tracker that almost works.
+         *
+         * Returns {left, top, width, height, scale} in CANVAS pixels, or null
+         * while the video has no dimensions yet.
+         */
+        videoContentRect() {
+            var canvasWidth = (this.canvas && this.canvas.width) || 0;
+            var canvasHeight = (this.canvas && this.canvas.height) || 0;
+            var element = this.video || {};
+            var videoWidth = element.videoWidth || 0;
+            var videoHeight = element.videoHeight || 0;
+            if (!canvasWidth || !canvasHeight || !videoWidth || !videoHeight) {
+                return null;
+            }
+
+            // The picture is fitted inside the VIDEO ELEMENT's box, then
+            // expressed in the canvas's coordinates.
+            //
+            // Both steps are needed and neither is obvious. The video is
+            // letterboxed inside its element (`object-fit: contain`), so the
+            // picture is narrower than the element. And the overlay canvas is
+            // inset 45px from the bottom of that element to clear the native
+            // controls, so canvas (0,0) is the element's (0,0) but the two
+            // boxes are different heights. Skipping either step draws every
+            // propagated box beside the object rather than on it.
+            var canvasRect = (this.canvas && this.canvas.getBoundingClientRect)
+                ? this.canvas.getBoundingClientRect() : null;
+            var videoRect = element.getBoundingClientRect
+                ? element.getBoundingClientRect() : null;
+            if (!canvasRect || !videoRect || !videoRect.width) {
+                // Without layout, fall back to fitting inside the canvas. It
+                // is right whenever the canvas covers the whole element.
+                var plain = Math.min(canvasWidth / videoWidth,
+                                     canvasHeight / videoHeight);
+                return {
+                    left: (canvasWidth - videoWidth * plain) / 2,
+                    top: (canvasHeight - videoHeight * plain) / 2,
+                    width: videoWidth * plain,
+                    height: videoHeight * plain,
+                    scale: plain,
+                    scaleY: plain,
+                };
+            }
+
+            var fit = Math.min(videoRect.width / videoWidth,
+                               videoRect.height / videoHeight);
+            var shownWidth = videoWidth * fit;
+            var shownHeight = videoHeight * fit;
+            // Page coordinates of the picture's top-left corner.
+            var pictureLeft = videoRect.left + (videoRect.width - shownWidth) / 2;
+            var pictureTop = videoRect.top + (videoRect.height - shownHeight) / 2;
+            // Into the canvas's backing store.
+            var toBackingX = canvasWidth / (canvasRect.width || canvasWidth);
+            var toBackingY = canvasHeight / (canvasRect.height || canvasHeight);
+            return {
+                left: (pictureLeft - canvasRect.left) * toBackingX,
+                top: (pictureTop - canvasRect.top) * toBackingY,
+                width: shownWidth * toBackingX,
+                height: shownHeight * toBackingY,
+                // Backing pixels per video pixel, per axis: a stretched canvas
+                // makes these differ.
+                scale: (shownWidth * toBackingX) / videoWidth,
+                scaleY: (shownHeight * toBackingY) / videoHeight,
+            };
+        }
+
+        /**
+         * A `<video>` src is a URL; the server wants a path inside the media
+         * directory.
+         *
+         * Sending `http://host/media/clip.webm` gets refused by the traversal
+         * guard, which is correct of it and looks to the annotator like a
+         * missing file. Strip the origin and the /media/ prefix so what
+         * arrives is what the guard expects to resolve.
+         */
+        _mediaRelativePath(source) {
+            if (!source) return '';
+            var path = String(source);
+            try {
+                if (/^https?:\/\//.test(path)) path = new URL(path).pathname;
+            } catch (error) {
+                // A malformed URL is a caller problem, not a crash: fall
+                // through and let the server refuse whatever this is.
+            }
+            return path.replace(/^\/?media\//, '').replace(/^\//, '');
+        }
+
+        _propagationStatus(message, kind) {
+            var el = this.root.querySelector('.tracking-propagate-status');
+            if (!el) return;
+            el.textContent = message;
+            el.dataset.kind = kind || 'info';
+        }
+
+        /**
+         * Pin the current frame's interpolated shape as a real keyframe.
+         *
+         * The "yes, this one is right" action: an annotator scrubbing through
+         * an interpolated span should be able to confirm a frame without
+         * redrawing a shape that is already correct.
+         */
+        setKeyframeHere(atFrame) {
+            if (!this.activeTrackId) return null;
+            var track = this.tracks[this.activeTrackId];
+            if (!track || !window.TrackingInterpolationEngine) return null;
+
+            var frame = atFrame === undefined ? this._getCurrentFrame() : atFrame;
+            if (track.keyframes[frame]) return frame;   // already one
+
+            var shape = window.TrackingInterpolationEngine
+                .interpolateShape(track, frame);
+            if (!shape) return null;
+            this.addShapeKeyframe(shape, frame);
+            return frame;
+        }
+
+        /**
+         * Seek to the next or previous keyframe across the active track.
+         *
+         * @param {number} direction - +1 forward, -1 backward
+         * @returns {boolean} Whether a keyframe was found and sought to.
+         */
+        seekToAdjacentKeyframe(direction) {
+            var track = this.tracks[this.activeTrackId];
+            if (!track || !this.video) return false;
+
+            var frames = Object.keys(track.keyframes).map(Number)
+                .sort(function(a, b) { return a - b; });
+            if (frames.length === 0) return false;
+
+            var current = this._getCurrentFrame();
+            var target = null;
+            if (direction > 0) {
+                for (var i = 0; i < frames.length; i++) {
+                    if (frames[i] > current) { target = frames[i]; break; }
+                }
+            } else {
+                for (var j = frames.length - 1; j >= 0; j--) {
+                    if (frames[j] < current) { target = frames[j]; break; }
+                }
+            }
+            if (target === null) return false;
+
+            this.video.currentTime = target / this._frameRate();
+            this.selectedKeyframe = { trackId: this.activeTrackId, frame: target };
+            this.renderOverlay();
+            return true;
         }
 
         /**
@@ -125,6 +519,7 @@
 
             track.keyframes[frame].bbox = bbox;
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -160,6 +555,7 @@
 
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -185,6 +581,7 @@
             this._updateCanvasPointerEvents();
             this._renderTrackPanel();
             this.renderOverlay();
+            this._changed();
         }
 
         /**
@@ -195,49 +592,107 @@
             if (track) {
                 track.interpolation = type;
                 this.renderOverlay();
+                this._changed();
             }
         }
 
         /**
          * Render tracking overlay for current frame using interpolation.
          */
+        /**
+         * A keyframe a model wrote has its normalized box only: the server
+         * cannot know this annotator's canvas pixels. Put it in them once
+         * the video's picture has a size, so it draws (and interpolates)
+         * like any other. Not a change: nothing is saved for it.
+         */
+        _fillCanvasBoxes() {
+            // Boxes filled here, and the pixels they were given: refilled at
+            // the current size on each draw (a resize moved the picture and
+            // left them where they were), until the annotator edits one.
+            if (!this._normFilled) this._normFilled = new Map();
+            var content = this.videoContentRect();
+            if (!content) return;
+            var place = function (norm) {
+                return {
+                    x: content.left + norm.x * content.width,
+                    y: content.top + norm.y * content.height,
+                    width: norm.width * content.width,
+                    height: norm.height * content.height,
+                };
+            };
+            var same = function (a, b) {
+                return a && b && a.x === b.x && a.y === b.y
+                    && a.width === b.width && a.height === b.height;
+            };
+            for (var id in this.tracks) {
+                var keyframes = (this.tracks[id] || {}).keyframes || {};
+                for (var f in keyframes) {
+                    var kf = keyframes[f];
+                    if (!kf || !kf.bboxNorm) continue;
+                    var given = this._normFilled.get(kf);
+                    if (!kf.bbox || (given && same(kf.bbox, given))) {
+                        kf.bbox = place(kf.bboxNorm);
+                        this._normFilled.set(kf, {x: kf.bbox.x, y: kf.bbox.y,
+                                                  width: kf.bbox.width,
+                                                  height: kf.bbox.height});
+                    } else if (given) {
+                        this._normFilled.delete(kf);   // edited: the annotator's now
+                    }
+                }
+            }
+        }
+
         renderOverlay() {
             if (!this.ctx || !this.canvas) return;
+            this._fillCanvasBoxes();
 
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             var currentFrame = this._getCurrentFrame();
 
             for (var trackId in this.tracks) {
                 var track = this.tracks[trackId];
-                var bbox = null;
-                var isKeyframe = false;
+                var shape = null;
+                var isKeyframe = !!track.keyframes[currentFrame];
 
-                // Check if current frame is a keyframe
-                if (track.keyframes[currentFrame]) {
-                    bbox = track.keyframes[currentFrame].bbox;
-                    isKeyframe = true;
-                } else if (window.TrackingInterpolationEngine) {
-                    // Use interpolation engine for non-keyframes
-                    bbox = window.TrackingInterpolationEngine.interpolate(track, currentFrame);
+                if (window.TrackingInterpolationEngine) {
+                    // interpolateShape preserves the KIND, so a polygon track
+                    // draws as a polygon rather than collapsing to its
+                    // bounding box on every non-keyframe.
+                    shape = window.TrackingInterpolationEngine
+                        .interpolateShape(track, currentFrame);
+                } else if (isKeyframe) {
+                    shape = { type: 'bbox', bbox: track.keyframes[currentFrame].bbox };
+                }
+                if (!shape) continue;
+
+                var bbox = shape.bbox;
+                var isActive = trackId === this.activeTrackId;
+                var isSelected = this.selectedKeyframe &&
+                                this.selectedKeyframe.trackId === trackId &&
+                                this.selectedKeyframe.frame === currentFrame;
+
+                if (shape.type === 'polygon' && shape.points) {
+                    this._drawPolygon(shape.points, track.color, track.label,
+                                      isActive, isSelected);
+                } else if (bbox) {
+                    this._drawBbox(bbox, track.color, track.label, isActive,
+                                   isSelected);
                 }
 
-                if (bbox) {
-                    var isActive = trackId === this.activeTrackId;
-                    var isSelected = this.selectedKeyframe &&
-                                    this.selectedKeyframe.trackId === trackId &&
-                                    this.selectedKeyframe.frame === currentFrame;
+                if (!bbox) continue;
 
-                    this._drawBbox(bbox, track.color, track.label, isActive, isSelected);
-
-                    // Mark if this is a keyframe
-                    if (isKeyframe) {
-                        this._drawKeyframeDiamond(bbox, track.color);
-                    }
-
-                    // Draw resize handles if selected
-                    if (isSelected && isKeyframe) {
-                        this._drawResizeHandles(bbox, track.color);
-                    }
+                // A held frame (mask tracks, and either side of a kind change)
+                // is NOT a real annotation. Marking it visually keeps the
+                // annotator from trusting a frame nobody drew.
+                if (!isKeyframe && shape.interpolated === false) {
+                    this._drawHeldMarker(bbox, track.color);
+                }
+                if (isKeyframe) {
+                    this._drawKeyframeDiamond(bbox, track.color);
+                }
+                // Resize handles only make sense on a box the user can drag.
+                if (isSelected && isKeyframe && shape.type === 'bbox') {
+                    this._drawResizeHandles(bbox, track.color);
                 }
             }
 
@@ -245,6 +700,10 @@
             if (this.mode === 'drawing' && this.drawStart && this.drawCurrent) {
                 this._drawPreviewRect(this.drawStart, this.drawCurrent);
             }
+
+            // The panel shows values at this frame when they can change per
+            // keyframe; it re-renders only when the frame changed.
+            if (this._hasKeyframeAttributes()) this._renderAttributePanel();
         }
 
         /**
@@ -255,20 +714,228 @@
         }
 
         /**
+         * The box as fractions of the video picture (0-1), or null.
+         *
+         * Keyframe boxes are in the overlay canvas's pixels, which depend on
+         * the annotator's window size; two annotators' boxes for the same car
+         * differ by their screens. The normalized copy is what agreement and
+         * any export compare.
+         */
+        _normalizeBbox(bbox) {
+            var content = this.videoContentRect();
+            if (!bbox || !content || !content.width || !content.height) return null;
+            return {
+                x: (bbox.x - content.left) / content.width,
+                y: (bbox.y - content.top) / content.height,
+                width: bbox.width / content.width,
+                height: bbox.height / content.height,
+            };
+        }
+
+        /** Refresh every keyframe's normalized box (the canvas box may have moved). */
+        _normalizeKeyframes() {
+            for (var id in this.tracks) {
+                var keyframes = this.tracks[id].keyframes || {};
+                for (var f in keyframes) {
+                    var kf = keyframes[f];
+                    if (kf && kf.bbox) {
+                        var norm = this._normalizeBbox(kf.bbox);
+                        if (norm) kf.bboxNorm = norm;
+                    }
+                }
+            }
+        }
+
+        /** Tell the annotation manager the tracks changed (not while loading). */
+        _changed() {
+            this._normalizeKeyframes();
+            this._updateAttributeRequirement();
+            if (this._loading || !this.onChange) return;
+            try { this.onChange(this.tracks); } catch (e) { console.error('[Tracking] save failed', e); }
+        }
+
+        /** Tracks still missing a required, visible attribute. */
+        _updateAttributeRequirement() {
+            if (!this.attributeDefs || !this.attributeDefs.length || !window.ObjectAttributes) return;
+            var self = this;
+            var missing = Object.keys(this.tracks).filter(function (id) {
+                var t = self.tracks[id];
+                return window.ObjectAttributes.incomplete(self.attributeDefs, t.label, t.attributes || {});
+            }).length;
+            window.ObjectAttributes.updateRequirement(this.attributePanel, this.form, missing, 'track');
+        }
+
+        _hasKeyframeAttributes() {
+            return (this.attributeDefs || []).some(function (d) { return d.per_keyframe; });
+        }
+
+        /**
+         * A track's attributes as they stand at `frame`: its own values, then
+         * each keyframe's `attributes` up to that frame (per_keyframe ones;
+         * see potato/server_utils/track_attributes.py). A null override
+         * clears the value from there on.
+         */
+        attributesAt(track, frame) {
+            var values = JSON.parse(JSON.stringify(track.attributes || {}));
+            Object.keys(track.keyframes || {}).map(Number).sort(function (a, b) { return a - b; })
+                .forEach(function (f) {
+                    var kf = track.keyframes[f];
+                    if (f > frame || !kf || !kf.attributes) return;
+                    Object.keys(kf.attributes).forEach(function (name) {
+                        if (kf.attributes[name] === null) delete values[name];
+                        else values[name] = kf.attributes[name];
+                    });
+                });
+            return values;
+        }
+
+        /**
+         * Store an edit from the panel. A per-track attribute goes on the
+         * track. A per_keyframe one goes on this frame's keyframe, pinning one
+         * here first if the frame is interpolated, as moving the box would.
+         * Returns false when the frame has no shape to pin (outside the
+         * track), so nothing could be stored.
+         */
+        _commitAttributes(track, values, frame) {
+            var self = this;
+            var before = this.attributesAt(track, frame);
+            var stored = true;
+            (this.attributeDefs || []).forEach(function (def) {
+                var name = def.name;
+                var value = values[name];
+                if (!def.per_keyframe) {
+                    if (value === undefined) delete track.attributes[name];
+                    else track.attributes[name] = value;
+                    return;
+                }
+                if (JSON.stringify(value) === JSON.stringify(before[name])) return;
+                if (!track.keyframes[frame]) {
+                    // The frame the value was set on, which during playback
+                    // is no longer the one showing.
+                    if (track.id !== self.activeTrackId || self.setKeyframeHere(frame) === null) {
+                        stored = false;
+                        return;
+                    }
+                }
+                var kf = track.keyframes[frame];
+                kf.attributes = kf.attributes || {};
+                kf.attributes[name] = value === undefined ? null : value;
+            });
+            return stored;
+        }
+
+        /**
+         * Show the active track's attributes. Re-rendered on a change of
+         * track, and of frame when an attribute can change per keyframe.
+         */
+        _renderAttributePanel(force) {
+            if (!this.attributeDefs || !this.attributeDefs.length || !this.attributePanel
+                    || !window.ObjectAttributes) return;
+            var track = this.activeTrackId ? this.tracks[this.activeTrackId] : null;
+            var perFrame = this._hasKeyframeAttributes();
+            var frame = this._getCurrentFrame();
+            var trackKey = track ? track.id + '|' + track.label : null;
+            var key = trackKey !== null ? trackKey + (perFrame ? '|' + frame : '') : null;
+            if (!force && key === this._attributePanelKey) return;
+            var self = this;
+            var panel = this.attributePanel;
+            var focused = document.activeElement;
+            if (!force && trackKey !== null && trackKey === this._attributePanelTrack
+                    && focused && panel.contains(focused)) {
+                // During playback the frame changes many times a second, and a
+                // re-render would wipe a value being typed or close an open
+                // select. The panel catches up when focus leaves it.
+                this._attributePanelStale = true;
+                if (!this._attributeFocusBound) {
+                    this._attributeFocusBound = true;
+                    panel.addEventListener('focusout', function (e) {
+                        if (self._attributePanelStale && !panel.contains(e.relatedTarget)) {
+                            self._attributePanelStale = false;
+                            self._renderAttributePanel();
+                        }
+                    });
+                }
+                return;
+            }
+            this._attributePanelStale = false;
+            this._attributePanelKey = key;
+            this._attributePanelTrack = trackKey;
+            if (track && !track.attributes) track.attributes = {};
+            window.ObjectAttributes.render({
+                panel: this.attributePanel,
+                defs: this.attributeDefs,
+                label: track ? track.label : null,
+                values: track ? (perFrame ? this.attributesAt(track, frame) : track.attributes) : {},
+                idPrefix: 'track-attr-' + (this.config.schemaName || 'video'),
+                noun: 'track',
+                frameNote: 'From frame ' + frame + ' until the next keyframe that changes it',
+                onChange: function (values) {
+                    if (perFrame && track) {
+                        var stored = self._commitAttributes(track, values, frame);
+                        if (!stored) {
+                            self._renderAttributePanel(true);   // put the control back
+                            var status = self.attributePanel.querySelector('.attribute-panel-status');
+                            if (status) {
+                                status.textContent = 'This frame is outside the track: move to a frame '
+                                    + 'it covers to change the attribute there.';
+                            }
+                            return;
+                        }
+                        // Redraw on the next render whatever order the
+                        // browser sends change and focusout in: Chrome can
+                        // send focusout first, and the panel had then already
+                        // caught up, without this value, at the frame showing.
+                        self._attributePanelKey = null;
+                        self._renderTrackPanel();
+                        self.renderOverlay();
+                    }
+                    self._changed();
+                },
+            });
+        }
+
+        /**
          * Load tracking data from saved state.
          */
         loadTrackingData(data) {
             if (!data) return;
+            this._loading = true;
+            // Replaces the tracks (a teammate's answer in a live session
+            // arrives here too), so a selection on a track that is gone, and
+            // a drag in progress on it, go with it.
             this.tracks = data;
-            // Update nextTrackId
+            // Update nextTrackId past the restored ids: `track_<n>` (before
+            // ids carried a nonce) and this page's own `track_<nonce>_<n>`.
+            var pattern = /^track_(?:([a-z0-9]+)_)?(\d+)$/;
             for (var id in this.tracks) {
-                var num = parseInt(id.replace('track_', ''), 10);
-                if (!isNaN(num) && num >= this.nextTrackId) {
+                var m = pattern.exec(id);
+                if (!m || (m[1] && m[1] !== this.idNonce)) continue;
+                var num = parseInt(m[2], 10);
+                if (num >= this.nextTrackId) {
                     this.nextTrackId = num + 1;
                 }
             }
+            if (this.activeTrackId && !this.tracks[this.activeTrackId]) this.activeTrackId = null;
+            var sel = this.selectedKeyframe;
+            if (sel && !(this.tracks[sel.trackId] && this.tracks[sel.trackId].keyframes
+                         && this.tracks[sel.trackId].keyframes[sel.frame])) {
+                this.selectedKeyframe = null;
+            }
+            if (this.mode !== 'idle') {
+                this.mode = 'idle';
+                this.drawStart = null;
+                this.dragStart = null;
+                this.resizeHandle = null;
+                this.originalBbox = null;
+            }
+            this._updateCanvasPointerEvents();
+            var deleteBtn = this.root && this.root.querySelector
+                ? this.root.querySelector('[data-action="delete-track"]') : null;
+            if (deleteBtn) deleteBtn.disabled = !this.activeTrackId;
             this._renderTrackPanel();
             this.renderOverlay();
+            this._loading = false;
+            this._updateAttributeRequirement();
         }
 
         // --- Drawing helpers ---
@@ -293,6 +960,62 @@
             this.ctx.fillRect(bbox.x, bbox.y - 16, textWidth + 6, 16);
             this.ctx.fillStyle = isSelected ? '#000' : '#fff';
             this.ctx.fillText(label, bbox.x + 3, bbox.y - 4);
+        }
+
+        /**
+         * Draw a polygon track outline.
+         *
+         * Uses the same colour, dash and selection treatment as _drawBbox so a
+         * polygon track and a box track read as the same kind of thing.
+         */
+        _drawPolygon(points, color, label, isActive, isSelected) {
+            if (!points || points.length < 3) return;
+
+            this.ctx.strokeStyle = isSelected ? '#FFD700' : color;
+            this.ctx.lineWidth = isSelected ? 3 : (isActive ? 2 : 1);
+            this.ctx.setLineDash(!isActive && !isSelected ? [4, 4] : []);
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(points[0].x, points[0].y);
+            for (var i = 1; i < points.length; i++) {
+                this.ctx.lineTo(points[i].x, points[i].y);
+            }
+            this.ctx.closePath();
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+
+            // Anchor the label to the top-left of the outline, matching the
+            // box treatment rather than floating it at a vertex.
+            var minX = points[0].x, minY = points[0].y;
+            for (var j = 1; j < points.length; j++) {
+                if (points[j].x < minX) minX = points[j].x;
+                if (points[j].y < minY) minY = points[j].y;
+            }
+            this.ctx.font = '11px Arial';
+            var textWidth = this.ctx.measureText(label).width;
+            this.ctx.fillStyle = isSelected ? '#FFD700' : color;
+            this.ctx.fillRect(minX, minY - 16, textWidth + 6, 16);
+            this.ctx.fillStyle = isSelected ? '#000' : '#fff';
+            this.ctx.fillText(label, minX + 3, minY - 4);
+        }
+
+        /**
+         * Mark a frame whose shape was HELD from a keyframe rather than
+         * interpolated -- mask tracks, and either side of a kind change.
+         *
+         * Without this the annotator cannot tell a frame somebody drew from a
+         * frame nobody did, which is the difference between an annotation and
+         * a guess.
+         */
+        _drawHeldMarker(bbox, color) {
+            var size = 5;
+            var cx = bbox.x + bbox.width / 2;
+            var cy = bbox.y;
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, size, 0, Math.PI * 2);
+            this.ctx.stroke();
         }
 
         _drawKeyframeDiamond(bbox, color) {
@@ -495,6 +1218,8 @@
                 var x = coords.x;
                 var y = coords.y;
 
+                // A drag or resize edits a keyframe in place; it is saved here.
+                var edited = self.mode === 'moving' || self.mode === 'resizing';
                 if (self.mode === 'drawing') {
                     var bbox = {
                         x: Math.min(self.drawStart.x, x),
@@ -505,6 +1230,7 @@
 
                     if (bbox.width > 5 && bbox.height > 5) {
                         self.addKeyframe(bbox);
+                        self._autoAdvance();
                     }
                 }
 
@@ -520,6 +1246,7 @@
 
                 self._renderTrackPanel();
                 self.renderOverlay();
+                if (edited) self._changed();
             });
 
             this.canvas.addEventListener('mouseleave', function() {
@@ -616,14 +1343,47 @@
             var self = this;
 
             document.addEventListener('keydown', function(e) {
+                // One guard for every shortcut below. Typing "don't, then" in
+                // a free-text field must not jump the playhead or create a
+                // track -- the exact failure that turned "bad boxes here" into
+                // "badboxesee" on the image canvas.
+                var el = document.activeElement || {};
+                var typing = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+                    || el.tagName === 'SELECT' || el.isContentEditable === true;
+                if (typing) return;
+
                 // Delete key removes selected keyframe
                 if ((e.key === 'Delete' || e.key === 'Backspace') && self.selectedKeyframe) {
-                    // Make sure we're focused on the canvas area
-                    if (document.activeElement.tagName !== 'INPUT' &&
-                        document.activeElement.tagName !== 'TEXTAREA') {
+                    e.preventDefault();
+                    self.deleteSelectedKeyframe();
+                }
+
+                // Keyframe navigation on SHIFT+, / SHIFT+. (i.e. < and >).
+                //
+                // Plain , and . are already frame stepping in
+                // video-annotation.js, and both handlers are bound to
+                // `document` -- taking them here would fire BOTH, stepping a
+                // frame and jumping a keyframe on one press. Shifted is also
+                // the video-editor convention: , . for frames, < > for markers.
+                if ((e.key === '<' || e.key === '>')
+                    || (e.shiftKey && (e.key === ',' || e.key === '.'))) {
+                    var forward = (e.key === '>' || e.key === '.');
+                    if (self.seekToAdjacentKeyframe(forward ? 1 : -1)) {
                         e.preventDefault();
-                        self.deleteSelectedKeyframe();
                     }
+                }
+
+                // t starts a new track at the current frame.
+                if (e.key === 't' && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    self.createTrack();
+                }
+
+                // Ctrl/Cmd+K sets a keyframe on the active track, copying the
+                // interpolated shape so "confirm this frame" is one keystroke.
+                if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    self.setKeyframeHere();
                 }
 
                 // Escape deselects
@@ -634,24 +1394,52 @@
             });
         }
 
+        /**
+         * Step forward `autoAdvanceFrames` frames after a drawn keyframe,
+         * stopping at the last frame. The video is paused first so the seek
+         * lands on the frame the annotator will draw on next.
+         */
+        _autoAdvance() {
+            if (!this.autoAdvanceFrames || !this.video) return;
+            var rate = this._frameRate();
+            var target = (this._getCurrentFrame() + this.autoAdvanceFrames) / rate;
+            if (isFinite(this.video.duration) && this.video.duration > 0) {
+                target = Math.min(target, this.video.duration - 0.5 / rate);
+            }
+            if (!this.video.paused) this.video.pause();
+            this.video.currentTime = Math.max(0, target);
+        }
+
         _getCurrentFrame() {
             if (this.manager && this.manager.getCurrentFrame) {
                 return this.manager.getCurrentFrame();
             }
             if (this.video) {
-                var fps = this.config.videoFps || 30;
-                return Math.round(this.video.currentTime * fps);
+                return Math.round(this.video.currentTime * this._frameRate());
             }
             return 0;
         }
 
+        /**
+         * Frames per second, from the one place the schema sets it. The config
+         * only ever carries `videoFps`; stamping keyframe times with
+         * `config.fps || 25` and seeking with `this.fps || 30` (never set)
+         * put every propagated keyframe 20% off at the 30 fps default, and
+         * keyframe navigation off whenever video_fps was not 30.
+         */
+        _frameRate() {
+            var rate = Number(this.config.videoFps || this.config.fps);
+            return rate > 0 ? rate : 30;
+        }
+
         _renderTrackPanel() {
             // Find or create track panel
-            var panel = document.querySelector('.tracking-panel');
+            var panel = this.root.querySelector('.tracking-panel');
             if (!panel) return;
 
             var list = panel.querySelector('.tracking-track-list');
             if (!list) return;
+            this._renderAttributePanel();
 
             var trackIds = Object.keys(this.tracks);
             if (trackIds.length === 0) {
@@ -669,7 +1457,8 @@
 
                 html += '<div class="tracking-track-item' + (isActive ? ' active' : '') + '" data-track-id="' + track.id + '">';
                 html += '<span class="tracking-track-color" style="background:' + track.color + '"></span>';
-                html += '<span class="tracking-track-label">' + track.label + '</span>';
+                html += '<span class="tracking-track-label">' + String(track.label)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
                 html += '<span class="tracking-track-info">' + kfCount + ' kf, ' + track.interpolation + '</span>';
                 html += '<button class="tracking-track-delete" data-track-id="' + track.id + '">&times;</button>';
                 html += '</div>';

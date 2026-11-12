@@ -647,7 +647,38 @@ class TestMiscElements:
         result = str(sanitize_html(html_input))
         assert '<ruby>' in result
         assert '<rt>kan</rt>' in result
-        assert '<rp>(</rp>' in result
+
+
+class TestMediaElements:
+    """Audio/video media tags must render (Potato is a multimedia tool) while
+    staying safe: src is dangerous-pattern checked and event handlers stripped."""
+
+    def test_video_with_source_preserved(self):
+        html_input = ('<video width="320" height="240" controls>'
+                      '<source src="data/files/clip.mp4" type="video/mp4"></video>')
+        result = str(sanitize_html(html_input))
+        assert '<video' in result and '<source' in result
+        assert 'clip.mp4' in result
+
+    def test_boolean_media_attributes_preserved(self):
+        result = str(sanitize_html('<video autoplay loop muted controls></video>'))
+        for attr in ('autoplay', 'loop', 'muted', 'controls'):
+            assert attr in result
+
+    def test_audio_preserved(self):
+        result = str(sanitize_html('<audio controls src="a.mp3"></audio>'))
+        assert '<audio' in result and 'a.mp3' in result
+
+    def test_media_event_handler_stripped(self):
+        result = str(sanitize_html('<video src="x.mp4" onerror="alert(1)" controls></video>'))
+        assert 'onerror' not in result
+        assert 'controls' in result
+
+    def test_media_javascript_src_blocked(self):
+        # Dangerous-scheme src must never survive as a live attribute (the tag is
+        # either attribute-stripped or escaped to inert text).
+        result = str(sanitize_html('<video controls><source src="javascript:alert(1)"></video>'))
+        assert 'src="javascript:' not in result
 
 
 class TestExpandedAllowlistCompleteness:

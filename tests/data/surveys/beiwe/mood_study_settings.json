@@ -1,0 +1,348 @@
+{
+  "surveys": [
+    {
+      "name": "Daily check-in",
+      "survey_type": "tracking_survey",
+      "content": [
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000001",
+          "question_type": "info_text_box",
+          "question_text": "Please answer about the last 24 hours.",
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000002",
+          "question_type": "slider",
+          "question_text": "How is your mood right now?",
+          "min": "0",
+          "max": "10",
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000003",
+          "question_type": "radio_button",
+          "question_text": "Did you sleep well last night?",
+          "answers": [
+            {
+              "text": "Yes"
+            },
+            {
+              "text": "No"
+            },
+            {
+              "text": "Not sure"
+            }
+          ],
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000004",
+          "question_type": "free_response",
+          "text_field_type": "NUMERIC",
+          "question_text": "How many hours did you sleep?",
+          "display_if": {
+            "==": [
+              "5a170000-0000-4000-8000-000000000003",
+              1
+            ]
+          }
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000005",
+          "question_type": "checkbox",
+          "question_text": "What did you do today?",
+          "answers": [
+            {
+              "text": "Exercise"
+            },
+            {
+              "text": "Work"
+            },
+            {
+              "text": "Socialize"
+            },
+            {
+              "text": "Rest"
+            }
+          ],
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000006",
+          "question_type": "free_response",
+          "text_field_type": "MULTI_LINE_TEXT",
+          "question_text": "Tell us about your exercise.",
+          "display_if": {
+            "and": [
+              {
+                "==": [
+                  "5a170000-0000-4000-8000-000000000005",
+                  0
+                ]
+              },
+              {
+                "not": {
+                  "<": [
+                    "5a170000-0000-4000-8000-000000000002",
+                    4
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000007",
+          "question_type": "free_response",
+          "text_field_type": "SINGLE_LINE_TEXT",
+          "question_text": "What made your mood low?",
+          "display_if": {
+            "or": [
+              {
+                "<=": [
+                  "5a170000-0000-4000-8000-000000000002",
+                  3
+                ]
+              },
+              {
+                ">=": [
+                  "5a170000-0000-4000-8000-000000000003",
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000008",
+          "question_type": "radio_button",
+          "question_text": "How stressed do you feel?",
+          "answers": [
+            {
+              "text": "Not at all"
+            },
+            {
+              "text": "A little"
+            },
+            {
+              "text": "Somewhat"
+            },
+            {
+              "text": "Very"
+            }
+          ],
+          "display_if": {
+            "!=": [
+              "5a170000-0000-4000-8000-000000000005",
+              3
+            ]
+          }
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000009",
+          "question_type": "date",
+          "question_text": "When did you last see a doctor?",
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-00000000000a",
+          "question_type": "free_response",
+          "text_field_type": "NUMERIC",
+          "question_text": "How many cups of coffee did you drink?",
+          "display_if": {
+            ">": [
+              "5a170000-0000-4000-8000-000000000005",
+              1
+            ]
+          }
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-00000000000b",
+          "question_type": "info_text_box",
+          "question_text": "Thank you for checking in.",
+          "display_if": {
+            "and": []
+          }
+        }
+      ],
+      "settings": {
+        "trigger_on_first_download": true,
+        "randomize": true,
+        "randomize_with_memory": false,
+        "number_of_random_questions": null,
+        "always_available": false
+      },
+      "timings": [
+        [
+          32400
+        ],
+        [
+          32400
+        ],
+        [
+          32400
+        ],
+        [
+          32400
+        ],
+        [
+          32400
+        ],
+        [
+          32400
+        ],
+        [
+          32400
+        ]
+      ],
+      "absolute_timings": [],
+      "relative_timings": []
+    },
+    {
+      "name": "Weekly reflection",
+      "survey_type": "tracking_survey",
+      "content": [
+        {
+          "question_id": "5a170000-0000-4000-8000-00000000000c",
+          "question_type": "info_text_box",
+          "question_text": "A few questions about your week.",
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-00000000000d",
+          "question_type": "radio_button",
+          "question_text": "Overall, how was your week?",
+          "answers": [
+            {
+              "text": "Very bad"
+            },
+            {
+              "text": "Bad"
+            },
+            {
+              "text": "OK"
+            },
+            {
+              "text": "Good"
+            },
+            {
+              "text": "Very good"
+            }
+          ],
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-00000000000e",
+          "question_type": "time",
+          "question_text": "What time do you usually wake up?",
+          "display_if": null
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-00000000000f",
+          "question_type": "free_response",
+          "text_field_type": "MULTI_LINE_TEXT",
+          "question_text": "What would have made it better?",
+          "display_if": {
+            "and": [
+              {
+                "<": [
+                  "5a170000-0000-4000-8000-00000000000d",
+                  2
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "not": {
+                      "==": [
+                        "5a170000-0000-4000-8000-00000000000d",
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "==": [
+                      "5a170000-0000-4000-8000-00000000000c",
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "question_id": "5a170000-0000-4000-8000-000000000010",
+          "question_type": "free_response",
+          "text_field_type": "SINGLE_LINE_TEXT",
+          "question_text": "Anything else?",
+          "display_if": {
+            "==": [
+              "5a170000-0000-4000-8000-00000000000d",
+              "good"
+            ]
+          }
+        }
+      ],
+      "settings": {
+        "trigger_on_first_download": false,
+        "randomize": false,
+        "randomize_with_memory": true,
+        "number_of_random_questions": 2,
+        "always_available": true
+      },
+      "timings": [
+        [],
+        [],
+        [],
+        [],
+        [],
+        [
+          68400
+        ],
+        []
+      ],
+      "absolute_timings": [],
+      "relative_timings": []
+    },
+    {
+      "name": "Voice diary",
+      "survey_type": "audio_survey",
+      "content": [
+        {
+          "prompt": "Describe how your day went."
+        }
+      ],
+      "settings": {
+        "audio_survey_type": "compressed",
+        "bit_rate": 64000,
+        "trigger_on_first_download": false,
+        "always_available": false
+      },
+      "timings": [
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "absolute_timings": [
+        [
+          2026,
+          11,
+          2,
+          72000
+        ]
+      ],
+      "relative_timings": []
+    }
+  ],
+  "device_settings": {
+    "gps": true,
+    "accelerometer": true,
+    "consent_form_text": "I agree to take part."
+  },
+  "interventions": []
+}

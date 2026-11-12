@@ -11,9 +11,9 @@
 /* ==================== Container ==================== */
 
 .audio-annotation-container {
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
-    background: var(--card, #ffffff);
+    background: var(--card, light-dark(#ffffff, #1a1a1a));
     padding: 1rem;
     margin-bottom: 1rem;
 }
@@ -26,7 +26,7 @@
     gap: 0.75rem;
     align-items: center;
     padding: 0.75rem;
-    background: var(--muted, #f9fafb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
     border-radius: var(--radius, 0.5rem);
     margin-bottom: 1rem;
 }
@@ -40,7 +40,7 @@
 .tool-group-label {
     font-size: 0.75rem;
     font-weight: 500;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     margin-right: 0.25rem;
 }
 
@@ -58,18 +58,18 @@
     width: 2rem;
     height: 2rem;
     padding: 0;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .playback-btn:hover {
-    background: var(--accent, #f3f4f6);
-    border-color: var(--primary, #3b82f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
+    border-color: var(--primary, #6e56cf);
 }
 
 .playback-btn:disabled {
@@ -80,7 +80,7 @@
 .time-display {
     font-size: 0.75rem;
     font-family: monospace;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     padding: 0 0.5rem;
 }
 
@@ -94,9 +94,9 @@
 .playback-rate-select {
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
     cursor: pointer;
 }
 
@@ -115,22 +115,22 @@
     padding: 0.375rem 0.75rem;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .label-btn:hover {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
 }
 
 .label-btn.active {
-    border-color: var(--label-color, var(--primary, #3b82f6));
-    background: color-mix(in srgb, var(--label-color, var(--primary, #3b82f6)) 15%, white);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color, var(--primary, #3b82f6)) 25%, transparent);
+    border-color: var(--label-color, var(--primary, #6e56cf));
+    background: color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 15%, light-dark(white, #1a1a1a));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color, var(--primary, #6e56cf)) 25%, transparent);
 }
 
 .label-color-dot {
@@ -156,17 +156,17 @@
     padding: 0 0.5rem;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .zoom-btn:hover {
-    background: var(--accent, #f3f4f6);
-    border-color: var(--primary, #3b82f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
+    border-color: var(--primary, #6e56cf);
 }
 
 /* Segment controls */
@@ -183,17 +183,17 @@
     padding: 0.375rem 0.75rem;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
-    color: var(--foreground, #1f2937);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .segment-btn:hover:not(:disabled) {
-    background: var(--accent, #f3f4f6);
-    border-color: var(--primary, #3b82f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
+    border-color: var(--primary, #6e56cf);
 }
 
 .segment-btn:disabled {
@@ -202,9 +202,9 @@
 }
 
 .segment-btn.delete-btn:hover:not(:disabled) {
-    background: #fef2f2;
-    border-color: #ef4444;
-    color: #ef4444;
+    background: var(--destructive-tint);
+    border-color: var(--destructive-text);
+    color: var(--destructive-text);
 }
 
 /* Segment count */
@@ -214,12 +214,12 @@
 
 .segment-count {
     font-size: 0.75rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 .count-value {
     font-weight: 600;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
 }
 
 /* ==================== Waveform ==================== */
@@ -230,8 +230,8 @@
 
 .waveform-container {
     height: 200px;
-    background: var(--muted, #f9fafb);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
     margin-bottom: 0.5rem;
@@ -239,10 +239,19 @@
 
 .overview-container {
     height: 50px;
-    background: var(--muted, #f9fafb);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
+}
+
+/* Affordance hints on the overview / zoomview labels.
+   #6b7280 keeps a WCAG-AA (>=4.5:1) contrast on the light background. */
+.overview-hint,
+.zoomview-hint {
+    font-style: italic;
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
+    font-weight: 400;
 }
 
 /* ==================== Segment List ==================== */
@@ -254,7 +263,7 @@
 .segment-list-container h4 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     margin-bottom: 0.75rem;
 }
 
@@ -271,21 +280,21 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem;
-    background: var(--background, #ffffff);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .segment-item:hover {
-    background: var(--accent, #f3f4f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
 }
 
 .segment-item.active {
-    border-color: var(--primary, #3b82f6);
-    background: color-mix(in srgb, var(--primary, #3b82f6) 5%, white);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #3b82f6) 15%, transparent);
+    border-color: var(--primary, #6e56cf);
+    background: color-mix(in srgb, var(--primary, #6e56cf) 5%, light-dark(white, #1a1a1a));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #6e56cf) 15%, transparent);
 }
 
 .segment-color {
@@ -304,7 +313,7 @@
     display: block;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -314,7 +323,7 @@
     display: block;
     font-size: 0.75rem;
     font-family: monospace;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 .segment-actions {
@@ -333,22 +342,22 @@
     border: 1px solid transparent;
     border-radius: var(--radius, 0.375rem);
     background: transparent;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .segment-play-btn:hover {
-    background: var(--accent, #f3f4f6);
-    color: var(--primary, #3b82f6);
-    border-color: var(--primary, #3b82f6);
+    background: var(--accent, light-dark(#f3f4f6, #1d1f22));
+    color: var(--primary, light-dark(#6e56cf, #b2a8db));
+    border-color: var(--primary, #6e56cf);
 }
 
 .segment-delete-btn:hover {
-    background: #fef2f2;
-    color: #ef4444;
-    border-color: #ef4444;
+    background: var(--destructive-tint);
+    color: var(--destructive-text);
+    border-color: var(--destructive-text);
 }
 
 /* ==================== Questions Panel ==================== */
@@ -356,15 +365,15 @@
 .segment-questions-panel {
     margin-top: 1rem;
     padding: 1rem;
-    background: var(--muted, #f9fafb);
-    border: 1px solid var(--border, #e5e7eb);
+    background: var(--muted, light-dark(#f9fafb, #191d20));
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
 }
 
 .segment-questions-panel h4 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--foreground, #1f2937);
+    color: var(--foreground, light-dark(#1f2937, #cbd3dd));
     margin-bottom: 0.75rem;
 }
 
@@ -374,27 +383,27 @@
 
 .segment-questions-header {
     font-size: 0.875rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     margin-bottom: 1rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border, #e5e7eb);
+    border-bottom: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
 }
 
 .segment-questions-placeholder {
     font-size: 0.875rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
     font-style: italic;
 }
 
 /* ==================== Empty State ==================== */
 
 .segment-list:empty::before {
-    content: 'No segments yet. Double-click on the waveform or use [ and ] keys to create segments.';
+    content: 'No segments yet. Right-click and drag on the waveform, or use the [ and ] keys, to create segments.';
     display: block;
     text-align: center;
     padding: 2rem;
     font-size: 0.875rem;
-    color: var(--muted-foreground, #6b7280);
+    color: var(--muted-foreground, light-dark(#6b7280, #bec0c6));
 }
 
 /* ==================== Responsive ==================== */
@@ -437,7 +446,7 @@
     position: relative;
     height: 150px;
     background: var(--muted, #1a1a1a);
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
 }
@@ -461,7 +470,7 @@
 
 .spectrogram-label {
     font-size: 0.85em;
-    color: var(--muted-foreground, #666);
+    color: var(--muted-foreground, light-dark(#666, #c2c2c2));
     margin-bottom: 4px;
 }
 
@@ -476,9 +485,9 @@
 .spectrogram-colormap-select {
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--border, light-dark(#e5e7eb, #494b50));
     border-radius: var(--radius, 0.375rem);
-    background: var(--background, #ffffff);
+    background: var(--background, light-dark(#ffffff, #1a1a1a));
     cursor: pointer;
 }
 
@@ -519,7 +528,7 @@
 
 /* Overview highlight */
 .peaks-overview-highlight {
-    stroke: var(--primary, #3b82f6);
+    stroke: var(--primary, #6e56cf);
     stroke-width: 2;
     fill: none;
 }
@@ -530,4 +539,113 @@
     .spectrogram-container {
         height: 100px;
     }
+}
+
+
+/* ---- Waveform captions and the help panel --------------------------------
+   These were inline styles carrying their own greys (#666, #495057, #ccc,
+   #f8f9fa); they now sit on the shared tokens. */
+.audio-annotation-container .overview-label,
+.audio-annotation-container .zoomview-label,
+.audio-annotation-container .spectrogram-label {
+    font-size: var(--text-sm);
+    color: var(--muted-foreground);
+    margin-bottom: var(--space-xs);
+}
+
+.audio-annotation-container .spectrogram-label {
+    margin-top: 12px;
+}
+
+.audio-annotation-container .overview-container {
+    margin-bottom: 12px;
+}
+
+.audio-annotation-container .help-toggle {
+    margin-left: auto;
+}
+
+.audio-annotation-container .help-toggle-btn {
+    min-height: 32px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    color: var(--foreground);
+    font-size: var(--text-dense);
+    cursor: pointer;
+}
+
+.audio-annotation-container .help-toggle-btn:hover {
+    background: var(--muted);
+}
+
+.audio-annotation-container .help-toggle-btn[aria-expanded="true"] {
+    border-color: var(--primary);
+    background: var(--primary-tint);
+}
+
+.audio-annotation-container .help-toggle-btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
+.audio-annotation-container .help-panel {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--muted);
+    font-size: var(--text-dense);
+    color: var(--foreground);
+}
+
+.audio-annotation-container .help-panel.collapsed {
+    display: none;
+}
+
+.audio-annotation-container .help-panel-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md) var(--space-xl);
+}
+
+.audio-annotation-container .help-panel ul,
+.audio-annotation-container .help-panel ol {
+    margin: var(--space-xs) 0 0;
+    padding-left: 20px;
+}
+
+/* ---- Load failure ---------------------------------------------------------
+   The reason sits in the zoomed waveform pane, where the annotator is looking,
+   and the controls that need audio are disabled (audio-annotation.js
+   showLoadFailure). */
+.audio-annotation-container .waveform-container {
+    position: relative;
+}
+
+.audio-annotation-container .audio-load-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    text-align: center;
+    background: var(--destructive-tint);
+    border: 1px solid var(--destructive-text);
+    border-radius: var(--radius);
+    color: var(--destructive-text);
+    font-size: var(--text-dense);
+    z-index: 2;
+}
+
+.audio-annotation-container .audio-load-error span {
+    color: var(--foreground);
+}
+
+.audio-annotation-container.audio-load-failed .overview-container {
+    opacity: 0.5;
 }

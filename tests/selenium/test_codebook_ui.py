@@ -230,6 +230,24 @@ class TestCodebookOnTheFlyNavBack(unittest.TestCase):
             return _check
         w.until(_selected("seed-a"))
         w.until(_selected("runtime-x"))
+        # Saved under the code's own name and linked to it (audit 105 A1):
+        # named after the element id, it was neither, so a merge, split or
+        # rename of the code could not reach this coding.
+        saved = d.execute_async_script(
+            "var done = arguments[arguments.length - 1];"
+            "fetch('/get_annotations?instance_id=' + arguments[0])"
+            ".then(r => r.json()).then(j => done(j.label_annotations.themes || []));",
+            "n1")
+        self.assertIn("runtime-x", saved)
+        self.assertFalse(any("__cb__" in str(n) for n in saved), saved)
+        from potato.codebook import store
+        from potato.codebook.codebook import Codebook
+        import yaml
+        cfg = yaml.safe_load(open(self.config_file))
+        task_dir = cfg.get("task_dir") or os.path.dirname(self.config_file)
+        project = cfg.get("annotation_task_name") or "default"
+        code_id = Codebook.load(task_dir, project).label_to_id()["runtime-x"]
+        self.assertTrue(store.affected_annotation_ids(task_dir, project, code_id))
 
 
 _CB_SPAN = [{
@@ -408,12 +426,29 @@ class TestCodebookTrayDisabled(unittest.TestCase):
         if hasattr(self, "driver"):
             self.driver.quit()
 
-    def test_toggle_hidden_when_codebook_disabled(self):
-        time.sleep(1.5)  # allow the enable-probe to resolve
-        toggle = self.driver.find_element(By.ID, "cb-panel-toggle")
-        self.assertFalse(
-            toggle.is_displayed(),
-            "Codebook toggle must stay hidden when no codebook is enabled")
+    def test_tray_absent_when_codebook_disabled(self):
+        """Not merely hidden: absent, and with it the requests it made.
+
+        The tray used to ship on every annotation page and probe
+        /api/codebook to find out whether it belonged there, so a task with
+        no codebook paid five 503s per page view. The server decides now, so
+        neither the markup nor codebook.js reaches the browser.
+        """
+        time.sleep(1.0)
+        self.assertEqual(
+            [], self.driver.find_elements(By.ID, "cb-panel-toggle"),
+            "Codebook tray must not be rendered when no codebook is enabled")
+        self.assertEqual(
+            [], self.driver.find_elements(By.ID, "cb-panel"))
+        self.assertNotIn(
+            "codebook.js", self.driver.page_source,
+            "codebook.js must not load when no codebook is enabled")
+        failures = [
+            e for e in self.driver.get_log("browser")
+            if "/api/codebook" in e.get("message", "")
+        ]
+        self.assertEqual([], failures,
+                         f"Codebook endpoints were still called: {failures}")
 
 
 if __name__ == "__main__":

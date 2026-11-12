@@ -48,12 +48,14 @@ def _to_openai_tools(tools: list) -> list:
 
 
 def _normalize_base_url(raw: str) -> str:
-    """The OpenAI SDK appends '/chat/completions' to base_url, so it must
-    end at the '/v1' root. Accept either the server root or a '/v1' URL."""
+    """The OpenAI SDK appends '/chat/completions' to base_url, so bare host
+    URLs (vLLM/local servers) need the conventional '/v1' suffix. URLs that
+    already carry a path (e.g. Gemini's /v1beta/openai/) are left intact."""
     if not raw:
         return raw
+    from urllib.parse import urlparse
     u = raw.rstrip("/")
-    if not u.endswith("/v1"):
+    if not urlparse(u).path:
         u = u + "/v1"
     return u
 
@@ -63,7 +65,8 @@ class OpenAIToolUseBackend(CodingAgentBackend):
 
     def __init__(self, config: dict):
         self._config = config
-        ai = config.get("ai_config", {})
+        from potato.ai.ai_endpoint import without_unresolved_api_key
+        ai = without_unresolved_api_key(config.get("ai_config", {}))
         self._model = ai.get("model", "gpt-4o-mini")
         self._base_url = _normalize_base_url(ai.get("base_url", "")) or None
         # vLLM/local servers ignore the key; SDK requires non-empty.
@@ -206,7 +209,7 @@ class OpenAIToolUseBackend(CodingAgentBackend):
                         "input": tool_input,
                     })
 
-                    output = execute_tool(tool_name, tool_input, self._working_dir)
+                    output = execute_tool(tool_name, tool_input, self.sandbox)
                     output_type = self._classify_output_type(tool_name)
 
                     tc = {

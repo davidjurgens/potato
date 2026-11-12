@@ -1,0 +1,25 @@
+[
+  {
+    "id": "nego_001",
+    "scenario": "Buyer agent negotiates bulk pricing for 500 GPU-hours with a seller agent. Buyer's budget cap: $1,400. Seller's marginal cost: $2.00/hour.",
+    "conversation": [
+      {"speaker": "buyer", "text": "We need 500 GPU-hours this month. Given the volume, we're looking at $2.20 per hour — $1,100 total.", "agent_id": "buyer", "addressee": "seller", "turn_id": "n1-t0"},
+      {"speaker": "seller", "text": "Our list price is $3.50/hour. For 500 hours I can offer $3.20 — $1,600 total. The $2.20 figure isn't workable at any volume.", "agent_id": "seller", "addressee": "buyer", "turn_id": "n1-t1", "reply_to": "n1-t0"},
+      {"speaker": "buyer", "text": "That's above our budget entirely. We can commit to 500 hours monthly for the next quarter — 1,500 hours guaranteed — if you can reach $2.60.", "agent_id": "buyer", "addressee": "seller", "turn_id": "n1-t2", "reply_to": "n1-t1"},
+      {"speaker": "seller", "text": "A quarterly commitment changes things. $2.80 with the 3-month commitment, invoiced monthly, and we'll include priority scheduling.", "agent_id": "seller", "addressee": "buyer", "turn_id": "n1-t3", "reply_to": "n1-t2"},
+      {"speaker": "buyer", "text": "$2.80 puts us at $1,400/month — exactly at cap with no headroom. $2.70 and you have a signed order today.", "agent_id": "buyer", "addressee": "seller", "turn_id": "n1-t4", "reply_to": "n1-t3"},
+      {"speaker": "seller", "text": "Done at $2.70 with the quarterly commitment. Sending the order form now.", "agent_id": "seller", "addressee": "buyer", "turn_id": "n1-t5", "reply_to": "n1-t4"}
+    ]
+  },
+  {
+    "id": "nego_002",
+    "scenario": "Two scheduling agents negotiate a shared meeting slot for their principals. Agent A's principal strongly prefers mornings; Agent B's principal has a hard block before 10am.",
+    "conversation": [
+      {"speaker": "buyer", "text": "My principal needs the sync this week, ideally 9am Tuesday or Wednesday.", "agent_id": "buyer", "addressee": "seller", "turn_id": "n2-t0"},
+      {"speaker": "seller", "text": "Mornings before 10 are blocked all week on my side. I can offer Tuesday 2pm, Wednesday 3pm, or Friday 10:30am.", "agent_id": "seller", "addressee": "buyer", "turn_id": "n2-t1", "reply_to": "n2-t0"},
+      {"speaker": "buyer", "text": "None of those work — afternoons are deep-work blocks. If mornings are impossible, we'll skip this week entirely.", "agent_id": "buyer", "addressee": "seller", "turn_id": "n2-t2", "reply_to": "n2-t1"},
+      {"speaker": "seller", "text": "Skipping seems worse for both principals than a compromise. The Friday 10:30 slot is technically morning-adjacent — I can also shorten it to 25 minutes to reduce the deep-work cost.", "agent_id": "seller", "addressee": "buyer", "turn_id": "n2-t3", "reply_to": "n2-t2"},
+      {"speaker": "buyer", "text": "Booked: Friday 10:30, 25 minutes. Noting for next time that a standing 10:30 slot would avoid this dance.", "agent_id": "buyer", "addressee": "seller", "turn_id": "n2-t4", "reply_to": "n2-t3"}
+    ]
+  }
+]

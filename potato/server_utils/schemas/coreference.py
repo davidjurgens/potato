@@ -15,6 +15,7 @@ import json
 from .identifier_utils import (
     safe_generate_layout,
     escape_html_content,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,9 @@ def _generate_coreference_layout_internal(annotation_scheme, horizontal=False):
     Returns:
         tuple: (HTML string, key bindings list)
     """
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     scheme_name = annotation_scheme["name"]
     description = annotation_scheme.get("description", "Create coreference chains")
     span_schema = annotation_scheme.get("span_schema", "")
@@ -113,7 +117,7 @@ def _generate_coreference_layout_internal(annotation_scheme, horizontal=False):
         """
 
     schematic = f"""
-    <div id="{escape_html_content(scheme_name)}" class="coref-container annotation-form"
+    <div id="{escape_html_content(scheme_name)}" class="coref-container annotation-form" data-annotation-type="coreference" data-schema-name="{escape_html_content(scheme_name)}" {layout_attrs}
          data-annotation-type="coreference"
          data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-span-schema="{escape_html_content(span_schema)}"

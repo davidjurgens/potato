@@ -1,0 +1,15 @@
+{
+ "c0": {
+  "meta": {
+   "page_title": "Talk:Example",
+   "derailed": false,
+   "split": "train"
+  },
+  "vectors": []
+ },
+ "d0": {
+  "page_title": "Talk:Another",
+  "derailed": true,
+  "split": "test"
+ }
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "study_consent",
+    "description": "I agree to answer short surveys on my phone five times a day for seven days.",
+    "annotation_type": "radio",
+    "labels": ["I agree", "I do not agree"],
+    "label_requirement": {"required_label": ["I agree"]}
+  },
+  {
+    "name": "sms_consent",
+    "description": "May we text you when each survey opens? Without texts you will need to check the study page yourself. Your number is kept apart from your answers and deleted when the study ends.",
+    "annotation_type": "radio",
+    "labels": ["Yes", "No"],
+    "label_requirement": {"required": true}
+  }
+]

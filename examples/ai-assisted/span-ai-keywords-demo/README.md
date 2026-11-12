@@ -1,6 +1,6 @@
 # Span Annotation with AI Keywords and Admin Highlights Demo
 
-This example demonstrates all three overlay systems working together in the Potato annotation platform:
+All three overlay systems on one page:
 
 ## Overlay Types
 

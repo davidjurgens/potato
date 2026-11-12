@@ -11,11 +11,11 @@
   "scoring": {
     "method": "subscales",
     "subscales": {
-      "extraversion": {"items": [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56]},
-      "agreeableness": {"items": [2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57]},
-      "conscientiousness": {"items": [3, 8, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58]},
-      "negative_emotionality": {"items": [4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59]},
-      "open_mindedness": {"items": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]}
+      "extraversion": {"items": [1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56], "reverse": [16, 21, 26, 36, 46, 56]},
+      "agreeableness": {"items": [2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57], "reverse": [7, 27, 32, 42, 47]},
+      "conscientiousness": {"items": [3, 8, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58], "reverse": [3, 8, 28, 33, 38, 53]},
+      "negative_emotionality": {"items": [4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59], "reverse": [14, 19, 24, 34, 44, 54]},
+      "open_mindedness": {"items": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60], "reverse": [10, 20, 30, 40, 50]}
     }
   },
   "instructions": "Here are a number of characteristics that may or may not apply to you. For example, do you agree that you are someone who likes to spend time with others? Please indicate the extent to which you agree or disagree with each statement.",

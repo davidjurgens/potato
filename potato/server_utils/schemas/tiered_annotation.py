@@ -36,13 +36,16 @@ Example configuration:
             labels:
               - name: Word
                 color: "#95E1D3"
+          - name: tones
+            point: true          # instants, not intervals (Praat TextTier)
+            labels: ["H*", "L*", "L-L%"]
 """
 
 import json
 import logging
 from typing import Dict, Any, Tuple, List
 
-from .identifier_utils import safe_generate_layout, escape_html_content
+from .identifier_utils import safe_generate_layout, escape_html_content, generate_layout_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,9 @@ def _generate_tiered_annotation_layout_internal(
     annotation_scheme: Dict[str, Any]
 ) -> Tuple[str, List[Tuple[str, str]]]:
     """Internal implementation of tiered annotation layout generation."""
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schema_name = annotation_scheme.get("name", "tiered_annotation")
     description = annotation_scheme.get("description", "")
@@ -128,6 +134,22 @@ def _generate_tiered_annotation_layout_internal(
     playback_rate_control = annotation_scheme.get("playback_rate_control", True)
     overview_height = annotation_scheme.get("overview_height", 40)
 
+    # Optional transcript seeding: pre-populate a tier with one annotation per
+    # transcript turn, so annotators correct and enrich an existing alignment
+    # instead of re-segmenting speech that ASR already segmented. Opt-in — the
+    # field is only read when named. Defaults to the first tier.
+    transcript_field = annotation_scheme.get("transcript_field")
+    transcript_tier = annotation_scheme.get("transcript_tier") or (
+        processed_tiers[0]["name"] if processed_tiers else None
+    )
+    if transcript_field and transcript_tier:
+        known = {tier["name"] for tier in processed_tiers}
+        if transcript_tier not in known:
+            raise ValueError(
+                f"transcript_tier '{transcript_tier}' is not a defined tier. "
+                f"Available tiers: {', '.join(sorted(known))}"
+            )
+
     # Build tier rows HTML
     tier_rows_html = _generate_tier_rows_html(
         schema_name, processed_tiers, tier_height, show_tier_labels, collapsed_tiers
@@ -148,6 +170,8 @@ def _generate_tiered_annotation_layout_internal(
         "zoomEnabled": zoom_enabled,
         "playbackRateControl": playback_rate_control,
         "overviewHeight": overview_height,
+        "transcriptField": transcript_field,
+        "transcriptTier": transcript_tier if transcript_field else None,
     }
     config_json = json.dumps(js_config)
 
@@ -161,7 +185,7 @@ def _generate_tiered_annotation_layout_internal(
 
     # Generate the complete HTML
     html = f'''
-<form id="{escape_html_content(schema_name)}" class="annotation-form tiered-annotation-container"
+<form id="{escape_html_content(schema_name)}" class="annotation-form tiered-annotation-container" data-annotation-type="tiered_annotation" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}
       action="javascript:void(0)"
       data-annotation-type="tiered_annotation"
       data-schema-name="{escape_html_content(schema_name)}"
@@ -332,8 +356,16 @@ def _process_tiers(tiers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "constraint_type": tier.get("constraint_type", "none").lower(),
             "description": tier.get("description", ""),
             "linguistic_type": tier.get("linguistic_type"),
+            # A point tier marks instants (Praat's TextTier: ToBI tones, break
+            # indices) instead of intervals. Its annotations have
+            # start_time == end_time.
+            "point": tier.get("point", False),
             "labels": [],
         }
+        if not isinstance(tier_data["point"], bool):
+            raise ValueError(
+                f"Tier '{tier_data['name']}' has point: {tier_data['point']!r}; "
+                f"use true or false")
 
         # Validate tier_type
         if tier_data["tier_type"] not in ("independent", "dependent"):
@@ -387,8 +419,17 @@ def _validate_tier_structure(tiers: List[Dict[str, Any]]) -> None:
         ValueError: If structure is invalid
     """
     tier_names = {t["name"] for t in tiers}
+    point_tiers = {t["name"] for t in tiers if t.get("point")}
 
     for tier in tiers:
+        if tier.get("point") and tier["tier_type"] == "dependent":
+            raise ValueError(
+                f"Point tier '{tier['name']}' must be independent: a point has no "
+                f"duration to fit inside a parent annotation")
+        if tier.get("parent_tier") in point_tiers:
+            raise ValueError(
+                f"Tier '{tier['name']}' cannot depend on point tier "
+                f"'{tier['parent_tier']}': a point has no duration to subdivide")
         # Check dependent tier requirements
         if tier["tier_type"] == "dependent":
             if not tier.get("parent_tier"):
@@ -434,6 +475,8 @@ def _generate_tier_rows_html(
         is_collapsed = tier_name in collapsed_tiers
         collapsed_class = "collapsed" if is_collapsed else ""
         indent_class = "tier-dependent" if tier["tier_type"] == "dependent" else ""
+        if tier.get("point"):
+            indent_class += " tier-point"
 
         row_html = f'''
         <div class="tier-row {indent_class} {collapsed_class}"
@@ -441,6 +484,7 @@ def _generate_tier_rows_html(
              data-tier-type="{escape_html_content(tier['tier_type'])}"
              data-parent-tier="{escape_html_content(tier.get('parent_tier') or '')}"
              data-constraint-type="{escape_html_content(tier.get('constraint_type', 'none'))}"
+             data-point="{'true' if tier.get('point') else 'false'}"
              style="height: {tier_height}px;">
 '''
 
@@ -471,6 +515,8 @@ def _generate_tier_selector_html(tiers: List[Dict[str, Any]]) -> str:
     for tier in tiers:
         indent = "&nbsp;&nbsp;" if tier["tier_type"] == "dependent" else ""
         tier_type_indicator = " (→)" if tier["tier_type"] == "dependent" else ""
+        if tier.get("point"):
+            tier_type_indicator = " (points)"
         options.append(
             f'<option value="{escape_html_content(tier["name"])}">'
             f'{indent}{escape_html_content(tier["name"])}{tier_type_indicator}</option>'

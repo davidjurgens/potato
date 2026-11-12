@@ -20,22 +20,40 @@ logger = logging.getLogger(__name__)
 class WebhookReceiver:
     """Receives and normalizes agent traces from webhook POST requests."""
 
-    def __init__(self, api_key: str = "", allowed_formats: Optional[List[str]] = None):
+    def __init__(
+        self,
+        api_key: str = "",
+        allowed_formats: Optional[List[str]] = None,
+        allow_unauthenticated: bool = False,
+    ):
         self.api_key = api_key
         self.allowed_formats = allowed_formats or ["auto", "generic", "langsmith"]
+        self.allow_unauthenticated = allow_unauthenticated
 
     def validate_auth(self, request_headers: Dict[str, str]) -> bool:
-        """Validate webhook authentication."""
-        if not self.api_key:
-            return True  # No auth required
+        """Validate webhook authentication.
 
-        # Check Authorization header
-        auth = request_headers.get("Authorization", "")
+        With no `trace_ingestion.api_key` configured this used to return True,
+        so turning trace ingestion on without also setting a key left an open
+        endpoint that writes into the annotation task. It now fails closed;
+        an admin who genuinely wants an open receiver (a trusted private
+        network, say) sets `trace_ingestion.allow_unauthenticated: true`.
+        """
+        if not self.api_key:
+            return self.allow_unauthenticated
+
+        # Case-insensitively, because HTTP header names are. The route hands
+        # this `dict(request.headers)`, and Werkzeug title-cases the names on
+        # the way out: "X-API-Key" arrives as "X-Api-Key" and a plain dict
+        # lookup missed it. "Authorization" title-cases to itself, which is
+        # why Bearer worked and the documented X-API-Key returned 401.
+        headers = {str(k).lower(): v for k, v in (request_headers or {}).items()}
+
+        auth = headers.get("authorization", "") or ""
         if auth.startswith("Bearer "):
             return hmac.compare_digest(auth[7:], self.api_key)
 
-        # Check X-API-Key header
-        api_key = request_headers.get("X-API-Key", "")
+        api_key = headers.get("x-api-key", "") or ""
         if api_key:
             return hmac.compare_digest(api_key, self.api_key)
 
@@ -93,7 +111,7 @@ class WebhookReceiver:
                 "viewport": step.get("viewport"),
             })
 
-        return {
+        normalized = {
             "id": f"webhook_{trace_id}",
             "task_description": payload.get(
                 "task_description",
@@ -108,6 +126,23 @@ class WebhookReceiver:
                 "original_id": trace_id,
             },
         }
+        # Carry through everything else the sender supplied.
+        #
+        # This used to be an allowlist of four quality signals, so an ingested
+        # trace reached the annotator as an envelope of five keys and every
+        # field the task's own `instance_display` reads -- repo, judge_score,
+        # reasoning, patch, eval_steps -- was silently dropped between the POST
+        # and the page. The server diagnosed it precisely in the log ("ALL 4
+        # non-lazy field(s) ... are absent from the instance data") while the
+        # annotator was shown a blank item and asked to judge it.
+        #
+        # An allowlist cannot work here: `instance_display` names arbitrary
+        # keys, and the receiver has no way to know which. The envelope's own
+        # keys still win, so normalization is unchanged for anything that
+        # collides.
+        for key, value in payload.items():
+            normalized.setdefault(key, value)
+        return normalized
 
     def _normalize_langsmith(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize a LangSmith webhook payload."""

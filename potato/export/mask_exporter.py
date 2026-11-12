@@ -15,6 +15,7 @@ from typing import Optional, Tuple, List
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     build_category_mapping,
@@ -76,7 +77,8 @@ class MaskExporter(BaseExporter):
             if not img_anns:
                 continue
 
-            width, height = get_image_dimensions(item)
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             if width <= 0 or height <= 0:
                 # Try to get from mask RLE size
                 for _, objects in img_anns:
@@ -93,7 +95,7 @@ class MaskExporter(BaseExporter):
                 warnings.append(f"No dimensions for {instance_id}, skipping masks")
                 continue
 
-            file_name = get_image_filename(item) or instance_id
+            file_name = get_image_filename(item, context.config) or instance_id
             raw_stem = os.path.splitext(os.path.basename(file_name))[0]
             stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
 
@@ -126,6 +128,12 @@ class MaskExporter(BaseExporter):
                     img.save(mask_file)
                     files_written.append(mask_file)
                     masks_exported += 1
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the mask export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

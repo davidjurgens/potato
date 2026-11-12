@@ -8,7 +8,20 @@ visual traces, or any ordered collection of images with optional captions.
 import html
 from typing import Dict, Any, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_pixels, display_text
+
+
+#: Extensions a browser plays in a `<video>` element. Checked before the query
+#: string, because a signed media url carries one.
+_VIDEO_EXTENSIONS = (".mp4", ".m4v", ".webm", ".ogv", ".mov")
+
+
+def _is_video_url(url) -> bool:
+    """Whether this url names a video rather than an image."""
+    if not isinstance(url, str):
+        return False
+    path = url.split("?", 1)[0].split("#", 1)[0]
+    return path.lower().endswith(_VIDEO_EXTENSIONS)
 
 
 class GalleryDisplay(BaseDisplay):
@@ -67,16 +80,32 @@ class GalleryDisplay(BaseDisplay):
 
             caption_html = ""
             if show_captions and caption:
-                escaped_caption = html.escape(str(caption))
+                escaped_caption = html.escape(display_text(caption))
                 caption_html = f'<div class="gallery-caption">{escaped_caption}</div>'
 
             zoom_attr = 'data-zoomable="true"' if zoomable else ''
 
+            # `gallery` is the only display that takes a LIST of urls, so it is
+            # where anyone with several media files per item starts -- and
+            # multi-camera robot demonstrations, side-by-side model rollouts
+            # and frame-grid temporal segmentation are all lists of video.
+            # Every url used to go into an `<img>` unconditionally, so three
+            # clips rendered as three broken images with nothing in the log and
+            # nothing on the page.
+            if _is_video_url(item["url"]):
+                media_html = (
+                    f'<video src="{url}" class="gallery-img gallery-video" '
+                    f'controls preload="metadata" '
+                    f'aria-label="Video {i + 1}"></video>')
+            else:
+                media_html = (
+                    f'<img src="{url}" alt="Image {i + 1}" '
+                    f'class="gallery-img" loading="lazy" {zoom_attr} />')
+
             item_html = f'''
             <div class="gallery-item" data-index="{i}">
                 <div class="gallery-img-wrapper">
-                    <img src="{url}" alt="Image {i + 1}"
-                         class="gallery-img" loading="lazy" {zoom_attr} />
+                    {media_html}
                 </div>
                 {caption_html}
             </div>
@@ -152,19 +181,12 @@ class GalleryDisplay(BaseDisplay):
     def _build_css(self, layout: str, thumbnail_size: int, max_height: int,
                    columns: int, zoomable: bool) -> str:
         """Build CSS for the gallery layout."""
-        # Ensure numeric types for CSS arithmetic
-        try:
-            thumbnail_size = int(thumbnail_size)
-        except (ValueError, TypeError):
-            thumbnail_size = 300
-        try:
-            max_height = int(max_height)
-        except (ValueError, TypeError):
-            max_height = 400
-        try:
-            columns = int(columns)
-        except (ValueError, TypeError):
-            columns = 3
+        # Numeric, because the layout below computes `max_height - 40`. A bare
+        # int() raises on "220px" and was caught into the default, so a length
+        # written the way the rest of the block is written silently reverted.
+        thumbnail_size = css_pixels(thumbnail_size, 300)
+        max_height = css_pixels(max_height, 400)
+        columns = css_pixels(columns, 3)
 
         layout_css = ""
 
@@ -217,21 +239,21 @@ class GalleryDisplay(BaseDisplay):
         return f'''
         .gallery-display {{ font-family: inherit; }}
         .gallery-item {{
-            border: 1px solid #e0e0e0; border-radius: 6px;
-            overflow: hidden; background: #fafafa;
+            border: 1px solid light-dark(#e0e0e0, #4c4c4c); border-radius: 6px;
+            overflow: hidden; background: light-dark(#fafafa, #1d1d1d);
         }}
         .gallery-img-wrapper {{ display: flex; justify-content: center; padding: 4px; }}
         .gallery-img {{ border-radius: 4px; }}
         .gallery-caption {{
-            padding: 6px 10px; font-size: 0.85em; color: #555;
-            background: #f5f5f5; border-top: 1px solid #e0e0e0;
+            padding: 6px 10px; font-size: 0.85em; color: light-dark(#555, #c4c4c4);
+            background: light-dark(#f5f5f5, #1f1f1f); border-top: 1px solid light-dark(#e0e0e0, #4c4c4c);
             text-align: center;
         }}
         .gallery-nav {{
             display: flex; justify-content: center; padding: 4px 0;
             margin-bottom: 8px;
         }}
-        .gallery-counter {{ font-size: 0.85em; color: #666; }}
+        .gallery-counter {{ font-size: 0.85em; color: light-dark(#666, #c2c2c2); }}
         {layout_css}
         {zoom_css}
         '''

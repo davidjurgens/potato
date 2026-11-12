@@ -1,0 +1,64 @@
+{% extends "scheduling/base.html" %}
+{% block main_id %}schedule-session{% endblock %}
+{% block content %}
+<h1 class="potato-page-title" id="schedule-heading">{{ s.title }}</h1>
+<p class="sched-hint">Open until <time datetime="{{ s.closes.iso }}" data-epoch="{{ s.closes.epoch }}">{{ s.closes.local }}</time>.</p>
+{% if intro %}<p class="sched-intro">{{ intro }}</p>{% endif %}
+{% if errors %}
+<div class="sched-banner sched-banner-error" role="alert" id="schedule-errors">Some answers need attention.</div>
+{% endif %}
+<form method="post" action="{{ url_for('schedule_session', session_id=s.id) }}" id="schedule-session-form"
+      data-started-url="{{ url_for('schedule_started', session_id=s.id) }}" novalidate>
+    {% for q in questions %}
+    {% set err = errors.get(q.name) %}
+    <fieldset class="sched-question{% if err %} sched-question-error{% endif %}" data-question="{{ q.name }}" data-type="{{ q.type }}"
+              {% if err %}aria-describedby="err-{{ q.name }}"{% endif %}>
+        <legend class="sched-question-text">{{ q.text }}{% if q.required %} <span class="sched-required" aria-label="required">*</span>{% endif %}</legend>
+        {% if q.type in ('radio', 'likert') %}
+        <div class="sched-options {% if q.type == 'likert' or q.horizontal %}sched-options-row{% endif %}">
+            {% if q.type == 'likert' and q.min_label %}<span class="sched-scale-label" aria-hidden="true">{{ q.min_label }}</span>{% endif %}
+            {% for opt in q.options %}
+            <label class="sched-option">
+                <input type="radio" name="{{ q.name }}" value="{{ opt.name }}" {% if q.value is not none and (q.value|string) == opt.name %}checked{% endif %}
+                       {% if q.type == 'likert' %}aria-label="{{ opt.text }}{% if loop.first and q.min_label %} ({{ q.min_label }}){% elif loop.last and q.max_label %} ({{ q.max_label }}){% endif %}"{% endif %}>
+                <span>{{ opt.text }}</span>
+            </label>
+            {% endfor %}
+            {% if q.type == 'likert' and q.max_label %}<span class="sched-scale-label" aria-hidden="true">{{ q.max_label }}</span>{% endif %}
+        </div>
+        {% elif q.type == 'multiselect' %}
+        <div class="sched-options">
+            {% for opt in q.options %}
+            <label class="sched-option">
+                <input type="checkbox" name="{{ q.name }}" value="{{ opt.name }}" {% if q.value and (opt.name in q.value or q.value == opt.name) %}checked{% endif %}>
+                <span>{{ opt.text }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% elif q.type == 'slider' %}
+        <div class="sched-slider">
+            {% if q.min_label %}<span class="sched-scale-label">{{ q.min_label }}</span>{% endif %}
+            <input type="range" class="form-range" name="{{ q.name }}" id="q-{{ q.name }}" min="{{ q.min }}" max="{{ q.max }}" step="{{ q.step }}"
+                   value="{{ q.value if q.value is not none else q.start }}" aria-label="{{ q.text }}"
+                   data-touched="{{ '1' if q.value is not none else '0' }}">
+            {% if q.max_label %}<span class="sched-scale-label">{{ q.max_label }}</span>{% endif %}
+            <output class="sched-slider-value" for="q-{{ q.name }}">{{ q.value if q.value is not none else 'not set' }}</output>
+            <input type="hidden" name="{{ q.name }}__touched" value="{{ '1' if q.value is not none else '0' }}">
+        </div>
+        {% elif q.type == 'number' %}
+        <input type="number" class="potato-form-input sched-number" name="{{ q.name }}" aria-label="{{ q.text }}"
+               {% if q.min is not none %}min="{{ q.min }}"{% endif %} {% if q.max is not none %}max="{{ q.max }}"{% endif %} step="{{ q.step }}"
+               value="{{ q.value if q.value is not none else '' }}">
+        {% elif q.type == 'text' %}
+        {% if q.multiline %}
+        <textarea class="potato-form-input" name="{{ q.name }}" rows="3" maxlength="{{ q.max_length }}" aria-label="{{ q.text }}">{{ q.value or '' }}</textarea>
+        {% else %}
+        <input type="text" class="potato-form-input" name="{{ q.name }}" maxlength="{{ q.max_length }}" aria-label="{{ q.text }}" value="{{ q.value or '' }}">
+        {% endif %}
+        {% endif %}
+        {% if err %}<p class="sched-error" id="err-{{ q.name }}">{{ err }}</p>{% endif %}
+    </fieldset>
+    {% endfor %}
+    <button type="submit" class="shadcn-button sched-primary" id="schedule-submit">Submit</button>
+</form>
+{% endblock %}

@@ -1,13 +1,13 @@
 """
 OpenAI Vision AI Endpoint
 
-This module provides integration with OpenAI's vision models (GPT-4o, GPT-4o-mini)
+Integration with OpenAI's vision models (GPT-4o, GPT-4o-mini)
 for visual analysis and annotation assistance.
 """
 
 import base64
 import logging
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -28,9 +28,17 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
     Configuration options:
     - model: Model to use (gpt-4o, gpt-4o-mini) (default: gpt-4o)
     - api_key: OpenAI API key (can also use OPENAI_API_KEY env var)
-    - max_tokens: Maximum response tokens (default: 1000)
+    - base_url: An OpenAI-compatible server to talk to instead of OpenAI --
+      vLLM, SGLang, LM Studio, llama.cpp, LiteLLM, OpenRouter. Setting it also
+      makes the API key optional, because self-hosted servers usually have none
+      and requiring a placeholder just to reach a local GPU is a papercut that
+      sends people to write their own endpoint class.
+    - max_tokens: Maximum response tokens (default: 800)
     - temperature: Sampling temperature (default: 0.1)
     - detail: Image detail level - 'low', 'high', or 'auto' (default: auto)
+    - json_mode: Request ``response_format={"type": "json_object"}`` (default
+      True). Servers without constrained decoding reject it; the endpoint
+      detects that and retries once without, so this rarely needs setting.
     """
 
     # Capabilities declaration for OpenAI vision models (GPT-4o, GPT-4o-mini)
@@ -42,7 +50,15 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
         text_classification=True,
         image_classification=True,
         rationale_generation=True,
-        keyword_extraction=False,  # Keywords don't apply to images
+        # True, and gated per item rather than per endpoint. These are
+        # language models; they extract keywords from text as well as their
+        # text-only siblings do. `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`, so declaring False here
+        # said "no keywords, ever" -- and the capability filter runs per item,
+        # so on a text-only task through a vision endpoint the Keyword button
+        # was simply absent and only two of the three assistants were
+        # reachable.
+        keyword_extraction=True,
     )
 
     def _initialize_client(self) -> None:
@@ -51,28 +67,119 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
             import openai
         except ImportError:
             raise AIEndpointRequestError(
-                "openai package is required. Install it with: pip install openai"
+                "openai package is required. Install it with: pip install 'potato-annotation[ai]'"
             )
 
         import os
 
+        base_url = self.ai_config.get("base_url") or self.ai_config.get("api_base")
+        if base_url:
+            # Accept either the server root or an OpenAI-style ".../v1", the
+            # same tolerance VLLMEndpoint applies -- people paste both.
+            base_url = str(base_url).rstrip("/")
+            if not base_url.endswith("/v1"):
+                base_url = base_url + "/v1"
+
         api_key = self.ai_config.get("api_key") or os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise AIEndpointRequestError(
-                "OpenAI API key is required. Set it in config or OPENAI_API_KEY env var."
-            )
+            if not base_url:
+                raise AIEndpointRequestError(
+                    "OpenAI API key is required. Set it in config or OPENAI_API_KEY env var."
+                )
+            # The client insists on a non-empty key even when the server
+            # ignores it entirely.
+            api_key = "not-needed"
 
         timeout = self.ai_config.get("timeout", 60)
         self.detail = self.ai_config.get("detail", "auto")
+        self.json_mode = bool(self.ai_config.get("json_mode", True))
+        # Set once, by _create, when the server 400s on a json_schema
+        # response_format. Sticky so the failed round trip is paid once
+        # rather than on every assistant click.
+        self._schema_mode_refused = False
 
-        self.client = openai.OpenAI(api_key=api_key, timeout=timeout)
-        logger.info(f"OpenAI Vision client initialized with model: {self.model}")
+        kwargs = {"api_key": api_key, "timeout": timeout}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self.client = openai.OpenAI(**kwargs)
+        self.base_url = base_url
+        logger.info("OpenAI Vision client initialized with model: %s%s",
+                    self.model, f" at {base_url}" if base_url else "")
+
+    def _create(self, messages, output_format=None):
+        """One chat completion, retrying with weaker JSON guarantees if refused.
+
+        Three levels, strongest first:
+
+        1. ``json_schema`` when the caller named a schema. This is the only one
+           that constrains the SHAPE, and without it the same task returned a
+           different shape one click apart -- ``{"rationales": [...]}`` for the
+           rationale button and ``{"annotation_guidance": {...}}`` for the hint
+           button, which rendered as "No hint available". The hint that did
+           work worked because the model followed the prompt, not because
+           anything held it to the format.
+        2. ``json_object``, which guarantees only that the reply parses.
+        3. Nothing, parsed leniently.
+
+        Each step down is taken only when the server rejects the one above. A
+        server built without constrained decoding answers ``response_format``
+        with a 400, and failing there would make it look like it has no vision
+        support when only the guarantee is missing.
+        """
+        kwargs = dict(
+            model=self.model,
+            messages=messages,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+
+        schema = None
+        if output_format is not None and hasattr(output_format, "model_json_schema"):
+            try:
+                schema = output_format.model_json_schema()
+            except Exception:  # noqa: BLE001
+                schema = None
+
+        if schema is not None and self.json_mode and not self._schema_mode_refused:
+            try:
+                return self.client.chat.completions.create(
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": getattr(output_format, "__name__", "output"),
+                            "schema": schema,
+                        },
+                    },
+                    **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                if "response_format" not in str(exc) and "json_schema" not in str(exc):
+                    raise
+                logger.info(
+                    "Server rejected schema-constrained output (%s); falling "
+                    "back to plain JSON mode. Responses are no longer "
+                    "guaranteed to match the requested shape.", exc)
+                # Sticky: retrying the schema on every call would pay the
+                # round trip and the log line once per assistant click.
+                self._schema_mode_refused = True
+
+        if self.json_mode:
+            try:
+                return self.client.chat.completions.create(
+                    response_format={"type": "json_object"}, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                if "response_format" not in str(exc):
+                    raise
+                logger.info(
+                    "Server rejected JSON mode (%s); retrying without it and "
+                    "parsing leniently.", exc)
+                self.json_mode = False
+        return self.client.chat.completions.create(**kwargs)
 
     def _get_default_model(self) -> str:
         """Get the default OpenAI vision model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard text query without images.
 
@@ -84,19 +191,35 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
             Parsed response
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"},
-            )
-
+            response = self._create([{"role": "user", "content": prompt}],
+                                    output_format)
+            self._warn_if_truncated(response.choices[0].finish_reason)
             content = response.choices[0].message.content
             return self.parseStringToJson(content)
 
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI query failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn text chat.
+
+        Calls the client directly rather than going through `_create`, whose
+        JSON modes would force a conversational reply into a JSON object. The
+        base class's fallback called query(prompt) without an output_format
+        and failed on every message.
+        """
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+            )
+            self._warn_if_truncated(response.choices[0].finish_reason,
+                                    where="chat reply")
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            raise AIEndpointRequestError(f"OpenAI vision chat request failed: {e}")
 
     def query_with_image(
         self,
@@ -130,13 +253,14 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
                 content.append(image_content)
 
             # Make request
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": content}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"},
-            )
+            response = self._create([{"role": "user", "content": content}],
+                                    output_format)
+            self._warn_if_truncated(response.choices[0].finish_reason,
+                                    "image response")
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._note_usage(getattr(usage, "prompt_tokens", None),
+                                 getattr(usage, "completion_tokens", None))
 
             response_content = response.choices[0].message.content
             logger.debug(f"OpenAI vision response: {response_content[:500] if response_content else 'empty'}")

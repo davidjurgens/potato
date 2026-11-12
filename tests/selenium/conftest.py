@@ -14,12 +14,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 
+from tests.helpers.teardown_watchdog import (
+    TEST_TEARDOWN_TIMEOUT_SECONDS,
+    bounded_teardown,
+    use_capture_manager,
+)
+
 # Skip all selenium tests in CI or when explicitly disabled
 SKIP_SELENIUM = os.environ.get('SKIP_SELENIUM_TESTS', '').lower() in ('1', 'true', 'yes')
 
 # Fast mode reduces wait times for local development
 FAST_MODE = os.environ.get('FAST_TESTS', '').lower() in ('1', 'true', 'yes')
 DEFAULT_WAIT = 5 if FAST_MODE else 10
+
+
+def pytest_configure(config):
+    # So a teardown hang's stack dump survives pytest's fd-level capture.
+    use_capture_manager(config.pluginmanager.getplugin("capturemanager"))
 
 
 def pytest_collection_modifyitems(config, items):
@@ -126,8 +137,9 @@ def shared_flask_server():
 
     yield server
 
-    server.stop_server()
-    shutil.rmtree(test_dir, ignore_errors=True)
+    with bounded_teardown("shared_flask_server"):
+        server.stop_server()
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
@@ -155,7 +167,11 @@ def shared_chrome_browser(shared_chrome_options):
     """
     driver = webdriver.Chrome(options=shared_chrome_options)
     yield driver
-    driver.quit()
+    # quit() blocks on a socket read; if chromedriver has already died it
+    # never returns, and nothing else in the harness would time it out.
+    with bounded_teardown("shared_chrome_browser",
+                          seconds=TEST_TEARDOWN_TIMEOUT_SECONDS, announce=False):
+        driver.quit()
 
 
 # Helper functions for replacing time.sleep() with explicit waits
@@ -333,8 +349,9 @@ def shared_form_server():
 
     yield server
 
-    server.stop_server()
-    shutil.rmtree(test_dir, ignore_errors=True)
+    with bounded_teardown("shared_form_server"):
+        server.stop_server()
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
@@ -386,8 +403,9 @@ def shared_span_server():
 
     yield server
 
-    server.stop_server()
-    shutil.rmtree(test_dir, ignore_errors=True)
+    with bounded_teardown("shared_span_server"):
+        server.stop_server()
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 
 @pytest.fixture
@@ -401,12 +419,17 @@ def clear_browser_state(request):
             # Browser state will be cleared after test
     """
     yield
-    # Get the browser from the test's fixtures if available
-    if hasattr(request, 'fixturenames') and 'shared_chrome_browser' in request.fixturenames:
-        driver = request.getfixturevalue('shared_chrome_browser')
-        try:
-            driver.delete_all_cookies()
-            driver.execute_script("if(window.localStorage){localStorage.clear();}")
-            driver.execute_script("if(window.sessionStorage){sessionStorage.clear();}")
-        except:
-            pass  # Browser may be closed or in error state
+    # These are real WebDriver round-trips: `except: pass` catches an error
+    # reply, but a browser that has stopped replying at all hangs here instead
+    # of raising, and pytest-timeout does not watch teardown.
+    with bounded_teardown("clear_browser_state",
+                          seconds=TEST_TEARDOWN_TIMEOUT_SECONDS, announce=False):
+        # Get the browser from the test's fixtures if available
+        if hasattr(request, 'fixturenames') and 'shared_chrome_browser' in request.fixturenames:
+            driver = request.getfixturevalue('shared_chrome_browser')
+            try:
+                driver.delete_all_cookies()
+                driver.execute_script("if(window.localStorage){localStorage.clear();}")
+                driver.execute_script("if(window.sessionStorage){sessionStorage.clear();}")
+            except:
+                pass  # Browser may be closed or in error state

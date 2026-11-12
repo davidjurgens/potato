@@ -56,7 +56,10 @@ def _get_webhook_receiver():
     """
     ingestion_config = current_app.config.get("trace_ingestion", {})
     api_key = ingestion_config.get("api_key", "")
-    return WebhookReceiver(api_key=api_key)
+    return WebhookReceiver(
+        api_key=api_key,
+        allow_unauthenticated=bool(ingestion_config.get("allow_unauthenticated", False)),
+    )
 
 
 def _inject_trace(trace: dict):
@@ -66,8 +69,10 @@ def _inject_trace(trace: dict):
 
         ism = get_item_state_manager()
 
-        # Save trace data to disk
-        task_dir = current_app.config.get("task_dir", ".")
+        # Save trace data to disk. The potato config holds task_dir; Flask's
+        # app.config does not, which wrote traces under the working directory.
+        from potato.server_utils.config_module import config as potato_config
+        task_dir = potato_config.get("task_dir") or current_app.config.get("task_dir", ".")
         traces_dir = os.path.join(task_dir, "ingested_traces")
         os.makedirs(traces_dir, exist_ok=True)
 
@@ -83,6 +88,8 @@ def _inject_trace(trace: dict):
             **trace,
         }
         ism.add_item(trace_id, item_data)
+        from potato.server_utils.runtime_items import record_runtime_item
+        record_runtime_item(potato_config, trace_id, item_data, "trace_ingestion")
 
         _stats["processed"] += 1
 
@@ -171,6 +178,45 @@ def langsmith_webhook():
         "trace_id": trace.get("id"),
         "steps": len(trace.get("steps", [])),
     })
+
+
+@trace_ingestion_bp.route("/api/traces/otel", methods=["POST"])
+def otel_endpoint():
+    """OpenTelemetry / OpenInference ingest endpoint.
+
+    Accepts an OTLP-JSON span export (``{"resourceSpans": [...]}``) emitted by any
+    OTel-instrumented agent framework (LangGraph, CrewAI, OpenAI Agents SDK,
+    Pydantic AI, …) and converts the GenAI/OpenInference spans into Potato traces.
+    """
+    receiver = _get_webhook_receiver()
+    if not receiver.validate_auth(dict(request.headers)):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    payload = request.get_json(silent=True)
+    if not payload:
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    _stats["received"] += 1
+    _stats["last_received"] = time.time()
+
+    try:
+        from potato.trace_converter.converters.otel_converter import OTELConverter
+        traces = OTELConverter().convert(payload)
+    except Exception as e:
+        logger.error(f"OTLP convert failed: {e}")
+        _stats["errors"] += 1
+        return jsonify({"error": f"Failed to convert OTLP payload: {e}"}), 422
+
+    if not traces:
+        return jsonify({"status": "accepted", "ingested": 0,
+                        "note": "no GenAI/OpenInference spans found"}), 200
+
+    ingested = 0
+    for ct in traces:
+        if _inject_trace(ct.to_dict()):
+            ingested += 1
+    return jsonify({"status": "accepted", "ingested": ingested,
+                    "trace_ids": [ct.id for ct in traces]})
 
 
 @trace_ingestion_bp.route("/api/traces/stream")

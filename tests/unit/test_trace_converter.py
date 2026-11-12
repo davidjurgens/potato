@@ -221,6 +221,26 @@ class TestLangfuseConverter:
         assert trace.task_description == "Translate hello to French"
         assert len(trace.conversation) == 3
 
+    def test_token_counts_read_the_public_api_usage_shape(self):
+        """Langfuse's public trace API names it usage.total (with input and
+        output beside it); reading only totalTokens, the API's traces never
+        showed a token count."""
+        converter = LangfuseConverter()
+
+        def tokens(usages):
+            data = self.get_sample_data()
+            data[0]["observations"] = [
+                {"type": "GENERATION", "name": "g%d" % n, "input": {}, "output": {"content": "x"},
+                 "usage": usage} for n, usage in enumerate(usages)]
+            (trace,) = converter.convert(data)
+            rows = [r for r in trace.metadata_table if r["Property"] == "Tokens"]
+            return rows[0]["Value"] if rows else None
+
+        assert tokens([{"input": 30, "output": 12, "total": 42}]) == "42"
+        assert tokens([{"input": 30, "output": 12}]) == "42"
+        assert tokens([{"totalTokens": 100}, {"total": 5}]) == "105"
+        assert tokens([{}]) is None
+
 
 class TestATIFConverter:
     """Tests for the ATIF converter."""

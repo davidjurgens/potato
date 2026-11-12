@@ -185,6 +185,15 @@
         // Listen for span creation events
         document.addEventListener('spanCreated', handleSpanCreated);
 
+        // Nothing in Potato dispatches `spanCreated`, so this listener only ever
+        // ran for spans that existed at boot: draw a new mention and it came
+        // back without a link icon, which reads as entity linking being off for
+        // that span. Watch the overlay container instead. addLinkIconsToSpans()
+        // is idempotent -- it skips any overlay that already has an icon -- so
+        // re-running it on every overlay change is safe, and it keeps working if
+        // the span layer ever does start emitting the event.
+        observeOverlayChanges();
+
         // Add click handlers to existing spans with link icons
         addLinkIconsToSpans();
 
@@ -214,6 +223,29 @@
     /**
      * Add link icons to all span overlays (only for schemas with entity linking enabled)
      */
+    /**
+     * Re-apply link icons whenever the overlay layer changes.
+     *
+     * Overlays are re-rendered wholesale on every span change and on instance
+     * navigation, so this fires often; the callback is debounced to one pass per
+     * frame rather than one per mutation record.
+     */
+    function observeOverlayChanges() {
+        if (typeof MutationObserver === 'undefined') return;
+
+        const container = document.getElementById('span-overlays') || document.body;
+        let pending = false;
+        const observer = new MutationObserver(() => {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(() => {
+                pending = false;
+                addLinkIconsToSpans();
+            });
+        });
+        observer.observe(container, {childList: true, subtree: true});
+    }
+
     function addLinkIconsToSpans() {
         const enabledSchemas = getSchemasWithEntityLinking();
         if (enabledSchemas.size === 0) {
@@ -308,10 +340,19 @@
     }
 
     /**
+     * A linked span. Spans are span-core overlays; the label chip is the part
+     * that takes the pointer. This listened for the inline `.span-highlight`
+     * the server used to wrap stored spans in, so the tooltip showed only on
+     * a reloaded page and never for a link just made.
+     */
+    const LINKED_SPAN_SELECTOR =
+        '.span-overlay-pure.has-entity-link, .span-highlight.has-entity-link';
+
+    /**
      * Handle hover over a span with entity link
      */
     function handleSpanHover(event) {
-        const span = event.target.closest('.span-highlight.has-entity-link');
+        const span = event.target.closest(LINKED_SPAN_SELECTOR);
         if (!span) return;
 
         const kbId = span.getAttribute('data-kb-id');
@@ -328,7 +369,7 @@
      * Handle hover out from span
      */
     function handleSpanHoverOut(event) {
-        const span = event.target.closest('.span-highlight.has-entity-link');
+        const span = event.target.closest(LINKED_SPAN_SELECTOR);
         if (!span) return;
 
         hideEntityTooltip();
@@ -352,8 +393,10 @@
             <div class="el-tooltip-label">${escapeHtml(kbLabel || 'Loading...')}</div>
         `;
 
-        // Position tooltip near the span
-        const rect = span.getBoundingClientRect();
+        // Position tooltip near the span. An overlay's own box is 0x0 at the
+        // corner of the text; its first segment is the span.
+        const anchor = span.querySelector('.span-highlight-segment') || span;
+        const rect = anchor.getBoundingClientRect();
         tooltip.style.position = 'fixed';
         tooltip.style.left = `${rect.left}px`;
         tooltip.style.top = `${rect.bottom + 5}px`;
@@ -669,18 +712,18 @@
                 `<input type="checkbox" class="el-result-checkbox" ${isLinked ? 'checked' : ''}>` : '';
 
             return `
-                <div class="el-result-item ${linkedClass}" data-entity-id="${entity.entity_id}"
-                     data-kb-source="${entity.kb_source}" data-label="${escapeHtml(entity.label)}">
+                <div class="el-result-item ${linkedClass}" data-entity-id="${escapeHtml(String(entity.entity_id ?? ''))}"
+                     data-kb-source="${escapeHtml(String(entity.kb_source ?? ''))}" data-label="${escapeHtml(entity.label)}">
                     <div class="el-result-header">
                         ${checkbox}
                         <span class="el-result-label">${escapeHtml(entity.label)}</span>
-                        <span class="el-result-id">${entity.entity_id}</span>
+                        <span class="el-result-id">${escapeHtml(String(entity.entity_id ?? ''))}</span>
                         ${linkedBadge}
                     </div>
                     ${entity.description ? `<div class="el-result-desc">${escapeHtml(entity.description)}</div>` : ''}
                     ${entity.aliases && entity.aliases.length > 0 ?
                         `<div class="el-result-aliases">Also: ${entity.aliases.slice(0, 3).map(a => escapeHtml(a)).join(', ')}</div>` : ''}
-                    ${entity.url ? `<a href="${entity.url}" target="_blank" class="el-result-link">View in KB</a>` : ''}
+                    ${safeHttpUrl(entity.url) ? `<a href="${escapeHtml(safeHttpUrl(entity.url))}" target="_blank" rel="noopener noreferrer" class="el-result-link">View in KB</a>` : ''}
                 </div>
             `;
         }).join('');
@@ -875,11 +918,21 @@
     /**
      * Escape HTML special characters
      */
+    // Quotes too: results go into data-* attributes, and KB labels are
+    // publicly editable (Wikidata).
     function escapeHtml(text) {
         if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /** A KB link only if it is http(s); anything else is dropped. */
+    function safeHttpUrl(url) {
+        try {
+            const u = new URL(String(url), window.location.href);
+            return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+        } catch (e) {
+            return '';
+        }
     }
 
     // Initialize when DOM is ready

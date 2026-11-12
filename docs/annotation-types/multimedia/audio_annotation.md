@@ -1,6 +1,6 @@
 # Audio Annotation
 
-Audio annotation allows annotators to segment audio files and assign labels to time regions. This is useful for speech transcription, speaker diarization, music analysis, and audio event detection.
+Audio annotation lets annotators cut an audio file into time regions and label them. This is useful for speech transcription, speaker diarization, music analysis, and audio event detection.
 
 ![Audio Annotation Interface](../../img/screenshots/audio_annotation_full.png)
 *The audio annotation interface with waveform visualization, segment labels, and playback controls*
@@ -36,7 +36,7 @@ If `audiowaveform` is not installed, client-side waveform generation will be use
 
 ### Client-Side
 
-The frontend uses [Peaks.js](https://github.com/bbc/peaks.js) (loaded from CDN) for waveform rendering.
+The frontend uses [Peaks.js](https://github.com/bbc/peaks.js), bundled with Potato, for waveform rendering.
 
 ## Configuration
 
@@ -72,7 +72,7 @@ annotation_schemes:
 | `mode` | string | `"label"` | Annotation mode: `"label"`, `"questions"`, or `"both"` |
 | `labels` | list | required* | Category labels for segments (*required for label/both modes) |
 | `segment_schemes` | list | required* | Per-segment annotation schemes (*required for questions/both modes) |
-| `min_segments` | integer | `0` | Minimum required segments |
+| `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments |
 | `zoom_enabled` | boolean | `true` | Enable zoom controls |
 | `playback_rate_control` | boolean | `false` | Show playback speed selector |
@@ -104,7 +104,8 @@ labels:
 ```
 
 #### Questions Mode
-Each segment gets its own set of annotation questions:
+Each segment gets its own set of annotation questions. The annotator marks a
+region, selects it, and answers the questions in the Segment Details panel:
 
 ```yaml
 mode: questions
@@ -132,6 +133,50 @@ segment_schemes:
   - annotation_type: radio
     name: speaker
     labels: ["host", "guest"]
+```
+
+#### How segment questions work
+
+Each entry in `segment_schemes` is an ordinary annotation scheme, rendered by
+the same generator that renders a top-level one — so any annotation type works
+inside a segment, with the same layout, tooltips and validation messages.
+
+Answers are stored on the segment rather than on the item, keyed by the
+sub-scheme's `name`:
+
+```json
+{"segments": [
+  {"id": "segment_1", "start_time": 0.0, "end_time": 16.3, "label": "interruption",
+   "annotations": {"who_started": "Patient", "cues": ["Talking over"]}}
+]}
+```
+
+Two limits are worth knowing:
+
+- **Keybindings are not bound.** A segment's fields only exist while that
+  segment is selected, so a global key would fire against whichever segment
+  happened to be open. Answer them by clicking.
+- **`label_requirement` is not enforced** on a sub-scheme. Marking one required
+  would block Next on a question the annotator may not have opened yet. Use
+  `min_segments` to require segments, and check completeness in analysis.
+
+A runnable example is in `examples/audio/segment-questions/`.
+
+### Requiring segments
+
+With `label_requirement.required: true` on the scheme, Next is blocked until
+the annotator has marked at least `min_segments` segments and given every one of
+them a label. The message names what is missing: "1 of 2 segments marked", "1
+segment with no label". Without `required`, neither check blocks anything.
+
+```yaml
+- annotation_type: audio_annotation
+  name: speaker_turns
+  description: "Mark each speaker turn"
+  labels: [caller, agent]
+  min_segments: 2
+  label_requirement:
+    required: true
 ```
 
 ### Label Configuration
@@ -166,6 +211,12 @@ item_properties:
 
 Supported formats: MP3, WAV, OGG, and other formats supported by the browser.
 
+> **Header behavior:** When `text_key` points at the media file path/URL (as above),
+> the redundant "instance text" header is hidden automatically — the waveform player
+> is the content. If the item instead carries a real prompt or transcript (text with
+> spaces, not a bare path), that text is shown above the player. The same applies to
+> video and tiered/temporal tasks.
+
 ### Output Data
 
 Annotations are saved as JSON:
@@ -196,6 +247,12 @@ Annotations are saved as JSON:
 }
 ```
 
+The `segments` export writes these as one JSONL row per segment and as RTTM
+files for diarization tools; see
+[Timeline segments](../../data-export/export_formats.md#timeline-segments-segments).
+A model can be trained on them in Potato with the `hf-audio-tagger` trainer
+([Model training](../../ai-intelligence/model_training.md#hf-audio-tagger)).
+
 ## Keyboard Shortcuts
 
 | Key | Action |
@@ -221,13 +278,32 @@ Annotations are saved as JSON:
 - **Zoom Controls**: Zoom in, zoom out, fit to view
 - **Segment Controls**: Create segment, delete selected
 - **Segment Count**: Shows current number of segments
+- **Help**: Shows or hides the usage panel below the toolbar. The panel starts
+  open; once an annotator closes it, it stays closed on later items in the same
+  browser.
 
 ### Waveform Display
 
-- **Main Waveform**: Zoomable view showing amplitude
-- **Overview**: Mini-map showing full audio with current view highlighted
+- **Main Waveform (zoomed view)**: Zoomable view showing amplitude
+- **Overview**: Mini-map showing the full audio with the current view highlighted
 - **Segments**: Color-coded regions on the waveform
 - **Playhead**: Current playback position indicator
+
+### Creating Segments by Dragging
+
+Segments can be drawn directly on either panel:
+
+- **Zoomed view** — **right-click and drag** to draw a segment precisely. If the
+  drag reaches the left or right edge, the view **auto-scrolls** so you can extend
+  the selection past the currently visible window in a single gesture (no need to
+  zoom out first).
+- **Overview** — **right-click and drag** to draw a coarse segment anywhere across
+  the whole clip, even outside the current zoom window. This makes the entire
+  recording annotatable without first navigating to it.
+
+**Left-click** on either panel still seeks / navigates the playhead, so the two
+gestures never conflict. You can also create segments with the `[` / `]` / `Enter`
+keyboard shortcuts or the toolbar buttons.
 
 ### Segment List
 
@@ -253,11 +329,24 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 
 5. **Label Colors**: Choose distinct colors that are visible on the waveform (avoid grays that blend with the waveform).
 
-6. **Min Segments**: Set `min_segments: 1` to ensure annotators create at least one segment per audio file.
+6. **Min Segments**: Set `min_segments: 1` to ensure annotators create at least one segment per audio file. Pair it with `label_requirement.required: true` — `min_segments` is checked as part of the requiredness pass, so on its own it records the number and blocks nothing.
 
 ## Troubleshooting
 
 ### Waveform not loading
+
+When the audio cannot be loaded, the zoomed waveform pane shows the reason and
+the play, zoom and segment controls are disabled. The other questions on the
+page still work. The messages are:
+
+| Message | Cause |
+|---|---|
+| "the server answered HTTP 404" (or another status) | The URL, or the `/api/audio/proxy` request for an external URL, returned that status. A 502 from the proxy means Potato could not fetch the remote file. |
+| "could not be reached from this browser" | The request failed before any response arrived: a network error, or a cross-origin server that did not allow the read. |
+| "downloaded, but this browser cannot play its format" | The file arrived but the browser cannot decode it. Convert to MP3, WAV or OGG. |
+| "This item has no audio file to load" | No URL was found in `source_field`, the display, or the item text. |
+
+Then:
 
 1. Check browser console for errors
 2. Verify the audio URL is accessible
@@ -275,3 +364,26 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 1. Check browser audio permissions
 2. Verify audio format is supported (MP3, WAV, OGG)
 3. Check for CORS issues if audio is hosted externally
+
+## Already have a transcript?
+
+This page covers segmenting a waveform from scratch. If you have ASR output or
+subtitle files for your audio, you probably want a transcript-driven display
+instead — the turns are already segmented, so annotators label speech rather than
+re-drawing boundaries by hand.
+
+Potato reads Whisper, WhisperX, and whisper.cpp JSON, SubRip, WebVTT, SubStation
+Alpha, TTML, YouTube captions, AWS Transcribe, Deepgram, AssemblyAI, Rev.ai, CTM,
+Praat TextGrid, and ELAN EAF — either inlined in your data file or read from a
+sidecar next to the media.
+
+```bash
+potato transcripts ./whisper_out --media-dir ./audio -o data/interviews.json
+```
+
+- [Working with Transcripts](../../guides/working_with_transcripts.md) — running Whisper or pulling YouTube subtitles, then annotating the result
+- [Transcript Format Support](transcript_formats.md) — every supported format and how it is detected
+- [Audio Dialogue](audio_dialogue.md) — speaker bubbles with per-turn playback
+
+Waveform segmentation and transcript annotation combine: keep this schema for
+marking acoustic events, and add an `audio_dialogue` display for the speech.

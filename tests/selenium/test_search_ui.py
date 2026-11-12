@@ -38,6 +38,10 @@ def _login(driver, wait, base_url, uid):
 
 
 class TestSearchClaimUI(unittest.TestCase):
+    #: -1 (unlimited) makes fixed_order hand out one item at a time, so the
+    #: searched-for items are not already in the queue. A cap binds claims.
+    MAX_PER_USER = -1
+
     @classmethod
     def setUpClass(cls):
         from tests.helpers.flask_test_setup import FlaskTestServer
@@ -60,7 +64,7 @@ class TestSearchClaimUI(unittest.TestCase):
                                  "annotation_type": "radio",
                                  "labels": ["a", "b"]}],
             data_files=[data_file], annotation_task_name="Search UI Test",
-            require_password=False, max_annotations_per_user=1,
+            require_password=False, max_annotations_per_user=cls.MAX_PER_USER,
             additional_config={"search": {"annotator_claim": True}})
         cls.port = find_free_port()
         cls.server = FlaskTestServer(
@@ -104,6 +108,33 @@ class TestSearchClaimUI(unittest.TestCase):
         # button reflects claimed state
         self.wait.until(EC.text_to_be_present_in_element(
             (By.CSS_SELECTOR, "#search-results .search-claimed"), "queue"))
+
+
+class TestSearchClaimAtCapUI(TestSearchClaimUI):
+    """With the queue at max_annotations_per_user the server refuses a claim
+    (409). The row has to say the queue is full: the generic "Couldn't
+    claim -- retry" offered a retry that could never succeed."""
+
+    MAX_PER_USER = 1
+    test_search_then_claim = None   # the parent's test needs room to claim
+
+    def test_claim_at_the_cap_says_the_queue_is_full(self):
+        self.wait.until(EC.element_to_be_clickable(
+            (By.ID, "search-panel-toggle"))).click()
+        q = self.wait.until(EC.visibility_of_element_located(
+            (By.ID, "search-q")))
+        q.send_keys("distinctive")
+        self.driver.find_element(By.ID, "search-go").click()
+        self.wait.until(EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, "#search-results .search-claim"))).click()
+        note = self.wait.until(EC.visibility_of_element_located(
+            (By.CSS_SELECTOR, "#search-results .search-claim-refused")))
+        self.assertEqual(note.text, "Queue full (limit 1)")
+        self.assertIn("max_annotations_per_user", note.get_attribute("title"))
+        self.assertEqual(
+            [], self.driver.find_elements(
+                By.CSS_SELECTOR, "#search-results .search-claimed"),
+            "a refused claim must not show as in the queue")
 
 
 class TestSearchClaimDisabled(unittest.TestCase):
@@ -150,12 +181,26 @@ class TestSearchClaimDisabled(unittest.TestCase):
         if hasattr(self, "driver"):
             self.driver.quit()
 
-    def test_toggle_hidden_when_claim_disabled(self):
-        time.sleep(1.5)  # allow the enable-probe to resolve
-        toggle = self.driver.find_element(By.ID, "search-panel-toggle")
-        self.assertFalse(
-            toggle.is_displayed(),
-            "Search toggle must stay hidden when annotator_claim is off")
+    def test_panel_absent_when_claim_disabled(self):
+        """Absent rather than hidden, so the enable-probe never runs.
+
+        The panel used to load on every annotation page and probe
+        /api/search, which answers 403 when annotator_claim is off -- one
+        console error per page view for a feature the task did not have.
+        """
+        time.sleep(1.0)
+        self.assertEqual(
+            [], self.driver.find_elements(By.ID, "search-panel-toggle"),
+            "Search panel must not be rendered when annotator_claim is off")
+        self.assertNotIn(
+            "search.js", self.driver.page_source,
+            "search.js must not load when annotator_claim is off")
+        failures = [
+            e for e in self.driver.get_log("browser")
+            if "/api/search" in e.get("message", "")
+        ]
+        self.assertEqual([], failures,
+                         f"Search endpoint was still called: {failures}")
 
 
 if __name__ == "__main__":

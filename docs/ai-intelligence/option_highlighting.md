@@ -1,6 +1,6 @@
 # Option Highlighting
 
-Option Highlighting is an AI-assisted feature that helps annotators identify the most likely correct options for discrete annotation tasks (radio buttons, checkboxes, likert scales). Using an LLM, the system analyzes the content and task description to predict the top-k most likely options, displaying them at full opacity while dimming less-likely options.
+Option highlighting marks the options an LLM thinks are most likely for a discrete annotation task (radio buttons, checkboxes, likert scales). The LLM reads the content and task description to predict the top-k most likely options, displaying them at full opacity while dimming less-likely options.
 
 ## Overview
 

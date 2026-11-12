@@ -1,6 +1,6 @@
 # Active Learning Administrator Guide
 
-This guide provides comprehensive instructions for administrators on how to configure and use active learning in the Potato annotation platform. Active learning uses machine learning to intelligently prioritize annotation tasks, helping you get the most value from your annotation budget.
+Active learning trains a classifier on the annotations you already have and reorders the queue so annotators see the instances it is least sure about first. This page is the administrator's reference for configuring it.
 
 ## Table of Contents
 
@@ -17,14 +17,13 @@ This guide provides comprehensive instructions for administrators on how to conf
 
 ## Overview
 
-Active learning in Potato automatically reorders annotation instances based on machine learning predictions, prioritizing items where the model is most uncertain. This helps you:
+Uncertain instances carry more information than confident ones, so a fixed
+annotation budget spent on them produces a better model than the same budget
+spent in dataset order. The cost is that your labeled set is no longer a random
+sample of the corpus, which matters if you intend to report distribution
+statistics over it.
 
-- **Maximize annotation efficiency** by focusing on the most informative instances
-- **Reduce annotation costs** by requiring fewer annotations for the same model performance
-- **Improve model quality** by ensuring diverse and representative training data
-- **Scale annotation workflows** with intelligent instance prioritization
-
-### How It Works
+### The active learning cycle
 
 1. **Training**: A machine learning classifier is trained on existing annotations
 2. **Prediction**: The model predicts confidence scores for unannotated instances
@@ -95,22 +94,47 @@ active_learning:
     stop_words: "english"
 ```
 
+### Naming a classifier or a vectorizer
+
+Both take either a short name or a fully qualified import path. These are the
+same thing:
+
+```yaml
+active_learning:
+  classifier: {name: logistic}
+  vectorizer: {name: tfidf}
+```
+
+```yaml
+active_learning:
+  classifier: {name: sklearn.linear_model.LogisticRegression}
+  vectorizer: {name: sklearn.feature_extraction.text.TfidfVectorizer}
+```
+
+A dotted path is imported as written, so any scikit-learn-compatible estimator
+works. A bare word that is not one of the short names below is a config error
+naming the ones that are — it used to validate clean and then fall back to
+LogisticRegression at the first training run, with the failure only in the log.
+
 ### Supported Classifiers
 
-| Classifier | Use Case | Pros | Cons |
-|------------|----------|------|------|
-| `LogisticRegression` | Binary/multi-class | Fast, interpretable | Linear only |
-| `RandomForestClassifier` | Complex patterns | Robust, handles non-linear | Slower training |
-| `SVC` | High-dimensional data | Good with sparse data | Memory intensive |
-| `MultinomialNB` | Text classification | Very fast | Assumes independence |
+| Short name | Class | Use Case | Pros | Cons |
+|---|---|----------|------|------|
+| `logistic` | `LogisticRegression` | Binary/multi-class | Fast, interpretable | Linear only |
+| `random_forest` | `RandomForestClassifier` | Complex patterns | Robust, handles non-linear | Slower training |
+| `svm` | `SVC` | High-dimensional data | Good with sparse data | Memory intensive |
+| — | `MultinomialNB` | Text classification | Very fast | Assumes independence |
 
 ### Supported Vectorizers
 
-| Vectorizer | Use Case | Pros | Cons |
-|------------|----------|------|------|
-| `CountVectorizer` | Simple text features | Fast, simple | No word importance |
-| `TfidfVectorizer` | Text with word importance | Better performance | Slightly slower |
-| `HashingVectorizer` | Large datasets | Memory efficient | No feature names |
+| Short name | Class | Use Case | Pros | Cons |
+|---|---|----------|------|------|
+| `count` | `CountVectorizer` | Simple text features | Fast, simple | No word importance |
+| `tfidf` | `TfidfVectorizer` | Text with word importance | Better performance | Slightly slower |
+| `sentence-transformers` | sentence-transformers embeddings | Semantic similarity | Captures meaning | Downloads a model |
+| — | `HashingVectorizer` | Large datasets | Memory efficient | No feature names |
+
+A class with no short name is reached by its import path.
 
 ### Resolution Strategies
 
@@ -123,9 +147,13 @@ active_learning:
 
 | Strategy | Description | Use When |
 |----------|-------------|----------|
-| `majority_vote` | Most common label wins | Multiple annotators, clear disagreements |
+| `majority_vote` | Most common label wins. A tie has no majority and the item is left out of training | Multiple annotators, clear disagreements |
 | `consensus` | All annotators must agree | High-quality requirements |
 | `random` | Randomly select one annotation | Quick testing, simple workflows |
+
+Each annotator contributes one answer per item. A radio's "Other" text is not a
+class. A multiselect answer is one class made of its ticked labels together
+(`sports+tech`), since the classifier predicts a single label.
 
 ## LLM Integration
 
@@ -190,21 +218,31 @@ active_learning:
 | `model_save_directory` | Directory to save models | Required | `/models/` |
 | `model_retention_count` | Number of models to keep | `2` | `3-5` |
 
-### Database Integration
+### Training history
 
-For large-scale deployments, enable database persistence:
+Potato records every training run: what was trained, on how many annotations,
+how long it took, and where the model was saved. There is nothing to configure.
+The records go into the project's SQLite database alongside the rest of Potato's
+state, and you can read them at `GET /admin/active-learning/stats`.
 
-```yaml
-active_learning:
-  enabled: true
-  database_enabled: true
-  database_config:
-    host: "localhost"
-    port: 3306
-    database: "potato_al"
-    username: "potato_user"
-    password: "secure_password"
-```
+### Is the ordering being served?
+
+`active_learning.enabled: true` means the pool is being **reordered**. Whether
+anyone is served that order is a separate question, decided by
+`assignment_strategy`, and the two came apart silently: two servers with the
+same data and the same annotations, one serving the ranked pool and one serving
+the file order, logged an identical `Reordered N instances` line and reported
+the same stats.
+
+The reorder line names the strategy and whether the order will be used, and
+`GET /admin/active-learning/stats` carries `assignment_strategy` and
+`ordering_is_served`. `enabled: true` under the wrong
+strategy is the likeliest way to misconfigure this feature.
+
+Earlier versions documented `database_enabled` and a `database_config` block
+with MySQL connection details. Neither key did anything: the code behind them
+created no tables and saved no metrics. Both are ignored if you still have them
+in a config file, and you can delete them.
 
 ## Multi-Schema Support
 
@@ -220,28 +258,17 @@ active_learning:
   min_instances_for_training: 15
 ```
 
-### Schema-Specific Configuration
+### Per-Schema Settings
 
-Configure different parameters for each schema:
-
-```yaml
-active_learning:
-  enabled: true
-  schema_names: ["sentiment", "topic"]
-  schema_configs:
-    sentiment:
-      min_annotations_per_instance: 3
-      classifier_name: "sklearn.linear_model.LogisticRegression"
-    topic:
-      min_annotations_per_instance: 2
-      classifier_name: "sklearn.ensemble.RandomForestClassifier"
-```
+There are none. The classifier, vectorizer and thresholds under
+`active_learning` apply to every scheme in `schema_names`. A `schema_configs`
+block is not read.
 
 ## Monitoring and Metrics
 
 ### Accessing Metrics
 
-Active learning provides comprehensive metrics through the admin interface:
+The admin interface exposes these metrics:
 
 ```python
 # Get active learning statistics
@@ -470,15 +497,6 @@ active_learning:
   model_save_directory: "/data/potato/models"
   model_retention_count: 5
 
-  # Database integration
-  database_enabled: true
-  database_config:
-    host: "localhost"
-    port: 3306
-    database: "potato_al"
-    username: "potato_user"
-    password: "secure_password"
-
   resolution_strategy: "majority_vote"
   random_sample_percent: 10
   max_instances_to_reorder: 200
@@ -486,7 +504,7 @@ active_learning:
 
 ## Query Strategies
 
-Potato supports multiple query strategies beyond basic uncertainty sampling. For a comprehensive reference with mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
+Potato supports multiple query strategies beyond basic uncertainty sampling. For the mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
 
 | Strategy | Description | Config Value |
 |----------|-------------|-------------|
@@ -506,7 +524,7 @@ active_learning:
 
 ## Cold-Start with LLM Selection
 
-Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized.
+Before enough annotations exist for classifier training, Potato can use an LLM to identify the most informative instances. Instances with moderate LLM confidence (near the decision boundary) are prioritized. The LLM chooses among the schema's own labels, with the schema's description as its instructions; a schema with no labels skips the LLM cold start.
 
 ```yaml
 active_learning:
@@ -529,7 +547,7 @@ active_learning:
     model_name: "all-MiniLM-L6-v2"
 ```
 
-Requires: `pip install sentence-transformers`
+Requires: `pip install 'potato-annotation[embeddings]'`
 
 ## Probability Calibration
 
@@ -555,7 +573,6 @@ Set to `false` to disable calibration (e.g., for debugging or when using RandomF
 | `classifier_params` | dict | `{}` | Extra parameters passed to classifier constructor |
 | `vectorizer_params` | dict | `{}` | Extra parameters passed to vectorizer constructor |
 | `use_icl_ensemble` | bool | `false` | Blend ICL predictions with classifier |
-| `annotation_routing` | bool | `false` | Enable LLM-based annotation routing |
 
 ## Architecture Overview
 
@@ -571,10 +588,6 @@ Key source files:
 - `potato/active_learning_manager.py` — Main manager class
 - `potato/ai/llm_active_learning.py` — LLM integration module
 
-## Conclusion
-
-Active learning in Potato provides powerful capabilities for optimizing annotation workflows. By following this guide and best practices, administrators can configure and use active learning effectively to improve annotation efficiency and model quality.
-
-For additional support and advanced configurations, refer to:
+## Where to go next
 - [Active Learning Query Strategies](active_learning_strategies.md) — Detailed strategy reference with citations
 - [AI Support](ai_support.md) — LLM endpoint configuration

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "trace-001",
+    "task_description": "What is the weather in NYC?",
+    "conversation": [
+      {"speaker": "User", "text": "What is the weather in NYC?"},
+      {"speaker": "Agent (Action)", "text": "get_weather({\"location\": \"NYC\"})"},
+      {"speaker": "Environment", "text": "Sunny, 72F"},
+      {"speaker": "Agent", "text": "It's sunny and 72F in NYC."}
+    ]
+  },
+  {
+    "id": "trace-002",
+    "task_description": "Book a table for two at 7pm.",
+    "conversation": [
+      {"speaker": "User", "text": "Book a table for two at 7pm."},
+      {"speaker": "Agent (Action)", "text": "search_restaurants({\"party\": 2})"},
+      {"speaker": "Environment", "text": "3 options found"},
+      {"speaker": "Agent (Action)", "text": "book_table({\"time\": \"7pm\", \"party\": 2})"},
+      {"speaker": "Environment", "text": "Booked"},
+      {"speaker": "Agent", "text": "Your table for two at 7pm is booked."}
+    ]
+  }
+]

@@ -65,6 +65,9 @@ class _StubItem:
 class _StubUserState:
     instance_id_ordering = ["item-1"]
 
+    def prelabels_resolved(self, instance_id):
+        return False
+
     def get_current_phase_and_page(self):
         return (UserPhase.ANNOTATION, "page")
 
@@ -76,6 +79,9 @@ class _StubUserState:
 
     def get_annotation_count(self):
         return 0
+
+    def get_annotated_instance_ids(self):
+        return set()
 
     def get_max_assignments(self):
         return -1
@@ -106,6 +112,9 @@ class _StubUSM:
 class _StubISM:
     def get_total_assignable_items_for_user(self, user_state):
         return 1
+
+    def get_progress_pending_ids_for_user(self, user_state):
+        return ["i1"]
 
 
 def _configure_render_mocks(monkeypatch, app, annotation_codebook_url):

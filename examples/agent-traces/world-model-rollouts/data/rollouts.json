@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ball_drop",
+    "prompt": "A ball is dropped onto a table and bounces once.",
+    "intervention": "",
+    "intervention_t": null,
+    "real": "rollouts/ball_drop/real.webm",
+    "gen_a": "rollouts/ball_drop/gen_a.webm",
+    "gen_b": "rollouts/ball_drop/gen_b.webm",
+    "note": "Find the frame where each rollout stops making sense. Mark a panel as having no breaks if it is coherent throughout."
+  },
+  {
+    "id": "block_push",
+    "prompt": "A block slides to the right and hits a wall.",
+    "intervention": "The wall was moved 50 px to the left at 1.5 s.",
+    "intervention_t": 1.5,
+    "real": "rollouts/block_push/real.webm",
+    "gen_a": "rollouts/block_push/gen_a.webm",
+    "gen_b": "rollouts/block_push/gen_b.webm",
+    "note": "Find the frame where each rollout stops making sense. Mark a panel as having no breaks if it is coherent throughout."
+  },
+  {
+    "id": "two_balls",
+    "prompt": "A red ball and a blue ball pass each other.",
+    "intervention": "",
+    "intervention_t": null,
+    "real": "rollouts/two_balls/real.webm",
+    "gen_a": "rollouts/two_balls/gen_a.webm",
+    "gen_b": "rollouts/two_balls/gen_b.webm",
+    "note": "Find the frame where each rollout stops making sense. Mark a panel as having no breaks if it is coherent throughout."
+  }
+]

@@ -17,11 +17,10 @@ Checks performed:
 Exit codes:
     0 — all checks passed
     1 — fatal errors found (invalid YAML, missing required fields,
-        structural errors)
-    2 — warnings only (unrecognized keys) and --strict was passed
+        structural errors), or any warning when --strict was passed
 
-In default mode unknown keys are reported but do not fail the exit
-code. Use --strict to treat them as fatal (useful for CI).
+In default mode warnings are reported but do not fail the exit code.
+Use --strict to treat them as fatal (useful for CI).
 """
 
 from __future__ import annotations
@@ -39,7 +38,10 @@ import yaml
 from potato.server_utils.config_module import (
     ConfigValidationError,
     ConfigSecurityError,
+    normalize_config_before_validation,
+    validate_file_paths,
     validate_yaml_structure,
+    warn_about_unreadable_optional_files,
 )
 
 
@@ -50,6 +52,13 @@ class ValidationReport:
     errors: List[str] = field(default_factory=list)
     unknown_keys: List[str] = field(default_factory=list)
     other_warnings: List[str] = field(default_factory=list)
+    #: Deprecation notes (pre_annotation, icl_labeling, judge_calibration ...).
+    #: Advice, not warnings: they never fail --strict. The CLI also prints
+    #: them to stderr, but only once per process and only to a terminal, so an
+    #: agent reading this report over MCP never saw them.
+    notes: List[str] = field(default_factory=list)
+    #: Warnings matched by `validation.acknowledge`. Shown, never fatal.
+    acknowledged: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -58,6 +67,8 @@ class ValidationReport:
             "errors": self.errors,
             "unknown_keys": self.unknown_keys,
             "other_warnings": self.other_warnings,
+            "notes": self.notes,
+            "acknowledged": self.acknowledged,
         }
 
 
@@ -130,14 +141,35 @@ def validate_config_file(config_file: str) -> ValidationReport:
 
     config_file_dir = os.path.dirname(os.path.abspath(config_file))
     try:
+        # Same pre-validation pass the server runs, so validate does not report
+        # errors a running server would not have (unexpanded ${ENV_VAR}s,
+        # a defaulted task_dir).
+        # The server turns YAML's boolean keys (a bare `on:`) back into the
+        # words they were written as before anything reads the config; doing
+        # less here crashed the unknown-key check on a config the server runs.
+        from potato.server_utils.config_module import _restore_yaml_boolean_keys
+        config_data = _restore_yaml_boolean_keys(config_data, config_file)
+        config_data = normalize_config_before_validation(config_data, config_file_dir)
         validate_yaml_structure(
             config_data,
             project_dir=config_file_dir,
             config_file_dir=config_file_dir,
         )
+        # The path checks the server runs at boot. They lived only on the boot
+        # path, so `validate` reported "OK -- no issues found" for a config
+        # naming a header_logo that does not exist, which then refused to
+        # start. A preflight that passes a config the server rejects is worse
+        # than no preflight.
+        validate_file_paths(config_data, config_file_dir, config_file_dir)
     except (ConfigValidationError, ConfigSecurityError) as e:
         report.ok = False
-        report.errors.append(str(e))
+        # A block validated as a whole (labeling_engine) carries its own list
+        # of problems; one bullet each, not its heading as a bullet.
+        items = getattr(e, "errors", None) or getattr(e.__cause__, "errors", None)
+        if isinstance(items, list) and items:
+            report.errors.extend(str(x) for x in items)
+        else:
+            report.errors.append(str(e))
     except Exception as e:
         # Surface unexpected errors but do not crash the CLI
         report.ok = False
@@ -149,10 +181,80 @@ def validate_config_file(config_file: str) -> ValidationReport:
 
     report.unknown_keys = collector.unknown_keys
     report.other_warnings = collector.other_warnings
+    try:
+        from potato.labeling_engine.config.translate import deprecation_warnings
+        if isinstance(config_data, dict):
+            report.notes = deprecation_warnings(config_data)
+    except Exception as e:  # noqa: BLE001 - advice must not fail the run
+        report.notes = [f"Could not check for deprecated keys ({type(e).__name__}): {e}"]
+    # Optional files the server merely shrugs off. Not fatal here either --
+    # but named, so `--strict` can refuse them and a human can see them.
+    try:
+        report.other_warnings.extend(
+            warn_about_unreadable_optional_files(config_data, config_file_dir))
+    except Exception as e:  # noqa: BLE001 - a warning pass must not fail the run
+        report.other_warnings.append(
+            f"Could not check optional file paths ({type(e).__name__}): {e}")
+    _apply_acknowledgements(report, config_data)
     return report
 
 
-def _format_human(report: ValidationReport) -> str:
+#: Shorter entries could match nearly any warning ("scheme", "engine") and
+#: silence problems nobody meant to accept.
+MIN_ACKNOWLEDGEMENT_LENGTH = 12
+
+
+def _apply_acknowledgements(report: ValidationReport, config_data) -> None:
+    """Move warnings named in `validation.acknowledge` out of the fatal lists.
+
+    Some warnings are expected for a given study: under
+    `assignment_strategy: engine` a free-text scheme is always reported,
+    because the engine cannot label it. `--strict` fails on every warning, so
+    an agent could not tell "expected here" from "fix this". Matching is by
+    substring of the warning text. An entry that is too short, or that
+    matches nothing, is reported as a warning of its own.
+    """
+    block = config_data.get("validation") if isinstance(config_data, dict) else None
+    entries = block.get("acknowledge") if isinstance(block, dict) else None
+    if not entries:
+        return
+    if not isinstance(entries, list):
+        report.other_warnings.append(
+            "validation.acknowledge must be a list of warning texts; it was ignored.")
+        return
+
+    usable = []
+    for entry in entries:
+        text = str(entry).strip()
+        if len(text) < MIN_ACKNOWLEDGEMENT_LENGTH:
+            report.other_warnings.append(
+                f"validation.acknowledge entry '{text}' is shorter than "
+                f"{MIN_ACKNOWLEDGEMENT_LENGTH} characters, so it could match "
+                "warnings you did not mean to accept; it was ignored. Quote more "
+                "of the warning.")
+        else:
+            usable.append(text)
+
+    matched = set()
+    for name in ("unknown_keys", "other_warnings"):
+        kept = []
+        for warning in getattr(report, name):
+            hit = next((e for e in usable if e in warning), None)
+            if hit is None:
+                kept.append(warning)
+            else:
+                matched.add(hit)
+                report.acknowledged.append(warning)
+        setattr(report, name, kept)
+
+    for entry in usable:
+        if entry not in matched:
+            report.other_warnings.append(
+                f"validation.acknowledge entry '{entry}' matches no warning. "
+                "Remove it, or it will hide a different problem later.")
+
+
+def _format_human(report: ValidationReport, strict: bool = False) -> str:
     lines = []
     lines.append(f"Config: {report.config_file}")
     if report.errors:
@@ -170,14 +272,40 @@ def _format_human(report: ValidationReport) -> str:
         lines.append("OTHER WARNINGS:")
         for w in report.other_warnings:
             lines.append(f"  - {w}")
+    if report.acknowledged:
+        lines.append("")
+        lines.append("ACKNOWLEDGED (validation.acknowledge; not counted):")
+        for w in report.acknowledged:
+            lines.append(f"  - {w}")
     lines.append("")
     if report.ok and not report.unknown_keys and not report.other_warnings:
         lines.append("OK — no issues found.")
-    elif report.ok and report.unknown_keys:
+    elif report.ok and strict:
+        # --strict makes warnings fatal, and the exit code says so, so the
+        # summary must not say "OK". It used to, alongside advice to re-run
+        # with the flag that was already set.
+        counts = []
+        if report.unknown_keys:
+            counts.append(f"{len(report.unknown_keys)} unrecognized key(s)")
+        if report.other_warnings:
+            counts.append(f"{len(report.other_warnings)} warning(s)")
         lines.append(
-            f"OK with {len(report.unknown_keys)} unknown-key warning(s). "
-            "Re-run with --strict to fail on unknown keys."
+            f"FAILED — {' and '.join(counts)}; --strict treats these as errors."
         )
+    elif report.ok:
+        # A valid config with warnings still exits 0, so it must not say FAILED.
+        counts = []
+        if report.unknown_keys:
+            counts.append(f"{len(report.unknown_keys)} unknown-key warning(s)")
+        if report.other_warnings:
+            counts.append(f"{len(report.other_warnings)} warning(s)")
+        summary = f"OK with {' and '.join(counts)}."
+        if not strict:
+            # Under --strict this advice contradicts the command that produced
+            # it, and the warnings are already errors, so there is nothing to
+            # re-run.
+            summary += " Re-run with --strict to fail on warnings."
+        lines.append(summary)
     else:
         lines.append(f"FAILED — {len(report.errors)} error(s).")
     return "\n".join(lines)
@@ -219,12 +347,18 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     report = validate_config_file(args.config_file)
 
-    fatal = not report.ok or (args.strict and bool(report.unknown_keys))
+    # Under --strict, EVERY warning is fatal, not only unknown keys. The
+    # warnings config_module emits are the ones that silently disable a
+    # feature: a missing `ai_config_file` turns ai_support off and says so at
+    # WARNING, so `validate --strict` used to exit 0 on a study whose entire
+    # subject was AI assistance, with the AI off.
+    fatal = not report.ok or (
+        args.strict and bool(report.unknown_keys or report.other_warnings))
 
     if args.emit_json:
         print(json.dumps(report.to_dict(), indent=2))
     elif not args.quiet or fatal or report.unknown_keys or report.other_warnings:
-        print(_format_human(report))
+        print(_format_human(report, strict=args.strict))
 
     return 1 if fatal else 0
 

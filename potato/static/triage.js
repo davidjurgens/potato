@@ -81,6 +81,12 @@
         const hiddenInput = form.querySelector('.triage-input');
         if (hiddenInput) {
             hiddenInput.value = value;
+            // `bws` and `ranking` set this on their hidden inputs and triage did
+            // not. It does not show on an annotation page, where the display-logic
+            // gate reads the live answer map, but on a phase page that gate falls
+            // back to getAnnotationsFromDOM -- which requires the flag -- so a
+            // question gated on a triage answer could never see one.
+            hiddenInput.setAttribute('data-modified', 'true');
 
             // Trigger change event for annotation system
             hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -290,6 +296,23 @@
         }
         return null;
     }
+
+    // Live collaborative sessions: collab.js has written the teammate's
+    // answer into the hidden input; light the matching button (none, for an
+    // empty answer). Nothing in annotation.js's restore pass redraws these
+    // buttons, so without this a teammate's choice never showed. No save,
+    // no auto-advance.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.triage = {
+        apply: function(ctx) {
+            const form = ctx && ctx.form;
+            if (!form || !form.matches('.annotation-form.triage')) return false;
+            const hiddenInput = form.querySelector('.triage-input');
+            if (!hiddenInput) return false;
+            updateButtonStates(form, hiddenInput.value || null);
+            return true;
+        }
+    };
 
     // Expose API for external use
     window.triageManager = {

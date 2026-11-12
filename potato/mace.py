@@ -83,8 +83,12 @@ class MACEAlgorithm:
                 marginals = self._e_step(annotations, spamming, theta)
 
                 # M-step: update spamming and theta via variational update
-                spamming, theta = self._m_step(annotations, marginals)
+                spamming, theta = self._m_step(
+                    annotations, marginals, spamming, theta)
 
+            # Posteriors for the parameters actually returned, not the ones
+            # before the last M-step.
+            marginals = self._e_step(annotations, spamming, theta)
             ll = self._log_likelihood(annotations, marginals, spamming, theta)
 
             if ll > best_ll:
@@ -195,98 +199,91 @@ class MACEAlgorithm:
 
         return marginals
 
-    def _m_step(self, annotations, marginals):
+    def _m_step(self, annotations, marginals, spamming, theta):
         """Variational M-step: update spamming and theta using expected counts.
+
+        A label that matches the true label is only *possibly* known: a
+        guessing annotator hits the true label with probability theta[j, k]
+        too. So each match is split by the posterior of knowing given that
+        match, using the previous iteration's parameters (Hovy et al. 2013):
+
+            q = P(knowing) / (P(knowing) + P(guessing) * theta[j, label])
+
+        knowing gets marginal[label] * q, and guessing gets the rest, which is
+        also the only mass that feeds theta. Counting every match as knowing
+        let a spammer earn competence from its lucky guesses: two pure
+        spammers scored 0.35 on a simulated 3-label task instead of ~0.
 
         Args:
             annotations: np.ndarray shape (num_instances, num_annotators), -1 = missing
             marginals: np.ndarray shape (num_instances, num_labels)
+            spamming: np.ndarray shape (num_annotators, 2), previous iteration
+            theta: np.ndarray shape (num_annotators, num_labels), previous iteration
 
         Returns:
             tuple: (spamming, theta) updated parameters
         """
-        spamming = np.zeros((self.num_annotators, 2))
-        theta = np.zeros((self.num_annotators, self.num_labels))
+        # The E-step's weights, so both halves of the iteration agree.
+        e_log_s = digamma(spamming) - digamma(spamming.sum(axis=1, keepdims=True))
+        e_log_theta = digamma(theta) - digamma(theta.sum(axis=1, keepdims=True))
+
+        new_spamming = np.zeros((self.num_annotators, 2))
+        new_theta = np.zeros((self.num_annotators, self.num_labels))
 
         for j in range(self.num_annotators):
             observed = annotations[:, j] >= 0
             if not np.any(observed):
                 # No observations for this annotator — use prior
-                spamming[j, 0] = self.alpha
-                spamming[j, 1] = self.alpha
-                theta[j] = self.beta
+                new_spamming[j, 0] = self.alpha
+                new_spamming[j, 1] = self.alpha
+                new_theta[j] = self.beta
                 continue
 
             label_j = annotations[observed, j].astype(int)
             marginals_j = marginals[observed]
 
-            # Expected count of "knowing" for annotator j:
-            # Sum over instances where annotator's label matches true label
-            # weighted by P(true_label=k)
-            knowing_count = 0.0
-            guessing_count = 0.0
+            knowing = np.exp(e_log_s[j, 0])
+            guessing = np.exp(e_log_s[j, 1] + e_log_theta[j, label_j])
+            q = knowing / (knowing + guessing + EPS)
 
-            for i_idx in range(len(label_j)):
-                k = label_j[i_idx]
-                p_correct = marginals_j[i_idx, k]
-                knowing_count += p_correct
-                guessing_count += (1.0 - p_correct)
+            p_knew = marginals_j[np.arange(len(label_j)), label_j] * q
+            p_guessed = 1.0 - p_knew
 
-            spamming[j, 0] = self.alpha + knowing_count
-            spamming[j, 1] = self.alpha + guessing_count
+            new_spamming[j, 0] = self.alpha + p_knew.sum()
+            new_spamming[j, 1] = self.alpha + p_guessed.sum()
+            new_theta[j] = self.beta + np.bincount(
+                label_j, weights=p_guessed, minlength=self.num_labels)
 
-            # Update theta: expected count of guessing label k
-            # When guessing, the annotator produces label a_ij with probability theta[j, a_ij]
-            # The expected count of guessing-and-producing-label-k is:
-            # sum_i (1 - P(knowing_ij)) * I(a_ij = k)
-            for k in range(self.num_labels):
-                mask = label_j == k
-                if np.any(mask):
-                    # Weight by P(guessing) ≈ 1 - P(correct)
-                    theta[j, k] = self.beta + np.sum(1.0 - marginals_j[mask, k])
-                else:
-                    theta[j, k] = self.beta
-
-        return spamming, theta
+        return new_spamming, new_theta
 
     def _log_likelihood(self, annotations, marginals, spamming, theta):
-        """Compute log-likelihood of the data given current parameters.
+        """Marginal log-likelihood of the data under the point estimates.
 
-        Args:
-            annotations: np.ndarray shape (num_instances, num_annotators)
-            marginals: np.ndarray shape (num_instances, num_labels)
-            spamming: np.ndarray shape (num_annotators, 2)
-            theta: np.ndarray shape (num_annotators, num_labels)
+        ``sum_i log sum_k (1/K) prod_j P(a_ij | T_i = k)``, with
+        ``P(a | k) = s_j [a == k] + (1 - s_j) theta_j[a]``. This is what picks
+        the best restart. It used to be ``sum_ik q_ik log P(x_i | k)`` with no
+        label prior or entropy term, which on hard data chose restarts 0.5 to
+        1.9 nats worse by the real likelihood in 35 of 80 datasets.
 
-        Returns:
-            float: log-likelihood value
+        ``marginals`` is accepted for compatibility and not used.
         """
-        ll = 0.0
-
-        # Normalize spamming and theta to probabilities for likelihood
         s_norm = spamming / spamming.sum(axis=1, keepdims=True)
         t_norm = theta / theta.sum(axis=1, keepdims=True)
+        log_prior = -np.log(self.num_labels)
 
+        ll = 0.0
         for i in range(self.num_instances):
-            for k in range(self.num_labels):
-                if marginals[i, k] < EPS:
+            log_p = np.full(self.num_labels, log_prior)
+            for j in range(self.num_annotators):
+                a = int(annotations[i, j])
+                if a < 0:
                     continue
-
-                log_p = 0.0
-                for j in range(self.num_annotators):
-                    if annotations[i, j] < 0:
-                        continue
-                    a = int(annotations[i, j])
-
-                    # P(a_ij | T_i=k) = s_j * I(a==k) + (1-s_j) * theta_j_a
-                    p_knowing = s_norm[j, 0] * (1.0 if a == k else 0.0)
-                    p_guessing = s_norm[j, 1] * t_norm[j, a]
-                    p = p_knowing + p_guessing
-                    log_p += np.log(max(p, EPS))
-
-                ll += marginals[i, k] * log_p
-
-        return ll
+                p = s_norm[j, 1] * t_norm[j, a] + s_norm[j, 0] * (
+                    np.arange(self.num_labels) == a)
+                log_p += np.log(np.maximum(p, EPS))
+            top = log_p.max()
+            ll += top + np.log(np.exp(log_p - top).sum())
+        return float(ll)
 
     @staticmethod
     def entropy(marginals):

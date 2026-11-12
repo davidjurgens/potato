@@ -1,7 +1,6 @@
 annotation_task_name: Simple Span Labeling Test
 task_dir: output/simple-span-labeling
 output_annotation_dir: output/simple-span-labeling/annotations
-output_annotation_format: jsonl
 data_files:
 - ../../../data/test_data.json
 item_properties:

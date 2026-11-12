@@ -199,8 +199,16 @@ class TestInstrumentFileFormat:
                 f"{file_path.name}: id '{instrument['id']}' doesn't match filename"
 
     def test_annotation_types_are_valid(self, instruments_dir):
-        """Test that all annotation types are valid Potato types."""
-        valid_types = {"radio", "likert", "slider", "multiselect", "textbox"}
+        """Every question type must be registered in the schema registry.
+
+        This assertion used to compare against a hardcoded set that included
+        "textbox", which the registry has never offered (the free-text type is
+        "text"). All eight demographics instruments shipped "textbox", so any
+        phase naming one was dropped at boot while this test stayed green.
+        Source the allow-list from the registry so the test cannot drift.
+        """
+        from potato.server_utils.schemas.registry import schema_registry
+        valid_types = set(schema_registry.get_supported_types())
 
         for file_path in instruments_dir.glob("*.json"):
             with open(file_path) as f:
@@ -209,6 +217,56 @@ class TestInstrumentFileFormat:
             for q in instrument["questions"]:
                 assert q["annotation_type"] in valid_types, \
                     f"{file_path.name} has invalid annotation_type: {q['annotation_type']}"
+
+    def test_every_instrument_question_generates_html(self):
+        """Every bundled instrument must survive the boot-time HTML build.
+
+        A registered type is necessary but not sufficient -- the generator can
+        still reject a question over a missing field. Boot resolves every
+        question of every named instrument, so exercise the same call here.
+        """
+        from potato.survey_instruments import get_registry, get_instrument_questions
+        from potato.server_utils.schemas.registry import schema_registry
+
+        failures = []
+        for inst_id in get_registry()["instruments"]:
+            for question in get_instrument_questions(inst_id):
+                try:
+                    schema_registry.generate(dict(question))
+                except Exception as exc:
+                    failures.append(f"{inst_id}/{question.get('name')}: {exc}")
+
+        assert not failures, "Instrument questions failed to generate:\n" + "\n".join(failures)
+
+    def test_dict_labels_reach_the_annotator(self, instruments_dir):
+        """A label's human text must appear in the rendered HTML.
+
+        The instruments write option text under "label"; the display helper
+        only read "displayed_label", so annotators saw the raw identifiers
+        ("less_hs", "not_strong_dem") instead.
+        """
+        from potato.server_utils.schemas.registry import schema_registry
+
+        for file_path in sorted(instruments_dir.glob("*.json")):
+            with open(file_path) as f:
+                instrument = json.load(f)
+            for q in instrument["questions"]:
+                labels = q.get("labels") or []
+                dict_labels = [
+                    lbl for lbl in labels
+                    if isinstance(lbl, dict) and lbl.get("label")
+                ]
+                if not dict_labels or q["annotation_type"] not in ("radio", "multiselect"):
+                    continue
+                html, _ = schema_registry.generate(dict(q))
+                for lbl in dict_labels:
+                    # Compare on the first word so apostrophes and other
+                    # HTML-escaped characters do not make this brittle.
+                    probe = lbl["label"].split()[0].split("'")[0]
+                    assert probe in html, (
+                        f"{file_path.name}/{q['name']}: option {lbl['name']!r} "
+                        f"renders without its label text {lbl['label']!r}"
+                    )
 
 
 class TestInstrumentContent:

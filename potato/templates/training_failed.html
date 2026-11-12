@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{annotation_task_name}} - Training Failed</title>
+    {% include '_theme_head.html' %}
 
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
 
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
@@ -66,7 +67,7 @@
         }
 
         .stats-label {
-            color: #6c757d;
+            color: var(--muted-foreground);
         }
 
         .stats-value {
@@ -79,6 +80,16 @@
             padding: 1rem;
             margin-top: 1.5rem;
         }
+
+        :root[data-theme="dark"] .failed-content,
+        :root[data-theme="dark"] .contact-info {
+            background-color: var(--muted);
+            border-color: var(--border);
+        }
+        :root[data-theme="dark"] .stats-box { background-color: var(--card); border-color: var(--border); }
+        :root[data-theme="dark"] .stats-row { border-bottom-color: var(--border); }
+        :root[data-theme="dark"] .failed-icon { color: var(--destructive-text); }
+        :root[data-theme="dark"] .failed-message { color: var(--text-color); }
     </style>
 </head>
 
@@ -87,7 +98,7 @@
     <nav class="potato-navbar" role="navigation" style="margin-bottom: 1.5rem;">
         <div class="navbar-inner">
             <div class="navbar-brand">
-                <span class="task-name">{{annotation_task_name}}</span>
+                <span class="task-name" title="{{annotation_task_name}}">{{annotation_task_name}}</span>
             </div>
             <div class="navbar-center">
                 <span style="color: var(--light-color); font-size: 0.85rem;">
@@ -97,7 +108,7 @@
             <div class="navbar-end">
                 <div class="user-pill">
                     <span class="username">{{username}}</span>
-                    <a href="/logout" class="logout-btn">Logout</a>
+                    <a href="{{ url_prefix }}/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
         </div>
@@ -107,7 +118,7 @@
         <!-- Failed header -->
         <div class="failed-header text-center">
             <h2><i class="fas fa-times-circle me-3"></i>Training Not Passed</h2>
-            <p class="mb-0">Unfortunately, you did not pass the training phase</p>
+            <p class="mb-0">You did not pass the training phase</p>
         </div>
 
         <!-- Failed content -->
@@ -116,7 +127,6 @@
                 <i class="fas fa-user-times"></i>
             </div>
 
-            <h3 class="mb-3">We're sorry</h3>
 
             <p class="failed-message">
                 {{ message }}
@@ -203,6 +213,6 @@
     </div>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/bootstrap-5.3.3.bundle.min.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "gui_settings_001",
+    "task": "Open the system Settings app and turn on Dark Mode.",
+    "steps": [
+      {
+        "action": "click the Settings icon in the dock",
+        "x": 0.18, "y": 0.82,
+        "screenshot": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='300'><rect width='480' height='300' fill='%23f4f4f5'/><rect x='0' y='276' width='480' height='24' fill='%23e4e4e7'/><circle cx='86' cy='246' r='14' fill='%236e56cf'/><circle cx='130' cy='246' r='14' fill='%2310b981'/><text x='12' y='28' font-family='sans-serif' font-size='16' fill='%2318181b'>Desktop</text></svg>"
+      },
+      {
+        "action": "click the 'Appearance' row in the Settings sidebar",
+        "x": 0.22, "y": 0.40,
+        "screenshot": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='300'><rect width='480' height='300' fill='%23ffffff'/><rect width='160' height='300' fill='%23f4f4f5'/><text x='16' y='40' font-family='sans-serif' font-size='14' fill='%2318181b'>General</text><text x='16' y='124' font-family='sans-serif' font-size='14' fill='%236e56cf'>Appearance</text><text x='16' y='168' font-family='sans-serif' font-size='14' fill='%2318181b'>Network</text></svg>"
+      },
+      {
+        "action": "toggle the 'Dark Mode' switch on",
+        "x": 0.78, "y": 0.30,
+        "screenshot": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='300'><rect width='480' height='300' fill='%23ffffff'/><rect width='160' height='300' fill='%23f4f4f5'/><text x='180' y='40' font-family='sans-serif' font-size='15' fill='%2318181b'>Appearance</text><text x='180' y='96' font-family='sans-serif' font-size='13' fill='%2318181b'>Dark Mode</text><rect x='356' y='82' width='44' height='22' rx='11' fill='%236e56cf'/><circle cx='389' cy='93' r='9' fill='%23ffffff'/></svg>"
+      }
+    ]
+  },
+  {
+    "id": "gui_search_002",
+    "task": "Search the file browser for 'report.pdf' and open it.",
+    "steps": [
+      {
+        "action": "click the search field at the top of the window",
+        "x": 0.50, "y": 0.10,
+        "screenshot": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='300'><rect width='480' height='300' fill='%23ffffff'/><rect x='120' y='14' width='240' height='28' rx='6' fill='%23f4f4f5' stroke='%23e4e4e7'/><text x='132' y='33' font-family='sans-serif' font-size='13' fill='%2371717a'>Search</text></svg>"
+      },
+      {
+        "action": "type 'report.pdf' and press Enter",
+        "x": 0.50, "y": 0.10,
+        "screenshot": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='300'><rect width='480' height='300' fill='%23ffffff'/><rect x='120' y='14' width='240' height='28' rx='6' fill='%23ffffff' stroke='%236e56cf'/><text x='132' y='33' font-family='sans-serif' font-size='13' fill='%2318181b'>report.pdf</text><rect x='40' y='70' width='400' height='28' fill='%23eef'/><text x='52' y='89' font-family='sans-serif' font-size='13' fill='%2318181b'>report.pdf</text></svg>"
+      },
+      {
+        "action": "double-click the wrong result 'report_draft.docx'",
+        "x": 0.30, "y": 0.55,
+        "screenshot": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='300'><rect width='480' height='300' fill='%23ffffff'/><rect x='40' y='70' width='400' height='28' fill='%23ffffff'/><text x='52' y='89' font-family='sans-serif' font-size='13' fill='%2318181b'>report.pdf</text><rect x='40' y='150' width='400' height='28' fill='%23fde'/><text x='52' y='169' font-family='sans-serif' font-size='13' fill='%2318181b'>report_draft.docx</text></svg>"
+      }
+    ]
+  }
+]

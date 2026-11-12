@@ -48,7 +48,13 @@ Each `user_state.json` contains the complete annotation state for that user:
 }
 ```
 
-> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` for auto-export (see below).
+Span offsets count characters of the text as the annotator saw it on the page:
+an entity such as `&amp;` is one character, HTML tags count for nothing, and
+runs of spaces and tabs are one space. Exporters that include a span's words
+read them from that same text, so the words match the offsets even when the
+data file holds markup or doubled spaces.
+
+> **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Auto-Export
 
@@ -86,8 +92,8 @@ python -m potato.export --config config.yaml --format coco --output ./export/
 python -m potato.export --config config.yaml --format yolo --output ./export/
 
 # Export with options
-python -m potato.export --config config.yaml --format coco --output ./export/ \
-    --option split_ratio=0.8 --option include_unlabeled=false
+python -m potato.export --config config.yaml --format conll_2003 --output ./export/ \
+    --option schema_name=entities --option annotator=annotator_1
 ```
 
 ### Command Options
@@ -107,22 +113,20 @@ python -m potato.export --config config.yaml --format coco --output ./export/ \
 
 The Common Objects in Context format, widely used for object detection and instance segmentation.
 
-**Best for:** Image bounding boxes, polygons, keypoints
+**Best for:** Image bounding boxes, polygons, segmentation masks
 
 **Output Structure:**
 ```
-export/
-├── annotations/
-│   └── instances.json
-└── images/
-    └── (symlinked or copied images)
+<output-dir>/
+└── annotations.json
 ```
 
-**annotations/instances.json:**
+A single file is written. **Images are not copied or symlinked** — the exported
+`file_name` values point at wherever your images already live.
+
+**annotations.json:**
 ```json
 {
-    "info": {"description": "Potato export", "version": "1.0"},
-    "licenses": [],
     "images": [
         {"id": 1, "file_name": "image_001.jpg", "width": 1920, "height": 1080}
     ],
@@ -143,10 +147,73 @@ export/
 }
 ```
 
+No `info` or `licenses` block is emitted. A few strict COCO consumers require
+them; add `"info": {}` and `"licenses": []` if yours does.
+
+**Category IDs** come from `label_id` on each label when present, so a file
+imported from COCO exports with its original (often sparse) numbering intact.
+Labels without one are numbered from 1 upward.
+
+**Segmentation:** polygons export as `segmentation: [[x1, y1, ...]]`; masks
+export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
+explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
+not yet emitted.
+
+**Provenance** travels onto each annotation object: `source` (`human`, `ai` or
+`import`), and alongside it `ai_model`, `confidence`, `edited`, `carried_over`
+and `import_format` where they are known. COCO has no field of its own for
+this, and a shape whose origin is unknown carries nothing rather than a guess.
+See [Where a shape came from](../annotation-types/multimedia/image_annotation.md#where-a-shape-came-from).
+
+**Image dimensions** come from `image_width`/`image_height` (or
+`width`/`height`) on the data item when it declares them. A data file usually
+names an image rather than measuring one, so when those fields are absent
+Potato derives the size: from a mask's own RLE, which needs no file access, or
+by reading the image. Declaring them is still faster and works when the image
+is somewhere the exporter cannot read.
+
+A JPEG carrying an EXIF orientation tag is measured in the frame the browser
+displays rather than the frame it is stored in, because the displayed frame is
+the one the annotator drew in. A photo stored 4032x3024 and rotated by its tag
+exports as 3024x4032. An SVG is measured from its opening tag: `width` and
+`height` when they are plain lengths, `viewBox` otherwise.
+
+When the size cannot be established at all (a missing file, a remote URL, a
+path outside the media directory), the export writes zeros and reports it, in
+the log and in the export's own warnings list. Coordinates are stored
+normalized, so a zero width makes every box, polygon and point on that image
+come out as `[0, 0, 0, 0]`. Declare `image_width` and `image_height` for those
+items.
+
+**Items with no saved annotation record are not exported.** Each CV exporter
+writes the annotations it finds, so an item that was never assigned, or was
+assigned and never saved, appears in no image list and no annotation list. The
+export names how many were left out and which.
+
+**An item an annotator opened and left empty is different**, and COCO writes
+it: the image gets an entry with no annotations, which is what a negative
+example is. The distinction matters because "reviewed, contains nothing" is
+training data and "no record was ever saved" is missing data, and the two used
+to come out identical. The other CV formats still omit both; if you need
+negatives from those, add the images to the output yourself.
+
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f coco -o ./coco_export/
 ```
+
+**Importing COCO** is covered in
+[Image Annotation Formats](../annotation-types/multimedia/image_formats.md).
+
+!!! warning "Fixed: box and polygon export before this release"
+    Every CV exporter (COCO, YOLO, Pascal VOC) read flat, absolute-pixel fields
+    that the annotation UI has never written — it stores coordinates normalized
+    and nested under `coordinates`. As a result **bounding boxes exported as
+    `[0, 0, 0, 0]` with `area: 0`, and polygons were silently dropped**, for any
+    annotation made in the browser. Masks were unaffected.
+
+    The unit tests hand-built the flat shape, so they passed throughout. If you
+    have COCO/YOLO/VOC exports produced before this release, re-export them.
 
 ### YOLO (yolo)
 
@@ -157,19 +224,20 @@ YOLO format for object detection, with one text file per image.
 **Output Structure:**
 ```
 export/
-├── images/
-│   ├── train/
-│   │   └── image_001.jpg
-│   └── val/
-│       └── image_002.jpg
 ├── labels/
-│   ├── train/
-│   │   └── image_001.txt
-│   └── val/
-│       └── image_002.txt
+│   ├── image_001.txt
+│   └── image_002.txt
 ├── data.yaml
 └── classes.txt
 ```
+
+A label file is named after its image, which is how YOLO pairs them. Two
+different images with the same file name (`set1/img.jpg` and `set2/img.jpg`)
+keep their folders: `labels/set1/img.txt` and `labels/set2/img.txt`.
+
+When more than one annotator drew boxes, each gets a directory of their own
+(`labels/<annotator>/image_001.txt`) and the export warns. A YOLO label file
+is one set of boxes, so choose or merge the annotators before training.
 
 **Label File Format (image_001.txt):**
 ```
@@ -178,22 +246,24 @@ export/
 1 0.3 0.4 0.15 0.20
 ```
 
+A box that reaches past the edge of the image is clipped to it. One that lies
+entirely outside is skipped with a warning.
+
 **data.yaml:**
 ```yaml
-train: ./images/train
-val: ./images/val
+train: images/train
+val: images/val
 nc: 3
 names: ['person', 'vehicle', 'object']
 ```
 
+The `train` and `val` paths are placeholders: the exporter writes labels, not
+images, and does not split them.
+
 **Usage:**
 ```bash
-python -m potato.export -c config.yaml -f yolo -o ./yolo_export/ \
-    --option split_ratio=0.8
+python -m potato.export -c config.yaml -f yolo -o ./yolo_export/
 ```
-
-**Options:**
-- `split_ratio`: Train/val split ratio (default: 0.8)
 
 ### Pascal VOC (pascal_voc)
 
@@ -204,20 +274,18 @@ Pascal Visual Object Classes format using XML annotation files.
 **Output Structure:**
 ```
 export/
-├── Annotations/
-│   └── image_001.xml
-├── ImageSets/
-│   └── Main/
-│       ├── train.txt
-│       └── val.txt
-└── JPEGImages/
-    └── image_001.jpg
+├── image_001.xml
+└── image_002.xml
 ```
+
+Files are named and laid out the same way as YOLO's: by image, with folders
+kept for images that share a name, and one directory per annotator when there
+are several.
 
 **Annotation XML:**
 ```xml
 <annotation>
-    <folder>JPEGImages</folder>
+    <folder>images</folder>
     <filename>image_001.jpg</filename>
     <size>
         <width>1920</width>
@@ -227,8 +295,8 @@ export/
     <object>
         <name>person</name>
         <bndbox>
-            <xmin>100</xmin>
-            <ymin>50</ymin>
+            <xmin>101</xmin>
+            <ymin>51</ymin>
             <xmax>300</xmax>
             <ymax>350</ymax>
         </bndbox>
@@ -236,10 +304,50 @@ export/
 </annotation>
 ```
 
+Corners are 1-based and inclusive, as VOC defines them: a box covering pixels
+100 to 299 is written `xmin=101`, `xmax=300`. The VOC importer reads them the
+same way, so exporting and re-importing gives back the same box.
+
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f pascal_voc -o ./voc_export/
 ```
+
+### REFI-QDA project exchange (qdpx)
+
+The interchange format NVivo, ATLAS.ti, MAXQDA, Quirkos and QDA Miner read and
+write. Exporting one hands a Potato project to a colleague who uses any of
+them, or archives it in a form that outlives this tool.
+
+```bash
+python -m potato.export -c config.yaml -f qdpx -o ./export/
+```
+
+A `.qdpx` is a ZIP holding `project.qde` (REFI-QDA XML) and one UTF-8 `.txt`
+per annotated item under `sources/`. Codes carry their hierarchy, descriptions
+and colours; span annotations become `PlainTextSelection` elements with a
+`Coding` each; annotators become `Users`. Memos and cases are not exported
+yet; the export warns when the project has them.
+
+Two things worth knowing:
+
+- **`endPosition` is inclusive.** REFI-QDA 1.5 §10.2 defines a selection by
+  "the first and the last character", where Potato's `end` is exclusive. The
+  exporter writes `end - 1`, and the importer measures both readings against
+  the source text rather than assuming, because exporting tools disagree.
+- **`flatten_subcodes`.** ATLAS.ti supports one level of subcode and silently
+  mangles anything deeper. Passing this option re-parents every code to the top
+  level and renames it `Parent > Child > Grandchild`, so you control the loss
+  instead of discovering it. Potato warns when your codebook is deep enough for
+  this to matter. Pass it with `--option`:
+
+  ```bash
+  python -m potato.export -c config.yaml -f qdpx -o ./export/ \
+    --option flatten_subcodes=true
+  ```
+
+Two exports of an unchanged project are byte-identical: the GUIDs REFI-QDA
+requires are derived from what they name, so an export can be diffed.
 
 ### CoNLL-2003 (conll_2003)
 
@@ -247,21 +355,21 @@ CoNLL-2003 format for named entity recognition.
 
 **Best for:** NER/span annotations, sequence labeling
 
-**Output Format:**
+**Output Format** (tab-separated: token, POS, chunk, NER tag):
 ```
--DOCSTART- -X- O O
+-DOCSTART- -X- -X- O
 
-Alice B-PERSON
-went O O
-to O O
-Paris B-LOCATION
-. O O
+Alice	_	_	B-PER
+went	_	_	O
+to	_	_	O
+Paris	_	_	B-LOC
+.	_	_	O
 
-Bob B-PERSON
-works O O
-at O O
-Google B-ORGANIZATION
-. O O
+Bob	_	_	B-PER
+works	_	_	O
+at	_	_	O
+Google	_	_	B-ORG
+.	_	_	O
 ```
 
 **Usage:**
@@ -270,23 +378,56 @@ python -m potato.export -c config.yaml -f conll_2003 -o ./conll_export/
 ```
 
 **Options:**
-- `tag_scheme`: BIO, BIOES, or IOB (default: BIO)
+- `schema_name`: the span schema to export (default: the first one)
+- `annotator`: export this annotator's spans to `annotations.conll`
+- `tokenization`: `whitespace` (default) or `word_punct`
+- `pos_column`, `chunk_column`: the text written in those columns (default `_`)
+
+A CoNLL file has one tag column, so it holds one annotator's spans. Without
+`annotator`, a study with several annotators gets one file each,
+`annotations.<annotator>.conll`, and a warning.
+
+Each span is tokenised against the field it was drawn on, rendered the way the
+annotation page renders it, so spans on a `dialogue` or `document` field
+export correctly. A sentence never ends inside an entity, after an initialism
+such as "U.S.", or after a title such as "Dr.". When a span does not line up
+with token boundaries ("Trump" inside "anti-Trump"), the tokens it touches are
+tagged and the export says so in a warning.
 
 ### CoNLL-U (conll_u)
 
-Universal Dependencies CoNLL-U format for linguistic annotation.
+Universal Dependencies CoNLL-U format. Span labels go in the MISC column as
+NER tags.
 
-**Best for:** POS tagging, dependency parsing, morphological analysis
+**Best for:** Combining span labels with a UD toolchain
 
 **Output Format:**
 ```
-# sent_id = 1
+# sent_id = item_001-s1
 # text = Alice went to Paris.
-1	Alice	Alice	PROPN	NNP	Number=Sing	2	nsubj	_	SpaceAfter=No
-2	went	go	VERB	VBD	Tense=Past	0	root	_	_
-3	to	to	ADP	IN	_	4	case	_	_
-4	Paris	Paris	PROPN	NNP	Number=Sing	2	obl	_	SpaceAfter=No
-5	.	.	PUNCT	.	_	2	punct	_	_
+1	Alice	_	_	_	_	_	_	_	NER=B-PER
+2	went	_	_	_	_	_	_	_	_
+3	to	_	_	_	_	_	_	_	_
+4	Paris.	_	_	_	_	_	_	_	NER=B-LOC
+```
+
+Lemma, POS and features are left `_`. HEAD and DEPREL are filled when the
+project annotates dependencies the way Potato stores them: a `span_link`
+scheme with directed link types over the exported span scheme, each link
+from the head span to the dependent span. The first token of each span is
+attached to the first token of its head span, a span with no head is `0` /
+`root`, and every other token is `_`. A link that crosses a sentence boundary
+(sentences are split by the tokenizer) is left out, with a warning. Pass
+`link_schema` to choose the link scheme; otherwise it is the first `span_link`
+over that span scheme with a directed link type. `SpaceAfter=No` is set where
+the source has no space between tokens.
+
+```
+# sent_id = item_002-s1
+# text = the cat sat
+1	the	_	_	_	_	2	det	_	_
+2	cat	_	_	_	_	3	nsubj	_	_
+3	sat	_	_	_	_	0	root	_	_
 ```
 
 **Usage:**
@@ -294,29 +435,38 @@ Universal Dependencies CoNLL-U format for linguistic annotation.
 python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 ```
 
-### Segmentation Masks (mask)
+Takes the same options as CoNLL-2003, and with several annotators writes
+`annotations.<annotator>.conllu` for each.
 
-Export polygon/segmentation annotations as binary mask images.
+### Segmentation Masks (mask_png)
 
-**Best for:** Semantic segmentation, instance segmentation
+Export brush/fill mask annotations as PNG images, one per label per image.
+
+**Best for:** Semantic segmentation
+
+**Requires:** `Pillow` (`pip install Pillow`)
 
 **Output Structure:**
 ```
-export/
-├── images/
-│   └── image_001.jpg
-├── masks/
-│   └── image_001.png
-└── class_mapping.json
+<output-dir>/
+├── image_001_road_mask.png
+├── image_001_sky_mask.png
+└── image_002_road_mask.png
 ```
 
+Files are written flat as `{image-stem}_{label}_mask.png`. **Images are not
+copied**, and no class-mapping file is written.
+
 **Mask Format:**
-- PNG images with pixel values corresponding to class IDs
-- 0 = background, 1+ = class indices
+- RGBA PNG, one file per (image, label) pair
+- Mask pixels take the label's configured colour at alpha 200; everything else
+  is fully transparent
+- Only `type: "mask"` annotations are exported. Polygons and boxes are ignored
+  by this format — use COCO for those.
 
 **Usage:**
 ```bash
-python -m potato.export -c config.yaml -f mask -o ./mask_export/
+python -m potato.export -c config.yaml -f mask_png -o ./mask_export/
 ```
 
 ### Parquet (parquet)
@@ -341,13 +491,31 @@ export/
 |--------|------|-------------|
 | `instance_id` | string | The annotated item's ID |
 | `user_id` | string | The annotator's ID |
+| `annotator_origin` | string | `human`, `tool` or `llm`. Present only when a [machine annotator](../advanced/machine_annotators.md) contributed |
+| `annotator_origin_detail` | string | JSON with the machine rater's tool or model and its versions; empty for a person. Same condition |
 | *\<schema_name\>* | varies | One column per annotation schema, type depends on schema |
 
 Schema columns are flattened by annotation type:
 - **radio/select** → `string` (the selected label)
-- **likert/slider/number** → `float64`
+- **likert/slider/number** → `float64`, or `string` for a scale with named labels
 - **multiselect** → `list<string>` (selected labels)
 - **text** → `string`
+
+A schema that stores **several answers at once** gets one column per
+sub-answer, named `<schema>.<key>`. These are the same columns the CSV writes:
+
+| Schema | Stored | Columns |
+|---|---|---|
+| `multirate` | `{"Urgency": "Low", "Customer tone": "High"}` | `handling.Urgency`, `handling.Customer tone` |
+| `constant_sum`, `soft_label` | `{"A": 40, "B": 60}` | `budget.A`, `budget.B` |
+| `image_annotation` and other blob schemas | `{"_data": "[...]"}` | `uibox._data` (the JSON) |
+
+A single-select stays a single column, because that is the shape that is usable
+in a dataframe: `severity` holds `"Serious"` rather than spreading across a
+sparse `severity.Serious`, `severity.Minor`, … as the CSV does.
+
+Every column is present on every row, filled with null where an annotator did
+not answer, so a schema only some annotators reached is still in the file.
 
 **spans.parquet schema:**
 
@@ -360,6 +528,24 @@ Schema columns are flattened by annotation type:
 | `end` | int | Character offset where the span ends |
 | `label` | string | The span's label |
 | `text` | string | The text content of the span |
+| `target_field` | string | Which display field the span was drawn in, `""` on a single-field page |
+| `title` | string | The label's display title |
+| `span_id` | string | The stored span's id, `schema_label_start_end` |
+| `format_coords` | string | JSON: page and box for a PDF span, row and column for a spreadsheet one |
+| `additional_parts` | string | JSON: the other ranges of a discontinuous span |
+| `kb_id`, `kb_source`, `kb_label` | string | The entity a linked span points at |
+
+`target_field` matters more than its size suggests. One span schema records in
+every span-target field on the page, so the field varies *within* a scheme, and
+nothing else in the file recovers it: `span_id` is the schema, label and
+offsets, so the same words marked in two fields produce otherwise identical
+rows. Read it whenever a study has more than one span target.
+
+`text` is derived from the offsets at export time rather than stored, so it can
+never disagree with them. Offsets on a `dialogue` field index that field's
+*rendered* text — `"{speaker}: {text}"`, one turn per line, which is what the
+annotator saw. The exporter reconstructs that string, so the column reads the
+same as for a plain text field.
 
 **items.parquet schema:**
 
@@ -416,6 +602,9 @@ JOIN 'export/items.parquet' i ON a.instance_id = i.item_id;
 ### CSV (csv)
 
 Export annotations as comma-separated values with one row per annotation.
+Spans are a JSON column per span scheme, `<scheme>._spans`. Links and
+chains are `<scheme>._links` and events `<scheme>._events`, JSON in the same
+shape as the JSONL `links` and `events` below.
 
 ```bash
 python -m potato.export --config config.yaml --format csv --output ./export/
@@ -429,13 +618,354 @@ Export annotations as tab-separated values. Same structure as CSV but with tab d
 python -m potato.export --config config.yaml --format tsv --output ./export/
 ```
 
+CSV and TSV exports also write `participants.csv` (conditions, page and
+question orders, skipped pages, screen-outs) when the study uses
+[experiment flow](../workflow/experiment_flow.md) features, and `trials.csv`
+(one row per timed trial, including timeouts) when
+[`trial_timing`](../workflow/timed_trials.md) is on, and `regions.csv` (one
+row per region of a [self-paced reading or maze](../workflow/self_paced_reading.md)
+trial).
+
+### Runtime phases (runtime, jspsych)
+
+Data from [runtime phases](../workflow/runtime_phases.md): for each runtime
+used, `<kind>_runs.csv`, `<kind>_trials.csv` (one row per trial, every column
+the task recorded), `<kind>_interaction.csv`, and each run's raw JSON.
+`jspsych` writes only the `type: jspsych` pages' files.
+
+```bash
+python -m potato.export --config config.yaml --format runtime --output ./export/
+python -m potato.export --config config.yaml --format jspsych --output ./export/
+```
+
+### Listening tests (listening_test)
+
+Ratings from [`listening_test` schemes](../annotation-types/multimedia/listening_tests.md),
+with each sample mapped back to its condition: `listening_ratings.csv`,
+`listening_summary.csv` (mean, SD and 95% interval per condition: MOS,
+CMOS, MUSHRA and BS.1116 scores), `listening_abx.csv`, and
+`listening_screening.csv` (the ITU-R BS.1534-3 post-screening rule).
+
+```bash
+python -m potato.export --config config.yaml --format listening_test --output ./export/
+```
+
+### Chemical structures (chemistry)
+
+From [`chemical_structure` schemes](../annotation-types/science/chemical_structures.md)
+and `viewer_selection` schemes bound to a `molecule` display:
+`chemical_structures.csv` (SMILES, RDKit SMILES, InChI, InChIKey, OpenChemLib
+ID code, formula, whether the pre-filled structure was changed, problems, and
+the answer-key result when the scheme has an `answer_field`),
+`chemical_structures.sdf` (each molfile with those fields as SD properties)
+and `molecule_atoms.csv` (one row per selected atom: 0-based index, molfile
+number, element, label). InChI and InChIKey come from the browser when
+RDKit.js ran there, otherwise from the `rdkit` Python package when it is
+installed (`pip install "potato-annotation[chemistry]"`), otherwise they are
+blank.
+
+```bash
+python -m potato.export --config config.yaml --format chemistry --output ./export/
+```
+
+### Incentive payments (incentives)
+
+Bonuses for [`price_list`](../annotation-types/measurement/price_list.md),
+[`bdm`](../annotation-types/measurement/bdm.md) and
+[`belief_elicitation`](../annotation-types/measurement/belief_elicitation.md)
+answers, computed from the stored answers under the config's `incentives:`
+rules. `bonuses.csv` has one row per paid-for decision with the seed, every
+random draw, the payoff, and the participant's total; `bonuses_prolific.csv`
+is Prolific's bulk bonus format (`<participant_id>,<amount>` per line, no
+header). Nothing is paid. See [Incentive payments](../advanced/incentives.md).
+
+```bash
+python -m potato.export --config config.yaml --format incentives --output ./export/
+```
+
+### Interlinear glossed text (flextext, toolbox, igt)
+
+From an [interlinear_gloss](../annotation-types/text/interlinear_gloss.md)
+scheme: `flextext` writes `<user>.flextext` for FieldWorks, `toolbox` writes
+`<user>.txt` with aligned Toolbox columns, and `igt` writes `igt.txt` (Leipzig
+three-line text) and `igt.tex` (gb4e `\gll` / `\glt`). FLEx GUIDs, lexicon
+links and tiers other than `pos` are not written back. See
+[Linguistic fieldwork](../guides/linguistic-fieldwork.md).
+
+### Ego networks (ego_network)
+
+From an [ego_network](../annotation-types/structured/ego_network.md) question:
+`egos.csv` (network size, ties, density, isolates, components and whether
+the network is complete), `alters.csv`, `edges.csv`, and one GraphML file
+per participant and item under `graphml/`. Names are left out unless
+`--option export_names=true`.
+
+### Cultural domain analysis (cultural_domain)
+
+Free lists, triad tests and pile sorts (from `card_sort`): item salience
+(Smith's S, CSI), item-by-item similarity matrices, and a cultural consensus
+analysis with informant competence. Options: `normalize`, `synonyms` (a CSV
+mapping variants to one name), `consensus_schemes`, `consensus_choices`,
+`consensus_min_answers`. See
+[Cultural domain analysis](../guides/cultural-domain-analysis.md).
+
+### Camera traps (megadetector, camtrap_dp, darwin_core)
+
+From a camera-trap review project ([Camera traps](../guides/camera-traps.md)):
+
+- `megadetector`: MegaDetector batch-output JSON with the corrected boxes. A
+  box the reviewer drew or changed has confidence 1.0. A box the reviewer
+  left unchanged keeps the detector's `conf` and the classifier's own score.
+  Boxes on an image triaged empty are kept and listed in the warnings, as in
+  every camera-trap export.
+- `camtrap_dp`: a Camtrap DP 1.0.2 package (deployments, media, observations,
+  `datapackage.json`). Coordinates and package metadata come from item
+  fields or `--option` values (`title`, `license`, `media_license`,
+  `contributor`, `timezone`, `capture_method`, `sampling_design`); anything missing is
+  named in the warnings. Run a Camtrap DP validator before publishing.
+- `darwin_core`: an occurrence table. `basisOfRecord` is
+  MachineObservation when the model's identification was left unchanged and
+  HumanObservation otherwise; `--option basis_of_record=...` forces one.
+  `associatedMedia` is a public link or empty; `--option media_base_url=...`
+  says where the images are published.
+
+All three write one reviewer per item: the first by user id, or the one
+named by `--option annotator=<user>`, and they warn when an item had several.
+
+### Bioacoustics (raven, audacity_labels)
+
+The boxes of a
+[spectrogram_annotation](../annotation-types/multimedia/spectrogram_annotation.md)
+question, one file per recording: Raven selection tables, and Audacity label
+tracks (the spectral form when a box has frequencies). Both import back by
+file name. In the Raven table a box a reviewer drew or changed has
+`Confidence` 1.0, and `Box Source` records where each box came from. See [Bioacoustics](../guides/bioacoustics.md).
+
+### Viewer selections (no dedicated format)
+
+A [viewer_selection](../annotation-types/science/protein_structures.md#data-format)
+answer (residues picked on a protein structure, or the locus and calls picked
+in the [genome viewer](../annotation-types/science/genome_loci.md#data-format))
+has no exporter of its own. Its JSON is written as the scheme's value by
+`jsonl`, `csv` and `tsv`, and by the other general formats.
+
+### Maps (geojson, geo_overlap)
+
+From a [geo_annotation](../annotation-types/spatial/geo_annotation.md)
+question:
+
+- `geojson`: RFC 7946 FeatureCollections (`[lon, lat]`, EPSG:4326), with
+  the item, participant and label on each feature; `--option
+  layout=per_item` (default) or `single`.
+- `geo_overlap`: for each label or typed name, the share of participants
+  whose polygon covers each grid cell, as GeoJSON cells and a PNG, plus
+  tables of the names given. Options: `group_by`, `cells`, `cell_size`,
+  `extent`, `schema`. See
+  [Perceptual dialectology](../guides/perceptual-dialectology.md).
+
+### Digital humanities (iiif_annotations, page_xml, tei)
+
+See [Digital humanities formats](../guides/digital-humanities.md).
+
+- `iiif_annotations`: one AnnotationPage per canvas, targeting the canvas
+  in canvas coordinates, and a copy of the manifest that references them,
+  for Mirador or Universal Viewer. Options: `base_url`, `embed=true`.
+- `page_xml`: the project's copy of each PAGE XML file, edited in place:
+  corrected line text (lines mode) or moved, added and removed regions and
+  lines (regions mode). Other content is kept. Options: `keep_words`,
+  `annotator` (one annotator's version; otherwise one folder each).
+- `tei`: TEI P5 with the spans as inline elements (`<rs type>`, or the
+  original element name), and spans that cannot nest in `<standOff>`.
+  Option: `annotator`.
+
+### Survey experiments (survey_experiments)
+
+Prevalence estimates for [list experiments and randomized-response
+questions](../annotation-types/measurement/sensitive_questions.md):
+`survey_experiments.csv` with the estimate, standard error, 95% interval
+and counts per scheme.
+
+### Reliability (reliability)
+
+Krippendorff's alpha per question with a bootstrap interval, percent
+agreement and the units and coders it rests on, as `reliability.csv` and a
+Markdown table. Span questions get a positional row, with each character as a
+unit. See [Content analysis](../guides/content-analysis.md).
+
+### Consensus (consensus)
+
+The consensus of several annotators per item, as citizen-science projects
+aggregate volunteers' classifications: vote counts and fractions for radio,
+select, likert and multiselect questions with a `retired` / `needs_review`
+flag, summaries for slider and number, DBSCAN clusters of `image_annotation`
+points and median consensus boxes grouped by IoU. Writes
+`consensus_questions.csv`, `consensus_votes.csv`, `consensus_numeric.csv`,
+`consensus_points.csv`, `consensus_boxes.csv` and `consensus.json`.
+Parameters come from the `consensus_aggregation` config block or `--option`
+(`agreement_threshold`, `min_classifiers`, `eps`, `eps_unit`, `min_samples`,
+`iou_threshold`, `schemes`). See [Consensus aggregation](consensus_aggregation.md).
+
+### Vocabulary test (lextale)
+
+LexTALE-style scores per participant from a radio scheme with a `lextale`
+block: `lextale.csv`. See [Vocabulary tests](../annotation-types/measurement/vocabulary_test.md).
+
+### W3C Web Annotation (web_annotation)
+
+Every annotation as a [W3C Web Annotation](https://www.w3.org/TR/annotation-model/)
+in one JSON-LD `AnnotationCollection` (`web_annotations.jsonld`), the format
+IIIF viewers (Mirador, Universal Viewer), Annotorious and Hypothesis read:
+
+- a text span: a `TextQuoteSelector` (the words plus 32 characters of
+  context each side) refined by a `TextPositionSelector` (code-point offsets);
+- an image region: a `FragmentSelector` (`xywh=pixel:` when the image's size
+  is known, `xywh=percent:` otherwise) for a box, an `SvgSelector` for a
+  polygon or polyline;
+- an answer to a question: a `TextualBody` on the whole item,
+  `purpose: classifying` for a chosen option and `describing` for free text.
+
+The target is the item's `url` field when it has one, else
+`urn:potato:<task>:<item id>`; pass `base_iri` in the export options to mint
+`<base_iri><item id>` instead. Structured answers (tiered annotations,
+rubrics) have no Web Annotation shape and are counted in the warnings.
+
+A region's target is its image. An image in the project's `media/` folder is
+served at a bare server path (`/media/page1.png`), which is not an IRI, so the
+export writes it relative to the project folder (`media/page1.png`) and warns.
+Pass `media_base_url` to write absolute IRIs
+(`https://annotate.example.org/media/page1.png`). Re-importing the file with
+`--image-dir` pointing at the project's `media/` folder finds the images again.
+
+```bash
+python -m potato.export --config config.yaml --format web_annotation --output ./export/ \
+    --option media_base_url=https://annotate.example.org/
+```
+
+### Frictionless Data Package (data_package)
+
+The CSV export (annotations, participants, trials, phase answers, runtime
+tables) plus a [Data Package v2](https://datapackage.org/) `datapackage.json`
+listing each CSV with a Table Schema: each column's type and the question's
+wording as its description. Single-choice answers are written one column
+per option (`sentiment.positive`, holding `positive` or empty), and each such
+column gets that option as its `enum`. `frictionless validate datapackage.json` checks it; Zenodo and OSF
+preview it.
+
+```bash
+python -m potato.export --config config.yaml --format data_package --output ./export/
+```
+
+### Psych-DS (psych_ds)
+
+The same tables in the [Psych-DS](https://psychds-docs.readthedocs.io/)
+layout: `dataset_description.json` (schema.org `Dataset` JSON-LD, every
+column listed in `variableMeasured`) and the CSVs under `data/` with
+keyword file names (`study-<task>_table-annotations_data.csv`).
+
+```bash
+python -m potato.export --config config.yaml --format psych_ds --output ./export/
+```
+
+### KITTI 3D (kitti_3d)
+
+3D boxes from `spatial_annotation` schemes, in KITTI's camera frame: one
+`label_2/<cloud>.txt` per point cloud, and for a point-cloud sequence one
+`label_02/<item>.txt` in KITTI's tracking format. Each item needs its
+calibration. See [3D labels](format_matrix.md#kitti-3d-labels).
+
+```bash
+python -m potato.export --config config.yaml --format kitti_3d --output ./kitti/
+```
+
+### NIfTI label volumes (volume_nifti)
+
+For `volume_annotation`: per annotator and item, a uint8 label volume
+(`<item>__<schema>.nii.gz`) in the source file's voxel order and affine, a
+`labels__<schema>.json` value-to-name table, and the boxes and polygons as
+JSON. Works for DICOM and NIfTI sources. See
+[3D Medical Volumes](../annotation-types/multimedia/volume_annotation.md#export).
+
+```bash
+python -m potato.export --config config.yaml --format volume_nifti --output ./labels/
+```
+
+### DICOM Segmentation (dicom_seg)
+
+For `volume_annotation` on DICOM series: one binary DICOM SEG per annotator
+and item, with a segment per label that has voxels, referencing the source
+series. It copies the source's patient and study modules, as DICOM requires.
+
+```bash
+python -m potato.export --config config.yaml --format dicom_seg --output ./seg/
+```
+
+Each segment carries the label's coded concepts (`dicom:` on the label; SNOMED
+CT "Tissue" by default). See
+[Clinical and Pathology Formats](../annotation-types/science/clinical_formats.md).
+
+### DICOM SEG with measurement report (dicom_sr)
+
+The `dicom_seg` SEG plus `<item>__<schema>__sr.dcm`: a Comprehensive 3D SR
+holding a TID 1500 measurement report, with one volumetric group per segment
+(its volume in mm³, referencing the segment) and the annotator as the person
+observer. The two are written together because the report names the SEG by
+its instance UID.
+
+```bash
+python -m potato.export --config config.yaml --format dicom_sr --output ./sr/
+```
+
+### QuPath GeoJSON (qupath_geojson) and ASAP XML (asap_xml)
+
+For `image_annotation`, usually on whole-slide images: one file per annotator
+and slide, `<user>/<slide stem>.geojson` or `.xml`, in level-0 slide pixels.
+Labels become QuPath classifications (name and colour) or ASAP groups
+(`PartOfGroup`). Both formats also import, as pre-annotations. See
+[Clinical and Pathology Formats](../annotation-types/science/clinical_formats.md#pathology-regions-qupath-geojson-and-asap-xml).
+
+```bash
+python -m potato.export --config config.yaml --format qupath_geojson --output ./qupath/
+python -m potato.export --config config.yaml --format asap_xml --output ./asap/
+```
+
 ### JSONL (jsonl)
 
 Export annotations as JSON Lines (one JSON object per line). Preserves full annotation structure.
 
+Each line carries `labels`, `spans` (by span scheme), `links` and `events`.
+`links` holds the `span_link` and `coreference` answers, `{scheme: [link,
+...]}`, each link naming the ids of the spans it joins (`span_ids`) in its
+order, with `link_type` and `direction`. `events` holds the
+`event_annotation` answers, `{scheme: [event, ...]}`, each with
+`event_type`, `trigger_span_id` and `arguments` (`role`, `span_id`).
+
+Answers stored as a JSON blob stay a JSON string inside the line. Video object
+tracks are one example: they sit at `labels.<scheme>._data`, and the
+[video annotation page](../annotation-types/multimedia/video_annotation.md)
+shows how to read them. CSV and Parquet carry the same string in the column
+`<scheme>._data`.
+
 ```bash
 python -m potato.export --config config.yaml --format jsonl --output ./export/
 ```
+
+### Annotator origin
+
+When a study declares [machine annotators](../advanced/machine_annotators.md)
+and at least one of them has annotated, every per-annotator format marks each
+row with who produced it:
+
+| Format | Field |
+|---|---|
+| csv, tsv, parquet, huggingface, publish bundle | `annotator_origin` (`human`, `tool` or `llm`) and `annotator_origin_detail` (the declaration as JSON; empty for a person), right after `user_id` |
+| jsonl | `annotator_origin`: the whole declaration, e.g. `{"kind": "tool", "id": "pipeline_a", "version": "2.1.0", ...}`, or `{"kind": "human"}` |
+| parquet and huggingface span tables | `annotator_origin` |
+
+Filter on it to keep tool output out of a human agreement figure or a training
+set. A study with no machine rater exports without these columns, as before.
+A rater declared in the config but not yet loaded by the server (for example,
+state files written by an import script) is still labelled, from the
+declaration.
 
 ### EAF - ELAN Annotation Format (eaf)
 
@@ -452,6 +982,38 @@ Export tiered annotations as Praat TextGrid files for use with [Praat](https://w
 ```bash
 python -m potato.export --config config.yaml --format textgrid --output ./export/
 ```
+
+!!! tip "Both formats round-trip"
+    Potato also *reads* EAF and TextGrid, so annotations can go out to ELAN or
+    Praat, be refined there, and come back in. See
+    [Transcript Format Support](../annotation-types/multimedia/transcript_formats.md).
+
+### Timeline segments (segments)
+
+This format exports the segments of
+[audio_annotation](../annotation-types/multimedia/audio_annotation.md) and
+[video_annotation](../annotation-types/multimedia/video_annotation.md)
+questions, which the CSV, TSV and JSONL exports carry only as a JSON string in
+one column.
+
+```bash
+python -m potato.export --config config.yaml --format segments --output ./export/
+```
+
+- `segments.jsonl` has one line per segment: `instance_id`, `user_id`,
+  `schema`, `start`, `end`, `duration` (seconds), `label`, and `media` when the
+  item names its recording (the scheme's `source_field`, a field such as
+  `audio_url`, or the item's text field, as the audio widget reads it).
+- `rttm/<user_id>.rttm` is the same segments as NIST RTTM, the input
+  pyannote.metrics, dscore and md-eval score diarization and sound events
+  against. Each annotator gets a file, because one RTTM file is one reference.
+  With more than one audio or video question, each question's files go under
+  `rttm/<schema>/`. The file column is the recording's name without its
+  extension (the item id when the item names no file; `<name>__<item id>`
+  when two items' recordings share a name), and spaces in a label become
+  `_`, since RTTM fields are separated by spaces. A zero-length segment is
+  in `segments.jsonl` and left out of the RTTM files, which have no way to
+  score it.
 
 ### Agent Evaluation (agent_eval)
 
@@ -484,7 +1046,7 @@ project [codebook](../advanced/codebook.md), including the hierarchy and
 how often each code was used.
 
 ```bash
-python -m potato.export --config config.yaml --format codebook -o codebook.csv
+python -m potato.export --config config.yaml --format codebook -o ./export/
 ```
 
 | Column | Meaning |
@@ -504,11 +1066,11 @@ A qualitative-coding deliverable: one CSV row per **coded span** (a
 offsets, the source instance, and the coder.
 
 ```bash
-python -m potato.export --config config.yaml --format quotation_report -o quotations.csv
+python -m potato.export --config config.yaml --format quotation_report -o ./export/
 
 # Also append one row per memo (analytic notes alongside the quotes):
 python -m potato.export --config config.yaml --format quotation_report \
-  --option include_memos=true -o quotations.csv
+  --option include_memos=true -o ./export/
 ```
 
 | Column | Meaning |
@@ -525,6 +1087,130 @@ python -m potato.export --config config.yaml --format quotation_report \
 | Option | Default | Description |
 |--------|---------|-------------|
 | `include_memos` | `false` | Also append one row per [memo](../advanced/memos.md): `schema="(memo)"`, `code=<visibility>`, `text=<memo body>`, offsets from the memo anchor when span-anchored. |
+
+### ConvoKit (convokit)
+
+Writes annotations back onto the utterances and conversations they were made
+about, as [ConvoKit](../integrations/convokit.md) metadata. Requires items
+imported with `potato convokit`, whose turns carry real ConvoKit utterance ids —
+the mapping is a direct lookup, not a match by position or text.
+
+```bash
+# Overlay files that drop into an existing corpus (default)
+python -m potato.export --config config.yaml --format convokit -o out/
+
+# A complete corpus directory with the annotations merged in
+python -m potato.export --config config.yaml --format convokit \
+  --option mode=corpus -o annotated-corpus/
+```
+
+**Overlay mode** writes one `info.<field>.jsonl` per field, in exactly the shape
+`corpus.load_info()` reads:
+
+```json
+{"id": "146743638.12667.12652", "value": {"alice": ["personal_attack"]}}
+```
+
+```python
+from convokit import Corpus, download
+corpus = Corpus(filename=download("conversations-gone-awry-corpus"))
+corpus.load_info("utterance", ["potato_turn_problems"])
+```
+
+A `potato_export_manifest.json` records which object type each field targets,
+since `load_info` makes the caller name it and the filename does not encode it.
+
+**Corpus mode** writes `utterances.jsonl`, `speakers.json`, `conversations.json`,
+`corpus.json`, and `index.json`. Metadata skipped on import is not re-emitted;
+the fields involved are listed in `corpus.json` so the output is not mistaken for
+a faithful copy of the source.
+
+| Annotation | Lands on |
+|---|---|
+| Instance scheme, conversation-unit items | Conversation metadata |
+| Instance scheme, utterance-unit items | Utterance metadata |
+| `turn_level` scheme | Utterance metadata, keyed by `turn_id` |
+| Span | Utterance metadata, split onto the utterances it covers |
+
+A span crossing a comment boundary is split into one entry per utterance, each
+with offsets relative to that utterance's own text, sharing a `span_group` so the
+pieces can be recombined.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `mode` | `info` | `info` for overlay files, `corpus` for a full dump |
+| `aggregate` | `none` | `none` keeps `{user_id: value}`; `majority` or `mean` adds an aggregate and moves the per-annotator dict to `<field>_raw` |
+| `field_prefix` | `potato_` | Prefix for written fields. Underscore, not a dot — MongoDB rejects `.` in keys |
+| `include_spans` | `true` | Map span annotations onto utterances |
+| `corpus_dir` | – | Existing corpus directory, for `write_into_corpus` |
+| `write_into_corpus` | `false` | Write overlays directly into `corpus_dir` |
+
+Per-annotator data is never discarded, in any mode. Every field is accompanied by
+`<field>_n_annotators`.
+
+### Adjudication (adjudication)
+
+The adjudicated label -- one resolved answer per item -- is what an adjudicated
+workflow is for, and it is not in csv, jsonl or parquet. Those three read
+per-annotator state, so an export made after adjudication carries the
+disagreements and not the resolution. Use this format to get the resolution.
+
+```bash
+python -m potato.export --config config.yaml --format adjudication -o final/
+```
+
+Two files:
+
+| File | One row per | Holds |
+|---|---|---|
+| `adjudicated.csv` | (item, schema) | The final value, where it came from, and the adjudicator's confidence |
+| `adjudication_log.jsonl` | decision | Notes, error taxonomy, span decisions, guideline flags and time spent |
+
+The `source` column names an annotator when the adjudicator adopted that
+person's answer verbatim, and reads `adjudicator` when they answered it
+themselves. In a study with [machine annotators](../advanced/machine_annotators.md),
+a `source_origin` column follows it, saying what produced the final answer:
+the adopted annotator (`human`, or a description such as `pipeline_a 2.1.0 db
+refdb-2024-03 (tool)`), or, when the adjudicator chose the value themselves,
+everyone who had given that same value, joined with `; `. It is empty when
+the final value is one no annotator gave.
+
+A composite scheme such as `constant_sum`, `soft_label` or
+`hierarchical_multiselect` resolves to a whole allocation or path list, which
+has no scalar reading. Those cells hold JSON, which round-trips. Scalar answers
+stay scalar.
+
+The exporter declines when the project has no adjudication config or has
+recorded no decisions, and warns if an adjudicated item resolved no schema at
+all.
+
+`python -m potato.adjudication_export` is the older, separate CLI for the same
+data. It merges unanimous agreements with adjudicated decisions into one
+dataset, which this exporter does not; use it when you want that merge.
+
+### Other formats
+
+These formats are documented on the page of the feature that produces them.
+
+| Format | Writes | Documented in |
+|--------|--------|---------------|
+| `labelme` | LabelMe JSON, one `.json` per image | [CV format matrix](format_matrix.md#export) |
+| `cvat` | CVAT XML 1.1 for images | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `darwin` | V7 Darwin JSON v2, one `.json` per item | [CV format matrix](format_matrix.md#export) |
+| `cityscapes` | Cityscapes polygons (`*_gtFine_polygons.json`) | [CV format matrix](format_matrix.md#export) |
+| `davis` | DAVIS / YouTube-VOS indexed PNG masks, one per frame | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `mot` | MOTChallenge tracking ground truth (`seqinfo.ini` and `gt/gt.txt`) | [CV format matrix](format_matrix.md#export), [video formats](../annotation-types/multimedia/video_formats.md) |
+| `episode_jsonl` | Per-frame JSONL for embodied episodes (phase, progress reward, outcome), keyed by episode id and frame index | [Embodied episodes](../annotation-types/embodied/episodes.md) |
+| `keystrokes` | Keystroke event streams and typing-dynamics features, without the typed text | [Keystroke logging](../advanced/keystroke_logging.md) |
+| `annotation_telemetry` | Drawing event streams and annotation-process features | [Annotation telemetry](../advanced/annotation_telemetry.md) |
+| `labeling_engine` | Every item's label with its provenance, the quality certificate and the model-call log | [Labeling engine CLI and API](../labeling-engine/cli-and-api.md) |
+| `trajectory_correction` | Corrected agent trajectories as SFT targets and DPO preference pairs | [Trajectory correction](../agent-evaluation/trajectory_correction.md) |
+| `microscopy` | Regions as QuPath-readable GeoJSON, one CSV row per classified cell, and OME-Zarr label images | [Multichannel microscopy](../annotation-types/science/microscopy.md#export) |
+| `ontology_terms` | One row per picked ontology term (`obo_id`, label, IRI, ontology version), as CSV and JSONL | [Ontology-backed labels](../annotation-types/science/ontology_labels.md#export) |
+| `peak_table` | One row per picked peak or integrated region from `peak_picking`, as CSV and/or JSONL | [Spectra and peak picking](../annotation-types/science/spectra.md#export) |
+| `interval_label` | One row per interval or event from `interval_label`, as CSV and JSONL | [Time series](../annotation-types/science/time_series.md#export) |
+| `bids_events` | BIDS `events.tsv` and `events.json` per annotator and recording | [Time series](../annotation-types/science/time_series.md#export) |
+| `schedule` | Scheduled sessions, compliance, notification log and Delphi ratings as CSV, without contact details | [Scheduled sessions](../workflow/scheduling.md#export) |
 
 ## Programmatic Export
 
@@ -584,15 +1270,16 @@ export_registry.register(MyExporter())
 
 ## Format Compatibility Matrix
 
-| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval |
-|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|
-| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - |
-| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - |
-| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - |
-| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - |
-| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - |
-| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - |
-| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes |
+| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval | ConvoKit |
+|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|----------|
+| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - | - |
+| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - | - |
+| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - | - |
+| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - | Yes |
+| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - | Yes |
+| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - | - |
+| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes | - |
+| Per-turn labels | - | - | - | - | - | - | Yes | - | - | Yes | Yes |
 
 ## Best Practices
 
@@ -608,12 +1295,11 @@ export_registry.register(MyExporter())
    - Verify label distributions
 
 3. **Handle missing data:**
-   - Use `--option include_unlabeled=false` to skip unannotated items
    - Check export warnings for skipped items
 
-4. **Use consistent splits:**
-   - Set `split_ratio` for reproducible train/val splits
-   - Or manage splits externally and export separately
+4. **Split externally:**
+   - The exporters do not split data into train and validation sets; split
+     the exported files with your training framework's own tooling
 
 ## Troubleshooting
 

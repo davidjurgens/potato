@@ -1,0 +1,8 @@
+[
+  {"id": "ja_001", "task_description": "User asked for the capital of France. Agent answered 'Paris'. Did the agent answer correctly?", "trace": "Q: What is the capital of France?\nAgent: The capital of France is Paris."},
+  {"id": "ja_002", "task_description": "User asked to add 2+2. Agent answered '5'. Did the agent answer correctly?", "trace": "Q: What is 2+2?\nAgent: 2+2 = 5."},
+  {"id": "ja_003", "task_description": "User asked for a vegan recipe. Agent returned a recipe containing cheese. Did the agent answer correctly?", "trace": "Q: Give me a vegan lasagna recipe.\nAgent: Layer pasta with ricotta cheese and marinara..."},
+  {"id": "ja_004", "task_description": "User asked to summarize an article in one sentence. Agent gave a clear one-sentence summary. Did the agent answer correctly?", "trace": "Q: Summarize the article in one sentence.\nAgent: The article argues that remote work boosts productivity but weakens team cohesion."},
+  {"id": "ja_005", "task_description": "User asked for today's weather. Agent said it could not access live data and suggested a weather site. Did the agent answer correctly?", "trace": "Q: What's the weather today?\nAgent: I can't access live data, but you can check weather.com for your area."},
+  {"id": "ja_006", "task_description": "User asked to translate 'hello' to Spanish. Agent answered 'hola'. Did the agent answer correctly?", "trace": "Q: Translate 'hello' to Spanish.\nAgent: hola"}
+]

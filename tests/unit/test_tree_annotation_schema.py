@@ -48,6 +48,26 @@ class TestTreeAnnotationLayout:
         assert "Select the best response path" in html
         assert "tree_eval_clear_path" in html
 
+    def test_empty_path_text_is_one_text(self):
+        # The page's "no path" text and the one conversation-tree.js writes
+        # when the path empties come from the config; they used to differ.
+        import html as html_lib
+        import json
+        import re
+        from potato.server_utils.schemas.tree_annotation import generate_tree_annotation_layout
+        scheme = {
+            "annotation_type": "tree_annotation",
+            "name": "tree_eval",
+            "description": "Evaluate",
+            "path_selection": {"enabled": True},
+        }
+        html, _ = generate_tree_annotation_layout(scheme)
+        rendered = re.search(r'<span class="tree-ann-no-path">([^<]*)</span>', html).group(1)
+        config = json.loads(html_lib.unescape(
+            re.search(r"data-tree-ann-config='([^']*)'", html).group(1)))
+        assert config["pathSelection"]["emptyText"] == html_lib.unescape(rendered)
+        assert rendered.startswith("No path selected.")
+
     def test_without_path_selection(self):
         from potato.server_utils.schemas.tree_annotation import generate_tree_annotation_layout
         scheme = {

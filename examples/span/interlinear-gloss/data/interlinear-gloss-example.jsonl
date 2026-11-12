@@ -1,0 +1,4 @@
+{"id": "latin_1", "text": "Puella rosam amat.", "morphemes": ["puell-a", "ros-am", "ama-t"], "glosses": ["girl-NOM.SG", "rose-ACC.SG", "love-3SG"], "translation": "The girl loves the rose.", "pos": ["n", "n", "v"]}
+{"id": "latin_2", "text": "Arma virumque cano."}
+{"id": "latin_3", "text": "Veni, vidi, vici.", "morphemes": ["ven-i", "vid-i", "vic-i"], "translation": "I came, I saw, I conquered."}
+{"id": "latin_4", "text": "Senatus Populusque Romanus", "morphemes": ["senatus", "popul-us=que", "Roman-us"], "glosses": ["senate.NOM.SG", "people-NOM.SG-and", "Roman-NOM.SG"], "translation": "The Senate and the Roman People"}

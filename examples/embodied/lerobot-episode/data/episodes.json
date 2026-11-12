@@ -1,0 +1,12 @@
+[
+  {
+    "id": "episode_0000",
+    "episode": "episodes/episode_0000/episode.json",
+    "note": "Pick and place. Mark the phases, say whether it worked, and draw how well it was going."
+  },
+  {
+    "id": "episode_0001",
+    "episode": "episodes/episode_0001/episode.json",
+    "note": "Pick and place. Mark the phases, say whether it worked, and draw how well it was going."
+  }
+]

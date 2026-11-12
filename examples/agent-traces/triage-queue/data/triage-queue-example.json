@@ -1,0 +1,44 @@
+[
+  {
+    "id": "trace_001",
+    "text": "Task: Book a one-way flight from Detroit to Seattle on July 3.\nAgent: I searched flights and booked DTW→SEA departing 8:10am on July 3, confirmation XJ4K2.",
+    "status": "ok",
+    "score": 0.92,
+    "feedback": "thumbs_up"
+  },
+  {
+    "id": "trace_002",
+    "text": "Task: Summarize the attached quarterly report.\nAgent: [tool: read_file] threw FileNotFoundError. Agent gave up without retrying.",
+    "status": "error",
+    "score": 0.10,
+    "feedback": "thumbs_down"
+  },
+  {
+    "id": "trace_003",
+    "text": "Task: What is the capital of Australia?\nAgent: The capital of Australia is Sydney.",
+    "status": "ok",
+    "score": 0.35,
+    "feedback": "thumbs_down"
+  },
+  {
+    "id": "trace_004",
+    "text": "Task: Convert 100 USD to EUR at today's rate.\nAgent: [tool: fx_rate] 100 USD ≈ 92 EUR. Done.",
+    "status": "ok",
+    "score": 0.88,
+    "feedback": "none"
+  },
+  {
+    "id": "trace_005",
+    "text": "Task: Draft a polite reply declining the meeting.\nAgent: Produced a 3-line decline. User edited heavily before sending.",
+    "status": "ok",
+    "score": 0.41,
+    "feedback": "none"
+  },
+  {
+    "id": "trace_006",
+    "text": "Task: Find the bug in this Python snippet.\nAgent: [tool: run_code] crashed with SyntaxError, then returned an unrelated answer.",
+    "status": "error",
+    "score": 0.22,
+    "feedback": "none"
+  }
+]

@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+/* Outfit is vendored under vendor/outfit/ rather than imported from Google:
+ * an @import is invisible to the template's asset guard, so this one
+ * survived the air-gap work, and it sent every annotator's IP to a third
+ * party on every page load. */
+@import url('vendor/outfit/outfit.css');
 
 :root {
   /* Typography */
@@ -9,6 +13,13 @@
   --text-xs: 0.75rem;     /* 12px — badges, fine print */
   --text-sm: 0.8125rem;   /* 13px — help text, captions */
   --text-base: 1rem;      /* 16px — body, labels, UI text */
+  /* 14px — dense expert chrome: annotation toolbars, timeline transports,
+     slab captions. Added because the gap between 13px and 16px was being
+     filled ad hoc: 0.85 / 0.875 / 0.88 / 0.9 / 0.92 / 0.95rem and a bare 14px
+     all appear across the stylesheets, ~170 declarations of the same
+     intention at seven different sizes. New dense surfaces use this; the
+     existing call sites are a separate sweep. */
+  --text-dense: 0.875rem;
   --text-md: 1.0625rem;   /* 17px — schema titles */
   --text-lg: 1.1875rem;   /* 19px — instance text to annotate */
   --text-xl: 1.25rem;     /* 20px — page headings */
@@ -37,11 +48,39 @@
   --accent-foreground: #18181b;
   --destructive: #ef4444;
   --destructive-foreground: #fafafa;
+  /* `--destructive` is a FILL. At 3.76:1 on white it cannot carry text, which
+     is why components that needed red words kept reaching for a literal.
+     These two are the text colours: both clear 7:1 on the card and on the
+     muted chip, which is the bar this product sets for anything an annotator
+     reads all day. */
+  --destructive-text: #9f1e17;
+  --warning-text: #7d4407;
+  /* The readable partner of --success-color, on the same terms as
+     --destructive-text above. #10b981 is an indicator colour: it reads at
+     2.5:1 on white and 2.35:1 on its own 8% scrim, so used as TEXT it fails
+     AA outright. /admin/iaa colours the agreement coefficients with it, which
+     put the page's actual content below the floor. 5.5:1 on white, 5.1:1 on
+     the scrim. */
+  --success-text: #047857;
+  /* Fills behind the three *-text colours above. Badges and chips kept
+     inventing their own tints (amber #fef3c7, red #fee2e2, Bootstrap's
+     rgba(220,53,69,.1) ...). On its own tint: destructive 6.9:1, warning
+     7.1:1, success 4.9:1 -- AA for badge text, not the 7:1 reading bar. */
+  --destructive-tint: #fdecea;
+  --warning-tint: #fdf3e2;
+  --success-tint: #e7f5ef;
+  /* The accent at the same weight, for a selected/armed state that should
+     not shout: chips, selected rows, the armed tool in a toolbar. Text on
+     it uses --foreground (17:1); --primary on it is only 4.6:1. */
+  --primary-tint: #efecfa;
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #6e56cf;
   --radius: 0.5rem;
   --primary-color: #6e56cf;
+  /* The navbar's fill. Its contents are white text and white chips with
+     fill-coloured text, so it stays this purple in both themes. */
+  --navbar-bg: #6e56cf;
   --secondary-color: #7c66ce;
   --accent-color: #a18fff;
   --dark-color: #09090b;
@@ -50,6 +89,10 @@
   --light-gray: #f4f4f5;
   --light-bg: #f5f7fb;
   --heading-color: #09090b;
+  /* Chart series, in this fixed order (never cycled). Validated as a pair on
+     the light surface: CVD dE 24.7, normal-vision dE 33.6, >= 3:1 contrast. */
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
   --text-color: #374151;
   --success-color: #10b981;
   --border-radius: 0.5rem;
@@ -65,6 +108,167 @@
   --z-overlay-user-span: 120;
   --z-overlay-controls: 200;
   --z-overlay-tooltip: 300;
+
+  /* Neutral scales. Component rules that hard-coded these exact values now
+     name them, so the light theme renders as before and the dark theme can
+     invert them: step 50 is the faintest fill and 900 the strongest text in
+     both themes. A new rule uses the semantic tokens above, not these. */
+  --surface: #ffffff;
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+}
+
+/* Component stylesheets give each colour literal a dark twin with
+   light-dark(), which follows color-scheme. The <head> script sets it on
+   <html> from the theme; this is the fallback when that has not run. */
+:root { color-scheme: light; }
+
+/* Dark theme. <head> sets data-theme on <html> from ui.theme, the annotator's
+   choice (localStorage 'potato-theme') or prefers-color-scheme, before any
+   stylesheet paints; without JavaScript the page stays light. Values are the
+   zinc dark set the light neutrals derive from. Contrast on --background /
+   --card: --foreground 19.1/17.0, --text-color 13.5/12.0, --muted-foreground
+   7.8/6.9, --primary as text 5.5/4.9, --input (control edges) 4.1/3.7, each
+   *-text on its *-tint 8.5 or more. --primary is light enough to read as text,
+   so a filled primary control carries --primary-foreground, which is dark
+   here (5.5:1), not white. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: #fafafa;
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
+  --primary: #8b74e8;
+  --primary-foreground: #09090b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --destructive-text: #fca5a5;
+  --warning-text: #fcd34d;
+  --success-text: #6ee7b7;
+  --destructive-tint: #3b1518;
+  --warning-tint: #3a2a0c;
+  --success-tint: #0f2e24;
+  --primary-tint: #2a2342;
+  --border: #3f3f46;
+  --input: #71717a;
+  --ring: #8b74e8;
+  --primary-color: #8b74e8;
+  --secondary-color: #9d8af0;
+  --accent-color: #a18fff;
+  --gray-color: #a1a1aa;
+  --light-gray: #27272a;
+  --light-bg: #09090b;
+  --heading-color: #fafafa;
+  --chart-series-1: #60a5fa;
+  --chart-series-2: #fb923c;
+  --text-color: #d4d4d8;
+  --success-color: #34d399;
+  --box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.5);
+  --box-shadow-lg: 0 4px 16px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.4);
+  --group-bg-odd: #141417;
+  --group-bg-even: #17171b;
+  --surface: #18181b;
+  --zinc-50: #18181b;
+  --zinc-100: #1f1f23;
+  --zinc-200: #27272a;
+  --zinc-300: #3f3f46;
+  --zinc-400: #71717a;
+  --zinc-500: #a1a1aa;
+  --zinc-600: #b4b4bc;
+  --zinc-700: #d4d4d8;
+  --zinc-800: #e4e4e7;
+  --zinc-900: #fafafa;
+  --gray-50: #18181b;
+  --gray-100: #1f1f23;
+  --gray-200: #27272a;
+  --gray-300: #3f3f46;
+  --gray-400: #71717a;
+  --gray-500: #a1a1aa;
+  --gray-600: #b4b4bc;
+  --gray-700: #d4d4d8;
+  --gray-800: #e4e4e7;
+  --gray-900: #fafafa;
+  --slate-50: #18181b;
+  --slate-100: #1f1f23;
+  --slate-200: #27272a;
+  --slate-300: #3f3f46;
+  --slate-400: #71717a;
+  --slate-500: #a1a1aa;
+  --slate-600: #b4b4bc;
+  --slate-700: #d4d4d8;
+  --slate-800: #e4e4e7;
+  --slate-900: #fafafa;
+}
+
+/* Light/dark toggle (templates/_theme_toggle.html). The icon shows the
+   theme a press switches to. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--muted); }
+.theme-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.theme-toggle .theme-toggle-icon-light { display: none; }
+:root[data-theme="dark"] .theme-toggle .theme-toggle-icon-light { display: inline; }
+:root[data-theme="dark"] .theme-toggle .theme-toggle-icon-dark { display: none; }
+/* On the navbar it takes the navbar's own chip style (white on the fill,
+   7:1 and up), like the jump buttons beside it. */
+.potato-navbar .theme-toggle {
+  background: light-dark(rgba(255, 255, 255, 0.1), rgba(26, 26, 26, 0.1));
+  border-color: light-dark(rgba(255, 255, 255, 0.18), rgba(76, 76, 76, 0.18));
+  color: #ffffff;
+}
+.potato-navbar .theme-toggle:hover { background: light-dark(rgba(255, 255, 255, 0.22), rgba(26, 26, 26, 0.22)); }
+.potato-navbar .theme-toggle:focus-visible { outline-color: light-dark(#ffffff, #4c4c4c); }
+.theme-toggle-corner {
+  position: fixed;
+  top: var(--space-md);
+  right: var(--space-md);
 }
 
 body {
@@ -75,6 +279,22 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
+}
+
+/* A right-hand rail panel (memos, codebook) is position: fixed and 360px
+   wide, and the page underneath was not narrowed to make room. At a 1400px
+   viewport the memo panel covered the Next button outright:
+   elementFromPoint at the centre of Next returned the memo composer, so the
+   only navigation control on the page could not be clicked until the
+   annotator found the × in the panel header. Reserve the width instead.
+
+   Below 1024px the panel is most of the screen, so reserving its width would
+   leave nothing to annotate; there it stays an overlay and the annotator
+   closes it. */
+@media (min-width: 1024px) {
+  body.potato-rail-open {
+    padding-right: 360px;
+  }
 }
 
 /* Shadcn-style button */
@@ -153,27 +373,25 @@ body {
   flex-shrink: 0;
 }
 
-.status-badge.labeled {
-  background-color: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.9);
+/* The three annotation-status pills sit on the purple navbar. They used to be
+   a white scrim with translucent white text, which put "Not labeled" -- the
+   state an annotator sees on every fresh item -- at 2.98:1, and the other two
+   at 3.6 and 3.3. A darkened scrim under solid white reaches ~7.3:1, which is
+   the bar this product sets for text annotators read all day. State is carried
+   by the dot colour and the word, not by the text opacity. */
+.status-badge.labeled,
+.status-badge.unlabeled,
+.status-badge.in_progress {
+  background-color: rgba(0, 0, 0, 0.18);
+  color: #ffffff;
 }
 
 .status-badge.labeled::before {
   background-color: #34d399;
 }
 
-.status-badge.unlabeled {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-}
-
 .status-badge.unlabeled::before {
-  background-color: #fbbf24;
-}
-
-.status-badge.in_progress {
-  background-color: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
+  background-color: light-dark(#fbbf24, #4e3f18);
 }
 
 .status-badge.in_progress::before {
@@ -183,7 +401,7 @@ body {
 /* Skip to unannotated button hover states */
 #jump-unannotated-btn:hover,
 #jump-unannotated-prev-btn:hover {
-  background-color: rgba(255, 255, 255, 0.35) !important;
+  background-color: light-dark(rgba(255, 255, 255, 0.35), rgba(26, 26, 26, 0.35)) !important;
 }
 
 /* Notification animations */
@@ -248,9 +466,9 @@ body {
 /* Required field validation */
 .required-fields-error {
   display: none;
-  background: #fef2f2;
-  border: 1px solid #fca5a5;
-  color: #991b1b;
+  background: light-dark(#fef2f2, #2c1010);
+  border: 1px solid light-dark(#fca5a5, #693030);
+  color: light-dark(#991b1b, #e2a2a2);
   padding: 0.5rem 0.75rem;
   border-radius: 0.375rem;
   margin-bottom: 0.75rem;
@@ -286,6 +504,42 @@ body {
   font-size: var(--text-md);
   letter-spacing: -0.01em;
   line-height: 1.4;
+  /* Undo Bootstrap's `legend { float: left; width: 100% }` reset.
+     A schema whose content wrapper is display:flex or display:grid
+     establishes a block formatting context, and a BFC does not overlap a
+     float -- it shrinks to whatever width is left beside it, which against a
+     100%-wide float is nothing. `triage` rendered its three buttons out of a
+     zero-width container and past the right edge of the card, where two of the
+     three were clipped and unclickable. Every schema with a flex or grid
+     wrapper directly after its legend is exposed to the same thing. */
+  float: none;
+  width: auto;
+}
+
+/* A legend is a heading, and headings are bold -- but `pure_display` puts a
+   whole block of prose in one, and every paragraph inherited the 600 weight.
+   `<b>` marking each definition's term was then invisible against text that
+   was already bold, and the page read as one shouted block.
+
+   Block children carry body weight; inline emphasis inside them stands out
+   again, which is the entire reason it was written. The legend's own direct
+   text is untouched, so a one-line schema title still reads as a heading. */
+.annotation-form legend > p,
+.annotation-form legend > ul,
+.annotation-form legend > ol,
+.annotation-form legend > div,
+.annotation-form legend > table,
+.annotation-form legend > blockquote {
+  font-weight: 400;
+  color: var(--foreground);
+}
+
+.annotation-form legend > p:first-child {
+  margin-top: 0;
+}
+
+.annotation-form legend > p:last-child {
+  margin-bottom: 0;
 }
 
 /* ai help */
@@ -298,7 +552,7 @@ body {
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   margin-bottom: 0.5rem;
-  background-color: #f8fafc;
+  background-color: var(--slate-50);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   width: fit-content;
@@ -325,7 +579,7 @@ body {
   position: absolute;
   top: 100%;
   right: 0;
-  background-color: white;
+  background-color: var(--surface);
   padding: 0;
   border-radius: 0.5rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -337,11 +591,37 @@ body {
   word-wrap: break-word;
   white-space: normal;
   margin-top: 0.5rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--gray-200);
+  /* A per-label rationale set runs to ~700px, and the panel is absolutely
+     positioned inside `.shadcn-card`, which sets `overflow: hidden` to keep the
+     media canvas inside its rounded corners. Unbounded, the panel was simply
+     sliced off mid-sentence at the card edge. Bounding it here keeps it a
+     self-contained, scrollable component instead of relying on the card to
+     clip it, without touching the card's own overflow. */
+  max-height: 22rem;
+  overflow-y: auto;
 }
 
 .tooltip.active {
   display: block;
+  /* Bootstrap ships `.tooltip { ... opacity: 0 }` for its own JS tooltips, which
+     it fades in by adding `.show`. Potato's AI assistant panels reuse the class
+     name `.tooltip` and toggle `.active` instead, and never restored the
+     opacity — so hint, keyword and rationale panels opened, laid out, filled
+     with model output, and painted nothing at all. `.tooltip.active` outranks
+     Bootstrap's single-class rule, so this is where it has to be set. */
+  opacity: 1;
+}
+
+/* The card and its content pane both clip (`overflow: hidden` / `overflow-y:
+   auto`) to keep the media canvas inside the rounded corners and to let long
+   forms scroll. An AI panel is absolutely positioned *inside* that context, so
+   a rationale set taller than the remaining card was sliced off mid-sentence —
+   the model's answer was on the page and unreadable. Lift the clip only while a
+   panel is actually open, so the normal scrolling behaviour is untouched. */
+.shadcn-card:has(.tooltip.active),
+.shadcn-card-content:has(.tooltip.active) {
+  overflow: visible;
 }
 
 /* Close button for tooltip */
@@ -352,7 +632,7 @@ body {
   background: transparent;
   border: none;
   font-size: 1.25rem;
-  color: #6b7280;
+  color: var(--gray-500);
   cursor: pointer;
   padding: 0.25rem 0.5rem;
   line-height: 1;
@@ -362,7 +642,7 @@ body {
 
 .tooltip .tooltip-close:hover {
   background-color: rgba(0, 0, 0, 0.1);
-  color: #1f2937;
+  color: var(--gray-800);
 }
 
 .tooltip .assistant-content {
@@ -374,10 +654,80 @@ body {
   display: flex;
 }
 
-.ai-assistant-img {
-  display: flex;
-  justify-content: center;
+/*
+ * Keep the assistant row to one line, and drop the labels when the cell is too
+ * narrow to show them.
+ *
+ * With `layout.grid` and `ai_config.include.all` the row wrapped once per
+ * assistant in a ~120px track, costing more height than the question it sat
+ * above. Ellipsing the labels instead fixed the height but painted a stray
+ * letter beside each icon -- "[icon] [icon]K [icon]R" -- so below the threshold
+ * the label is hidden outright.
+ *
+ * The container is `.ai-help-shell`, not the form: `container-type:
+ * inline-size` on `.annotation-form` collapses span-1 and span-2 grid items to
+ * their contain-intrinsic width, measured at 18px against a 123px track, and
+ * the fieldset behaves the same way. The shell is a plain block div whose width
+ * comes from its parent, so containing it costs nothing.
+ *
+ * The label is hidden, never removed. It stays the button's accessible name,
+ * and the `title` the wrapper writes gives sighted users the word back on hover
+ * and focus.
+ */
+.ai-help-shell {
+  container-type: inline-size;
+  container-name: ai-help-shell;
+  /* A definite width, because `.annotation-form` is a column flex container and
+     a size-contained item with no definite inline size resolves to 0 -- which
+     made the query match on every cell by accident rather than by measurement. */
+  width: 100%;
+}
+
+.ai-help {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ai-help .ai-assistant-containter {
+  min-width: 0;
   align-items: center;
+}
+
+/* The icon must never be what shrinks -- it is the only thing left to aim at
+   once the labels are gone. */
+.ai-help .ai-assistant-img {
+  flex: none;
+}
+
+@container ai-help-shell (max-width: 260px) {
+  .ai-help {
+    gap: 0.35rem;
+    padding: 0.35rem 0.4rem;
+  }
+
+  .ai-help .ai-assistant-containter > span:not(.ai-assistant-img) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Without a label the icon alone is the whole target. 24px is WCAG 2.2 AA
+     (2.5.8 Target Size Minimum); the 44px AAA figure does not fit -- three of
+     them need 132px and the row these appear in is around 105px, so demanding
+     it forced a wrap and put the row back to three lines, which is the height
+     problem this rule exists to fix. */
+  .ai-help .ai-assistant-containter {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+    justify-content: center;
+  }
 }
 
 .ai-assistant-img img {
@@ -464,6 +814,15 @@ body {
   color: var(--text-color) !important;
 }
 
+/* ...except on the image toolbar's filled --primary controls (an armed label
+   or tool; audio and video tint theirs instead), where
+   page text read 2.3:1 on the purple in the light theme and 2.5:1 in the
+   dark. They take the fill's own foreground. */
+.annotation-form fieldset .image-annotation-container .label-btn.active span:not(.label-color-dot),
+.annotation-form fieldset .image-annotation-container .tool-btn.active span {
+  color: var(--primary-foreground) !important;
+}
+
 /* Form elements */
 input[type="text"],
 input[type="number"],
@@ -485,6 +844,14 @@ select:focus {
   outline: none;
   border-color: var(--ring);
   box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.25);
+}
+
+/* Keyboard focus ring for range/slider inputs (they reset outline) */
+input[type="range"]:focus-visible,
+.shadcn-slider-input:focus-visible,
+.pairwise-scale-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.30);
 }
 
 /* Radio and checkbox styling */
@@ -556,9 +923,9 @@ input[type="range"]::-moz-range-thumb {
   font-size: 10px;
   border-radius: 3px;
   padding: 2px 4px;
-  color: #6e56cf;
-  background-color: white;
-  border: 1px solid #e4e4e7;
+  color: light-dark(#6e56cf, #b2a8db);
+  background-color: var(--surface);
+  border: 1px solid var(--zinc-200);
   z-index: 10;
   white-space: nowrap;
   font-weight: 500;
@@ -573,7 +940,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 2px 4px;
   cursor: pointer;
   color: var(--destructive);
-  background-color: white;
+  background-color: var(--surface);
   border: 1px solid var(--destructive);
   z-index: 10;
   font-weight: bold;
@@ -597,9 +964,9 @@ input[type="range"]::-moz-range-thumb {
   display: inline-block;
   width: 20px;
   height: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
+  border: 3px solid light-dark(rgba(255, 255, 255, 0.3), rgba(76, 76, 76, 0.3));
   border-radius: 50%;
-  border-top-color: #fff;
+  border-top-color: var(--surface);
   animation: spin 1s ease-in-out infinite;
 }
 
@@ -718,8 +1085,8 @@ input[type="range"]::-moz-range-thumb {
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 50%;
-  background-color: #fff;
-  border: 2px solid #9ca3af;
+  background-color: var(--surface);
+  border: 2px solid var(--gray-400);
   margin-bottom: 0;
   cursor: pointer;
   transition: var(--transition);
@@ -727,7 +1094,7 @@ input[type="range"]::-moz-range-thumb {
 .shadcn-likert-input:hover + .shadcn-likert-button,
 .shadcn-likert-button:hover {
   border-color: #6e56cf;
-  background-color: #f5f3ff;
+  background-color: light-dark(#f5f3ff, #120d2d);
 }
 
 .shadcn-likert-input:checked + .shadcn-likert-button {
@@ -812,7 +1179,9 @@ input[type="range"]::-moz-range-thumb {
   width: 1rem;
   height: 1rem;
   border-radius: 0.25rem;
-  border: 1px solid var(--border);
+  /* --border measures about 1.2:1 on white, so an empty box all but
+     disappeared; a control's outline needs 3:1 (WCAG 1.4.11). */
+  border: 1px solid var(--muted-foreground);
   background-color: var(--background);
   cursor: pointer;
   margin-right: 0.75rem;
@@ -830,7 +1199,7 @@ input[type="range"]::-moz-range-thumb {
   position: absolute;
   width: 0.3rem;
   height: 0.5rem;
-  border: solid white;
+  border: solid var(--surface);
   border-width: 0 2px 2px 0;
   top: 45%;
   left: 50%;
@@ -964,7 +1333,7 @@ input[type="range"]::-moz-range-thumb {
   width: 1rem;
   height: 1rem;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--muted-foreground); /* 3:1 minimum, as above */
   background-color: var(--background);
   cursor: pointer;
   margin-right: 0.5rem;
@@ -1129,11 +1498,27 @@ input[type="range"]::-moz-range-thumb {
   padding: var(--space-sm) var(--space-md);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Was `center`. As a column flex container, that made every child shrink to
+   * its content on the cross axis — including the <fieldset>, which then became
+   * ~200px wide inside an 860px box. `.shadcn-span-options` is a
+   * `repeat(auto-fill, minmax(180px, 1fr))` grid resolved against that fieldset,
+   * so it only ever got ONE column: five labels stacked in a narrow centred
+   * strip with two thirds of the box empty beside them. */
+  align-items: stretch;
   width: fit-content;
   max-width: 100%;
   font-family: var(--font-sans);
   position: relative;
+}
+
+/* The fieldset is the grid's containing block, so it has to carry the box's
+ * width or the label grid cannot use it. The `[schema]` in the selector is not
+ * decoration: `fieldset[schema] { width: fit-content }` further down this file
+ * has the same specificity as a bare `.shadcn-span-container > fieldset` and
+ * comes later, so the plain form of this rule loses. */
+.shadcn-span-container > fieldset[schema] {
+  width: 100%;
+  min-width: 0;
 }
 
 .shadcn-span-title {
@@ -1180,7 +1565,7 @@ input[type="range"]::-moz-range-thumb {
   position: absolute;
   width: 0.3rem;
   height: 0.5rem;
-  border: solid white;
+  border: solid var(--surface);
   border-width: 0 2px 2px 0;
   top: 45%;
   left: 50%;
@@ -1213,8 +1598,20 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 500;
 }
 
+/* The "nothing to mark" escape hatch, below the label grid.
+   It is a block, so its label stretched the full row -- an 828px hit area
+   beside 84px label chips, which reads as a heading rather than an option.
+   (It never showed at all until `bad_text_label` accepted the string form,
+   so the width was never visible to notice.) */
 .shadcn-span-bad-text {
   margin-top: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.shadcn-span-bad-text .shadcn-span-label {
+  flex: 0 1 auto;
+  color: var(--muted-foreground, var(--zinc-600));
 }
 
 /* Text Styles */
@@ -1412,24 +1809,33 @@ input[type="range"]::-moz-range-thumb {
 
 /* Multirate Styles */
 .shadcn-multirate-container {
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  margin: 1rem auto;
+  font-family: var(--font-sans);
+  /* Left-aligned like every other schema. `margin: 1rem auto` centred the
+     matrix and inset it about 64px from the card edge the questions above and
+     below start at. */
+  margin: 0;
   max-width: 100%;
   overflow-x: auto;
-  color: #374151;
+  color: var(--text-color);
 }
 
 .shadcn-multirate-title {
   font-size: 1rem;
   font-weight: 500;
   margin-bottom: 0.5rem;
-  color: #f3f4f6;
+  color: var(--heading-color);
+}
+
+/* The legend's inherited 12px inset put the question to the right of the
+   table it heads. */
+.annotation-form fieldset .shadcn-multirate-title {
+  padding-left: 0;
 }
 
 .shadcn-multirate-table {
   border-collapse: collapse;
   width: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -1437,18 +1843,43 @@ input[type="range"]::-moz-range-thumb {
 .shadcn-multirate-table td {
   padding: 0.75rem 1rem;
   text-align: center;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   font-size: var(--text-base);
 }
 
 .shadcn-multirate-table th {
-  background-color: #f9fafb;
+  background-color: var(--muted);
   font-weight: 500;
-  color: #6b7280;
+  /* --muted-foreground on --muted is 4.4:1, under AA; these are the scale
+     points the annotator reads on every row. */
+  color: var(--text-color);
 }
 
+/* The whole cell is the target, not the 20px circle in the middle of it: the
+   label fills the cell and carries the cell's padding. Table layout only; the
+   stacked phone layout (max-width: 640px, below) styles the label itself. */
+@media (min-width: 641px) {
+  .shadcn-multirate-table td.shadcn-radio-cell {
+    padding: 0;
+  }
+
+  .shadcn-multirate-table td.shadcn-radio-cell > .shadcn-multirate-choice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    margin: 0;
+    cursor: pointer;
+  }
+}
+
+/* Each item's label cell, not just the row's first: with
+   display_config.num_columns above 1 a row holds several items. */
 .shadcn-multirate-table thead th:first-child,
-.shadcn-multirate-table tbody td:first-child {
+.shadcn-multirate-table thead th.shadcn-multirate-item-head,
+.shadcn-multirate-table tbody td:first-child,
+.shadcn-multirate-table tbody td.shadcn-multirate-item {
   text-align: left;
   font-weight: 500;
   min-width: 180px;
@@ -1456,7 +1887,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .shadcn-multirate-table tbody tr:hover {
-  background-color: #f9fafb;
+  background-color: var(--muted);
 }
 
 .shadcn-multirate-radio {
@@ -1465,8 +1896,8 @@ input[type="range"]::-moz-range-thumb {
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 50%;
-  border: 2px solid #d1d5db;
-  background-color: #fff;
+  border: 2px solid var(--muted-foreground);
+  background-color: var(--background);
   cursor: pointer;
   margin: 0 auto;
   vertical-align: middle;
@@ -1475,8 +1906,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .shadcn-multirate-radio:checked {
-  border-color: #3b82f6;
-  background-color: #3b82f6;
+  border-color: var(--primary);
+  background-color: var(--primary);
 }
 
 .shadcn-multirate-radio:checked::after {
@@ -1485,19 +1916,19 @@ input[type="range"]::-moz-range-thumb {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background-color: white;
+  background-color: var(--surface);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
 }
 
 .shadcn-multirate-radio:hover:not(:checked) {
-  border-color: #3b82f6;
+  border-color: var(--primary);
 }
 
 .shadcn-multirate-radio:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
 .shadcn-radio-cell {
@@ -1542,7 +1973,9 @@ fieldset[schema] {
   }
 
   .shadcn-multirate-table thead th:first-child,
-  .shadcn-multirate-table tbody td:first-child {
+  .shadcn-multirate-table thead th.shadcn-multirate-item-head,
+  .shadcn-multirate-table tbody td:first-child,
+  .shadcn-multirate-table tbody td.shadcn-multirate-item {
     min-width: 120px;
   }
 }
@@ -1580,7 +2013,7 @@ fieldset[schema] {
   margin: 0 1px;
   cursor: pointer;
   transition: all 0.2s;
-  background-color: #ffeaa7;
+  background-color: light-dark(#ffeaa7, #4f4217);
   line-height: 1.2em;
   vertical-align: baseline;
 }
@@ -1601,25 +2034,25 @@ fieldset[schema] {
 
 /* Specific depth-based styling */
 .annotation-span.overlap-depth-1 {
-  background-color: rgba(255, 234, 167, 0.8);
-  border-color: rgba(255, 193, 7, 0.3);
+  background-color: light-dark(rgba(255, 234, 167, 0.8), rgba(79, 66, 23, 0.8));
+  border-color: light-dark(rgba(255, 193, 7, 0.3), rgba(107, 92, 46, 0.3));
 }
 
 .annotation-span.overlap-depth-2 {
-  background-color: rgba(255, 234, 167, 0.9);
-  border-color: rgba(255, 193, 7, 0.5);
+  background-color: light-dark(rgba(255, 234, 167, 0.9), rgba(79, 66, 23, 0.9));
+  border-color: light-dark(rgba(255, 193, 7, 0.5), rgba(107, 92, 46, 0.5));
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .annotation-span.overlap-depth-3 {
-  background-color: rgba(255, 234, 167, 1);
-  border-color: rgba(255, 193, 7, 0.7);
+  background-color: light-dark(rgba(255, 234, 167, 1), #4f4217);
+  border-color: light-dark(rgba(255, 193, 7, 0.7), rgba(107, 92, 46, 0.7));
   box-shadow: 0 3px 9px rgba(0, 0, 0, 0.2);
 }
 
 .annotation-span.overlap-depth-4 {
-  background-color: rgba(255, 234, 167, 1);
-  border-color: rgba(255, 193, 7, 0.9);
+  background-color: light-dark(rgba(255, 234, 167, 1), #4f4217);
+  border-color: light-dark(rgba(255, 193, 7, 0.9), rgba(107, 92, 46, 0.9));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
@@ -1758,7 +2191,7 @@ fieldset[schema] {
   position: relative;
   width: 100%;
   height: 4px;
-  background-color: #e5e7eb;
+  background-color: var(--gray-200);
   border-radius: 2px;
 }
 
@@ -1784,7 +2217,7 @@ fieldset[schema] {
   z-index: 2;
   cursor: grab;
   transition: transform 0.1s, box-shadow 0.1s;
-  color: white;
+  color: var(--primary-foreground);
 }
 
 .custom-slider-thumb.dragging {
@@ -1810,7 +2243,7 @@ fieldset[schema] {
 .custom-slider-tick-mark {
   width: 1px;
   height: 8px;
-  background-color: #ccc;
+  background-color: light-dark(#ccc, #333333);
 }
 
 .custom-slider-tick-mark.major {
@@ -1825,7 +2258,7 @@ fieldset[schema] {
   left: 50%;
   transform: translateX(-50%);
   font-size: 10px;
-  color: #666;
+  color: light-dark(#666, #c2c2c2);
   white-space: nowrap;
 }
 
@@ -1905,7 +2338,7 @@ fieldset[schema] {
 .ai-suggested-label {
   position: relative;
   font-weight: 600 !important;
-  color: #92400e !important;
+  color: light-dark(#92400e, #e9bda2) !important;
 }
 
 .ai-suggested {
@@ -2027,8 +2460,8 @@ fieldset[schema] {
 
 /* Tooltip styling for AI suggestions */
 .tooltip.hint-tooltip {
-  background-color: #fef3c7;
-  color: #1f2937;
+  background-color: light-dark(#fef3c7, #413814);
+  color: var(--gray-800);
   border: 1px solid #f59e0b;
   border-radius: var(--radius);
   padding: 0;
@@ -2039,7 +2472,7 @@ fieldset[schema] {
 }
 
 .tooltip.hint-tooltip .tooltip-close {
-  color: #92400e;
+  color: light-dark(#92400e, #e9bda2);
 }
 
 .tooltip.hint-tooltip .tooltip-close:hover {
@@ -2060,19 +2493,19 @@ fieldset[schema] {
 
 .tooltip.hint-tooltip .content-item .label {
   font-weight: 600;
-  color: #92400e;
+  color: light-dark(#92400e, #e9bda2);
   font-size: 11px;
   text-transform: uppercase;
 }
 
 .tooltip.hint-tooltip .content-item .value {
-  color: #1f2937;
+  color: var(--gray-800);
 }
 
 .tooltip.hint-tooltip .content-item .value.suggestion {
   font-weight: 600;
-  color: #78350f;
-  background-color: rgba(254, 243, 199, 0.8);
+  color: light-dark(#78350f, #e9c2ac);
+  background-color: light-dark(rgba(254, 243, 199, 0.8), rgba(65, 56, 20, 0.8));
   padding: 2px 6px;
   border-radius: 3px;
   display: inline-block;
@@ -2087,15 +2520,15 @@ fieldset[schema] {
 
 /* Rationale tooltip styling */
 .tooltip.rationale-tooltip {
-  background-color: #faf5ff;
-  color: #1f2937;
+  background-color: light-dark(#faf5ff, #1c0d2c);
+  color: var(--gray-800);
   border: 1px solid #8b5cf6;
   padding: 0;
   max-width: 100%;
 }
 
 .tooltip.rationale-tooltip .tooltip-close {
-  color: #5b21b6;
+  color: light-dark(#5b21b6, #bba2e2);
 }
 
 .tooltip.rationale-tooltip .tooltip-close:hover {
@@ -2110,10 +2543,10 @@ fieldset[schema] {
 
 .tooltip.rationale-tooltip .rationale-header {
   font-weight: 600;
-  color: #5b21b6;
+  color: light-dark(#5b21b6, #bba2e2);
   font-size: 12px;
   text-transform: uppercase;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--gray-200);
   padding-bottom: 8px;
 }
 
@@ -2122,19 +2555,19 @@ fieldset[schema] {
   flex-direction: column;
   gap: 4px;
   padding: 8px;
-  background-color: #f9fafb;
+  background-color: var(--gray-50);
   border-radius: var(--radius);
   border-left: 3px solid #8b5cf6;
 }
 
 .tooltip.rationale-tooltip .rationale-label {
   font-weight: 600;
-  color: #5b21b6;
+  color: light-dark(#5b21b6, #bba2e2);
   font-size: 13px;
 }
 
 .tooltip.rationale-tooltip .rationale-reasoning {
-  color: #374151;
+  color: var(--gray-700);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -2164,26 +2597,26 @@ fieldset[schema] {
 
 /* Alternating turn shading for readability */
 .dialogue-turn-even {
-  background-color: #f8fafc;
+  background-color: var(--slate-50);
   border-left: 4px solid var(--primary, #6366f1);
 }
 
 .dialogue-turn-odd {
-  background-color: #ffffff;
-  border-left: 4px solid #e2e8f0;
+  background-color: var(--surface);
+  border-left: 4px solid var(--slate-200);
 }
 
 /* Hover effect on dialogue turns */
 .dialogue-turn:hover {
-  background-color: #f1f5f9;
+  background-color: var(--slate-100);
 }
 
 /* Speaker color palette - 6 distinct colors for speaker names */
-.dialogue-speaker.speaker-color-0 { color: #4f46e5; } /* Indigo */
-.dialogue-speaker.speaker-color-1 { color: #db2777; } /* Pink */
+.dialogue-speaker.speaker-color-0 { color: light-dark(#4f46e5, #a39fe4); } /* Indigo */
+.dialogue-speaker.speaker-color-1 { color: light-dark(#db2777, #e3a1be); } /* Pink */
 .dialogue-speaker.speaker-color-2 { color: #0d9488; } /* Teal */
 .dialogue-speaker.speaker-color-3 { color: #d97706; } /* Amber */
-.dialogue-speaker.speaker-color-4 { color: #7c3aed; } /* Violet */
+.dialogue-speaker.speaker-color-4 { color: light-dark(#7c3aed, #b89ce8); } /* Violet */
 .dialogue-speaker.speaker-color-5 { color: #0891b2; } /* Cyan */
 
 /* Match left border color to speaker */
@@ -2195,29 +2628,159 @@ fieldset[schema] {
 .dialogue-turn[data-speaker-index="5"] { border-left-color: #06b6d4; }
 
 /* Dark mode support for dialogue */
-@media (prefers-color-scheme: dark) {
-  .dialogue-turn.turn-even,
-  .dialogue-turn-even {
+/* Dark theme (data-theme, set in <head>) */
+:root[data-theme="dark"] .dialogue-turn.turn-even,
+:root[data-theme="dark"] .dialogue-turn-even {
     background-color: rgba(255, 255, 255, 0.05);
   }
 
-  .dialogue-turn.turn-odd,
-  .dialogue-turn-odd {
+:root[data-theme="dark"] .dialogue-turn.turn-odd,
+:root[data-theme="dark"] .dialogue-turn-odd {
     background-color: transparent;
     border-left-color: #334155;
   }
 
-  .dialogue-turn:hover {
+:root[data-theme="dark"] .dialogue-turn:hover {
     background-color: rgba(255, 255, 255, 0.08);
   }
 
   /* Lighter speaker colors for dark mode */
-  .dialogue-speaker.speaker-color-0 { color: #818cf8; }
-  .dialogue-speaker.speaker-color-1 { color: #f472b6; }
-  .dialogue-speaker.speaker-color-2 { color: #2dd4bf; }
-  .dialogue-speaker.speaker-color-3 { color: #fbbf24; }
-  .dialogue-speaker.speaker-color-4 { color: #a78bfa; }
-  .dialogue-speaker.speaker-color-5 { color: #22d3ee; }
+:root[data-theme="dark"] .dialogue-speaker.speaker-color-0 { color: #818cf8; }
+
+:root[data-theme="dark"] .dialogue-speaker.speaker-color-1 { color: #f472b6; }
+
+:root[data-theme="dark"] .dialogue-speaker.speaker-color-2 { color: #2dd4bf; }
+
+:root[data-theme="dark"] .dialogue-speaker.speaker-color-3 { color: #fbbf24; }
+
+:root[data-theme="dark"] .dialogue-speaker.speaker-color-4 { color: #a78bfa; }
+
+:root[data-theme="dark"] .dialogue-speaker.speaker-color-5 { color: #22d3ee; }
+
+/* -----------------------------------------------------------------------
+   THREADED DIALOGUE: reply indentation, timestamps, per-turn metadata chips
+
+   Every decoration below is drawn with ::before/::after `content` or with
+   padding driven by a custom property. None of it introduces a text node.
+
+   That is a hard requirement, not a stylistic preference: span offsets are
+   measured against the dialogue container's textContent, which the server
+   reproduces in reconstruct_dialogue_dom_text() (displays/base.py) to slice
+   the annotated substring. Pseudo-element content is not part of textContent,
+   so this chrome is invisible to that calculation and every existing dialogue
+   span task keeps byte-identical offsets. Do not convert any of these to real
+   elements containing text.
+   ----------------------------------------------------------------------- */
+
+.dialogue-display-content.indent-replies .dialogue-turn {
+  --turn-depth: 0;
+  margin-left: calc(var(--turn-depth) * 22px);
+  position: relative;
+}
+
+/* Vertical thread guide showing which turns share a parent. */
+.dialogue-display-content.indent-replies.show-reply-lines
+  .dialogue-turn[data-depth]:not([data-depth="0"])::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border, var(--slate-200));
+  border-radius: 1px;
+}
+
+/* Depth badge, so nesting stays legible past the indent cap. */
+.dialogue-display-content.indent-replies
+  .dialogue-turn[data-depth]:not([data-depth="0"])::after {
+  content: "↳ depth " attr(data-depth);
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground, var(--slate-400));
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* The focus turn of an utterance-level item: everything else is context. */
+.dialogue-display-content .dialogue-turn[data-focus="true"] {
+  outline: 2px solid var(--primary, #6366f1);
+  outline-offset: 2px;
+}
+
+.dialogue-display-content .dialogue-turn:not([data-focus="true"]) {
+  /* Context turns read as secondary without becoming unreadable. */
+  opacity: 1;
+}
+
+.dialogue-display-content:has(.dialogue-turn[data-focus="true"])
+  .dialogue-turn:not([data-focus="true"]) {
+  opacity: 0.72;
+}
+
+/* Timestamp and per-turn metadata, rendered as a single chrome line. */
+.dialogue-display-content.show-timestamps .dialogue-turn[data-timestamp],
+.dialogue-display-content.show-meta-chips .dialogue-turn[data-meta-chips] {
+  padding-top: calc(var(--space-md, 12px) + 14px);
+}
+
+/* One absolutely-positioned chrome strip per turn carrying both signals.
+   The attributes live on .dialogue-text because attr() can only read the
+   attributes of the element its pseudo-element belongs to. */
+.dialogue-display-content.show-timestamps .dialogue-turn[data-timestamp] > .dialogue-text::before,
+.dialogue-display-content.show-meta-chips .dialogue-turn[data-meta-chips] > .dialogue-text::before {
+  position: absolute;
+  top: 6px;
+  left: var(--space-lg, 16px);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground, var(--slate-400));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 90px);
+  pointer-events: none;
+}
+
+.dialogue-display-content.show-timestamps
+  .dialogue-turn[data-timestamp] > .dialogue-text::before {
+  content: attr(data-turn-timestamp);
+}
+
+.dialogue-display-content.show-meta-chips
+  .dialogue-turn[data-meta-chips] > .dialogue-text::before {
+  content: attr(data-turn-meta-chips);
+}
+
+.dialogue-display-content.show-timestamps.show-meta-chips
+  .dialogue-turn[data-timestamp][data-meta-chips] > .dialogue-text::before {
+  content: attr(data-turn-timestamp) "   ·   " attr(data-turn-meta-chips);
+}
+
+/* Highlight the parent of the hovered turn (wired in dialogue-threading.js). */
+.dialogue-display-content .dialogue-turn.thread-parent-highlight {
+  box-shadow: inset 3px 0 0 var(--primary, #6366f1);
+  background-color: rgba(99, 102, 241, 0.06);
+}
+
+/* Dark theme (data-theme, set in <head>) */
+:root[data-theme="dark"] .dialogue-display-content.indent-replies.show-reply-lines
+    .dialogue-turn[data-depth]:not([data-depth="0"])::before {
+    background: #334155;
+  }
+
+:root[data-theme="dark"] .dialogue-display-content .dialogue-turn.thread-parent-highlight {
+    background-color: rgba(129, 140, 248, 0.12);
+  }
+
+@media (max-width: 640px) {
+  /* Deep threads must not push text off a narrow screen. */
+  .dialogue-display-content.indent-replies .dialogue-turn {
+    margin-left: calc(min(var(--turn-depth), 3) * 10px);
+  }
 }
 
 /* Pairwise comparison layout */
@@ -2230,8 +2793,8 @@ fieldset[schema] {
 .pairwise-cell {
   flex: 1;
   padding: 16px;
-  background-color: var(--card, #ffffff);
-  border: 1px solid var(--border, #e4e4e7);
+  background-color: var(--card, var(--surface));
+  border: 1px solid var(--border, var(--zinc-200));
   border-radius: 8px;
   box-shadow: var(--box-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1));
 }
@@ -2273,12 +2836,50 @@ fieldset[schema] {
   flex-direction: column;
 }
 
+/* Shown in place of the item when none of the configured display fields
+   exists in the data. Deliberately quiet rather than alarming: it is a
+   configuration problem, and the annotator's job is to stop and report it,
+   not to worry. */
+.instance-display-empty {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted-foreground);
+  border-radius: var(--radius);
+  background: var(--muted);
+  padding: var(--space-lg);
+}
+
+.instance-display-empty-title {
+  margin: 0 0 var(--space-xs);
+  font-weight: 600;
+}
+
+.instance-display-empty-body {
+  margin: 0;
+  /* Not --muted-foreground: on this block's own tinted background it measures
+     4.40:1, just under the 4.5:1 AA floor for 13px text, and this paragraph is
+     the whole instruction. */
+  color: var(--zinc-600);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* The field names are the actionable half of the message -- they are what the
+   reader copies into the bug report -- so they carry the block's strongest
+   contrast, not the code-pink default (4.09:1 here). */
+.instance-display-empty code {
+  word-break: break-word;
+  color: var(--foreground);
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+}
+
 /* Individual display field container */
 .display-field {
   margin-bottom: var(--space-md);
   padding: var(--space-lg);
-  background-color: var(--card, #ffffff);
-  border: 1px solid var(--border, #e4e4e7);
+  background-color: var(--card, var(--surface));
+  border: 1px solid var(--border, var(--zinc-200));
   border-radius: var(--radius);
 }
 
@@ -2306,7 +2907,7 @@ fieldset[schema] {
 .display-field-label {
   font-weight: 500;
   font-size: var(--text-sm);
-  color: var(--muted-foreground, #71717a);
+  color: var(--muted-foreground, var(--zinc-500));
   margin-bottom: 8px;
   text-transform: none;
   letter-spacing: normal;
@@ -2331,7 +2932,7 @@ fieldset[schema] {
 }
 
 .display-type-text .text-placeholder {
-  color: var(--muted-foreground, #71717a);
+  color: var(--muted-foreground, var(--zinc-500));
   font-style: italic;
 }
 
@@ -2350,7 +2951,7 @@ fieldset[schema] {
   content: " (click label, then highlight text)";
   font-size: var(--text-xs);
   font-weight: normal;
-  color: var(--muted-foreground, #71717a);
+  color: var(--muted-foreground, var(--zinc-500));
   font-style: italic;
 }
 
@@ -2388,6 +2989,46 @@ fieldset[schema] {
   overflow: auto;
 }
 
+/* "Show all" lifts the height cap (instance-display.js initResizableExpand).
+   !important because a config max_height arrives as an inline style. */
+.display-field-resizable.is-expanded {
+  max-height: none !important;
+}
+
+.display-field-expand {
+  display: block;
+  margin: calc(-1 * var(--space-sm)) 0 var(--space-md) auto;
+  min-height: 32px;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-dense);
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.display-field-expand[hidden] {
+  display: none;
+}
+
+.display-field-expand:hover {
+  background: var(--secondary);
+}
+
+.display-field-expand:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .display-field-expand {
+    min-height: 44px;
+  }
+}
+
 /* Resize handle indicator */
 .display-field-resizable::after {
   content: "";
@@ -2396,7 +3037,7 @@ fieldset[schema] {
   right: 2px;
   width: 12px;
   height: 12px;
-  background: linear-gradient(135deg, transparent 50%, var(--border, #e4e4e7) 50%);
+  background: linear-gradient(135deg, transparent 50%, var(--border, var(--zinc-200)) 50%);
   pointer-events: none;
   opacity: 0.7;
   border-radius: 0 0 4px 0;
@@ -2434,7 +3075,7 @@ fieldset[schema] {
   font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
+  color: var(--gray-500);
 }
 
 .collapsible-text-container .collapsible-toggle {
@@ -2485,7 +3126,7 @@ fieldset[schema] {
   right: 8px;
   display: flex;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.9);
+  background: light-dark(rgba(255, 255, 255, 0.9), rgba(26, 26, 26, 0.9));
   padding: 4px;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -2513,21 +3154,21 @@ fieldset[schema] {
 .display-type-image .image-error {
   padding: 32px;
   text-align: center;
-  color: var(--muted-foreground, #71717a);
-  background: var(--muted, #f4f4f5);
+  color: var(--muted-foreground, var(--zinc-500));
+  background: var(--muted, var(--zinc-100));
   border-radius: 4px;
 }
 
 .display-type-image .image-error {
   color: var(--destructive, #ef4444);
-  background: #fef2f2;
+  background: light-dark(#fef2f2, #2c1010);
 }
 
 /* Display error message */
 .display-error {
   padding: 16px;
   color: var(--destructive, #ef4444);
-  background: #fef2f2;
+  background: light-dark(#fef2f2, #2c1010);
   border: 1px solid var(--destructive, #ef4444);
   border-radius: 4px;
 }
@@ -2552,14 +3193,15 @@ fieldset[schema] {
 .display-type-video .video-error {
   padding: 32px;
   text-align: center;
-  color: var(--muted-foreground, #71717a);
-  background: var(--muted, #f4f4f5);
+  color: var(--muted-foreground, var(--zinc-500));
+  background: var(--muted, var(--zinc-100));
   border-radius: 4px;
 }
 
 .display-type-video .video-error {
-  color: var(--destructive, #ef4444);
-  background: #fef2f2;
+  /* --destructive is a fill (3.8:1 as text); this is a sentence to read. */
+  color: var(--destructive-text);
+  background: var(--destructive-tint);
 }
 
 /* Audio display styles */
@@ -2573,7 +3215,7 @@ fieldset[schema] {
 
 .display-type-audio .audio-waveform {
   margin-bottom: 8px;
-  background: var(--muted, #f4f4f5);
+  background: var(--muted, var(--zinc-100));
   border-radius: 4px;
   padding: 8px;
 }
@@ -2587,14 +3229,14 @@ fieldset[schema] {
 .display-type-audio .audio-error {
   padding: 16px;
   text-align: center;
-  color: var(--muted-foreground, #71717a);
-  background: var(--muted, #f4f4f5);
+  color: var(--muted-foreground, var(--zinc-500));
+  background: var(--muted, var(--zinc-100));
   border-radius: 4px;
 }
 
 .display-type-audio .audio-error {
   color: var(--destructive, #ef4444);
-  background: #fef2f2;
+  background: light-dark(#fef2f2, #2c1010);
 }
 
 /* Dialogue display styles */
@@ -2607,16 +3249,16 @@ fieldset[schema] {
 .display-type-dialogue .dialogue-turn {
   padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius);
-  background: var(--card, #ffffff);
-  border: 1px solid var(--border, #e4e4e7);
+  background: var(--card, var(--surface));
+  border: 1px solid var(--border, var(--zinc-200));
 }
 
 .display-type-dialogue .dialogue-turn.turn-even {
-  background: #f8f9fa;
+  background: light-dark(#f8f9fa, #1a1d20);
 }
 
 .display-type-dialogue .dialogue-turn.turn-odd {
-  background: var(--card, #ffffff);
+  background: var(--card, var(--surface));
 }
 
 /* Speaker-based colors */
@@ -2642,17 +3284,17 @@ fieldset[schema] {
 
 .display-type-dialogue .dialogue-speaker {
   font-weight: 600;
-  color: var(--foreground, #09090b);
+  color: var(--foreground, light-dark(#09090b, #dfdfe4));
   margin-right: 8px;
 }
 
 .display-type-dialogue .dialogue-text {
-  color: var(--text-color, #374151);
+  color: var(--text-color, var(--gray-700));
   line-height: 1.6;
 }
 
 .display-type-dialogue .turn-number {
-  color: var(--muted-foreground, #71717a);
+  color: var(--muted-foreground, var(--zinc-500));
   font-size: var(--text-xs);
   margin-right: 8px;
 }
@@ -2660,8 +3302,8 @@ fieldset[schema] {
 .display-type-dialogue .dialogue-placeholder {
   padding: 16px;
   text-align: center;
-  color: var(--muted-foreground, #71717a);
-  background: var(--muted, #f4f4f5);
+  color: var(--muted-foreground, var(--zinc-500));
+  background: var(--muted, var(--zinc-100));
   border-radius: 4px;
   font-style: italic;
 }
@@ -2673,17 +3315,23 @@ fieldset[schema] {
 .per-turn-rating {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
 }
 
 .ptr-values {
   display: flex;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
+/* Per-turn ratings are a radio group (role=radio on each value; see
+   dialogue_display.py). The old #e2e8f0 ring and #94a3b8 numerals measured
+   1.2:1 and 2.56:1 on white, so an unrated turn was close to invisible. The
+   numerals and end labels use --text-color, not --muted-foreground: muted is
+   4.8:1 on white but 4.4:1 on the #f1f5f9 alternating turn shading. */
 .ptr-value {
   display: inline-flex;
   align-items: center;
@@ -2691,30 +3339,44 @@ fieldset[schema] {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid #e2e8f0;
-  background: white;
-  font-size: 12px;
+  border: 2px solid var(--muted-foreground);
+  background: var(--card);
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--text-color);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   user-select: none;
 }
 
 .ptr-value:hover {
-  border-color: #8b5cf6;
-  color: #8b5cf6;
+  border-color: var(--primary);
+  color: var(--foreground);
 }
 
 .ptr-value.ptr-selected {
-  background: #8b5cf6;
-  border-color: #7c3aed;
-  color: white;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.ptr-value:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Touch: 44px targets on the annotation surface. */
+@media (pointer: coarse) {
+  .ptr-value {
+    width: 44px;
+    height: 44px;
+    font-size: var(--text-sm);
+  }
 }
 
 .ptr-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: var(--text-xs);
+  color: var(--text-color);
   white-space: nowrap;
 }
 
@@ -2722,10 +3384,10 @@ fieldset[schema] {
 .per-turn-rating-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
 }
 
 .per-turn-rating-group .per-turn-rating {
@@ -2735,54 +3397,43 @@ fieldset[schema] {
 }
 
 .ptr-schema-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
-  color: #64748b;
+  color: var(--foreground);
   white-space: nowrap;
   min-width: 80px;
 }
 
-/* Dark mode per-turn ratings */
-@media (prefers-color-scheme: dark) {
-  .per-turn-rating {
-    border-top-color: rgba(255, 255, 255, 0.1);
-  }
+/* No dark-mode block: the product is light-only (.impeccable.md), so a
+   dark-scheme OS used to get slate circles on the white card. */
 
-  .per-turn-rating-group {
-    border-top-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .ptr-schema-label {
-    color: #94a3b8;
-  }
-
-  .ptr-value {
-    border-color: #475569;
-    background: #1e293b;
-    color: #64748b;
-  }
-
-  .ptr-value:hover {
-    border-color: #a78bfa;
-    color: #a78bfa;
-  }
-
-  .ptr-value.ptr-selected {
-    background: #7c3aed;
-    border-color: #6d28d9;
-    color: white;
-  }
-
-  .ptr-label {
-    color: #64748b;
-  }
+/* Screen-reader-only text.
+ *
+ * Anything drawn on a <canvas> is pixels, so a canvas message needs a DOM
+ * twin for assistive tech. The twin must not also appear on screen, or the
+ * message reads twice. grounding-eval.css, region-caption.css and
+ * rollout-eval.css each carry a scoped copy of this rule; new call sites use
+ * this one. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Pairwise display styles */
 .display-type-pairwise .pairwise-display-content {
+  /* PairwiseDisplay subtracts each cell's share of this gap from its width, so
+     the two must agree. Change it here, not in the inline style. */
+  --pairwise-gap: 16px;
   display: flex;
   flex-direction: row;
-  gap: 16px;
+  gap: var(--pairwise-gap);
   flex-wrap: wrap;
 }
 
@@ -2802,9 +3453,13 @@ fieldset[schema] {
 }
 
 .display-type-pairwise .pairwise-cell {
+  /* Without this a long unbroken string sets the cell's floor above its flex
+     basis and pushes its neighbour onto the next row. */
+  min-width: 0;
+  box-sizing: border-box;
   padding: 16px;
-  background-color: var(--card, #ffffff);
-  border: 1px solid var(--border, #e4e4e7);
+  background-color: var(--card, var(--surface));
+  border: 1px solid var(--border, var(--zinc-200));
   border-radius: 8px;
   box-shadow: var(--box-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1));
 }
@@ -2828,7 +3483,7 @@ fieldset[schema] {
 .display-type-pairwise .pairwise-label {
   font-weight: 600;
   font-size: var(--text-base);
-  color: var(--muted-foreground, #71717a);
+  color: var(--muted-foreground, var(--zinc-500));
   margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -2839,7 +3494,7 @@ fieldset[schema] {
 }
 
 .display-type-pairwise .pairwise-empty {
-  color: var(--muted-foreground, #71717a);
+  color: var(--muted-foreground, var(--zinc-500));
   font-style: italic;
 }
 
@@ -2851,8 +3506,8 @@ fieldset[schema] {
 .display-type-pairwise .pairwise-placeholder {
   padding: 16px;
   text-align: center;
-  color: var(--muted-foreground, #71717a);
-  background: var(--muted, #f4f4f5);
+  color: var(--muted-foreground, var(--zinc-500));
+  background: var(--muted, var(--zinc-100));
   border-radius: 4px;
   font-style: italic;
 }
@@ -3008,10 +3663,11 @@ fieldset[schema] {
   background-color: var(--group-bg) !important;
 }
 
-/* Main content display area (text/image/video to annotate) always white */
+/* Main content display area (text/image/video to annotate): the card
+   surface, white in the light theme */
 #task_layout,
 #task_layout.shadcn-card {
-  background-color: #ffffff !important;
+  background-color: var(--card) !important;
 }
 
 /* Instance text container — the primary content, prominent and spacious */
@@ -3213,6 +3869,16 @@ body.has-pairwise-display #instance-text {
   vertical-align: middle;
 }
 
+/* Tiles and the tie/neither buttons share one box: same height, border and
+   padding. The tie button was 2px taller with a thinner border and sat 4px
+   higher than the A/B tiles beside it. */
+.pairwise-tile,
+.pairwise-tie-btn,
+.pairwise-neither-btn {
+  box-sizing: border-box;
+  min-height: 48px;
+}
+
 .pairwise-tile {
   flex: 0 0 auto;
   min-width: 80px;
@@ -3235,27 +3901,40 @@ body.has-pairwise-display #instance-text {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.pairwise-tile:focus {
-  outline: none;
+/* The tile is a div with tabindex, so this ring is the only thing telling a
+   keyboard user where they are. The 20%-alpha halo it used to rely on is
+   1.32:1 against the card -- WCAG 1.4.11 asks for 3:1 -- so the indicator is
+   a solid outline at full strength (5.39:1) and the halo stays as decoration
+   behind it. */
+.pairwise-tile:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
 }
 
+.pairwise-tile:focus {
+  border-color: var(--primary);
+}
+
 .pairwise-tile.selected {
   border-color: var(--primary);
-  background-color: rgba(110, 86, 207, 0.05);
+  background-color: var(--primary-tint);
   box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.15);
 }
 
+/* The check sits on the tile's corner, over the border, not inside it: at
+   top/right 8px it landed on the [1]/[2] hotkey chip and covered it. */
 .pairwise-tile.selected::after {
   content: '\2713';
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
+  top: -10px;
+  right: -10px;
+  width: 22px;
+  height: 22px;
+  box-shadow: 0 0 0 2px var(--card);
   background-color: var(--primary);
-  color: white;
+  color: var(--primary-foreground);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -3282,14 +3961,19 @@ body.has-pairwise-display #instance-text {
 .pairwise-extra-options {
   display: inline-flex;
   gap: 12px;
-  margin-left: 12px;
+  /* Same block margin as .pairwise-selection-container, so the two inline
+     groups share a baseline box. */
+  margin: 8px 0 8px 12px;
   vertical-align: middle;
 }
 
 .pairwise-tie-btn,
 .pairwise-neither-btn {
-  padding: 10px 24px;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
   cursor: pointer;
@@ -3314,7 +3998,7 @@ body.has-pairwise-display #instance-text {
 .pairwise-tie-btn.selected,
 .pairwise-neither-btn.selected {
   background: var(--primary);
-  color: white;
+  color: var(--primary-foreground);
   border-color: var(--primary);
 }
 
@@ -3327,11 +4011,15 @@ body.has-pairwise-display #instance-text {
   max-width: 600px;
 }
 
+/* These three labels are the only thing saying which end of the slider means
+   what, so they are UI labels rather than help text. At --text-sm they render
+   at 13px, which is the size this file reserves for captions and fine print. */
 .pairwise-scale-labels {
   display: flex;
   justify-content: space-between;
+  gap: 0.75rem;
   width: 100%;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--muted-foreground);
   margin-bottom: 12px;
@@ -3353,7 +4041,7 @@ body.has-pairwise-display #instance-text {
   width: 100%;
   height: 8px;
   border-radius: 4px;
-  background: #c4c4c8;  /* Darker gray for visible track */
+  background: light-dark(#c4c4c8, #323234);  /* Darker gray for visible track */
   outline: none;
   -webkit-appearance: none;
   appearance: none;
@@ -3368,7 +4056,7 @@ body.has-pairwise-display #instance-text {
   border-radius: 50%;
   background: var(--primary);
   cursor: pointer;
-  border: 2px solid white;
+  border: 2px solid var(--surface);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: transform 0.1s ease;
 }
@@ -3383,21 +4071,21 @@ body.has-pairwise-display #instance-text {
   border-radius: 50%;
   background: var(--primary);
   cursor: pointer;
-  border: 2px solid white;
+  border: 2px solid var(--surface);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .pairwise-scale-slider::-webkit-slider-runnable-track {
   width: 100%;
   height: 8px;
-  background: #c4c4c8;
+  background: light-dark(#c4c4c8, #323234);
   border-radius: 4px;
 }
 
 .pairwise-scale-slider::-moz-range-track {
   width: 100%;
   height: 8px;
-  background: #c4c4c8;
+  background: light-dark(#c4c4c8, #323234);
   border-radius: 4px;
 }
 
@@ -3529,7 +4217,7 @@ body.has-pairwise-display #instance-text {
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: #e9ecef;
+  background: light-dark(#e9ecef, #222528);
   border-radius: 3px;
   outline: none;
 }
@@ -3542,7 +4230,7 @@ body.has-pairwise-display #instance-text {
   border-radius: 50%;
   background: #0d6efd;
   cursor: pointer;
-  border: 2px solid #fff;
+  border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -3552,13 +4240,13 @@ body.has-pairwise-display #instance-text {
   border-radius: 50%;
   background: #0d6efd;
   cursor: pointer;
-  border: 2px solid #fff;
+  border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .brush-size-group .brush-size-value {
   font-size: 13px;
-  color: #495057;
+  color: light-dark(#495057, #c2c6c9);
   min-width: 24px;
   text-align: right;
 }
@@ -3623,7 +4311,7 @@ body.has-pairwise-display #instance-text {
 }
 
 .bws-worst-label {
-  color: #dc2626;
+  color: light-dark(#dc2626, #e3a1a1);
 }
 
 .bws-selection-container {
@@ -3697,7 +4385,7 @@ body.has-pairwise-display #instance-text {
 }
 
 .bws-validation-error {
-  color: #dc2626;
+  color: light-dark(#dc2626, #e3a1a1);
   font-size: var(--text-base);
   margin-top: 8px;
   padding: 6px 12px;
@@ -3717,6 +4405,9 @@ body > .container-fluid {
   margin: 0 auto;
   padding-left: var(--space-lg);
   padding-right: var(--space-lg);
+  /* The card used to start flush under the sticky bar, its top border hidden
+     behind it. */
+  padding-top: var(--space-lg);
 }
 
 /* ===== NAVBAR ===== */
@@ -3725,7 +4416,7 @@ body > .container-fluid {
   position: sticky;
   top: 0;
   z-index: 1030;
-  background-color: var(--primary-color);
+  background-color: var(--navbar-bg);
   padding: 0 var(--space-lg);
   height: 56px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.12);
@@ -3739,8 +4430,17 @@ body > .container-fluid {
   gap: 1rem;
 }
 
+/* The brand used to be `flex-shrink: 0`, so a long task name held its full
+   width and pushed the page sideways on a phone (465px of header on a 390px
+   iPhone) and Logout off the edge. It now yields after `.navbar-center`, which
+   has a zero flex basis and so empties first: the name truncates, and the
+   full name is in its title attribute. `.navbar-end` -- Logout -- never
+   shrinks. See tests/selenium/test_mobile_layouts.py. */
 .potato-navbar .navbar-brand {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .potato-navbar .navbar-brand .task-name {
@@ -3748,6 +4448,14 @@ body > .container-fluid {
   color: var(--light-color);
   font-size: var(--text-xl);
   letter-spacing: -0.015em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.potato-navbar .navbar-end {
+  flex-shrink: 0;
 }
 
 .potato-navbar .navbar-brand .header-logo {
@@ -3763,12 +4471,25 @@ body > .container-fluid {
   justify-content: center;
   flex: 1;
   gap: 0.75rem;
+  /* A flex item's default `min-width: auto` refuses to shrink below its own
+     content, so when the row ran out of room this section held its natural
+     width and pushed `.navbar-end` -- Logout -- off the right edge instead of
+     giving way. Reachability of Logout beats seeing every counter at once, so
+     this section is the one that yields, and it scrolls rather than clipping
+     so nothing is actually lost. Engages only when the row does not fit. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.potato-navbar .navbar-center::-webkit-scrollbar {
+  display: none;
 }
 
 .potato-navbar .navbar-divider {
   width: 1px;
   height: 18px;
-  background: rgba(255,255,255,0.2);
+  background: light-dark(rgba(255,255,255,0.2), rgba(26, 26, 26, 0.2));
   flex-shrink: 0;
 }
 
@@ -3780,7 +4501,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .progress-section .progress-label {
-  opacity: 0.65;
+  opacity: 0.9;
   margin-right: 0.25rem;
 }
 
@@ -3792,7 +4513,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .instance-number-section .instance-number-label {
-  opacity: 0.65;
+  opacity: 0.9;
   margin-right: 0.25rem;
 }
 
@@ -3810,31 +4531,57 @@ body > .container-fluid {
 }
 
 .potato-navbar .ibws-round-banner .ibws-round-detail {
-  opacity: 0.65;
+  opacity: 0.9;
 }
 
 .potato-navbar .nav-controls {
   display: flex;
+  align-items: center;
   gap: 3px;
 }
 
+/* Caption between the two jump-to-unlabeled buttons. Without it the pair read
+   as plain previous/next, which they are not. Hidden where the centre row is
+   already tight; the buttons keep their aria-label either way. */
+.potato-navbar .nav-controls-label {
+  display: none;
+  color: var(--light-color);
+  font-size: var(--text-xs);
+  opacity: 0.9;
+  padding: 0 var(--space-xs);
+  white-space: nowrap;
+}
+
+@media (min-width: 1200px) {
+  .potato-navbar .nav-controls-label {
+    display: inline;
+  }
+}
+
 .potato-navbar .nav-control-btn {
-  height: 30px;
-  width: 30px;
+  height: 38px;
+  width: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius);
-  background: rgba(255,255,255,0.1);
+  background: light-dark(rgba(255,255,255,0.1), rgba(26, 26, 26, 0.1));
   color: var(--light-color);
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid light-dark(rgba(255,255,255,0.12), rgba(76, 76, 76, 0.12));
   cursor: pointer;
   transition: background 0.15s ease;
   font-size: var(--text-xs);
 }
 
 .potato-navbar .nav-control-btn:hover {
-  background: rgba(255,255,255,0.22);
+  background: light-dark(rgba(255,255,255,0.22), rgba(26, 26, 26, 0.22));
+}
+
+.potato-navbar .nav-control-btn:focus-visible,
+.potato-navbar .goto-section input:focus-visible,
+.potato-navbar .goto-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px light-dark(rgba(255,255,255,0.55), rgba(76, 76, 76, 0.55));
 }
 
 .potato-navbar .goto-section {
@@ -3845,10 +4592,10 @@ body > .container-fluid {
 
 .potato-navbar .goto-section input {
   width: 48px;
-  height: 30px;
+  height: 38px;
   border-radius: var(--radius);
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.08);
+  border: 1px solid light-dark(rgba(255,255,255,0.18), rgba(76, 76, 76, 0.18));
+  background: light-dark(rgba(255,255,255,0.08), rgba(26, 26, 26, 0.08));
   color: var(--light-color);
   font-size: var(--text-sm);
   font-family: var(--font-sans);
@@ -3857,23 +4604,24 @@ body > .container-fluid {
 }
 
 .potato-navbar .goto-section input::placeholder {
-  color: rgba(255,255,255,0.35);
+  /* 0.35 put the "#" hint at about 1.5:1 on the bar. */
+  color: rgba(255,255,255,0.75);
 }
 
 .potato-navbar .goto-section input:focus {
   outline: none;
-  border-color: rgba(255,255,255,0.45);
-  background: rgba(255,255,255,0.14);
+  border-color: light-dark(rgba(255,255,255,0.45), rgba(76, 76, 76, 0.45));
+  background: light-dark(rgba(255,255,255,0.14), rgba(26, 26, 26, 0.14));
 }
 
 .potato-navbar .goto-btn {
-  height: 30px;
-  padding: 0 10px;
+  height: 38px;
+  padding: 0 12px;
   border-radius: var(--radius);
-  background: rgba(255,255,255,0.88);
-  color: var(--primary-color);
+  background: light-dark(rgba(255,255,255,0.88), rgba(26, 26, 26, 0.88));
+  color: var(--navbar-bg);
   border: none;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
@@ -3881,7 +4629,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .goto-btn:hover {
-  background: white;
+  background: var(--surface);
 }
 
 .potato-navbar .navbar-end {
@@ -3895,12 +4643,31 @@ body > .container-fluid {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(255,255,255,0.1);
+  background: light-dark(rgba(255,255,255,0.1), rgba(26, 26, 26, 0.1));
   padding: 0.3rem 0.6rem 0.3rem 0.75rem;
   border-radius: 999px;
   color: var(--light-color);
   font-size: var(--text-sm);
 }
+
+/* "Compact view" link to the card-stack interface (/pocket); hidden until
+   device-routing.js confirms the task is pocket-capable. */
+.potato-navbar .compact-view-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: light-dark(rgba(255,255,255,0.1), rgba(26, 26, 26, 0.1));
+  color: var(--light-color);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+.potato-navbar .compact-view-link:hover {
+  background: light-dark(rgba(255,255,255,0.22), rgba(26, 26, 26, 0.22));
+  color: var(--light-color);
+}
+.potato-navbar .compact-view-link[hidden] { display: none; }
 
 .potato-navbar .user-pill .username {
   font-weight: 500;
@@ -3911,36 +4678,42 @@ body > .container-fluid {
   align-items: center;
   padding: 0.2rem 0.55rem;
   border-radius: 5px;
-  background: rgba(255,255,255,0.88);
-  color: var(--primary-color);
-  font-size: 0.7rem;
+  background: light-dark(rgba(255,255,255,0.88), rgba(26, 26, 26, 0.88));
+  color: var(--navbar-bg);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-decoration: none;
   transition: background 0.15s ease;
 }
 
 .potato-navbar .logout-btn:hover {
-  background: white;
-  color: var(--primary-color);
+  background: var(--surface);
+  color: var(--navbar-bg);
 }
 
-.potato-navbar .adjudicate-btn {
+/* The Codebook link (annotation_codebook_url) is a sibling of these buttons in
+   .navbar-end and had no rule of its own, so it fell back to the default anchor
+   colour: link-blue on the purple navbar, effectively unreadable. It is the same
+   kind of control, so it gets the same treatment. */
+.potato-navbar .adjudicate-btn,
+.potato-navbar .codebook-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.2rem 0.55rem;
   border-radius: 5px;
-  background: rgba(255,255,255,0.15);
+  background: light-dark(rgba(255,255,255,0.15), rgba(26, 26, 26, 0.15));
   color: var(--light-color);
   font-size: var(--text-xs);
   font-weight: 500;
   text-decoration: none;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid light-dark(rgba(255,255,255,0.15), rgba(76, 76, 76, 0.15));
   transition: background 0.15s ease;
 }
 
-.potato-navbar .adjudicate-btn:hover {
-  background: rgba(255,255,255,0.25);
+.potato-navbar .adjudicate-btn:hover,
+.potato-navbar .codebook-btn:hover {
+  background: light-dark(rgba(255,255,255,0.25), rgba(26, 26, 26, 0.25));
   color: white;
 }
 
@@ -4039,6 +4812,10 @@ body > .container-fluid {
   color: var(--primary);
   text-decoration: none;
   transition: color 0.15s ease;
+  /* A 24px line box: the links were 16px tall, under the WCAG 2.2 minimum. */
+  display: inline-block;
+  min-height: 24px;
+  line-height: 24px;
 }
 
 .potato-footer a:hover {
@@ -4096,6 +4873,17 @@ body > .container-fluid {
 
 .potato-page-icon-success i {
   color: var(--success-color);
+}
+
+/* Neither a success nor a failure: the study has no work for this person.
+   Used by no_work_available.html, where a green tick would have read as
+   "you finished" -- which is what the completion page wrongly said. */
+.potato-page-icon-info {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.potato-page-icon-info i {
+  color: var(--primary, light-dark(#6e56cf, #b2a8db));
 }
 
 .potato-page-icon-error {
@@ -4162,7 +4950,7 @@ body > .container-fluid {
   padding: 0.6rem 1rem;
   border-radius: var(--radius);
   background: var(--primary);
-  color: white;
+  color: var(--primary-foreground);
   font-weight: 600;
   font-size: var(--text-base);
   border: none;
@@ -4226,7 +5014,7 @@ body > .container-fluid {
 .potato-alert-success {
   background: rgba(16, 185, 129, 0.08);
   border: 1px solid rgba(16, 185, 129, 0.2);
-  color: #065f46;
+  color: light-dark(#065f46, #b3f0df);
 }
 
 .potato-alert-info {
@@ -4256,11 +5044,17 @@ body > .container-fluid {
   align-items: flex-start;
 }
 
-/* Fit-content schemas flow side-by-side; full-width schemas break the row */
+/* Compact schemas flow side-by-side; full-width schemas break the row.
+   They used to be width: fit-content, so every card was as wide as its
+   longest label and the rows came out ragged -- on the agent-trace example
+   two cards stopped 130px short of the edge, then the next row was a single
+   card of a third width. A shared basis with grow lets each row fill the
+   card: two compact schemas split it, an odd one out takes the whole row. */
 #annotation-forms .shadcn-radio-container,
 #annotation-forms .shadcn-multiselect-container,
 #annotation-forms .shadcn-likert-container {
-  width: fit-content;
+  flex: 1 1 17.5rem;
+  width: auto;
   max-width: 100%;
   align-items: flex-start;
 }
@@ -4301,6 +5095,22 @@ body > .container-fluid {
 }
 
 /* ===== ANNOTATION INSTRUCTIONS BANNER ===== */
+
+/* Labeling engine note above the item. Quiet by design: the item stays the
+   loudest thing on the page. Foreground on muted keeps AA contrast. */
+.engine-request-note {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--text-dense);
+  color: var(--foreground);
+  background: var(--muted);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+}
+.engine-request-note[data-purpose="verify"] { border-left-color: var(--primary); }
+/* A blind request has no AI help: the routes refuse it (403), so the
+   buttons that would ask are hidden rather than left to fail. */
+[data-engine-visibility="blind"] .ai-help { display: none !important; }
 
 .annotation-instructions-banner {
   margin-bottom: var(--space-lg);
@@ -4874,7 +5684,7 @@ body > .container-fluid {
   height: 20px;
   border-radius: 50%;
   background: var(--primary);
-  border: 2px solid #fff;
+  border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   top: 50%;
   transform: translate(-50%, -50%);
@@ -4900,6 +5710,31 @@ body > .container-fluid {
 }
 .range-slider-val-sep {
   color: var(--muted-foreground);
+}
+/* Before the annotator moves a thumb there is no range: no band, no numbers,
+   and a label that says so. The widget used to open with a band drawn between
+   the 25th and 75th percentile while the stored value was empty. */
+.range-slider-unset-hint {
+  display: none;
+  font-weight: 400;
+  /* No `color` here on purpose. `.annotation-form fieldset span` is more
+     specific and would win anyway, and it inherits --text-color at 9.6:1 --
+     over the 7:1 this project asks of annotation-facing text. --muted-foreground
+     would be 4.5:1, which passes AA and fails that bar. */
+}
+.range-slider-values.range-slider-unset .range-slider-unset-hint {
+  display: inline;
+}
+.range-slider-values.range-slider-unset .range-slider-val-low,
+.range-slider-values.range-slider-unset .range-slider-val-sep,
+.range-slider-values.range-slider-unset .range-slider-val-high {
+  display: none;
+}
+.range-slider-track.range-slider-unset .range-slider-fill {
+  display: none;
+}
+.range-slider-track.range-slider-unset .range-slider-thumb {
+  background: var(--muted-foreground);
 }
 
 /* ==========================================
@@ -4941,7 +5776,7 @@ body > .container-fluid {
   align-items: center;
   padding: 0.2rem 0.6rem;
   background: var(--primary);
-  color: #ffffff !important;
+  color: var(--primary-foreground) !important;
   border-radius: 999px;
   font-size: var(--text-xs);
   font-weight: 500;
@@ -4968,6 +5803,14 @@ body > .container-fluid {
 }
 .hier-toggle {
   cursor: pointer;
+  /* It is a <button> so it is focusable and announced; strip the UA chrome that
+     comes with that, and keep the focus ring the UA reset would take away. */
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
   width: 1.125rem;
   height: 1.125rem;
   display: inline-flex;
@@ -4981,6 +5824,11 @@ body > .container-fluid {
 }
 .hier-toggle:hover {
   color: var(--foreground);
+}
+.hier-toggle:focus-visible {
+  outline: 2px solid var(--ring, var(--primary, #6366f1));
+  outline-offset: 1px;
+  border-radius: 2px;
 }
 .hier-toggle-placeholder {
   width: 1.125rem;
@@ -5001,6 +5849,24 @@ body > .container-fluid {
 }
 .hier-label-text {
   user-select: none;
+}
+
+/* Tooltip marker for taxonomy presets (e.g. MAST failure modes). */
+.hier-info {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: var(--muted-foreground, var(--zinc-500));
+  font-size: 0.85em;
+  cursor: help;
+  /* Full token color (~4.6:1) meets WCAG 1.4.11 non-text contrast; no opacity dimming. */
+}
+.hier-info:hover {
+  color: var(--foreground, var(--zinc-900));
+}
+.hier-info:focus-visible {
+  outline: 2px solid var(--ring, #6e56cf);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 /* ============================================================
@@ -5108,7 +5974,7 @@ body > .container-fluid {
   height: 16px;
   border-radius: 50%;
   background: var(--primary);
-  border: 2px solid #fff;
+  border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   margin-top: -7px;
   cursor: grab;
@@ -5123,7 +5989,7 @@ body > .container-fluid {
   height: 16px;
   border-radius: 50%;
   background: var(--primary);
-  border: 2px solid #fff;
+  border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   cursor: grab;
 }
@@ -5206,7 +6072,7 @@ body > .container-fluid {
 }
 .eqa-unanswerable-active {
   background: var(--primary) !important;
-  color: #fff !important;
+  color: var(--primary-foreground) !important;
   border-color: var(--primary) !important;
 }
 
@@ -5375,6 +6241,301 @@ body > .container-fluid {
 .text-edit-reset-btn:hover {
   background: var(--muted);
 }
+
+/* ============================================================
+   Trajectory Correction / Editing (trajectory_edit)
+   ============================================================ */
+.trajectory-edit-container {
+  padding: 1rem;
+}
+.trajedit-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.trajedit-summary {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--muted);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.trajedit-summary strong {
+  color: var(--foreground);
+}
+.trajedit-step-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.75rem;
+  background: var(--background);
+}
+.trajedit-final-card {
+  border-left: 3px solid hsl(142 50% 45%);
+}
+.trajedit-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.trajedit-step-number {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.trajedit-final-label {
+  color: hsl(142 50% 35%);
+}
+.trajedit-edited-flag {
+  font-size: var(--text-sm);
+  color: hsl(28 90% 32%);
+  font-weight: 600;
+}
+/* Non-color cue (in addition to the flag) that a field/answer was edited. */
+.trajedit-field-block.trajedit-edited {
+  border-left: 3px solid hsl(28 90% 45%);
+  padding-left: 0.6rem;
+  margin-left: -0.6rem;
+}
+.trajedit-step-card.trajedit-edited.trajedit-final-card {
+  border-left-color: hsl(28 90% 45%);
+}
+.trajedit-step-thought {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-bottom: 0.5rem;
+}
+.trajedit-thought-label {
+  font-weight: 600;
+}
+.trajedit-field-block {
+  margin-top: 0.6rem;
+}
+.trajedit-field-label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trajedit-original {
+  font-size: var(--text-sm);
+  background: var(--muted);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.4rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.trajedit-original-label {
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.trajedit-editor-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 0.25rem;
+}
+.trajedit-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  resize: vertical;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.trajedit-textarea:focus {
+  outline: 2px solid var(--ring, hsl(215 90% 60%));
+  outline-offset: 1px;
+  border-color: transparent;
+}
+/* Tool/action fields are code-like — monospace for precise editing & diffing. */
+.trajedit-mono,
+.trajedit-mono .trajedit-original-text {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm);
+}
+.trajedit-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-top: 0.35rem;
+}
+.trajedit-diff {
+  margin-top: 0.4rem;
+}
+/* Only show the diff once a field actually changed (avoids an empty
+   "Changes:" box on untouched fields). .trajedit-edited is toggled on the
+   field block / final card by onEdit. */
+.trajedit-diff {
+  display: none;
+}
+.trajedit-edited .trajedit-diff {
+  display: block;
+}
+.trajedit-diff-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 0.2rem;
+}
+.trajedit-diff-content {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  min-height: 1.75rem;
+}
+.trajedit-diff-same { color: inherit; }
+.trajedit-diff-del {
+  background: hsl(0 100% 95%);
+  color: hsl(0 84.2% 40%);
+  text-decoration: line-through;
+}
+.trajedit-diff-ins {
+  background: hsl(120 100% 95%);
+  color: hsl(120 50% 30%);
+}
+.trajedit-reason-block {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trajedit-reason-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+/* The block only renders under require_reason_on_edit, and that key now
+   actually blocks Next, so the label has to say so before the annotator
+   reaches the button. */
+.trajedit-reason-req {
+  font-weight: 500;
+  color: var(--destructive-text);
+}
+.trajedit-reason {
+  flex: 1 1 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+  font-size: var(--text-sm);
+}
+.trajedit-reset-btn {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.trajedit-reset-btn:hover {
+  background: var(--muted);
+}
+.trajedit-no-steps {
+  padding: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* ============================================================
+   LLM-Judge inline suggestion (judge ↔ human alignment)
+   ============================================================ */
+.judge-suggestion {
+  border: 1px solid var(--border);
+  border-left: 3px solid hsl(265 50% 55%);
+  border-radius: var(--radius);
+  background: var(--muted);
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.judge-suggestion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.judge-suggestion-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.judge-badge-icon { color: hsl(265 45% 45%); font-size: 1.1em; }
+.judge-suggestion-label { font-size: var(--text-sm); }
+.judge-suggested-value {
+  font-weight: 700;
+  background: hsl(265 60% 92%);
+  color: hsl(265 50% 32%);
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius);
+}
+.judge-schema-name { color: var(--muted-foreground); }
+.judge-confidence { font-size: var(--text-sm); color: var(--muted-foreground); }
+.judge-running {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: hsl(265 40% 40%);
+  white-space: nowrap;
+}
+.judge-accept-btn { font-size: var(--text-sm); padding: 0.3rem 0.7rem; }
+.judge-reasoning { margin-top: 0.4rem; }
+.judge-reasoning summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.judge-reasoning p { margin: 0.4rem 0 0; font-size: var(--text-sm); }
+
+/* ============================================================
+   Signal-based triage flag (why this item was prioritized)
+   ============================================================ */
+.triage-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Amber accent — a queue-priority cue, not an error. The leading glyph +
+     the word "Prioritized" carry meaning without relying on colour alone. */
+  border: 1px solid hsl(38 70% 80%);
+  border-left: 3px solid hsl(32 85% 45%);
+  border-radius: var(--radius);
+  background: hsl(40 80% 96%);
+  padding: 0.45rem 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.triage-flag-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  /* AA: white-on-disc clears 4.5:1 at this depth (was hsl(32 85% 45%) ≈ 3.2:1). */
+  background: hsl(30 90% 37%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.triage-flag-text { font-size: var(--text-sm); color: hsl(28 60% 28%); }
+.triage-flag-reason { font-weight: 700; }
 
 /* ============================================================
    Error Span with Typed Severity
@@ -5560,6 +6721,16 @@ body > .container-fluid {
   gap: 1rem;
   min-height: 200px;
 }
+
+/* A fixed 250px source column leaves about 70px for the groups on a phone.
+   Tapping a card and then tapping a group is now a supported way to do this
+   task -- it is the only one that works on touch, where HTML5 drag does not --
+   so the narrow layout has to be usable rather than merely present. */
+@media (max-width: 640px) {
+  .card-sort-layout {
+    grid-template-columns: 1fr;
+  }
+}
 .card-sort-source {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -5623,6 +6794,12 @@ body > .container-fluid {
   flex: 1;
 }
 .card-sort-card {
+  /* 44px is the tap target the annotation surface asks for, and a card is now
+     tapped rather than only dragged. The card is full-width in its column, so
+     only the height needed raising. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   padding: 0.4rem 0.75rem;
   background: var(--background);
   border: 1px solid var(--border);
@@ -5642,6 +6819,50 @@ body > .container-fluid {
 .card-sort-drag-over {
   background: var(--muted) !important;
   border-color: var(--primary) !important;
+}
+
+/* --- Card Sort: the keyboard and touch path ---------------------------------
+   The widget was drag-only: no tabindex, no roles, no click-to-assign, so a
+   keyboard or screen-reader annotator could not do the task at all, and HTML5
+   drag does not work on touch either. A card is now picked up with Enter or a
+   tap, and dropped into a focused group.                                    */
+
+.card-sort-card:focus-visible,
+.card-sort-group-items:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.card-sort-card.card-sort-held {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+  cursor: grabbing;
+}
+
+/* While a card is held, show where it can go. */
+.card-sort-holding .card-sort-group-items {
+  border-style: dashed;
+  border-color: var(--primary);
+}
+
+.card-sort-kbd-hint {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin: 0.25rem 0 0.5rem;
+}
+
+/* The move announcements. Visible text would repeat what the cards already
+   show; screen readers get it through role="status". */
+.card-sort-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .card-sort-new-group {
   display: flex;
@@ -5692,6 +6913,20 @@ body > .container-fluid {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+/* An item carrying more profiles than the scheme renders. Says so above the
+   cards, because the alternative is an annotator comparing three of five
+   options with nothing on screen to tell them the set is incomplete.
+
+   Scoped through the container because `.annotation-form fieldset p` and
+   `.annotation-form fieldset *` both set a colour and both outrank a bare
+   class, so the unscoped rule lost and the notice rendered in body grey. */
+.shadcn-conjoint-container .conjoint-truncation-notice {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--warning-text);
+  margin-bottom: 0.75rem;
 }
 .conjoint-profile-card {
   flex: 1;
@@ -5859,6 +7094,16 @@ body > .container-fluid {
   border-bottom: 1px solid var(--border);
 }
 
+/* When nothing in the instance area is showing (image annotation, a media-path
+   item, a pairwise item its scheme draws), the padding and rule above opened
+   the card on an empty band and a line. :has() re-evaluates live, so a script
+   that later reveals #instance-text brings the separator back. */
+#main-content > .instance-area:not(:has(> :not([style*="display: none"]))) {
+  margin-bottom: 0 !important;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 /* Annotation form schemas — moderate gap, tighter within groups */
 #annotation-forms {
   gap: var(--space-lg);
@@ -5878,7 +7123,7 @@ body > .container-fluid {
 }
 .annotation-form fieldset label:has(input[type="radio"]):hover,
 .annotation-form fieldset label:has(input[type="checkbox"]):hover {
-  background-color: #f5f3ff;
+  background-color: var(--primary-tint);
 }
 
 /* Keybinding badges — more subtle, less visual weight */
@@ -5923,10 +7168,36 @@ body > .container-fluid {
   transition: box-shadow 0.15s ease;
 }
 
-/* Annotation form card — clean presentation, no uniform border */
-#annotation-forms > .annotation_schema > .annotation-form {
-  border-left: none;
-  padding-left: 0;
+/* NOTE: there used to be a blanket reset here —
+ *
+ *   #annotation-forms > .annotation_schema > .annotation-form {
+ *     border-left: none; padding-left: 0; }
+ *
+ * — described as "clean presentation, no uniform border". Nothing gives a plain
+ * .annotation-form a left border or left padding to remove, so the rule had no
+ * upside; what it did have was an id in its selector, which let it outrank every
+ * schema container's own card. `.event-annotation-container`,
+ * `.audio-annotation-container`, `.span-link-container`, `.mde-container` and the
+ * `.shadcn-*-container` family all declare a border and shorthand padding, and
+ * this stripped the LEFT side of both, leaving panels bordered on three sides
+ * with their content flush against the missing edge. It also erased the left
+ * edge of the red `.annotation-form.required-unfilled` outline, so the
+ * "please answer this" affordance was visibly broken on every schema. */
+
+/* Event annotation is read together with the span schema it references — the
+ * labels create the entities, the panel wires them into events. Left to the
+ * default flow the label box takes the full row (see .shadcn-span-container in
+ * the full-width list) and the event panel lands underneath it in a narrow
+ * column, so the two halves of one task are never on screen together. Pair them
+ * into two columns instead; flex-wrap still stacks them on a narrow viewport. */
+#annotation-forms > .annotation_schema:has(.event-annotation-container)
+  > .shadcn-span-container,
+#annotation-forms > .annotation_schema:has(.event-annotation-container)
+  > .event-annotation-container {
+  flex: 1 1 340px;
+  width: auto;
+  max-width: none;
+  min-width: 0;
 }
 
 /* Annotation schema description text (below legend) — styled as help text */
@@ -5971,6 +7242,19 @@ body > .container-fluid {
   background: hsl(var(--muted, 210 40% 96%));
   border-radius: 0.375rem;
   display: inline-block;
+}
+
+/* Why the number on the left is not yet the verdict. Sits beside the score
+   rather than replacing it, so the running total stays readable while the
+   annotator fills in the severities it is waiting on. */
+.traj-score-note {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--warning-text);
+}
+
+.traj-score-note:empty {
+  display: none;
 }
 
 .traj-steps-container {
@@ -6231,3 +7515,515 @@ body > .container-fluid {
   color: hsl(0 84% 50%);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Training phase
+   Ported from the standalone training.html, which used to be a separate page.
+   Training now renders through base_template_v2 like every other phase, so its
+   chrome lives here rather than in a template-local <style> block.
+   Feedback classes are keyed by feedback_type: success | error | warning | info.
+   --------------------------------------------------------------------------- */
+.training-progress {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-muted, light-dark(#6c757d, #bec2c5));
+}
+:root[data-theme="dark"] .training-progress { color: var(--muted-foreground); }
+
+.training-progress-label {
+    font-weight: 600;
+}
+
+.feedback-alert {
+    border-radius: 0.5rem;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.feedback-success {
+    background-color: light-dark(#d4edda, #223627);
+    color: light-dark(#155724, #bae5c4);
+    border-left: 4px solid #28a745;
+}
+
+.feedback-error {
+    background-color: light-dark(#f8d7da, #37181b);
+    color: light-dark(#721c24, #e2b1b5);
+    border-left: 4px solid #dc3545;
+}
+
+.feedback-warning {
+    background-color: light-dark(#fff3cd, #3f3412);
+    color: light-dark(#856404, #efdca5);
+    border-left: 4px solid light-dark(#ffc107, #6b5c2e);
+}
+
+.feedback-info {
+    background-color: light-dark(#d1ecf1, #1f3438);
+    color: light-dark(#0c5460, #b4e4eb);
+    border-left: 4px solid #17a2b8;
+}
+
+:root[data-theme="dark"] .feedback-success {
+    background-color: var(--success-tint);
+    color: var(--success-text);
+}
+:root[data-theme="dark"] .feedback-error {
+    background-color: var(--destructive-tint);
+    color: var(--destructive-text);
+}
+:root[data-theme="dark"] .feedback-warning {
+    background-color: var(--warning-tint);
+    color: var(--warning-text);
+}
+:root[data-theme="dark"] .feedback-info {
+    background-color: var(--muted);
+    color: var(--foreground);
+}
+
+/* ---------------------------------------------------------------------------
+   Keystroke logging disclosure notice
+   Rendered under the navbar on every page that can hold a free-text field,
+   whenever keystroke_logging.disclose_to_annotators is on. Deliberately not
+   dismissible: it is a standing statement about what the task records, not a
+   one-time alert. Kept visually quiet so it reads as a status line rather than
+   a warning -- an alarming banner would bias how people write, which is the
+   very behaviour being measured.
+--------------------------------------------------------------------------- */
+.keystroke-disclosure {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    background-color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.keystroke-disclosure-icon {
+    flex: 0 0 auto;
+    opacity: 0.75;
+}
+
+.keystroke-disclosure-text {
+    flex: 1 1 auto;
+}
+
+/* Two collections can be on at once -- typing dynamics on free-text answers
+   and drawing dynamics on the canvas. Each is a separate opt-in and each keeps
+   its own line, because merging them would let one notice imply consent to the
+   other. But stacked with a full border between them they read as two
+   competing banners, so only the last one carries the separating rule and the
+   pair reads as one statement about what the task records. */
+.keystroke-disclosure + .keystroke-disclosure {
+    border-top: none;
+    padding-top: 0;
+}
+
+/* ==========================================================================
+   Phones and touch
+   --------------------------------------------------------------------------
+   From a phone sweep of 20 task types (iPhone 13, 390x664; see
+   plans/mobile-usability.md and tests/playwright/test_mobile_layouts.py).
+   Layout rules key on max-width. Target-size rules key on `pointer: coarse`,
+   so a narrow desktop window keeps its density and a tablet gets the bigger
+   targets. 44px is Apple's minimum touch target; WCAG 2.2 AA asks for 24px.
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* The <=768px rule above capped the card at the viewport and let its
+     content scroll inside it -- a scroller within the page, which a thumb
+     cannot tell apart from the page (the image task showed 522px of 1265px).
+     The page scrolls; the card grows. */
+  .shadcn-card,
+  .shadcn-card.media-annotation {
+    max-height: none;
+  }
+
+  /* A text display's user-resizable box is a fixed-height inner scroller:
+     the dialogue task held its 735px of turns in a 500px box, and a swipe on
+     it moved the page 1px. On a phone the text flows at its own height.
+     PDF and document viewers keep their box; they need one. */
+  .display-field-resizable:not(:has(.pdf-display, .document-display)) {
+    height: auto !important;
+    max-height: none;
+    overflow: visible;
+    resize: none;
+  }
+
+  .display-field-resizable:not(:has(.pdf-display, .document-display)) .display-field-content {
+    height: auto;
+    overflow: visible;
+  }
+
+  .display-field-resizable:not(:has(.pdf-display, .document-display))::after {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Header: two rows, not three. The brand used to fill row one alone, so
+     Logout wrapped to a second row and the counters to a third -- 140px of a
+     664px screen, before the banner. The brand and Logout now share row one
+     and the counters take a compact row two. Not sticky here: a header that
+     tall pinned to the top costs a fifth of the screen on every scroll. */
+  .potato-navbar {
+    position: static;
+  }
+
+  .potato-navbar .navbar-brand {
+    flex: 1 1 0;
+  }
+
+  .potato-navbar .navbar-brand .task-name {
+    font-size: var(--text-lg);
+  }
+
+  .potato-navbar .user-pill .username {
+    max-width: 9ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .potato-navbar .navbar-center {
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .potato-navbar .navbar-center .navbar-divider {
+    display: none;
+  }
+
+  .potato-navbar .status-badge,
+  .potato-navbar .progress-section,
+  .potato-navbar .instance-number-section {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Instance text: body size and ordinary spacing. 1.7 at the large size
+     spread a four-response ranking item over 1100px. Span tasks keep the
+     taller spacing their label chips need (.span-labels-on). */
+  #instance-text:not(.span-labels-on),
+  .instance-text-container:not(.span-labels-on) {
+    font-size: var(--text-base);
+    line-height: 1.55;
+  }
+
+  /* Every answer form spans the card. Forms are flex items of
+     .annotation_schema and shrank to their content: the stacked multirate
+     list used 187px of a 292px card, and option rows were tappable only as
+     far as their text reached. */
+  .annotation_schema > .annotation-form {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* fieldset[schema] is width: fit-content on desktop, which kept the
+     stacked multirate list at its widest label's width. */
+  .annotation_schema > .annotation-form > fieldset[schema] {
+    width: 100%;
+  }
+
+  /* Likert: the end labels sat either side of the scale and the right one
+     ran out of the card. Scale on its own row, end labels beneath it. */
+  .shadcn-likert-scale {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+  }
+
+  .shadcn-likert-options {
+    order: -1;
+    flex: 1 0 100%;
+  }
+
+  .shadcn-likert-endpoint {
+    flex: 1 1 0;
+    max-width: 50%;
+    padding: 0;
+  }
+
+  .shadcn-likert-endpoint:last-of-type {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  /* Multirate: a table with five rating columns does not fit 390px, and it
+     scrolled sideways inside its card with nothing to say two columns were
+     hidden. Each row becomes a block: the item, then its ratings as a list
+     of full-width choices. The rating text is in the label (see
+     schemas/multirate.py); desktop keeps the table and hides it. */
+  .shadcn-multirate-table,
+  .shadcn-multirate-table tbody,
+  .shadcn-multirate-table tr,
+  .shadcn-multirate-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .shadcn-multirate-table thead {
+    display: none;
+  }
+
+  .shadcn-multirate-table tbody tr {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .shadcn-multirate-table tbody td:first-child,
+  .shadcn-multirate-table tbody td.shadcn-multirate-item {
+    min-width: 0;
+    font-weight: 600;
+    padding: 0.25rem 0;
+    text-align: left;
+  }
+
+  .shadcn-multirate-table td.shadcn-radio-cell {
+    padding: 0;
+    border: none;
+    text-align: left;
+  }
+
+  .shadcn-multirate-table td:empty {
+    display: none;
+  }
+
+  .shadcn-multirate-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 44px;
+    cursor: pointer;
+  }
+
+  .shadcn-multirate-choice .shadcn-multirate-choice-text {
+    position: static;
+    width: auto;
+    height: auto;
+    clip: auto;
+    overflow: visible;
+    white-space: normal;
+  }
+}
+
+/* The rating's name inside each multirate cell: read by the stacked phone
+   layout above, visually hidden in the desktop table (the column header says
+   it there, and the input's aria-label already names it). */
+.shadcn-multirate-choice-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  /* Option rows: the whole row is the target, not the text's line box. */
+  .shadcn-radio-option,
+  .shadcn-multiselect-item,
+  .shadcn-span-option {
+    min-height: 44px;
+  }
+
+  .shadcn-radio-option > .shadcn-radio-label,
+  .shadcn-multiselect-item > .shadcn-multiselect-label {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .shadcn-radio-input,
+  .shadcn-multiselect-checkbox {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+  }
+
+  /* Likert-family buttons: a 32px circle with a 44px hit area. The circle
+     shrinks on a 10-point scale so the row still fits a phone. */
+  .shadcn-likert-button,
+  .semantic-differential-button {
+    --touch-dot: clamp(24px, 8.5vw, 32px);
+    width: var(--touch-dot);
+    height: var(--touch-dot);
+    position: relative;
+  }
+
+  .shadcn-likert-button::before,
+  .semantic-differential-button::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+  }
+
+  .shadcn-likert-track {
+    top: calc(clamp(24px, 8.5vw, 32px) / 2);
+  }
+
+  .semantic-differential-button.center {
+    width: calc(var(--touch-dot) - 4px);
+    height: calc(var(--touch-dot) - 4px);
+  }
+
+  /* Ranking: the arrows are the touch path -- HTML5 drag-and-drop does not
+     fire from a finger on most phones -- and they were 16x10px. */
+  .ranking-buttons {
+    flex-direction: row;
+    gap: 0.25rem;
+  }
+
+  .ranking-up,
+  .ranking-down {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  /* Slider: the invisible native input is what a finger drags, and it was
+     6px tall. Centre a 44px band on the track; enlarge the visible thumb. */
+  /* `input.` because the global input[type="range"] { height: 6px } outranks
+     a bare class -- it was also beating the base rule's height: 100%. */
+  input.custom-slider-input {
+    height: 44px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .custom-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Image annotation toolbar: label, zoom and edit buttons were 31px tall and
+     each label's visibility toggle 18x11px. */
+  .image-annotation-container .label-btn,
+  .image-annotation-container .zoom-btn,
+  .image-annotation-container .edit-btn,
+  .image-annotation-container .tool-btn {
+    min-height: 44px;
+  }
+
+  .image-annotation-container .zoom-btn,
+  .image-annotation-container .edit-btn {
+    min-width: 44px;
+  }
+
+  .image-annotation-container .label-visibility-toggle {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+  }
+
+  /* iOS zooms the page into any focused field under 16px. */
+  .annotation-form input[type="text"],
+  .annotation-form input[type="number"],
+  .annotation-form input:not([type]),
+  .annotation-form textarea,
+  .annotation-form select {
+    font-size: max(16px, 1em);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Keyboard-shortcut hints mean nothing without a keyboard. */
+  .keybinding-badge,
+  .pairwise-tile-shortcut,
+  .bws-tile-shortcut {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Dark theme: components whose light colours are literals tuned for a white
+   page. Each keeps its light rule and takes the matching semantic token here.
+   --------------------------------------------------------------------------- */
+:root[data-theme="dark"] .required-fields-error,
+:root[data-theme="dark"] .display-type-image .image-error,
+:root[data-theme="dark"] .display-error,
+:root[data-theme="dark"] .display-type-audio .audio-error {
+  background-color: var(--destructive-tint);
+  color: var(--destructive-text);
+  border-color: var(--destructive);
+}
+:root[data-theme="dark"] .shadcn-likert-button:hover { background-color: var(--primary-tint); }
+/* A highlight colour is the study's choice; the text on it stays dark so it
+   reads on any of them. */
+:root[data-theme="dark"] .annotation-span { color: #09090b; }
+:root[data-theme="dark"] .custom-slider-tick-mark { background-color: var(--input); }
+:root[data-theme="dark"] .tooltip.hint-tooltip {
+  background-color: var(--warning-tint);
+  color: var(--warning-text);
+}
+:root[data-theme="dark"] .tooltip.rationale-tooltip {
+  background-color: var(--primary-tint);
+  color: var(--foreground);
+}
+:root[data-theme="dark"] .display-type-dialogue .dialogue-turn.turn-even {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+:root[data-theme="dark"] .brush-size-group input[type="range"] { background: var(--muted); }
+:root[data-theme="dark"] .custom-slider-tick-label { color: var(--muted-foreground); }
+:root[data-theme="dark"] .ai-suggested-label,
+:root[data-theme="dark"] .tooltip.hint-tooltip .tooltip-close,
+:root[data-theme="dark"] .tooltip.hint-tooltip .content-item .label,
+:root[data-theme="dark"] .tooltip.hint-tooltip .content-item .value.suggestion {
+  color: var(--warning-text);
+}
+:root[data-theme="dark"] .tooltip.rationale-tooltip .tooltip-close,
+:root[data-theme="dark"] .tooltip.rationale-tooltip .rationale-header,
+:root[data-theme="dark"] .tooltip.rationale-tooltip .rationale-label {
+  color: var(--accent-color);
+}
+:root[data-theme="dark"] .brush-size-group .brush-size-value { color: var(--foreground); }
+:root[data-theme="dark"] .bws-worst-label,
+:root[data-theme="dark"] .bws-validation-error { color: var(--destructive-text); }
+:root[data-theme="dark"] .potato-alert-success { color: var(--success-text); }
+/* Bootstrap's dark kbd is a light chip; text here inherits light page text. */
+:root[data-theme="dark"] kbd { background-color: var(--muted); color: var(--foreground); }
+
+/* Cloze (fill-in-the-blank): blanks sit on the text line. */
+.cloze-passage {
+    line-height: 2.2;
+    margin: 0.25rem 0 0;
+}
+.cloze-passage .cloze-blank {
+    display: inline-block;
+    height: 1.8em;
+    padding: 0 0.4em;
+    margin: 0 0.15em;
+    font: inherit;
+    line-height: 1.8em;
+    vertical-align: baseline;
+    border: 1px solid var(--border, #d4d4d8);
+    border-radius: 0.375rem;
+    background: var(--background, #fff);
+    color: inherit;
+}
+.cloze-passage .cloze-blank:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: 1px;
+}
+
+/* Sensitive-question designs (list_experiment, randomized_response): the
+   statements, then the question's own form at the full width. */
+.survey-experiment { width: 100%; grid-column: 1 / -1; }
+.survey-experiment > .annotation-form { width: 100%; max-width: none; }
+.survey-experiment-list { margin: 0.25rem 0 0.75rem; padding-left: 1.5rem; }
+.survey-experiment-list li { margin: 0.2rem 0; }
+.survey-experiment-note, .survey-experiment-randomizer { color: var(--muted-foreground); }
+.survey-experiment-randomizer { border-left: 3px solid var(--border); padding-left: 0.75rem; }

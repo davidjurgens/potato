@@ -11,7 +11,8 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     escape_html_content,
-    generate_tooltip_html
+    generate_tooltip_html,
+    generate_layout_attributes,
 )
 from .span import get_span_color, SPAN_COLOR_PALETTE
 
@@ -53,6 +54,9 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
     Returns:
         tuple: (HTML string, key bindings list)
     """
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     scheme_name = annotation_scheme["name"]
     description = annotation_scheme.get("description", "Create relationships between spans")
     span_schema = annotation_scheme.get("span_schema", "")
@@ -117,7 +121,7 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
     multi_line_mode = visual_display.get("multi_line_mode", "bracket")
 
     schematic = f"""
-    <div id="{escape_html_content(scheme_name)}" class="span-link-container annotation-form"
+    <div id="{escape_html_content(scheme_name)}" class="span-link-container annotation-form" data-annotation-type="span_link" data-schema-name="{escape_html_content(scheme_name)}" {layout_attrs}
          data-annotation-type="span_link"
          data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-span-schema="{escape_html_content(span_schema)}"
@@ -138,11 +142,13 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
             </div>
         </div>
 
-        <!-- Selected Spans Display -->
+        <!-- Selected Spans Display (populated by span-link-manager.js) -->
         <div class="span-link-selection">
-            <label class="span-link-section-label">Selected Spans:</label>
-            <div class="span-link-selected-spans" id="{escape_html_content(scheme_name)}_selected_spans">
-                <p class="no-selection-message">Click on highlighted spans to select them for linking</p>
+            <label class="span-link-section-label">Link builder:</label>
+            <div class="span-link-selected-spans" id="{escape_html_content(scheme_name)}_selected_spans"
+                 role="status" aria-live="polite">
+                <p class="span-link-guide"><span class="span-link-step">1</span>Highlight spans first, then
+                <span class="span-link-step">2</span>choose a link type to connect them.</p>
             </div>
         </div>
 
@@ -158,8 +164,8 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
                 Create Link
             </button>
             <button type="button" class="span-link-clear-btn" id="{escape_html_content(scheme_name)}_clear_selection"
-                    title="Exit link mode to create new span annotations (Esc)">
-                Exit Link Mode
+                    title="Stop linking and go back to highlighting spans (Esc)">
+                Cancel
             </button>
         </div>
 

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "trace_booking_001",
+    "task": "Book a refundable flight from Detroit (DTW) to San Francisco (SFO) departing next Tuesday, under $400, and email the itinerary to the user.",
+    "steps": [
+      {"agent": "Planner", "content": "Plan: (1) search flights DTW->SFO next Tuesday, (2) filter refundable & under $400, (3) book cheapest, (4) email itinerary. Delegating search to the Researcher."},
+      {"agent": "Researcher", "content": "Found 3 options: UA482 $612 refundable; DL901 $338 non-refundable; AS22 $371 refundable. Returning to Planner."},
+      {"agent": "Planner", "content": "DL901 at $338 is the cheapest. Booking DL901."},
+      {"agent": "Booking", "content": "Booked DL901 for $338. Confirmation DL-77FA."},
+      {"agent": "Verifier", "content": "Price under $400 and route correct. Task complete."}
+    ]
+  },
+  {
+    "id": "trace_research_002",
+    "task": "Summarize the three most-cited findings from the attached paper and produce a 100-word abstract.",
+    "steps": [
+      {"agent": "Reader", "content": "I have read the paper. The key sections are Methods, Results, and Discussion."},
+      {"agent": "Reader", "content": "Let me read the paper again to be thorough. The key sections are Methods, Results, and Discussion."},
+      {"agent": "Analyst", "content": "What did the Reader find about citation counts? I'll just proceed with my own impression: the paper is about transformers."},
+      {"agent": "Writer", "content": "Abstract: This paper discusses transformers and their many applications across domains, and is generally well written and interesting to read for researchers in the field..."},
+      {"agent": "Writer", "content": "...(abstract continues to 210 words)."}
+    ]
+  },
+  {
+    "id": "trace_coding_003",
+    "task": "Fix the failing test test_parse_date in utils.py and confirm the full suite passes.",
+    "steps": [
+      {"agent": "Planner", "content": "I'll reason that the bug is an off-by-one in the day parsing, so I'll change the month index instead."},
+      {"agent": "Coder", "content": "Edited utils.py line 42: changed `month-1` to `month`."},
+      {"agent": "Coder", "content": "I believe this is correct. Marking the task done without running the tests."},
+      {"agent": "Reviewer", "content": "Looks good to me. Approved."}
+    ]
+  },
+  {
+    "id": "trace_support_004",
+    "task": "Help the customer change the shipping address on order #5521.",
+    "steps": [
+      {"agent": "Intake", "content": "The customer wants to update something on an order. Routing to Fulfillment."},
+      {"agent": "Fulfillment", "content": "I can update orders, but I wasn't told which field or order. I'll assume they want to cancel the most recent order and proceed."},
+      {"agent": "Fulfillment", "content": "Cancelled order #5530 (most recent). Done."},
+      {"agent": "Verifier", "content": "An order action was taken. Closing ticket."}
+    ]
+  }
+]

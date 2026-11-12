@@ -46,7 +46,31 @@ def generate_hierarchical_multiselect_layout(annotation_scheme):
     return safe_generate_layout(annotation_scheme, _generate_hierarchical_multiselect_layout_internal)
 
 
-def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
+def _label_tooltip(label, tooltips):
+    """Return ``(title_attr, info_marker_html)`` for a label that has a tooltip.
+
+    Uses the native ``title`` attribute (no extra JS) plus a subtle ⓘ marker so
+    annotators can see what each taxonomy code means on hover.
+    """
+    if not tooltips:
+        return "", ""
+    desc = tooltips.get(label)
+    if not desc:
+        return "", ""
+    safe_desc = escape_html_content(str(desc))
+    # Accessible info affordance: focusable + announced (aria-label) so keyboard
+    # and screen-reader users get the definition, not just mouse-hover (title).
+    # The marker sits inside the <label>, so a click would toggle the checkbox --
+    # suppress that; reading the tooltip should not change the selection.
+    info = (
+        f'<span class="hier-info" role="img" tabindex="0" '
+        f'title="{safe_desc}" aria-label="Definition: {safe_desc}" '
+        f'onclick="event.preventDefault();event.stopPropagation();">&#9432;</span>'
+    )
+    return f' title="{safe_desc}"', info
+
+
+def _build_tree_html(taxonomy, schema_name, prefix="", depth=0, tooltips=None):
     """Recursively build tree HTML from taxonomy dict/list."""
     html = ""
     safe_schema = escape_html_content(schema_name)
@@ -57,7 +81,17 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
             node_id = f"{prefix}{key}".replace(" ", "_")
             safe_node_id = escape_html_content(node_id)
             has_children = bool(children)
-            toggle = '<span class="hier-toggle">&#9654;</span>' if has_children else '<span class="hier-toggle-placeholder"></span>'
+            # A button, not a bare span. The toggle is the only way to reach a
+            # nested label, and as an unfocusable <span> with no role it was
+            # absent from the accessibility tree entirely -- so a keyboard-only
+            # annotator could not open the tree, and every label below the first
+            # level was unreachable for them.
+            toggle = (
+                f'<button type="button" class="hier-toggle" aria-expanded="false"'
+                f' aria-label="Expand {safe_key}">&#9654;</button>'
+                if has_children
+                else '<span class="hier-toggle-placeholder"></span>')
+            title_attr, info = _label_tooltip(key, tooltips)
 
             html += f"""
             <div class="hier-node" data-depth="{depth}" data-node-id="{safe_node_id}">
@@ -71,13 +105,13 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
                                data-hier-node="{safe_node_id}"
                                data-hier-depth="{depth}"
                                value="{safe_key}">
-                        <span class="hier-label-text">{safe_key}</span>
+                        <span class="hier-label-text"{title_attr}>{safe_key}</span>{info}
                     </label>
                 </div>
             """
             if has_children:
                 html += f'<div class="hier-children" style="display:none;">'
-                html += _build_tree_html(children, schema_name, prefix=f"{node_id}.", depth=depth + 1)
+                html += _build_tree_html(children, schema_name, prefix=f"{node_id}.", depth=depth + 1, tooltips=tooltips)
                 html += "</div>"
             html += "</div>"
 
@@ -86,6 +120,7 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
             safe_item = escape_html_content(str(item))
             node_id = f"{prefix}{item}".replace(" ", "_")
             safe_node_id = escape_html_content(node_id)
+            title_attr, info = _label_tooltip(str(item), tooltips)
 
             html += f"""
             <div class="hier-node hier-leaf" data-depth="{depth}" data-node-id="{safe_node_id}">
@@ -99,7 +134,7 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
                                data-hier-node="{safe_node_id}"
                                data-hier-depth="{depth}"
                                value="{safe_item}">
-                        <span class="hier-label-text">{safe_item}</span>
+                        <span class="hier-label-text"{title_attr}>{safe_item}</span>{info}
                     </label>
                 </div>
             </div>
@@ -113,6 +148,7 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
     safe_schema = escape_html_content(schema_name)
     description = annotation_scheme["description"]
     taxonomy = annotation_scheme.get("taxonomy", {})
+    tooltips = dict(annotation_scheme.get("tooltips", {}) or {})
     auto_select_children = annotation_scheme.get("auto_select_children", False)
     auto_select_parent = annotation_scheme.get("auto_select_parent", False)
     show_search = annotation_scheme.get("show_search", False)
@@ -120,8 +156,21 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
     layout_attrs = generate_layout_attributes(annotation_scheme)
     validation = generate_validation_attribute(annotation_scheme)
 
+    # A research-backed taxonomy preset (e.g. ``taxonomy_preset: mast``) fills in
+    # both the taxonomy and per-mode tooltips so projects don't hand-author the
+    # label set. An explicit ``taxonomy``/``tooltips`` always wins over the preset.
+    preset_name = annotation_scheme.get("taxonomy_preset")
+    if preset_name and not taxonomy:
+        from potato.server_utils.failure_taxonomy import to_hierarchical, to_tooltips
+        taxonomy = to_hierarchical(preset_name)
+        preset_tips = to_tooltips(preset_name)
+        preset_tips.update(tooltips)  # explicit tooltips override the preset
+        tooltips = preset_tips
+
     if not taxonomy:
-        raise ValueError(f"hierarchical_multiselect schema '{schema_name}' requires 'taxonomy'")
+        raise ValueError(
+            f"hierarchical_multiselect schema '{schema_name}' requires 'taxonomy' "
+            f"or 'taxonomy_preset'")
 
     identifiers = generate_element_identifier(schema_name, "selected_labels", "hidden")
 
@@ -162,7 +211,7 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                  data-max-selections="{max_selections if max_selections else ''}">
     """
 
-    html += _build_tree_html(taxonomy, schema_name)
+    html += _build_tree_html(taxonomy, schema_name, tooltips=tooltips)
 
     html += f"""
             </div>
@@ -189,6 +238,7 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                     const isOpen = children.style.display !== 'none';
                     children.style.display = isOpen ? 'none' : 'block';
                     toggle.innerHTML = isOpen ? '&#9654;' : '&#9660;';
+                    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
                 }}
                 return;
             }}
@@ -242,14 +292,29 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                 childCbs.forEach(child => {{ child.checked = false; }});
             }}
 
-            // Always select ancestor chain when a node is checked
-            if (cb.checked) {{
+            // Select a parent once ALL of its children are selected, and only
+            // when the author asked for it.
+            //
+            // This used to run unconditionally and select the whole ancestor
+            // chain from any checked descendant, so ticking one leaf three
+            // levels down stored all four nodes. `autoParent` was read but
+            // consulted only on the *un*checking branch, which meant
+            // `auto_select_parent: false` -- the documented default, and the
+            // config written specifically to prevent this -- had no effect on
+            // the behaviour it names. The data cost outlives the UI one: an
+            // analyst counting how often "Annotation" was chosen could not tell
+            // a deliberate category-level choice from a leaf click below it.
+            if (autoParent && cb.checked) {{
                 let parentChildren = cb.closest('.hier-children');
                 while (parentChildren) {{
                     const parentNode = parentChildren.closest('.hier-node');
                     if (!parentNode) break;
                     const parentCb = parentNode.querySelector(':scope > .hier-node-row .hier-checkbox');
-                    if (parentCb) parentCb.checked = true;
+                    const siblings = parentChildren.querySelectorAll(':scope > .hier-node > .hier-node-row .hier-checkbox');
+                    const allChecked = siblings.length > 0 &&
+                        Array.from(siblings).every(s => s.checked);
+                    if (!parentCb || !allChecked) break;
+                    parentCb.checked = true;
                     parentChildren = parentNode.parentElement.closest('.hier-children');
                 }}
             }}
@@ -289,7 +354,10 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                                     const parentToggle = parent.previousElementSibling;
                                     if (parentToggle) {{
                                         const toggle = parentToggle.querySelector('.hier-toggle');
-                                        if (toggle) toggle.innerHTML = '&#9660;';
+                                        if (toggle) {{
+                                            toggle.innerHTML = '&#9660;';
+                                            toggle.setAttribute('aria-expanded', 'true');
+                                        }}
                                     }}
                                 }}
                                 parent = parent.parentElement;
@@ -301,9 +369,41 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
         }}
 
         // On init: if hidden input has a server-restored value, check matching boxes
+        function splitKnownValues(stored, values) {{
+            // Split a comma-joined answer back into option values. A plain
+            // split(',') breaks any option whose own text has a comma in it
+            // ("Paris, France"), so match the known values first.
+            var known = values.filter(function (v) {{ return v; }})
+                .sort(function (a, b) {{ return b.length - a.length; }});
+            var out = [], pos = 0;
+            while (pos <= stored.length - 1) {{
+                while (stored.charAt(pos) === ' ') pos++;
+                var match = null;
+                for (var i = 0; i < known.length; i++) {{
+                    var v = known[i], end = pos + v.length;
+                    if (stored.substr(pos, v.length) === v && (end === stored.length || stored.charAt(end) === ',')) {{
+                        match = v; break;
+                    }}
+                }}
+                if (match === null) {{
+                    var next = stored.indexOf(',', pos);
+                    var stop = next < 0 ? stored.length : next;
+                    var piece = stored.slice(pos, stop).trim();
+                    if (piece) out.push(piece);
+                    pos = stop + 1;
+                }} else {{
+                    out.push(match);
+                    pos += match.length + 1;
+                }}
+            }}
+            return out;
+        }}
+
         var serverVal = hiddenInput.getAttribute('value') || hiddenInput.value;
         if (serverVal && serverVal.trim()) {{
-            var labels = serverVal.split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean);
+            var allValues = Array.prototype.map.call(
+                tree.querySelectorAll('.hier-checkbox'), function (cb) {{ return cb.value; }});
+            var labels = splitKnownValues(serverVal, allValues);
             tree.querySelectorAll('.hier-checkbox').forEach(function(cb) {{
                 cb.checked = labels.indexOf(cb.value) >= 0;
             }});
@@ -315,7 +415,10 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                     var parentNode = parent.closest('.hier-node');
                     if (parentNode) {{
                         var tog = parentNode.querySelector(':scope > .hier-node-row .hier-toggle');
-                        if (tog) tog.innerHTML = '&#9660;';
+                        if (tog) {{
+                            tog.innerHTML = '&#9660;';
+                            tog.setAttribute('aria-expanded', 'true');
+                        }}
                     }}
                     var grandparent = parentNode ? parentNode.parentElement : null;
                     parent = grandparent ? grandparent.closest('.hier-children') : null;

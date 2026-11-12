@@ -57,12 +57,15 @@ class ChatManager:
         self.task_description = config.get("annotation_task_description", "")
 
         # Build label summary from annotation schemes
+        # Label names, not entries: a dict label went into the system prompt
+        # as its Python repr ({'name': 'Yes', 'color': ...}).
+        from potato.server_utils.presentation_order import label_names
         labels = []
         for scheme in config.get("annotation_schemes", []):
             name = scheme.get("name", "")
-            scheme_labels = scheme.get("labels", [])
+            scheme_labels = label_names(scheme)
             if scheme_labels:
-                labels.append(f"{name}: {', '.join(str(l) for l in scheme_labels)}")
+                labels.append(f"{name}: {', '.join(scheme_labels)}")
             elif scheme.get("description"):
                 labels.append(f"{name}: {scheme['description']}")
         self.annotation_labels = "; ".join(labels) if labels else "See task description"

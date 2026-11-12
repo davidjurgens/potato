@@ -59,9 +59,9 @@ class TestLoadAnnotationsFromDir:
         annotations = load_annotations_from_dir(str(tmp_path))
 
         assert len(annotations) == 3
-        assert annotations["item_001"]["data_quality"]["name"] == "accept"
-        assert annotations["item_002"]["data_quality"]["name"] == "reject"
-        assert annotations["item_003"]["data_quality"]["name"] == "skip"
+        assert annotations["item_001"]["data_quality"] == {"user1": {"accept"}}
+        assert annotations["item_002"]["data_quality"] == {"user1": {"reject"}}
+        assert annotations["item_003"]["data_quality"] == {"user1": {"skip"}}
 
     def test_load_from_multiple_users(self, tmp_path):
         """Load annotations from multiple users."""

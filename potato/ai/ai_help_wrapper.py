@@ -15,10 +15,13 @@ def init_dynamic_ai_help():
     logger = logging.getLogger(__name__)
     logger.info(f"[init_dynamic_ai_help] Called. ai_support.enabled={config.get('ai_support', {}).get('enabled', False)}")
 
+    global DYNAMICAIHELP
     if not config["ai_support"]["enabled"]:
+        # Drop a helper left by an earlier boot in this process, or this
+        # server would render AI help built for that config.
+        DYNAMICAIHELP = None
         logger.info("[init_dynamic_ai_help] AI support disabled, returning")
         return
-    global DYNAMICAIHELP
     if DYNAMICAIHELP is None:
         DYNAMICAIHELP = DynamicAIHelp()
         logger.info(f"[init_dynamic_ai_help] Created DYNAMICAIHELP instance: {id(DYNAMICAIHELP)}")
@@ -41,17 +44,33 @@ class DynamicAIHelp:
         {% endif %}
         """
 
-    def get_empty_wrapper(self): 
-        return f'<div class="ai-help none"><div class="tooltip"></div></div>'
+    def get_empty_wrapper(self):
+        # The shell exists to be a size container for the row inside it (see
+        # styles.css). It has to be a separate element: putting
+        # `container-type: inline-size` on `.annotation-form` collapses span-1
+        # and span-2 grid items to their contain-intrinsic width -- 18px against
+        # a 123px track -- and the fieldset does the same. A plain block div
+        # takes its width from its parent rather than its contents, so
+        # containment on it changes nothing but what the query can measure.
+        return ('<div class="ai-help-shell">'
+                '<div class="ai-help none"><div class="tooltip"></div></div>'
+                '</div>')
 
     def generate_ai_assistant(self, ai_prompts, annotation_type, ai_assistant):
-        str_html = f'<div class="{ai_assistant} ai-assistant-containter">'
+        import html as _html
+        name = ai_prompts[annotation_type].get(ai_assistant).get("name", ai_assistant.capitalize())
+        safe_name = _html.escape(str(name), quote=True)
+        # `title` because a narrow grid cell hides the text label and shows the
+        # icon alone (see the @container rule in styles.css). The label stays in
+        # the DOM as the accessible name; this is how a sighted mouse or
+        # keyboard user gets the same word back.
+        str_html = (f'<div class="{ai_assistant} ai-assistant-containter" '
+                    f'title="{safe_name}">')
         img_url = ai_prompts[annotation_type].get(ai_assistant).get("img")
         if img_url:
             # Use empty alt since the button already has a text label
             str_html += f'<span class="ai-assistant-img"><img src="{img_url}" alt=""></span>'
-        name = ai_prompts[annotation_type].get(ai_assistant).get("name", ai_assistant.capitalize())
-        str_html += f'<span>{name}</span>'
+        str_html += f'<span>{safe_name}</span>'
         str_html += "</div>"
         return str_html
 
@@ -84,8 +103,16 @@ class DynamicAIHelp:
 
         return filtered_keys
 
-    def get_ai_help_data(self, instance: int, annotation_id: int, annotation_type: str) -> Dict[str, Any]:
-        """Get current AI help configuration with the new prompt structure"""
+    def get_ai_help_data(self, instance, annotation_id: int, annotation_type: str,
+                         page_index: int = None) -> Dict[str, Any]:
+        """Get current AI help configuration with the new prompt structure.
+
+        ``instance`` is the instance **id**; ``page_index`` is the annotator's
+        position, which is what ``ai_config.include.special_include`` is keyed
+        by. Passing the position as both is only correct under `fixed_order`.
+        """
+        if page_index is None:
+            page_index = instance
         try:
             context = {
                 'ai_assistant': None,
@@ -95,20 +122,32 @@ class DynamicAIHelp:
             logger.debug(f"[get_ai_help_data] ai_prompts keys: {list(ai_prompts.keys()) if ai_prompts else 'None'}")
 
             if not ai_prompts:
-                context["error_message"] = f'No AI prompt configured'
-                logger.debug("[get_ai_help_data] No AI prompts configured")
+                # Also a config-time fact, and also not the annotator's to fix.
+                logger.warning(
+                    "AI support is enabled but no AI prompts are configured; "
+                    "no assistant row will be rendered.")
                 return context
             elif annotation_type not in ai_prompts:
-                context["error_message"] = f'annotation type {annotation_type} does not exist in ai_prompts'
-                logger.debug(f"[get_ai_help_data] annotation type {annotation_type} not in prompts")
+                # No prompt file for this type -- a config-time fact, addressed
+                # to whoever wrote the config, and it was being printed into
+                # the annotation form for the annotator to read. The types with
+                # no AI support at all (multirate, image_annotation) already
+                # render no assistant row and say nothing, so the same
+                # situation had two presentations and the louder one reached
+                # the audience that cannot act on it. Log it, render nothing.
+                logger.warning(
+                    f"No AI prompt file for annotation type '{annotation_type}' "
+                    f"(potato/ai/prompt/). The AI assistant row is omitted for "
+                    f"schemes of this type.")
                 return context
 
             ai_cache_manager = get_ai_cache_manager()
             logger.debug(f"[get_ai_help_data] ai_cache_manager: {ai_cache_manager is not None}")
 
             if ai_cache_manager is None:
-                context["error_message"] = "AI cache manager not initialized"
-                logger.debug("[get_ai_help_data] AI cache manager is None")
+                logger.warning(
+                    "AI cache manager is not initialized; no assistant row "
+                    "will be rendered.")
                 return context
 
             ai_assistant_html_parts = []
@@ -124,7 +163,7 @@ class DynamicAIHelp:
                 logger.debug(f"[get_ai_help_data] Could not determine if content is image: {e}")
 
             # Check if user specified specific assistant types
-            special_include_types = ai_cache_manager.get_special_include(instance, annotation_id)
+            special_include_types = ai_cache_manager.get_special_include(page_index, annotation_id)
             logger.debug(f"[get_ai_help_data] special_include_types: {special_include_types}")
 
             if special_include_types:
@@ -163,21 +202,27 @@ class DynamicAIHelp:
             return context
         except Exception as e:
             logger.error(f"[get_ai_help_data] Exception: {e}", exc_info=True)
+            # The exception text names internals and is already in the log at
+            # ERROR with a traceback. What reaches the page is what the
+            # annotator can act on, which is "carry on without it".
             return {
                 'ai_assistant': None,
-                'error_message': f'Error loading AI help: {str(e)}',
+                'error_message': 'AI help is unavailable for this item.',
             }
 
-    def render(self, instance: int, annotation_id: int, annotation_type) -> str:
+    def render(self, instance, annotation_id: int, annotation_type,
+               page_index: int = None) -> str:
         """Render AI help HTML with current data"""
-        context = self.get_ai_help_data(instance, annotation_id, annotation_type)
+        context = self.get_ai_help_data(instance, annotation_id, annotation_type,
+                                        page_index=page_index)
         context.update({
             'instance': instance,
             'annotation_id': annotation_id
         })
         return render_template_string(self.template, **context)
 
-def generate_ai_help_html(instance: int, annotation_id: int, annotation_type: str) -> Optional[str]:
+def generate_ai_help_html(instance, annotation_id: int, annotation_type: str,
+                          page_index: int = None) -> Optional[str]:
     """
     Generates dynamic AI help HTML using template rendering.
     Now works with the new prompt structure: {annotation_type: {prompt: ..., outputformat: ...}}
@@ -189,7 +234,8 @@ def generate_ai_help_html(instance: int, annotation_id: int, annotation_type: st
         logger.debug("[generate_ai_help_html] DYNAMICAIHELP is None - AI support not enabled")
         return ""  # AI support not enabled
 
-    result = DYNAMICAIHELP.render(instance, annotation_id, annotation_type)
+    result = DYNAMICAIHELP.render(instance, annotation_id, annotation_type,
+                                  page_index=page_index)
     logger.debug(f"[generate_ai_help_html] Rendered result: '{result[:100] if result else 'empty'}...'")
     return result
 

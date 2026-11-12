@@ -1,6 +1,6 @@
 # Extended Format Support
 
-Potato supports annotation of various document formats beyond plain text, including PDF documents, Word files, spreadsheets, Markdown, and source code.
+Potato annotates more than plain text: PDF documents, Word files, spreadsheets, Markdown, and source code.
 
 ## Overview
 
@@ -116,6 +116,16 @@ The `bbox` field contains normalized coordinates `[x, y, width, height]` where
 all values are 0-1 relative to page dimensions. The optional `bbox_pixels`
 field contains the original pixel coordinates.
 
+### PDF Cross-Page Linking
+
+To highlight text spans and draw region boxes on a multi-page PDF and **link
+them across pages** (text↔text, text↔region, region↔region), use
+`annotation_mode: link`. See
+[Multi-Page PDF Anchors & Cross-Page Linking](text/pdf_cross_page_linking.md)
+for the full guide, and the runnable examples at
+`examples/advanced/pdf-link-scroll/` (all pages stacked) and
+`examples/advanced/pdf-link-paginated/` (page browser + pin-navigate).
+
 ### Word Documents (DOCX)
 
 Display and annotate Word documents:
@@ -177,13 +187,21 @@ instance_display:
       display_options:
         annotation_mode: row   # row, cell, or range
         show_headers: true
+        header_row: false      # First row of a list-of-lists is the header
         max_height: 400
         striped: true          # Alternating row colors
         hoverable: true        # Highlight on hover
         sortable: true         # Enable column sorting
-        selectable: true       # Enable row/cell selection
+        selectable: false      # Row checkboxes / cell selection (off by default)
         compact: false         # Compact table styling
 ```
+
+**Where the columns come from:**
+- A list of dictionaries, or `{columns, rows}` with dictionary rows: every key any row has, in the order it first appears. A row that omits a key gets an empty cell rather than a shifted one, so a JSON-lines export that drops empty fields keeps all its columns
+- `columns` or `headers` in the data: exactly those, in that order. Naming them is choosing them, including choosing to leave one out
+- A list of lists: no headers, unless `header_row: true` says the first row is one. It is off by default because promoting row 0 on a list that has no header line would take a real row out of the data
+
+`selectable` is off by default. The selection it draws is not saved with the annotation, so leave it off for read-only tables such as trace metadata.
 
 **Annotation Modes:**
 - `row` - Annotate entire rows (default)

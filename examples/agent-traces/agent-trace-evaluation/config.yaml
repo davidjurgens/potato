@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Agent Trace Evaluation Example
 #
 # This example demonstrates comprehensive evaluation of AI agent traces
@@ -20,7 +21,7 @@ item_properties:
 # Task directory
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Instance Display Configuration
 # Shows task description, metadata table, and agent trace as dialogue
@@ -39,7 +40,6 @@ instance_display:
       label: "Trace Info"
       display_options:
         compact: true
-        max_height: 220
 
     - key: conversation
       type: dialogue

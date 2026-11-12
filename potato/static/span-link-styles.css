@@ -6,8 +6,8 @@
 
 /* Container */
 .span-link-container {
-    background-color: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 8px;
     padding: 16px;
     margin-bottom: 16px;
@@ -27,7 +27,7 @@
     margin: 0;
     font-size: 14px;
     font-weight: 600;
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 /* Section Labels */
@@ -35,7 +35,7 @@
     display: block;
     font-size: 12px;
     font-weight: 500;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     margin-bottom: 8px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -69,12 +69,12 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border: 1px solid var(--border-color, #e5e7eb);
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
     transition: all 0.15s ease;
-    background-color: var(--card-bg, #fff);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
 }
 
 .span-link-type-label:hover {
@@ -96,11 +96,11 @@
 }
 
 .link-type-name {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 .link-direction-icon {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     font-size: 12px;
 }
 
@@ -108,7 +108,7 @@
 .span-link-selection {
     margin-bottom: 16px;
     padding: 12px;
-    background-color: var(--bg-secondary, #f9fafb);
+    background-color: var(--bg-secondary, light-dark(#f9fafb, #191d20));
     border-radius: 6px;
     min-height: 60px;
 }
@@ -121,7 +121,7 @@
 
 .no-selection-message,
 .no-links-message {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     font-size: 13px;
     font-style: italic;
     margin: 0;
@@ -132,19 +132,19 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    background-color: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 4px;
     font-size: 12px;
 }
 
 .selected-span-label {
     font-weight: 600;
-    color: var(--primary-color, #6E56CF);
+    color: var(--primary-color, light-dark(#6E56CF, #b2a8db));
 }
 
 .selected-span-text {
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
     max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -152,7 +152,7 @@
 }
 
 .span-role {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     font-size: 11px;
     font-style: italic;
 }
@@ -161,24 +161,24 @@
     background: none;
     border: none;
     padding: 0 4px;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
     font-size: 16px;
     line-height: 1;
 }
 
 .remove-span-btn:hover {
-    color: var(--danger-color, #dc2626);
+    color: var(--danger-color, light-dark(#dc2626, #e3a1a1));
 }
 
 /* Constraint Error */
 .constraint-error {
     margin-top: 8px;
     padding: 8px 12px;
-    background-color: #fef2f2;
-    border: 1px solid #fecaca;
+    background-color: light-dark(#fef2f2, #2c1010);
+    border: 1px solid light-dark(#fecaca, #6a2f2f);
     border-radius: 4px;
-    color: #dc2626;
+    color: light-dark(#dc2626, #e3a1a1);
     font-size: 12px;
 }
 
@@ -208,16 +208,23 @@
     background-color: color-mix(in srgb, var(--primary-color, #6E56CF) 85%, black);
 }
 
+/* Clearly-disabled until every required slot is filled (grey, not faded purple,
+ * so the enable transition reads as a real state change). */
 .span-link-create-btn:disabled {
-    opacity: 0.5;
+    background-color: var(--bg-secondary, light-dark(#f3f4f6, #1d1f22));
+    color: var(--text-muted, #9ca3af);
     cursor: not-allowed;
+    box-shadow: inset 0 0 0 1px var(--border-color, light-dark(#e5e7eb, #494b50));
+}
+.span-link-create-btn:not(:disabled) {
+    box-shadow: 0 1px 2px rgba(110, 86, 207, 0.25);
 }
 
 .span-link-clear-btn {
     padding: 8px 16px;
     background-color: transparent;
-    color: var(--text-muted, #6b7280);
-    border: 1px solid var(--border-color, #e5e7eb);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
@@ -226,7 +233,7 @@
 
 .span-link-clear-btn:hover {
     border-color: var(--text-muted, #6b7280);
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
 }
 
 /* Existing Links List */
@@ -243,19 +250,46 @@
 .link-item {
     display: flex;
     align-items: center;
+    gap: 8px;
     justify-content: space-between;
-    padding: 8px 12px;
-    background-color: var(--card-bg, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
+    padding: 8px 10px;
+    background-color: var(--card-bg, light-dark(#fff, #1a1a1a));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
     border-left: 3px solid var(--link-color, #dc2626);
-    border-radius: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+.link-item:hover {
+    background-color: color-mix(in srgb, var(--link-color, #dc2626) 6%, light-dark(#fff, #1a1a1a));
+}
+.link-item:focus-visible {
+    outline: 2px solid var(--link-color, #dc2626);
+    outline-offset: 1px;
+}
+
+/* Number badge — matches the numbered chip pinned to the span in the transcript. */
+.link-num-badge {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 1.5px light-dark(#fff, #4c4c4c), 0 0 0 2.5px color-mix(in srgb, var(--link-color, #dc2626) 40%, transparent);
 }
 
 .link-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px 8px;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .link-type-badge {
@@ -265,38 +299,87 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
+    white-space: nowrap;
 }
+.link-arrow-in-badge { opacity: 0.85; font-weight: 700; }
 
 .link-spans {
     font-size: 13px;
-    color: var(--text-color, #1f2937);
+    color: var(--text-color, light-dark(#1f2937, #cbd3dd));
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
+/* Each linked span rendered as a labelled chip with its snippet. */
+.link-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--muted, light-dark(#f4f4f5, #1f1f21));
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: capitalize;
+    max-width: 100%;
+}
+.link-chip.is-source { border-color: color-mix(in srgb, var(--link-color, #dc2626) 55%, var(--border-color, light-dark(#e5e7eb, #494b50))); }
+.link-chip.is-target { background: color-mix(in srgb, var(--link-color, #dc2626) 8%, light-dark(#fff, #1a1a1a)); }
+.link-chip-text {
+    font-weight: 400;
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
+    font-style: italic;
+    text-transform: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+}
+.link-arrow {
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
+    font-weight: 700;
+    margin: 0 1px;
+}
 .link-direction {
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     margin: 0 4px;
 }
+
+/* Pulse a linked span when its list entry is clicked. */
+@keyframes span-link-flash-kf {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    30%, 70% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-color, #f59e0b) 70%, transparent); }
+}
+.span-highlight-segment.span-link-flash {
+    animation: span-link-flash-kf 1.4s ease;
+    border-radius: 3px;
+}
+.span-link-simple-arcs.span-link-arcs-emphasis path { stroke-width: 3.5 !important; opacity: 1 !important; }
+.span-link-simple-arcs .span-link-badge { transition: transform 0.12s ease; }
 
 .delete-link-btn {
     background: none;
     border: none;
     padding: 4px;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.15s ease;
 }
 
 .delete-link-btn:hover {
-    color: var(--danger-color, #dc2626);
-    background-color: #fef2f2;
+    color: var(--danger-color, light-dark(#dc2626, #e3a1a1));
+    background-color: light-dark(#fef2f2, #2c1010);
 }
 
 /* Visual Toggle */
 .span-link-visual-toggle {
     margin-top: 8px;
     padding-top: 12px;
-    border-top: 1px solid var(--border-color, #e5e7eb);
+    border-top: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
 }
 
 .span-link-visual-toggle label {
@@ -304,7 +387,7 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: var(--text-muted, #6b7280);
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
     cursor: pointer;
 }
 
@@ -316,7 +399,7 @@
 
 /* Link Mode Instructions */
 .link-mode-instruction {
-    color: var(--primary-color, #6E56CF);
+    color: var(--primary-color, light-dark(#6E56CF, #b2a8db));
     font-size: 13px;
     font-weight: 500;
     margin: 0;
@@ -327,7 +410,7 @@
 }
 
 .link-mode-instruction strong {
-    color: var(--primary-color, #6E56CF);
+    color: var(--primary-color, light-dark(#6E56CF, #b2a8db));
 }
 
 .link-mode-instruction kbd {
@@ -335,8 +418,8 @@
     padding: 2px 6px;
     font-size: 11px;
     font-family: system-ui, -apple-system, monospace;
-    background-color: white;
-    border: 1px solid #ccc;
+    background-color: light-dark(white, #1a1a1a);
+    border: 1px solid light-dark(#ccc, #4c4c4c);
     border-radius: 3px;
     box-shadow: 0 1px 0 #bbb;
 }
@@ -428,7 +511,7 @@ body.span-link-mode-active #instance-text {
 .span-link-arc-spacer {
     position: relative;
     width: 100%;
-    background: linear-gradient(to bottom, rgba(248, 250, 252, 0.5), transparent);
+    background: linear-gradient(to bottom, light-dark(rgba(248, 250, 252, 0.5), rgba(22, 28, 35, 0.5)), transparent);
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     margin-bottom: 8px;
 }
@@ -452,7 +535,7 @@ body.span-link-mode-active #instance-text {
 }
 
 .dependency-single-line-mode::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: light-dark(#f1f1f1, #222222);
     border-radius: 5px;
 }
 
@@ -468,8 +551,8 @@ body.span-link-mode-active #instance-text {
 /* Scroll indicator shadows */
 .dependency-single-line-mode {
     background:
-        linear-gradient(to right, white 30%, transparent),
-        linear-gradient(to right, transparent, white 70%) 100% 0,
+        linear-gradient(to right, light-dark(white, #1a1a1a) 30%, transparent),
+        linear-gradient(to right, transparent, light-dark(white, #1a1a1a) 70%) 100% 0,
         linear-gradient(to right, rgba(0,0,0,0.1), transparent 20px),
         linear-gradient(to left, rgba(0,0,0,0.1), transparent 20px) 100% 0;
     background-repeat: no-repeat;
@@ -477,28 +560,101 @@ body.span-link-mode-active #instance-text {
     background-attachment: local, local, scroll, scroll;
 }
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-    .span-link-container {
-        background-color: var(--card-bg-dark, #1f2937);
-        border-color: var(--border-color-dark, #374151);
-    }
+/* Potato is a light-only UI. A prefers-color-scheme: dark block here used to
+ * flip ONLY this panel to a dark palette on dark-OS machines, so the link panel
+ * looked dark and unreadable while the rest of the interface stayed light. The
+ * panel now inherits the same light theme tokens as everything else. */
 
-    .span-link-selection {
-        background-color: var(--bg-secondary-dark, #111827);
-    }
-
-    .selected-span-item,
-    .link-item {
-        background-color: var(--card-bg-dark, #1f2937);
-        border-color: var(--border-color-dark, #374151);
-    }
-
-    .constraint-error {
-        background-color: rgba(220, 38, 38, 0.1);
-        border-color: rgba(220, 38, 38, 0.3);
-    }
+/* The link panel is content-heavy (link types, selected spans, existing links,
+ * options). The annotation form area lays schemes out two-up (flex-wrap in
+ * .annotation_schema, or a grid), which crams the panel into a half-width strip
+ * — give it the full row in either layout so it reads comfortably. */
+.span-link-container.annotation-form {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
 }
+.annotation-forms-layout .annotation-form[data-annotation-type="span_link"],
+.annotation-forms-grid .annotation-form[data-annotation-type="span_link"] {
+    grid-column: 1 / -1;
+}
+
+/* ---- Guided link builder (slots + step guidance) --------------------- */
+.span-link-guide {
+    font-size: 0.86em;
+    line-height: 1.5;
+    color: var(--text-color, light-dark(#374151, #c3c9d2));
+    margin: 0;
+}
+.span-link-guide-sub {
+    margin-top: 8px;
+    font-size: 0.82em;
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
+}
+.span-link-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin: 0 5px 0 0;
+    border-radius: 50%;
+    background: var(--primary-color, #6E56CF);
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+    vertical-align: 1px;
+}
+.span-link-guide .span-link-step:not(:first-child) { margin-left: 6px; }
+
+.span-link-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.span-link-slot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color, light-dark(#e5e7eb, #494b50));
+    border-radius: 8px;
+    background: var(--card-bg, light-dark(#fff, #1a1a1a));
+}
+.span-link-slot.is-empty {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--primary-color, #6E56CF) 40%, var(--border-color, light-dark(#e5e7eb, #494b50)));
+    background: color-mix(in srgb, var(--primary-color, #6E56CF) 4%, transparent);
+}
+.span-link-slot.is-filled {
+    border-color: color-mix(in srgb, var(--primary-color, #6E56CF) 55%, var(--border-color, light-dark(#e5e7eb, #494b50)));
+}
+.span-link-slot-head {
+    flex-shrink: 0;
+    min-width: 38px;
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, light-dark(#6b7280, #bec0c6));
+}
+.span-link-slot-hint { font-size: 0.85em; color: var(--text-muted, light-dark(#6b7280, #bec0c6)); }
+.span-link-slot-opt { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted, light-dark(#6b7280, #bec0c6)); }
+.span-link-slot-type {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color, #6E56CF) 12%, var(--card-bg, light-dark(#fff, #1a1a1a)));
+    color: var(--primary-color, #6E56CF);
+    font-weight: 600;
+    font-size: 0.94em;
+}
+.span-link-slot-fill { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.span-link-slot-fill .selected-span-text {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text-color, light-dark(#374151, #c3c9d2));
+}
+.span-link-slot .remove-span-btn { margin-left: auto; }
 
 /* Responsive */
 @media (max-width: 640px) {

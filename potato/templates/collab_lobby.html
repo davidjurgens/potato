@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live sessions · {{ task_name }}</title>
+  {% include '_theme_head.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=43">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/collab.css') }}?v=3">
+  <style>
+    [hidden] { display: none !important; }
+    body { background: var(--background); color: var(--foreground); margin: 0; }
+    .lobby-header {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md);
+      padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border);
+      background: var(--card);
+    }
+    .lobby-header h1 { font-size: var(--text-xl, 20px); margin: 0; }
+    .lobby-header .spacer { flex: 1; }
+    .lobby-wrap { max-width: 960px; margin: 0 auto; padding: var(--space-lg) var(--space-md) var(--space-xl); }
+    .lobby-intro { color: var(--muted-foreground); max-width: 62ch; margin: 0 0 var(--space-lg); }
+    .lobby-columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); gap: var(--space-lg); align-items: start; }
+    @media (max-width: 760px) { .lobby-columns { grid-template-columns: 1fr; } }
+    .lobby-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-md); }
+    .lobby-card h2 { font-size: var(--text-dense, 14px); margin: 0 0 var(--space-sm); color: var(--muted-foreground); font-weight: 600; }
+    .session-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md); padding: var(--space-sm) 0; border-bottom: 1px solid var(--border); }
+    .session-row:last-child { border-bottom: none; }
+    .session-row .name { font-weight: 600; }
+    .session-row .meta { flex: 1; min-width: 12ch; color: var(--muted-foreground); font-size: var(--text-dense, 14px); }
+    .lobby-form { display: flex; flex-direction: column; gap: var(--space-sm); }
+    .lobby-form label { display: flex; flex-direction: column; gap: var(--space-xs); font-size: var(--text-dense, 14px); color: var(--muted-foreground); }
+    .lobby-form .collab-check { flex-direction: row; align-items: flex-start; gap: var(--space-sm); color: var(--foreground); }
+    .lobby-form .collab-check input { min-height: 0; width: 18px; height: 18px; margin-top: 2px; flex: none; }
+    .lobby-form input, .lobby-form select, .lobby-form textarea {
+      min-height: 44px; padding: 0 var(--space-sm); border: 1px solid var(--input); border-radius: var(--radius);
+      background: var(--background); color: var(--foreground); font: inherit;
+    }
+    .lobby-form textarea { padding: var(--space-sm); min-height: 72px; resize: vertical; }
+    .lobby-status { min-height: 1.5em; font-size: var(--text-dense, 14px); }
+    .lobby-status.error { color: var(--destructive-text, var(--destructive)); }
+    a.collab-button { display: inline-flex; align-items: center; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="lobby-header">
+    <h1>Live sessions</h1>
+    <span class="collab-muted">{{ task_name }}</span>
+    <span class="spacer"></span>
+    <span class="collab-muted">{{ username }}</span>
+    {% if is_admin %}<a class="collab-button collab-button-quiet" href="{{ request.script_root }}/collab/admin">Watch all sessions</a>{% endif %}
+    <a class="collab-button collab-button-quiet" href="{{ request.script_root }}/annotate">Back to my own items</a>
+  </header>
+
+  <main class="lobby-wrap">
+    <p class="lobby-intro">
+      In a live session a team works through the same items together and keeps one
+      shared answer for each. Changes show up on everyone's page as they are made,
+      and the session panel records who changed what.
+    </p>
+    <div class="lobby-columns">
+      <section class="lobby-card" aria-labelledby="lobby-open-heading">
+        <h2 id="lobby-open-heading">Open sessions</h2>
+        <div id="session-list" aria-live="polite"><p class="collab-muted">Loading…</p></div>
+      </section>
+
+      <section class="lobby-card" aria-labelledby="lobby-new-heading" {% if not can_create %}hidden{% endif %}>
+        <h2 id="lobby-new-heading">Start a session</h2>
+        <form id="create-form" class="lobby-form">
+          <label>Name
+            <input type="text" id="create-name" maxlength="80" placeholder="e.g. Tuesday calibration">
+          </label>
+          <label>Items
+            <select id="create-items">
+              <option value="count">The first N items</option>
+              <option value="ids">Specific item ids</option>
+            </select>
+          </label>
+          <label id="create-count-wrap">How many
+            <input type="number" id="create-count" min="1" value="10">
+          </label>
+          <label id="create-ids-wrap" hidden>Item ids, comma-separated
+            <textarea id="create-ids" placeholder="item_1, item_2"></textarea>
+          </label>
+          <label>Mode
+            <select id="create-mode">
+              <option value="follow">Follow the leader (you)</option>
+              <option value="free">Everyone moves freely</option>
+            </select>
+          </label>
+          <label class="collab-check"><input type="checkbox" id="create-blind"{% if blind_first_default %} checked{% endif %}>
+            Everyone answers on their own first, then the answers are compared</label>
+          <label class="collab-check"><input type="checkbox" id="create-signoff"{% if require_signoff_default %} checked{% endif %}>
+            An item is done when everyone marks it ready</label>
+          <button type="submit" class="collab-button">Start and open</button>
+          <p id="create-status" class="lobby-status" role="status"></p>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    var base = {{ request.script_root | tojson }};
+    var list = document.getElementById('session-list');
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+      });
+    }
+
+    function post(path, body) {
+      return fetch(base + path, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+          return data;
+        });
+      });
+    }
+
+    function render(sessions) {
+      if (!sessions.length) {
+        list.innerHTML = '<p class="collab-muted">No open sessions. Start one, or ask your study lead which team you are on.</p>';
+        return;
+      }
+      list.innerHTML = sessions.map(function (s) {
+        var action = s.is_member
+          ? '<a class="collab-button" href="' + base + '/collab/s/' + encodeURIComponent(s.session_id) + '">Open</a>'
+          : '<button type="button" class="collab-button" data-join="' + esc(s.session_id) + '">Join</button>';
+        var who = s.leader ? 'led by ' + esc(s.leader) : 'no leader';
+        var how = (s.blind_first ? ' · answers first on your own' : '') + (s.require_signoff ? ' · sign-off' : '');
+        return '<div class="session-row">' +
+          '<span class="name">' + esc(s.name) + '</span>' +
+          '<span class="meta">' + s.n_items + ' items · ' + s.n_members + ' in it · ' + who +
+            (s.source === 'config' ? ' · your team' : '') + how + '</span>' + action + '</div>';
+      }).join('');
+    }
+
+    function load() {
+      fetch(base + '/collab/api/list', {credentials: 'same-origin'})
+        .then(function (r) { return r.json(); })
+        .then(function (data) { render(data.sessions || []); })
+        .catch(function (e) { list.innerHTML = '<p class="lobby-status error">Could not load sessions: ' + esc(e.message) + '</p>'; });
+    }
+
+    list.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-join]');
+      if (!btn) return;
+      btn.disabled = true;
+      post('/collab/api/' + encodeURIComponent(btn.dataset.join) + '/join', {})
+        .then(function () { window.location.href = base + '/collab/s/' + encodeURIComponent(btn.dataset.join); })
+        .catch(function (err) { btn.disabled = false; alertStatus(err.message); });
+    });
+
+    var status = document.getElementById('create-status');
+    function alertStatus(text) { status.textContent = text; status.className = 'lobby-status error'; }
+
+    var itemsSel = document.getElementById('create-items');
+    itemsSel.addEventListener('change', function () {
+      document.getElementById('create-count-wrap').hidden = itemsSel.value !== 'count';
+      document.getElementById('create-ids-wrap').hidden = itemsSel.value !== 'ids';
+    });
+
+    document.getElementById('create-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var body = {name: document.getElementById('create-name').value.trim(),
+                  mode: document.getElementById('create-mode').value,
+                  blind_first: document.getElementById('create-blind').checked,
+                  require_signoff: document.getElementById('create-signoff').checked};
+      if (itemsSel.value === 'ids') {
+        body.item_ids = document.getElementById('create-ids').value.split(/[\s,]+/).filter(Boolean);
+      } else {
+        body.count = parseInt(document.getElementById('create-count').value, 10) || 10;
+      }
+      status.textContent = 'Starting…'; status.className = 'lobby-status';
+      post('/collab/api/create', body)
+        .then(function (data) { window.location.href = data.url; })
+        .catch(function (err) { alertStatus(err.message); });
+    });
+
+    load();
+    setInterval(load, {{ [poll_interval_ms * 5, 5000] | max }});
+  })();
+  </script>
+</body>
+</html>

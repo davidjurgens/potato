@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }}</title>
+    {% for href in style_urls %}
+    <link rel="stylesheet" href="{{ href }}">
+    {% endfor %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='runtime-bridge.css') }}?v=1">
+</head>
+<body>
+    <!-- The study is author code from the task directory, loaded as a file
+         and never rendered through Jinja. The page's CSP allows scripts only
+         from this server, so nothing here is inline. -->
+    <div id="runtime-target"></div>
+    <div id="potato-runtime-status" role="status" aria-live="polite" hidden>
+        <p id="potato-runtime-status-text"></p>
+        <button type="button" id="potato-runtime-retry" hidden>Try again</button>
+    </div>
+    <script type="application/json" id="potato-runtime-config">{{ client_config | tojson }}</script>
+    {% for s in scripts %}
+    <script src="{{ s.src }}"{% if s.module %} type="module"{% endif %}></script>
+    {% endfor %}
+    <script src="{{ url_for('static', filename='runtime-bridge.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename=boot_script) }}?v=1"></script>
+    {% for src in extra_script_urls %}
+    <script src="{{ src }}"></script>
+    {% endfor %}
+    {% if main_url %}
+    <script src="{{ main_url }}"{% if main_is_module %} type="module"{% endif %}></script>
+    {% endif %}
+</body>
+</html>

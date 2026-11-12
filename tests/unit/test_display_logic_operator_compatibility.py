@@ -485,7 +485,9 @@ class TestAllOperatorsExist:
             "gt", "gte", "lt", "lte",
             "in_range", "not_in_range",
             "empty", "not_empty",
-            "length_gt", "length_lt", "length_in_range"
+            "length_gt", "length_lt", "length_in_range",
+            # tests/unit/test_display_logic_groups.py
+            "count_gt", "count_lt", "count_equals",
         ]
         for op in SUPPORTED_OPERATORS:
             assert op in tested_operators, f"Operator {op} is not tested"

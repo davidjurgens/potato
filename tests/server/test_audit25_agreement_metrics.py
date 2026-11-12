@@ -1,0 +1,372 @@
+"""
+/admin/api/agreement over two annotators, asserting the numbers.
+
+Audit 25 found that this endpoint had never produced a single number. It calls
+simpledorff, and it called the wrong one of two similarly named functions: the
+kwargs it passes belong to ``calculate_krippendorffs_alpha_for_df``, and the
+bare ``calculate_krippendorffs_alpha`` takes an experiment-by-annotator table
+and one metric. The TypeError was the first statement in the per-schema ``try``,
+so Cohen's and Fleiss' kappa were never reached either.
+
+Nothing showed it with one annotator, which is why it survived: an earlier
+branch returns "No items with 2+ annotators" and the call never runs. The
+existing tests for this endpoint all assert a status code and stop, so a 200
+carrying ``{"error": "..."}`` for every schema read as a pass.
+
+The data and the expected alphas are the auditor's, hand-computed against
+simpledorff directly.
+"""
+
+import json
+import time
+
+import pytest
+import requests
+
+from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.test_utils import TestConfigManager
+
+
+# Eight items, two annotators. Agreement is deliberately partial in both
+# schemas: a test whose annotators agree everywhere passes with any measure
+# that returns 1.0, including a broken one.
+ELIGIBILITY = {
+    "a1": ["eligible", "ineligible", "ineligible", "ineligible",
+           "nei", "eligible", "nei", "nei"],
+    "a2": ["eligible", "ineligible", "ineligible", "eligible",
+           "nei", "eligible", "ineligible", "nei"],
+}
+CERTAINTY = {
+    "a1": [4, 5, 5, 4, 3, 5, 2, 1],
+    "a2": [4, 5, 4, 3, 4, 5, 3, 1],
+}
+
+# A multiselect where one answer carries several labels and another carries
+# one. That mixture is the point: the shape of a single answer used to decide
+# its type, so this column held a tuple beside a string and simpledorff raised
+# sorting it. Nearly every real multiselect study looks like this.
+REASONS = {
+    "a1": [["age"], ["age", "meds"], ["meds"], ["age"],
+           ["age", "meds"], ["meds"], ["age"], ["meds"]],
+    "a2": [["age"], ["age", "meds"], ["age"], ["age"],
+           ["meds"], ["meds"], ["age", "meds"], ["meds"]],
+}
+
+EXPECTED_ELIGIBILITY_ALPHA = 0.6471   # nominal
+EXPECTED_CERTAINTY_ALPHA = 0.8649     # interval
+
+
+@pytest.fixture(scope="class")
+def agreement_server():
+    schemes = [
+        {
+            "annotation_type": "radio",
+            "name": "eligibility",
+            "description": "Is this patient eligible?",
+            "labels": ["eligible", "ineligible", "nei"],
+        },
+        {
+            "annotation_type": "multiselect",
+            "name": "reasons",
+            "description": "Why?",
+            "labels": ["age", "meds"],
+        },
+        {
+            "annotation_type": "likert",
+            "name": "certainty",
+            "description": "How certain are you?",
+            "size": 5,
+            "min_label": "not at all",
+            "max_label": "completely",
+        },
+        {
+            "annotation_type": "process_reward",
+            "name": "reward",
+            "description": "Is each step correct?",
+        },
+        {
+            "annotation_type": "interlinear_gloss",
+            "name": "igt",
+            "description": "Gloss each word.",
+        },
+        # Audit 105 B7: refused by the route itself, not only by its helper.
+        {
+            "annotation_type": "volume_annotation",
+            "name": "vol",
+            "description": "Paint the lesion.",
+            "labels": ["lesion"],
+        },
+        {
+            "annotation_type": "pure_display",
+            "name": "note",
+            "description": "Read this first.",
+        },
+    ]
+    with TestConfigManager(
+        "audit25_agreement",
+        schemes,
+        num_instances=8,
+        num_annotators_per_item=2,
+    ) as cfg:
+        server = FlaskTestServer(port=9047, config_file=cfg.config_path,
+                                 debug=True)
+        if not server.start():
+            pytest.fail("Failed to start server")
+        _annotate_everything(server)
+        yield server
+        server.stop()
+
+
+def _annotate_everything(server):
+    """Put both annotators through all eight items."""
+    for annotator in ("a1", "a2"):
+        session = requests.Session()
+        session.post(f"{server.base_url}/register",
+                     data={"email": f"{annotator}@lab.org", "pass": "pw"})
+        session.post(f"{server.base_url}/auth",
+                     data={"email": f"{annotator}@lab.org", "pass": "pw"})
+        session.get(f"{server.base_url}/annotate")
+
+        for index in range(8):
+            instance_id = str(index + 1)
+            response = session.post(
+                f"{server.base_url}/updateinstance",
+                json={
+                    "instance_id": instance_id,
+                    # Flat `schema:::label`. The nested shape stores nothing
+                    # and now earns a 400.
+                    "annotations": dict(
+                        {
+                            f"eligibility:::{ELIGIBILITY[annotator][index]}": "true",
+                            f"certainty:::{CERTAINTY[annotator][index]}": "true",
+                        },
+                        **{f"reasons:::{label}": "true"
+                           for label in REASONS[annotator][index]},
+                        # Step rewards that differ between the two people.
+                        **{"reward:::reward": json.dumps({"mode": "binary", "steps": [
+                            {"index": k, "reward": (k + index + (annotator == "a2")) % 2}
+                            for k in range(4)]})},
+                        # The same segmentation from both; the gloss of the
+                        # second word differs on odd items.
+                        **{"igt:::igt": json.dumps({"words": [
+                            {"word": "evlerde", "morphemes": "ev-ler-de", "gloss": "house-PL-LOC"},
+                            {"word": "oturdum", "morphemes": "otur-du-m",
+                             "gloss": ("live" if annotator == "a2" and index % 2 else "sit") + "-PST-1SG"},
+                        ], "translation": ""})},
+                    ),
+                },
+            )
+            assert response.status_code == 200, response.text
+        time.sleep(0.2)
+
+
+def _agreement(server):
+    response = requests.get(f"{server.base_url}/admin/api/agreement")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+class TestAgreementMetricsProduceNumbers:
+
+    def test_every_schema_reports_an_alpha_rather_than_an_error(
+            self, agreement_server):
+        by_schema = _agreement(agreement_server)["by_schema"]
+        for name in ("eligibility", "certainty", "reasons"):
+            assert "error" not in by_schema[name], (
+                f"{name} reported an error instead of a number: "
+                f"{by_schema[name]}")
+            assert "krippendorff_alpha" in by_schema[name]
+
+    def test_nominal_alpha_matches_the_hand_computed_value(
+            self, agreement_server):
+        """The label NAME is the answer, not the stored value.
+
+        Reading the value gave True for every annotator on every categorical
+        schema. Anything that compares values rather than names cannot land on
+        0.6471 -- six of eight items agree, and unanimity would be 1.0 or NaN.
+        """
+        eligibility = _agreement(agreement_server)["by_schema"]["eligibility"]
+        assert eligibility["metric_type"] == "nominal"
+        assert eligibility["items_evaluated"] == 8
+        assert eligibility["krippendorff_alpha"] == pytest.approx(
+            EXPECTED_ELIGIBILITY_ALPHA, abs=1e-4)
+
+    def test_interval_alpha_matches_the_hand_computed_value(
+            self, agreement_server):
+        """A rating has to reach the interval metric as a number.
+
+        The shared normalizer stringifies every answer, which is correct for
+        nominal comparison and raises TypeError inside interval_metric, so a
+        likert schema stayed broken even after the call itself was fixed.
+        """
+        certainty = _agreement(agreement_server)["by_schema"]["certainty"]
+        assert certainty["metric_type"] == "interval"
+        assert certainty["krippendorff_alpha"] == pytest.approx(
+            EXPECTED_CERTAINTY_ALPHA, abs=1e-4)
+
+    def test_kappas_are_reached_for_categorical_schemas(self, agreement_server):
+        """They sit after the alpha call inside the same try.
+
+        Reporting them is the point of this assertion: with the alpha call
+        raising, no kappa was ever computed for any study.
+        """
+        eligibility = _agreement(agreement_server)["by_schema"]["eligibility"]
+        assert "kappa_error" not in eligibility, eligibility.get("kappa_error")
+        assert isinstance(eligibility.get("cohen_kappa"), dict)
+        assert isinstance(eligibility.get("fleiss_kappa"), dict)
+        assert eligibility["cohen_kappa"].get("mean_kappa") is not None
+        assert eligibility["fleiss_kappa"].get("kappa") is not None
+
+    def test_overall_is_populated(self, agreement_server):
+        """`overall` is built by filtering for schemas that carry an alpha.
+
+        With every schema erroring, it stayed {} -- the shape the dashboard
+        reads, so the page rendered blank rather than saying anything failed.
+        """
+        overall = _agreement(agreement_server)["overall"]
+        assert overall.get("schemas_evaluated") == 3
+        by_schema = _agreement(agreement_server)["by_schema"]
+        expected = sum(by_schema[n]["krippendorff_alpha"]
+                       for n in ("eligibility", "certainty", "reasons")) / 3
+        assert overall["average_krippendorff_alpha"] == pytest.approx(
+            expected, abs=1e-3)
+        assert overall.get("average_cohen_kappa") is not None
+        assert overall.get("average_fleiss_kappa") is not None
+
+    def test_a_multiselect_of_mixed_width_is_measured_rather_than_erroring(
+            self, agreement_server):
+        """One answer with two labels beside one with a single label.
+
+        The shape used to be chosen per answer, so this column carried a tuple
+        next to a string and simpledorff raised while sorting it to build the
+        coincidence matrix. The shape is decided for the whole schema now.
+        """
+        reasons = _agreement(agreement_server)["by_schema"]["reasons"]
+        assert "error" not in reasons, reasons
+        assert reasons["items_evaluated"] == 8
+        assert reasons["total_annotations"] == 16
+
+    def test_a_multiselect_is_compared_as_sets_of_labels(self, agreement_server):
+        """Partial overlap is partial agreement.
+
+        Comparing whole sets as nominal categories counted {age, meds} against
+        {meds} as total disagreement, and the kappas on those sets came out
+        negative for annotators who mostly agreed. The expected alpha is
+        NLTK's AnnotationTask with masi_distance on the same data (0.4854);
+        Jaccard by hand is (1+1+0+1+0.5+1+0.5+1)/8 = 0.75.
+        """
+        reasons = _agreement(agreement_server)["by_schema"]["reasons"]
+        assert reasons["metric_type"] == "masi"
+        assert reasons["krippendorff_alpha"] == pytest.approx(0.4854, abs=2e-4)
+        assert reasons["mean_jaccard"] == pytest.approx(0.75, abs=1e-4)
+        assert "fleiss_kappa" not in reasons and "cohen_kappa" not in reasons
+
+    def test_one_annotator_per_item_is_not_counted_as_overlap(
+            self, agreement_server):
+        """A multiselect chooses several names at once.
+
+        Those used to be appended as separate rows, so one person clearing two
+        checkboxes satisfied a two-annotator overlap on their own. Here the
+        radio picks one name, so the count is the annotator count.
+        """
+        by_schema = _agreement(agreement_server)["by_schema"]
+        assert by_schema["eligibility"]["total_annotations"] == 16
+
+
+@pytest.fixture(scope="class")
+def unanimous_server():
+    """Two annotators, one radio item, the same label from both."""
+    schemes = [{
+        "annotation_type": "radio",
+        "name": "sarcasm",
+        "description": "Is this sarcastic?",
+        "labels": ["yes", "no"],
+    }]
+    with TestConfigManager("audit25_unanimous", schemes, num_instances=1,
+                           num_annotators_per_item=2) as cfg:
+        server = FlaskTestServer(port=9048, config_file=cfg.config_path,
+                                 debug=True)
+        if not server.start():
+            pytest.fail("Failed to start server")
+        for annotator in ("u1", "u2"):
+            session = requests.Session()
+            session.post(f"{server.base_url}/register",
+                         data={"email": f"{annotator}@lab.org", "pass": "pw"})
+            session.post(f"{server.base_url}/auth",
+                         data={"email": f"{annotator}@lab.org", "pass": "pw"})
+            session.get(f"{server.base_url}/annotate")
+            response = session.post(
+                f"{server.base_url}/updateinstance",
+                json={"instance_id": "1",
+                      "annotations": {"sarcasm:::yes": "true"}})
+            assert response.status_code == 200, response.text
+        time.sleep(0.2)
+        yield server
+        server.stop()
+
+
+class TestUnanimousAgreementIsUndefined:
+    """One label throughout makes expected disagreement 0, so alpha is 0/0.
+
+    simpledorff raised "float division by zero" and the schema came back as
+    {"error": ..., "items_count": 1} with a 200, while /admin/iaa reported the
+    same data as undefined with percent agreement 1.0.
+    """
+
+    def test_reported_as_undefined_not_as_an_error(self, unanimous_server):
+        sarcasm = _agreement(unanimous_server)["by_schema"]["sarcasm"]
+        assert "error" not in sarcasm, sarcasm
+        assert sarcasm["krippendorff_alpha"] is None
+        # Same shape as a defined result, so readers of the objects work.
+        assert sarcasm["cohen_kappa"]["mean_kappa"] is None
+        assert sarcasm["fleiss_kappa"]["kappa"] is None
+        assert sarcasm["percent_agreement"] == 1.0
+        assert "chance agreement is 1" in sarcasm["note"]
+
+    def test_overall_skips_the_undefined_schema(self, unanimous_server):
+        assert _agreement(unanimous_server)["overall"] == {}
+
+
+
+class TestStructuredSchemasAreLeftToTheAgreementReport:
+    """Found by potato-skill (D8): a process_reward scheme read as the scheme's
+    own name for every annotator, "perfect agreement", while /admin/iaa,
+    which matches the steps, measured 0.56."""
+
+    def test_process_reward_points_to_admin_iaa(self, agreement_server):
+        entry = _agreement(agreement_server)["by_schema"]["reward"]
+        assert entry.get("see") == "/admin/iaa"
+        assert "krippendorff_alpha" not in entry and "percent_agreement" not in entry
+
+    def test_interlinear_gloss_points_to_admin_iaa(self, agreement_server):
+        # Reduced to label names, both annotators "chose" igt on every item
+        # and agreed perfectly, though half their glosses of one word differ.
+        entry = _agreement(agreement_server)["by_schema"]["igt"]
+        assert entry.get("see") == "/admin/iaa"
+        assert "krippendorff_alpha" not in entry
+
+    def test_interlinear_gloss_is_scored_by_admin_iaa(self, agreement_server):
+        response = requests.get(f"{agreement_server.base_url}/admin/iaa")
+        assert response.status_code == 200, response.text
+        metrics = response.json()["schemas"]["igt"]["metrics"]
+        assert metrics["n_items"] == 8
+        assert metrics["segmentation"]["percent_agreement"] == 1.0
+        # 16 words, the second word's gloss differs on 4 of 8 items.
+        assert metrics["gloss"]["n_units"] == 16
+        assert metrics["gloss"]["percent_agreement"] == 0.75
+        assert metrics["morpheme_gloss"]["percent_agreement"] == pytest.approx(44 / 48)
+
+
+class TestAgreementRouteRefusesWhatItCannotMeasure:
+    """Audit 105 B7, through the served route: a volume scheme was reduced
+    to label names, and a display-only scheme was scored as if it had
+    answers."""
+
+    def test_a_volume_scheme_points_to_admin_iaa(self, agreement_server):
+        entry = _agreement(agreement_server)["by_schema"]["vol"]
+        assert entry.get("see") == "/admin/iaa"
+        assert "krippendorff_alpha" not in entry
+
+    def test_a_display_only_scheme_says_it_has_no_measure(self, agreement_server):
+        entry = _agreement(agreement_server)["by_schema"]["note"]
+        assert entry == {"error": "This annotation type has no agreement measure."}

@@ -7,8 +7,8 @@ for selecting options. For tasks where there are at most 10 options,
 keybindings can be assigned sequentially by default. When defining your
 annotation scheme, set the `sequential_key_binding` field to `True`.
 
-The first option will correspond to the \"1\" key, the second to the
-\"2\" key, \..., the tenth to the \"0\" key.
+The first option corresponds to the "1" key, the second to the "2" key, and
+so on to the tenth on "0".
 
 *Custom keybindings:* For greater control, custom keybindings can also
 be configured. In this case, pass in objects into the `labels` field of
@@ -166,33 +166,77 @@ Potato supports admin-defined keyword highlights to help annotators identify rel
 
 ### Configuration
 
-Add a `keyword_highlights_file` to your configuration pointing to a TSV file:
+Point `keyword_highlights_file` at a file of keywords:
 
 ```yaml
-keyword_highlights_file: data/keywords.tsv
+keyword_highlights_file: data/keywords.csv
 ```
 
-The path is relative to the directory where you run the server (task_dir).
+The path is relative to `task_dir`, which is also the directory the server runs in.
 
-### TSV File Format
+### File format
 
-The keywords file should be tab-separated with three columns:
+A CSV or TSV with a header row:
 
 ```
-Word	Label	Schema
-love	positive	sentiment
-hate	negative	sentiment
-excel*	positive	sentiment
-disappoint*	negative	sentiment
+keyword,label,schema
+love,positive,sentiment
+hate,negative,sentiment
+excel*,positive,sentiment
+disappoint*,negative,sentiment
 ```
 
-| Column | Description |
-|--------|-------------|
-| **Word** | The keyword or phrase to highlight (supports `*` wildcards) |
-| **Label** | The annotation label associated with this keyword |
-| **Schema** | The annotation schema name this keyword is relevant to |
+| Column | Required | Description |
+|--------|----------|-------------|
+| `keyword` | yes | The word or phrase to highlight (supports `*` wildcards) |
+| `label` | no | The annotation label this keyword suggests |
+| `schema` | no | The annotation scheme the label belongs to |
+| `color` | no | A color for this label, as `(r, g, b)` or `#rrggbb` |
 
-**Note:** Use actual tab characters between columns, not spaces.
+Columns are matched by name, so they can be in any order, and each accepts a
+few spellings: `keyword`/`word`/`pattern`/`term`, `label`/`category`/`tag`,
+`schema`/`scheme`, `color`/`colour`. A file whose header Potato does not
+recognize is read positionally as keyword, label, schema, and the log says so.
+The header line becomes a keyword in that case, because nothing marks it as a
+header.
+
+Quote any value that contains the delimiter. Unquoted, `rgb(255,0,0)` is three
+cells to a CSV reader and every later value lands in the wrong column. Potato
+skips a row whose field count does not match the header, and names the line
+number.
+
+Several other shapes load too. One keyword per line, with `#` comments:
+
+```
+# hazards from the 2019 review
+latch
+swelled
+```
+
+A `#` starts a comment unless what follows it is a hex color, so
+`#ffcc00,latch,Defect` is read as data rather than dropped.
+
+A JSON array of keywords:
+
+```json
+["latch", "swelled"]
+```
+
+A JSON array of objects, which is where the label and schema go:
+
+```json
+[{"keyword": "latch", "label": "Hazard", "schema": "hazards"}]
+```
+
+A JSON object mapping each keyword to its label:
+
+```json
+{"latch": "Hazard"}
+```
+
+JSONL (one object per line) and the same shapes in YAML also work. The boot
+log names the format it read and how many patterns it found, so a file Potato
+cannot parse shows up at boot.
 
 ### Matching Behavior
 
@@ -202,6 +246,17 @@ disappoint*	negative	sentiment
   - `excel*` matches "excellent", "excels", "excel"
   - `*happy` matches "unhappy", "happy"
   - `dis*ed` matches "disappointed", "dismayed"
+
+### Fields scanned
+
+Potato scans `item_properties.text_key` and every `instance_display` field
+carrying `span_target: true` — that is, every field an annotator can mark. A
+`dialogue` field is scanned as its rendered text, speaker labels and line
+breaks included, so the offsets line up with what the browser measured.
+
+`/api/keyword_highlights/<instance_id>` reports the list under
+`fields_scanned`, and each match names its own `target_field`. A field without
+`span_target` is skipped: there is nowhere to draw a highlight on it.
 
 ### Configuring Colors
 
@@ -217,6 +272,15 @@ ui:
         neutral: "(156, 163, 175)"   # Gray
 ```
 
+A `color` column in the keywords file sets the same thing per label, which is
+easier when the labels only exist for highlighting:
+
+```
+keyword,label,schema,color
+excellent,positive,sentiment,(34, 197, 94)
+terrible,negative,sentiment,#ef4444
+```
+
 If no color is specified, Potato automatically assigns colors from a default palette.
 
 ### Multiple Schemas
@@ -224,11 +288,11 @@ If no color is specified, Potato automatically assigns colors from a default pal
 A single keywords file can support multiple annotation schemas:
 
 ```
-Word	Label	Schema
-excellent	positive	sentiment
-terrible	negative	sentiment
-price	economic	topic
-election	political	topic
+keyword,label,schema
+excellent,positive,sentiment
+terrible,negative,sentiment
+price,economic,topic
+election,political,topic
 ```
 
 ### Randomization Settings
@@ -236,7 +300,7 @@ election	political	topic
 For research purposes, you can configure keyword highlight randomization to prevent annotators from relying solely on the highlights:
 
 ```yaml
-keyword_highlights_file: data/keywords.tsv
+keyword_highlights_file: data/keywords.csv
 
 keyword_highlight_settings:
   keyword_probability: 1.0       # Probability of showing each matched keyword (0.0-1.0)
@@ -315,7 +379,7 @@ your mouse over the response option.
 
 ## Active Learning
 
-Active learning uses machine learning to intelligently prioritize annotation tasks, helping you maximize the value of your annotation budget. For comprehensive configuration and usage instructions, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+Active learning reorders the queue so annotators see the instances a model is least sure about first. The [Active Learning Guide](../ai-intelligence/active_learning_guide.md) covers configuration and use in full.
 
 ### Basic Configuration
 
@@ -336,14 +400,15 @@ active_learning:
   random_sample_percent: 20
 ```
 
-### Key Benefits
+### Why reorder at all
 
-- **Maximize annotation efficiency** by focusing on the most informative instances
-- **Reduce annotation costs** by requiring fewer annotations for the same model performance
-- **Improve model quality** by ensuring diverse and representative training data
-- **Scale annotation workflows** with intelligent instance prioritization
+Uncertain instances carry more information than confident ones, so a fixed
+annotation budget spent on them produces a better model than the same budget
+spent in dataset order. The cost is that your labeled set is no longer a
+random sample of the corpus, which matters if you intend to report distribution
+statistics over it.
 
-### How It Works
+### The active learning cycle
 
 1. **Training**: A machine learning classifier is trained on existing annotations
 2. **Prediction**: The model predicts confidence scores for unannotated instances
@@ -353,26 +418,21 @@ active_learning:
 
 For advanced features including LLM integration, model persistence, and multi-schema support, refer to the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
 
-## Automatic task assignent
+## Automatic task assignment
 
-Potato allows you to easily assign annotation tasks to different
-annotators, this is especially userful for crowdsourcing setting where
-you only need one annotator to work on a fixed amount of instances.
+Potato assigns items to annotators as they arrive. `assignment_strategy` picks
+the order, `num_annotators_per_item` caps how many people label each item, and
+`max_annotations_per_user` caps how many items one person gets:
 
-You can edit the automatic_assignmetn section in the configureation file
-for this function
-
-``` yaml
-"automatic_assignment": {
-   "on": true, # set false to turn off automatic assignment
-   "output_filename": "task_assignment.json", # saving path of the task assignment status
-   "sampling_strategy:": "random", # currently we only support random assignment
-   "labels_per_instance": 10, # number of labels for each instance
-   "instance_per_annotator": 50, # number of instances assigned for each annotator
-   "test_question_per_annotator": 2, # number of attention test questions for each annotator
-   "users": []
-},
+```yaml
+assignment_strategy: random
+num_annotators_per_item: 10
+max_annotations_per_user: 50
 ```
+
+The 1.x `automatic_assignment` block is not read. [Task
+Assignment](../advanced/task_assignment.md) lists the strategies and maps the
+old keys.
 
 ## Label suggestions
 Starting from 1.2.2.1, Potato supports displaying suggestions to improve the productivity of annotators. Currently we
@@ -397,7 +457,7 @@ types for different schemes.
     ],
 
     # If true, numbers [1-len(labels)] will be bound to each
-    # label. Aannotations with more than 10 are not supported with this
+    # label. Annotations with more than 10 are not supported with this
     # simple keybinding and will need to use the full item specification
     # to bind all labels to keys.
     "sequential_key_binding": True,

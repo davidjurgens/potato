@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Needs the example plugin installed first:
+#   pip install -e examples/plugins/counter/plugin
+annotation_task_name: Plugin example - counting people
+task_dir: .
+output_annotation_dir: annotation_output/
+data_files:
+- data/scenes.jsonl
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+plugins:
+- counter
+instance_display:
+  fields:
+  - key: text
+    type: word_count
+    label: Scene
+annotation_schemes:
+- annotation_type: counter
+  name: people
+  description: How many people does the scene mention?
+  min: 0
+  max: 50
+- annotation_type: radio
+  name: setting
+  description: Indoors or outdoors?
+  labels:
+  - indoors
+  - outdoors
+  - unclear

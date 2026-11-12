@@ -1,0 +1,4 @@
+[
+  {"id": "psg-01", "note": "Synthetic polysomnogram, 5 minutes (EDF+)", "signal": "psg-synthetic.edf"},
+  {"id": "psg-02", "note": "The same recording again, to score twice", "signal": "psg-synthetic.edf"}
+]

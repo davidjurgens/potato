@@ -1,18 +1,47 @@
 site_name: Potato Annotation
-site_url: https://github.com/davidjurgens/potato
+site_url: https://potatoannotator.readthedocs.io/
+site_description: Free, open-source, self-hosted annotation and agent-evaluation platform for NLP, agentic, and GenAI research.
 nav:
     - Home: index.md
     - Quick Start: quick-start.md
+    - FAQ: faq.md
+    - Glossary: glossary.md
     - Comparison: comparison.md
     - Guides:
         - Getting Started: guides/getting-started.md
         - Administrator Guide: guides/admin-guide.md
         - Developer Guide: guides/developer-guide.md
+        - Testing: guides/testing.md
+        - Contributing: guides/contributing.md
         - Crowdsourcing Guide: guides/crowdsourcing-guide.md
         - Agent Evaluation Guide: guides/agent-evaluation-guide.md
         - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
+        - Working with Transcripts: guides/working_with_transcripts.md
+        - Hotkey Review Mode: guides/hotkey_review_mode.md
+        - Bringing a Project Into Potato: guides/migrating-into-potato.md
+        - Coming from Label Studio: guides/coming-from-label-studio.md
+        - Coming from Argilla: guides/coming-from-argilla.md
+        - Coming from jsPsych: guides/coming-from-jspsych.md
+        - Coming from Qualtrics: guides/coming-from-qualtrics.md
+        - Coming from REDCap: guides/coming-from-redcap.md
+        - Coming from ODK and KoboToolbox: guides/coming-from-odk.md
+        - Coming from Zooniverse: guides/coming-from-zooniverse.md
+        - Coming from Ibex and PCIbex: guides/coming-from-ibex.md
+        - Content Analysis: guides/content-analysis.md
+        - "Linguistic Fieldwork: FLEx and Toolbox": guides/linguistic-fieldwork.md
+        - Coming from Network Canvas: guides/coming-from-network-canvas.md
+        - Cultural Domain Analysis: guides/cultural-domain-analysis.md
+        - "Perceptual Dialectology: Draw-a-Map": guides/perceptual-dialectology.md
+        - Digital Humanities Formats: guides/digital-humanities.md
+        - "Camera Traps: MegaDetector Review": guides/camera-traps.md
+        - "Bioacoustics: Raven, Audacity, BirdNET": guides/bioacoustics.md
+        - "Structural Biology: Marking Residues": guides/structural-biology.md
+        - "Genomics: Reviewing Variant Calls": guides/genomics-variant-review.md
+        - "Astronomy: Vetting Transients": guides/astronomy.md
+        - "Chemistry: Structures and Atom Marking": guides/chemistry.md
     - Configuration:
         - Overview: configuration/configuration.md
+        - Configuration Reference: configuration/config_reference.md
         - Data Format: configuration/data_format.md
         - Data Directory: configuration/data_directory.md
         - Remote Data Sources: configuration/remote_data_sources.md
@@ -40,16 +69,55 @@ nav:
             - Coreference Annotation: annotation-types/text/coreference_annotation.md
             - Entity Linking: annotation-types/text/entity_linking.md
             - Span Linking: annotation-types/text/span_linking.md
+            - Interlinear Glossed Text: annotation-types/text/interlinear_gloss.md
             - Error Span: annotation-types/text/error_span.md
             - Text Edit: annotation-types/text/text_edit.md
+            - Cloze (Fill in the Blank): annotation-types/text/cloze.md
+            - Math Rendering and Grading: annotation-types/text/math.md
             - Event Annotation: annotation-types/text/event_annotation.md
+            - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
+            - Per-Object Attributes: annotation-types/multimedia/object_attributes.md
+            - Interactive Segmentation: annotation-types/multimedia/segmentation.md
+            - Text Prompting: annotation-types/multimedia/text_prompting.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
+            - Listening Tests: annotation-types/multimedia/listening_tests.md
+            - Spectrogram Annotation: annotation-types/multimedia/spectrogram_annotation.md
+            - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
+            - Image Annotation Formats: annotation-types/multimedia/image_formats.md
+            - Media Ingest (TIFF, HEIC, RAW, video): annotation-types/multimedia/media_ingest.md
+            - Deep Zoom & Tiling: annotation-types/multimedia/deep_zoom.md
+            - 3D Medical Volumes: annotation-types/multimedia/volume_annotation.md
+            - Video Annotation Formats: annotation-types/multimedia/video_formats.md
+            - Transcript Formats: annotation-types/multimedia/transcript_formats.md
+        - Spatial (3D):
+            - Point Cloud Annotation: annotation-types/spatial/point_cloud.md
+            - Calibration and 2D Verification: annotation-types/spatial/calibration.md
+            - Depth Maps: annotation-types/spatial/depth_maps.md
+            - Maps (Geographic Annotation): annotation-types/spatial/geo_annotation.md
+        - Scientific Viewers:
+            - Protein Structures: annotation-types/science/protein_structures.md
+            - Genome Loci: annotation-types/science/genome_loci.md
+            - Chemical Structures: annotation-types/science/chemical_structures.md
+            - Spectra and Peak Picking: annotation-types/science/spectra.md
+            - Time Series and Signals: annotation-types/science/time_series.md
+            - Multichannel Microscopy: annotation-types/science/microscopy.md
+            - Clinical and Pathology Formats: annotation-types/science/clinical_formats.md
+            - Astronomical Images (FITS): annotation-types/science/astronomy.md
+            - Ontology-Backed Labels: annotation-types/science/ontology_labels.md
+        - Embodied:
+            - Episode Annotation: annotation-types/embodied/episodes.md
+            - Robot Dataset Formats: annotation-types/embodied/robot_formats.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
+            - Sensitive Questions: annotation-types/measurement/sensitive_questions.md
+            - Vocabulary Tests (LexTALE): annotation-types/measurement/vocabulary_test.md
+            - Price Lists: annotation-types/measurement/price_list.md
+            - BDM Bids: annotation-types/measurement/bdm.md
+            - Belief Elicitation: annotation-types/measurement/belief_elicitation.md
             - Range Slider: annotation-types/measurement/range_slider.md
             - Constant Sum: annotation-types/measurement/constant_sum.md
             - Semantic Differential: annotation-types/measurement/semantic_differential.md
@@ -61,8 +129,20 @@ nav:
             - Dialogue Annotation: annotation-types/structured/dialogue_annotation.md
             - Hierarchical Multiselect: annotation-types/structured/hierarchical_multiselect.md
             - Card Sorting: annotation-types/structured/card_sort.md
+            - Ego Networks: annotation-types/structured/ego_network.md
+            - Free Lists: annotation-types/survey/free_list.md
+            - Triad Tests: annotation-types/survey/triad_test.md
     - Workflow Phases:
         - Multi-Phase Workflows: workflow/surveyflow.md
+        - Experiment Flow: workflow/experiment_flow.md
+        - Runtime Phases: workflow/runtime_phases.md
+        - jsPsych Phase: workflow/jspsych_phase.md
+        - Timed Trials: workflow/timed_trials.md
+        - Self-Paced Reading and Maze: workflow/self_paced_reading.md
+        - Scheduled Sessions and Reminders: workflow/scheduling.md
+        - Experience Sampling: workflow/experience_sampling.md
+        - Delphi Studies: workflow/delphi.md
+        - Guidelines and Codebooks: workflow/annotation_guidelines.md
         - Training Phase: workflow/training_phase.md
         - Quality Control: workflow/quality_control.md
         - Annotation Navigation: workflow/annotation_navigation.md
@@ -70,61 +150,206 @@ nav:
         - Diversity Ordering: workflow/diversity_ordering.md
     - Agent Evaluation:
         - Agent Traces: agent-evaluation/agent_traces.md
+        - Three-Pane Trace Eval: agent-evaluation/eval_trace.md
+        - Trace Score Write-Back: agent-evaluation/trace_writeback.md
         - Coding Agent Annotation: agent-evaluation/coding_agent_annotation.md
         - Web Agent Annotation: agent-evaluation/web_agent_annotation.md
         - Trajectory Evaluation: agent-evaluation/trajectory_eval.md
+        - Trajectory Correction: agent-evaluation/trajectory_correction.md
+        - Process Supervision (PRM): agent-evaluation/process_supervision.md
+        - Failure-Mode Taxonomy (MAST): agent-evaluation/failure_taxonomy.md
+        - Multi-Agent Team Annotation: agent-evaluation/multi_agent_annotation.md
+        - Multimodal-Agent Annotation: agent-evaluation/multimodal_agent_annotation.md
+        - Programmatic Evaluators: agent-evaluation/evaluators.md
+        - Datasets & Experiments: agent-evaluation/datasets_and_experiments.md
+        - Automation Rules: agent-evaluation/automation_rules.md
+        - CI Evaluation: agent-evaluation/ci_evaluation.md
+        - Judge Alignment: agent-evaluation/judge_alignment.md
+        - World-Model & Rollout Evaluation: agent-evaluation/world_model_eval.md
+        - VLM Grounding & Pointing: agent-evaluation/vlm_grounding.md
+        - Semantic Curation: agent-evaluation/semantic_curation.md
+        - Model Arena: agent-evaluation/model_arena.md
+        - Trace Analytics & Alerts: agent-evaluation/trace_analytics.md
+        - Persona Simulation (multi-turn): agent-evaluation/persona_simulation.md
+        - Triage Queue: agent-evaluation/triage_queue.md
         - Live Agent Interaction: agent-evaluation/live_agent.md
+        - Interactive Agent Chat: agent-evaluation/interactive_chat.md
+        - Agent Task Recipes: agent-evaluation/agent_task_recipes.md
+        - Turn-Level Annotation: agent-evaluation/turn_level_annotation.md
+        - Multi-Agent Discussion: agent-evaluation/multi_agent_discussion.md
+        - Process Reward (CoT): agent-evaluation/process_reward_cot.md
+        - Session-Level Scoring: agent-evaluation/session_level_scoring.md
+        - Run Tree: agent-evaluation/run_tree.md
+        - Review Workflow: agent-evaluation/review_workflow.md
+    - Labeling Engine:
+        - Overview: labeling-engine/overview.md
+        - Contracts: labeling-engine/contracts.md
+        - Configuration: labeling-engine/configuration.md
+        - CLI, REST API, MCP and SDK: labeling-engine/cli-and-api.md
+        - Migration: labeling-engine/migration.md
     - Solo Mode:
         - Solo Mode: solo-mode/solo_mode.md
         - Advanced Features: solo-mode/solo_mode_advanced.md
         - Developer Guide: solo-mode/solo_mode_developer_guide.md
+        - Refinement Pipeline: solo_mode_refinement.md
     - AI & Intelligence:
         - AI Support: ai-intelligence/ai_support.md
         - Visual AI Support: ai-intelligence/visual_ai_support.md
+        - The Model Zoo: ai-intelligence/model_zoo.md
+        - Annotation Critique: ai-intelligence/annotation_critique.md
         - Chat Support: ai-intelligence/chat_support.md
         - AI Integration Internals: ai-intelligence/ai_integration_internals.md
         - Option Highlighting: ai-intelligence/option_highlighting.md
+        - Measuring AI Influence: ai-intelligence/assist_effect.md
         - Active Learning Guide: ai-intelligence/active_learning_guide.md
+        - Vision Active Learning: ai-intelligence/vision_active_learning.md
         - Active Learning Strategies: ai-intelligence/active_learning_strategies.md
         - ICL Labeling: ai-intelligence/icl_labeling.md
+        - HuggingFace Models: ai-intelligence/huggingface_models.md
+        - Judge Calibration: ai-intelligence/judge_calibration.md
+        - Reviewing Model Output: ai-intelligence/model_review.md
+        - Model Training: ai-intelligence/model_training.md
+        - AI Costs and Spend Caps: ai-intelligence/ai_costs.md
     - Advanced Features:
         - MACE: advanced/mace.md
+        - Machine Annotators: advanced/machine_annotators.md
         - Embedding Visualization: advanced/embedding_visualization.md
         - Survey Instruments: advanced/survey_instruments.md
+        - Incentive Payments: advanced/incentives.md
         - Category-Based Assignment: advanced/category_assignment.md
         - Task Assignment: advanced/task_assignment.md
+        - Agreement Over Time: advanced/agreement_drift.md
+        - Presentation Order: advanced/presentation_order.md
+        - Near-Duplicate Detection: advanced/near_duplicates.md
         - Behavioral Tracking: advanced/behavioral_tracking.md
+        - Keystroke Logging: advanced/keystroke_logging.md
+        - Text as Image: advanced/text_as_image.md
+        - Writing-Process Detection: advanced/writing_process_detection.md
+        - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
+        - Annotation Telemetry: advanced/annotation_telemetry.md
+        - Authenticity Paradata: advanced/authenticity_paradata.md
+        - Qualitative Data Analysis (QDA): advanced/qda.md
+        - Embeddings and the Corpus Map: advanced/embeddings.md
+        - Geometry Agreement: advanced/geometry_agreement.md
+        - Codebook: advanced/codebook.md
+        - Memos: advanced/memos.md
+        - Cases: advanced/cases.md
+        - Search: advanced/search.md
+        - Psychometrics: advanced/psychometrics.md
+        - Multi-Document Events: advanced/multi_document_events.md
+        - Live Collaborative Sessions: advanced/collaborative_sessions.md
+        - Multiplayer Rooms: advanced/multiplayer_rooms.md
+        - Per-Cohort Schemas: advanced/per_cohort_schemas.md
+        - Heterogeneous Coverage: advanced/heterogeneous_coverage.md
+        - Paper Mode: advanced/paper_mode.md
+        - Pocket Mode: advanced/pocket_mode.md
+        - Grid Labeling: advanced/grid_view.md
+        - Plugins: advanced/plugins.md
+        - Think Aloud: advanced/think_aloud.md
+        - Truth Serum: advanced/truth_serum.md
+        - Boundary Lab: advanced/boundary_lab.md
     - Authentication & Users:
         - User and Collaboration: auth-users/user_and_collaboration.md
+        - Roles and Permissions: auth-users/roles_and_permissions.md
         - Password Management: auth-users/password_management.md
         - Passwordless Login: auth-users/passwordless_login.md
         - SSO & OAuth: auth-users/sso_authentication.md
     - Administration:
         - Admin Dashboard: administration/admin_dashboard.md
+        - Annotator Dashboard: administration/annotator_dashboard.md
         - Adjudication: administration/adjudication.md
         - Annotation History: administration/annotation_history.md
         - Productivity: administration/productivity.md
     - Data & Export:
         - Export Formats: data-export/export_formats.md
+        - CV Format Matrix: data-export/format_matrix.md
+        - Single-Select Integrity: data-export/single-select-integrity.md
+        - Consensus Aggregation: data-export/consensus_aggregation.md
         - HuggingFace Export: data-export/huggingface_export.md
         - HuggingFace Datasets: data-export/datasets_integration.md
         - HuggingFace Spaces: data-export/huggingface_spaces.md
+        - Potato on HuggingFace: data-export/potato_on_huggingface.md
+        - Publishing Datasets: data-export/publishing_datasets.md
     - Tools:
+        - Import CLI: tools/import_cli.md
+        - Importing Surveys: tools/survey_import.md
         - Preview CLI: tools/preview_cli.md
+        - MCP Server: tools/mcp_server.md
+        - Agent Instructions: tools/authoring-agents.md
         - Migration CLI: tools/migration_cli.md
+        - Project Snapshots: tools/snapshots.md
         - Simulator: tools/simulator.md
         - Debugging Guide: tools/debugging_guide.md
     - Integrations:
         - Webhooks: integrations/webhooks.md
+        - ConvoKit: integrations/convokit.md
         - LangChain Integration: integrations/langchain_integration.md
+        - FiftyOne Annotation Backend: integrations/fiftyone.md
+        - Tracing SDK (potato_trace): integrations/tracing_sdk.md
     - Deployment:
         - Usage: deployment/usage.md
         - Crowdsourcing: deployment/crowdsourcing.md
+        - Choosing a Platform: deployment/crowdsourcing-platforms.md
+        - Prolific Integration: deployment/prolific_integration.md
+        - Prolific Webhooks: deployment/prolific_webhooks.md
+        - Connect Integration: deployment/connect_integration.md
+        - SONA Integration: deployment/sona_integration.md
+        - Expert Annotators: deployment/expert_annotators.md
+        - Longitudinal Studies: deployment/longitudinal-studies.md
         - MTurk Integration: deployment/mturk_integration.md
-        - Open Sourcing: deployment/open-sourcing.md
+        - Installing and Running: deployment/installation.md
+        - Deploying a Task: deployment/one-command-deploy.md
+        - Your Own Machine: deployment/deploy-local.md
+        - Temporary Public URL: deployment/deploy-share.md
+        - Docker: deployment/docker.md
+        - AWS: deployment/deploy-aws.md
+        - Jetstream2 and OpenStack: deployment/deploy-openstack.md
+        - Hetzner, Vultr, Linode: deployment/deploy-vps.md
+        - DigitalOcean: deployment/deploy-digitalocean.md
+        - Fly.io: deployment/deploy-fly.md
+        - Railway: deployment/deploy-railway.md
+        - Render: deployment/deploy-render.md
+        - Heroku: deployment/deploy-heroku.md
+        - HuggingFace Spaces: deployment/deploy-huggingface.md
+        - Backups: deployment/deploy-backups.md
+        - Deploy Buttons: deployment/deploy-buttons.md
+        - Getting Annotations Back: deployment/deploy-pull.md
+        - Reverse Proxy: deployment/reverse-proxy.md
+        - Air-Gapped Deployment: deployment/air_gap.md
+        - Third-Party Components: deployment/third_party_licenses.md
+        - Scaling: deployment/scaling.md
     - API Reference:
         - API Reference: api-reference/api_reference.md
+        - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
+        - v2.14.0: releasenotes/v2.14.0.md
+        - v2.13.1: releasenotes/v2.13.1.md
+        - v2.13.0: releasenotes/v2.13.0.md
+        - v2.12.3: releasenotes/v2.12.3.md
+        - v2.12.2: releasenotes/v2.12.2.md
+        - v2.12.1: releasenotes/v2.12.1.md
+        - v2.12.0: releasenotes/v2.12.0.md
+        - v2.11.1: releasenotes/v2.11.1.md
+        - v2.11.0: releasenotes/v2.11.0.md
+        - v2.10.3: releasenotes/v2.10.3.md
+        - v2.10.2: releasenotes/v2.10.2.md
+        - v2.10.1: releasenotes/v2.10.1.md
+        - v2.10.0: releasenotes/v2.10.0.md
+        - v2.9.4: releasenotes/v2.9.4.md
+        - v2.9.3: releasenotes/v2.9.3.md
+        - v2.9.2: releasenotes/v2.9.2.md
+        - v2.9.1: releasenotes/v2.9.1.md
+        - v2.9.0: releasenotes/v2.9.0.md
+        - v2.8.2: releasenotes/v2.8.2.md
+        - v2.8.1: releasenotes/v2.8.1.md
+        - v2.8.0: releasenotes/v2.8.0.md
+        - v2.7.1: releasenotes/v2.7.1.md
+        - v2.7.0: releasenotes/v2.7.0.md
+        - v2.6.2: releasenotes/v2.6.2.md
+        - v2.6.1: releasenotes/v2.6.1.md
+        - v2.6.0: releasenotes/v2.6.0.md
+        - v2.5.0: releasenotes/v2.5.0.md
+        - v2.4.5: releasenotes/v2.4.5.md
         - v2.4.4: releasenotes/v2.4.4.md
         - v2.4.3: releasenotes/v2.4.3.md
         - v2.4.1: releasenotes/v2.4.1.md
@@ -133,4 +358,47 @@ nav:
         - v2.2.0: releasenotes/v2.2.0.md
         - v2.1.0: releasenotes/v2.1.0.md
         - v2.0.0: releasenotes/v2.0.0.md
-theme: readthedocs
+repo_url: https://github.com/davidjurgens/potato
+repo_name: davidjurgens/potato
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true

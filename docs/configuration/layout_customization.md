@@ -1,6 +1,6 @@
 # Layout Customization Guide
 
-This guide explains how to create sophisticated, custom visual layouts for your annotation tasks using custom CSS and HTML templates.
+Custom CSS and HTML templates let you lay out an annotation task however you need, rather than accepting the default stack of schemas.
 
 ## Overview
 
@@ -96,7 +96,7 @@ Each annotation scheme needs:
 
 ## Example Layouts
 
-Potato includes three sophisticated example layouts demonstrating advanced customization:
+Potato ships three worked example layouts:
 
 ### 1. Content Moderation Dashboard
 

@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Peak picking on NMR and IR spectra.
+#
+# Each item is one spectrum file in media/spectra/: two 1H NMR spectra as
+# JCAMP-DX (DIFDUP-compressed XYDATA, in Hz, converted to ppm on the server)
+# and one IR spectrum as a two-column CSV. The ppm and wavenumber axes run
+# high-to-low, as chemists draw them.
+#
+# Click a peak to pick it, click a picked peak to remove it, drag to zoom,
+# double-click to zoom out. Integrate mode (NMR only) integrates a dragged
+# region. Suggested peaks (open orange triangles) come from automatic peak
+# detection; accept or reject each one, in the plot or in the list.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/spectrum-peak-picking/config.yaml -p 8000
+#
+# The spectra are synthetic (Lorentzian lines at textbook shifts, invented
+# intensities). Regenerate them with:
+#   python examples/advanced/spectrum-peak-picking/generate_spectra.py
+
+port: 8000
+annotation_task_name: "Spectrum peak picking"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/spectra.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+instance_display:
+  fields:
+    - key: note
+      type: text
+      label: "Task"
+    - key: spectrum
+      type: spectrum
+      label: "Spectrum"
+      display_options:
+        height: 380
+        # Suggested peaks: local maxima (minima for transmittance) that stand
+        # at least 5% of the y range above their surroundings, at most 30.
+        prepick:
+          method: detect
+          prominence: 0.05
+          max_peaks: 30
+        # Integration is on for NMR by default (integrate: auto).
+        integrate: auto
+        # At most this many points go to the browser; zooming in fetches the
+        # full resolution for the visible range.
+        max_points: 4000
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: peak_picking
+    name: peaks
+    description: "Pick the peaks and describe each one"
+    viewer_field: spectrum
+    peak_fields:
+      - name: assignment
+        type: text
+        placeholder: "e.g. OCH2, C=O"
+      - name: multiplicity
+        type: choice
+        options: [s, d, t, q, m, br]
+    region_fields:
+      - name: protons
+        label: "nH"
+        type: text
+        placeholder: "e.g. 2"
+    # Next stays blocked until at least one peak is picked and every
+    # suggestion is accepted or rejected. min_peaks and require_review only
+    # count while the scheme is required.
+    min_peaks: 1
+    require_review: true
+    label_requirement: {required: true}

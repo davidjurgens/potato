@@ -89,6 +89,25 @@ class TestAIInitializationWithConfig:
         finally:
             wrapper.DYNAMICAIHELP = original_value
 
+    @patch('ai.ai_help_wrapper.config')
+    def test_init_dynamic_ai_help_drops_a_helper_from_an_earlier_boot(self, mock_config):
+        """A boot with AI off clears the helper an earlier AI-on boot left.
+
+        Servers in one process (the in-process test servers) share this
+        module, and the old helper rendered AI help built for the old config.
+        """
+        mock_config.__getitem__ = MagicMock(return_value={"enabled": False})
+
+        import ai.ai_help_wrapper as wrapper
+        original_value = wrapper.DYNAMICAIHELP
+        wrapper.DYNAMICAIHELP = MagicMock(name="helper from an earlier boot")
+
+        try:
+            wrapper.init_dynamic_ai_help()
+            assert wrapper.DYNAMICAIHELP is None
+        finally:
+            wrapper.DYNAMICAIHELP = original_value
+
     @patch('ai.ai_prompt.config')
     def test_init_ai_prompt_does_nothing_when_disabled(self, mock_config):
         """Verify init_ai_prompt doesn't load prompts when AI disabled."""

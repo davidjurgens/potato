@@ -91,7 +91,6 @@ class TestImageAnnotationServerConfig:
         config_content = {
             "server_name": "Image Annotation Test",
             "annotation_task_name": "Test Task",
-            "output_annotation_format": "json",
             "alert_time_each_instance": 0,
             "item_properties": {
                 "id_key": "id",
@@ -131,7 +130,6 @@ class TestImageAnnotationServerConfig:
         config_content = {
             "server_name": "Image Annotation Test",
             "annotation_task_name": "Test Task",
-            "output_annotation_format": "json",
             "alert_time_each_instance": 0,
             "item_properties": {
                 "id_key": "id",
@@ -259,8 +257,14 @@ class TestImageAnnotationSchemaGeneration:
 
         assert keybindings is not None
         keys = [k for k, _ in keybindings]
-        assert "b" in keys  # bbox
-        assert "p" in keys  # polygon
+
+        # Tool keys come from the active keybinding profile (the default is V7's,
+        # where bbox is R), so read them rather than hardcoding letters.
+        from potato.server_utils.schemas.image_annotation import get_tool_keys
+        tool_keys = get_tool_keys()
+        assert tool_keys["bbox"] in keys
+        assert tool_keys["polygon"] in keys
+
         assert "1" in keys  # person
         assert "2" in keys  # car
 

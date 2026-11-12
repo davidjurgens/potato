@@ -1,6 +1,6 @@
 # Password Management
 
-Potato provides a comprehensive password management system with secure per-user password hashing, multiple reset flows, and persistent user storage. This guide covers password security, reset mechanisms, shared credential files, and the database authentication backend.
+Potato hashes each user's password with its own salt, supports several reset flows, and can persist users to a file or a database. This page covers password security, the reset mechanisms, shared credential files, and the database authentication backend.
 
 This documentation applies to the `in_memory` and `database` authentication methods. If you use OAuth/SSO (Google, GitHub, institutional), passwords are managed by the identity provider — see [SSO & OAuth Authentication](sso_authentication.md). In [mixed mode](sso_authentication.md#mixed-mode) (SSO + local login), the features described here apply to local password accounts.
 
@@ -10,7 +10,7 @@ Potato's authentication system supports:
 
 - **Per-user salted password hashing** using PBKDF2-SHA256 with 100,000 iterations
 - **Admin-initiated password reset** via CLI command or REST API
-- **Self-service password reset** via token-based reset links
+- **Token-based reset links** issued by an administrator
 - **Shared user credential files** for multi-server deployments
 - **Database authentication backend** using SQLite or PostgreSQL
 
@@ -42,7 +42,7 @@ Reset a user's password from the command line:
 # Interactive (prompts for username and password)
 potato reset-password config.yaml
 
-# Non-interactive (prompts for password only)
+# Username on the command line (still prompts for the password)
 potato reset-password config.yaml --username annotator1
 ```
 
@@ -65,29 +65,29 @@ curl -X POST http://localhost:8000/admin/reset_password \
 
 **Response (success):**
 ```json
-{"message": "Password updated successfully"}
+{"status": "success", "message": "Password reset for 'annotator1'"}
 ```
 
-**Response (user not found):**
+**Response (user not found, HTTP 404):**
 ```json
-{"error": "User not found"}
+{"error": "User 'annotator1' does not exist"}
 ```
 
 This endpoint requires the `admin_api_key` configured in your project (see [Admin Dashboard](../administration/admin_dashboard.md)).
 
-### Self-Service Password Reset
+### Reset Links
 
 Potato includes a token-based password reset flow for annotators who forget their passwords.
 
-#### How It Works
+#### The reset flow
 
-1. The annotator visits `/forgot-password` and enters their username
-2. The system generates a secure single-use reset token (valid for 24 hours)
-3. The reset link is displayed on screen for the admin to copy and share with the annotator
+1. The annotator visits `/forgot-password`, enters their username, and is told to contact the administrator
+2. The administrator generates a secure single-use reset token (valid for 24 hours) with the API below
+3. The administrator sends the link to the annotator via email or chat
 4. The annotator opens the link (`/reset/<token>`) and sets a new password
 5. The token is consumed (single-use) and the password is updated
 
-> **Note:** Potato does not send emails. The reset link is displayed on the page after submission. In a typical workflow, an administrator generates the token and sends the link to the annotator via email or chat.
+> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API (`POST /admin/create_reset_token`). The `potato reset-password` CLI issues no link: it prompts for the new password and sets it directly.
 
 #### Generating Tokens via API
 
@@ -103,6 +103,7 @@ curl -X POST http://localhost:8000/admin/create_reset_token \
 **Response:**
 ```json
 {
+  "status": "success",
   "reset_link": "http://localhost:8000/reset/abc123...",
   "token": "abc123...",
   "expires_in_hours": 24
@@ -113,11 +114,13 @@ Optional: set a custom expiry with `"ttl_hours": 48`.
 
 #### Login Page Link
 
-When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to the self-service reset form.
+When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to a page that tells them to ask the administrator for a reset link.
 
-## Shared User Credentials
+## Where accounts are stored
 
-By default, user credentials are stored in memory and not persisted between server restarts when using the `in_memory` authentication method. To share credentials across server restarts or between multiple server instances, configure an explicit `user_config_path`:
+Accounts created through the sign-up form are written to a JSONL file, and they
+are read back at the next boot. With the `in_memory` method that file is
+`user_config.json`, next to the output directory, unless you name another one:
 
 ```yaml
 authentication:
@@ -125,11 +128,27 @@ authentication:
   user_config_path: /shared/path/to/user_config.jsonl
 ```
 
-When `user_config_path` is explicitly set:
-- New user registrations are saved to the file automatically
+Name one when several server instances share a roster, or when you want the
+roster somewhere other than beside the annotations.
+
+Either way:
+- New registrations are written to the file as they happen
 - Password changes are persisted immediately
-- The file is in JSONL format (one JSON object per line)
-- Passwords are stored as `salt$hash` (never plaintext)
+- The format is JSONL (one JSON object per line)
+- Passwords are stored as `salt$hash`, never as plaintext
+
+**Keep the file with the annotation output.** An annotator's directory is named
+after their username, so a roster that has gone missing and an output directory
+that has not is a study where the next person to type that username would
+inherit somebody else's work. Potato refuses that registration rather than
+allowing it, which means the annotator cannot get back in until you restore the
+roster.
+
+Before v2.8.3, `in_memory` wrote nothing unless `user_config_path` was set
+explicitly. Accounts did not survive a restart: the annotator was told their
+account did not exist, and the sign-up form then accepted their username with
+any password at all. If you ran a study on an earlier build, the accounts from
+it are gone; the annotations are not.
 
 **Example `user_config.jsonl`:**
 ```json
@@ -141,7 +160,7 @@ When `user_config_path` is explicitly set:
 
 ## Database Authentication Backend
 
-For production deployments or when you need robust user management, use the database backend with SQLite or PostgreSQL.
+For production deployments, or whenever user records need to survive more than a restart, use the database backend with SQLite or PostgreSQL.
 
 ### SQLite (No Dependencies)
 
@@ -236,7 +255,7 @@ authentication:
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/forgot-password` | GET | None | Show forgot password form |
-| `/forgot-password` | POST | None | Generate reset token for username |
+| `/forgot-password` | POST | None | Show the ask-your-administrator page for any username; creates no token |
 | `/reset/<token>` | GET | None | Show password reset form |
 | `/reset/<token>` | POST | None | Submit new password |
 | `/admin/reset_password` | POST | API Key | Admin password reset |

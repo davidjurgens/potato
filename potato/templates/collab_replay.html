@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session replay · {{ task_name }}</title>
+  {% include '_theme_head.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=43">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/collab.css') }}?v=3">
+  <style>
+    [hidden] { display: none !important; }
+    body { background: var(--background); color: var(--foreground); margin: 0; }
+    .replay-header {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md);
+      padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border); background: var(--card);
+    }
+    .replay-header h1 { font-size: var(--text-xl, 20px); margin: 0; }
+    .replay-header .spacer { flex: 1; }
+    .replay-wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-lg) var(--space-md) var(--space-xl); }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md);
+                margin-bottom: var(--space-md); }
+    .controls select, .controls input[type=range] { min-height: 44px; }
+    .controls select { padding: 0 var(--space-sm); border: 1px solid var(--input); border-radius: var(--radius);
+                       background: var(--background); color: var(--foreground); font: inherit; }
+    .controls input[type=range] { flex: 1 1 240px; accent-color: var(--primary); }
+    .replay-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); }
+    @media (max-width: 760px) { .replay-columns { grid-template-columns: 1fr; } }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-md); }
+    .panel h2 { font-size: var(--text-dense, 14px); color: var(--muted-foreground); margin: 0 0 var(--space-sm); font-weight: 600; }
+    .timeline { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+    .timeline li { padding: var(--space-xs) var(--space-sm); border-left: 3px solid transparent; }
+    .timeline li[aria-current="step"] { border-left-color: var(--primary); background: var(--muted); }
+    .timeline li.future { opacity: 0.45; }
+    .timeline button { all: unset; display: block; width: 100%; cursor: pointer; min-height: 32px; }
+    .timeline button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .answer { margin: 0; padding-left: var(--space-md); overflow-wrap: anywhere; }
+    .kind { color: var(--muted-foreground); font-size: var(--text-xs, 12px); }
+  </style>
+</head>
+<body>
+  <header class="replay-header">
+    <h1>Replay: {{ session_info.name }}</h1>
+    <span class="spacer"></span>
+    <a class="collab-button collab-button-quiet" href="{{ request.script_root }}/collab/s/{{ session_info.session_id }}/i/{{ instance_id | urlencode }}" style="display:inline-flex;align-items:center;text-decoration:none">Back to the session</a>
+  </header>
+  <main class="replay-wrap">
+    <div class="controls">
+      <label>Item
+        <select id="item">
+          {% for iid in item_ids %}<option value="{{ iid }}"{% if iid == instance_id %} selected{% endif %}>{{ loop.index }}. {{ iid }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="button" id="play" class="collab-button">Play</button>
+      <label for="step" class="collab-visually-hidden">Step</label>
+      <input type="range" id="step" min="0" max="0" value="0">
+      <span id="where" class="collab-muted" aria-live="polite"></span>
+    </div>
+    <div class="replay-columns">
+      <section class="panel" aria-labelledby="tl-h">
+        <h2 id="tl-h">What happened</h2>
+        <ol id="timeline" class="timeline"></ol>
+      </section>
+      <section class="panel" aria-labelledby="ans-h">
+        <h2 id="ans-h">The team's answer at this point</h2>
+        <ul id="answer" class="answer"></ul>
+      </section>
+    </div>
+  </main>
+  <script>
+  (function () {
+    var base = {{ request.script_root | tojson }};
+    var sid = {{ session_info.session_id | tojson }};
+    var data = null, step = 0, timer = null;
+    var $ = function (id) { return document.getElementById(id); };
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+      });
+    }
+    var KIND = {edit: 'changed', message: 'said', discussion: 'commented', signoff: 'marked',
+                blind_done: 'finished their own answer', revealed: 'answers revealed',
+                poll_opened: 'asked', poll_closed: 'poll closed', summon: 'called the team here',
+                viewing: 'opened this item', member_joined: 'joined', member_left: 'left',
+                leader_changed: 'leader changed', mode_changed: 'mode changed', session_closed: 'session ended'};
+
+    function answerAt(n) {
+      var lines = data.initial;
+      for (var i = 0; i < n && i < data.frames.length; i++) {
+        if (data.frames[i].answer) lines = data.frames[i].answer;
+      }
+      return lines;
+    }
+
+    function render() {
+      var frames = data.frames;
+      $('step').max = frames.length;
+      $('step').value = step;
+      $('where').textContent = step === 0 ? 'Before anything happened' : 'Step ' + step + ' of ' + frames.length;
+      $('timeline').innerHTML = frames.map(function (f, i) {
+        var when = new Date(f.ts * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        var who = f.user || (f.via === 'reveal' ? 'Agreed before discussion' : 'Session');
+        var lines = (f.lines || []).map(function (l) { return '<div>' + esc(l) + '</div>'; }).join('');
+        var cur = i + 1 === step ? ' aria-current="step"' : '';
+        return '<li' + cur + (i + 1 > step ? ' class="future"' : '') + '><button type="button" data-step="' + (i + 1) + '">' +
+          '<strong>' + esc(who) + '</strong> <span class="kind">' + esc(KIND[f.type] || f.type) + ' · ' + esc(when) + '</span>' +
+          lines + '</button></li>';
+      }).join('') || '<li class="collab-muted">Nothing has happened on this item yet.</li>';
+      var lines = answerAt(step);
+      $('answer').innerHTML = lines.length ? lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('')
+        : '<li class="collab-muted">No answer yet.</li>';
+      var current = $('timeline').querySelector('[aria-current="step"]');
+      if (current) current.scrollIntoView({block: 'nearest'});
+    }
+
+    function load(iid) {
+      stop();
+      fetch(base + '/collab/api/' + encodeURIComponent(sid) + '/replay?instance_id=' + encodeURIComponent(iid),
+            {credentials: 'same-origin'})
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) { data = d; step = d.frames.length; render(); })
+        .catch(function (e) { $('timeline').innerHTML = '<li>Could not load the history: ' + esc(e.message) + '</li>'; });
+    }
+
+    function stop() { clearInterval(timer); timer = null; $('play').textContent = 'Play'; }
+    $('play').addEventListener('click', function () {
+      if (timer) { stop(); return; }
+      if (!data) return;
+      if (step >= data.frames.length) step = 0;
+      $('play').textContent = 'Pause';
+      timer = setInterval(function () {
+        if (step >= data.frames.length) { stop(); return; }
+        step += 1; render();
+      }, 900);
+    });
+    $('step').addEventListener('input', function () { stop(); step = Number(this.value); render(); });
+    $('timeline').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-step]');
+      if (b) { stop(); step = Number(b.dataset.step); render(); }
+    });
+    $('item').addEventListener('change', function () {
+      history.replaceState(null, '', '?instance_id=' + encodeURIComponent(this.value));
+      load(this.value);
+    });
+    load($('item').value);
+  })();
+  </script>
+</body>
+</html>

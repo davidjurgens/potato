@@ -1,0 +1,5 @@
+{"id": "gp1", "condition": "ambiguous", "sentence": "The horse | raced | past | the barn | fell | to the ground.", "question": "Did the horse fall?"}
+{"id": "gp2", "condition": "unambiguous", "sentence": "The horse | that was raced | past | the barn | fell | to the ground.", "question": ""}
+{"id": "gp3", "condition": "ambiguous", "sentence": "While Anna | dressed | the baby | played | in the crib.", "question": "Was the baby in the crib?"}
+{"id": "gp4", "condition": "unambiguous", "sentence": "While Anna | dressed, | the baby | played | in the crib.", "question": ""}
+{"id": "filler1", "condition": "filler", "sentence": "The chef | tasted | the soup | before | serving it | to the guests.", "question": "Did the chef taste the soup?"}

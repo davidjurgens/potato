@@ -67,6 +67,16 @@ user_config:
   allow_all_users: true
 ```
 
+### `bws_config` is required
+
+A `bws` scheme does not read its candidates off the item the way `pairwise`
+reads `items_key`. The tuples come from the top-level `bws_config` block.
+
+Give a `bws` scheme neither that nor `ibws_config` and the page still renders:
+both questions, and a best and a worst button for every position in the tuple,
+over an empty item list, so the annotator is asked to choose between blanks.
+`potato validate` rejects the combination and names the missing block.
+
 ### BWS Config Options
 
 | Option | Default | Description |
@@ -84,7 +94,7 @@ user_config:
 | `best_description` | "Which is BEST?" | Question text for best selection. |
 | `worst_description` | "Which is WORST?" | Question text for worst selection. |
 | `tuple_size` | 4 | Must match `bws_config.tuple_size`. |
-| `sequential_key_binding` | true | Enable keyboard shortcuts (1-9 for best, a-z for worst). |
+| `sequential_key_binding` | true | Enable keyboard shortcuts: the number row for best, the row below it (`q w e r …`) for worst. |
 
 ## Tuple Generation
 
@@ -146,7 +156,7 @@ score(item) = (best_count - worst_count) / appearance_count
 
 Converts each BWS annotation to pairwise comparisons:
 - Best item beats every other item (K-1 comparisons per annotation)
-- Every item beats the worst item (K-1 comparisons per annotation)
+- Every other item beats the worst item (K-2 more, since best over worst is already counted)
 
 Fits a Bradley-Terry model via `choix.ilsr_pairwise()`. Produces log-scale strength parameters.
 
@@ -154,12 +164,15 @@ Fits a Bradley-Terry model via `choix.ilsr_pairwise()`. Produces log-scale stren
 
 ### 3. Plackett-Luce
 
-Converts BWS to partial rankings:
-- [best] > [middle items] > [worst]
+Fits the best-worst (MaxDiff) form of the Plackett-Luce model by maximum
+likelihood. Each judgment is two choices: the best item is picked from the
+tuple with probability proportional to exp(u), and the worst from the
+remaining items with probability proportional to exp(-u). Scores are the
+fitted utilities u on a log scale, centred on 0. Unlike Bradley-Terry, this
+uses the order of the two choices rather than reducing each judgment to
+pairwise wins.
 
-Fits a Plackett-Luce model. Most statistically sophisticated option.
-
-**Requires:** `pip install choix`
+**Requires:** scipy, which Potato already installs.
 
 ## Scoring via CLI
 
@@ -205,10 +218,14 @@ When `sequential_key_binding: true`:
 | `2` | Select item B as best |
 | `3` | Select item C as best |
 | `4` | Select item D as best |
-| `a` | Select item A as worst |
-| `b` | Select item B as worst |
-| `c` | Select item C as worst |
-| `d` | Select item D as worst |
+| `q` | Select item A as worst |
+| `w` | Select item B as worst |
+| `e` | Select item C as worst |
+| `r` | Select item D as worst |
+
+A larger tuple continues along both rows (`5` and `t` for item E, and so on).
+Past the tenth item a tile has no key. Potato keeps these keys away from other
+schemes on the page that use `sequential_key_binding`.
 
 ## Annotation Storage
 

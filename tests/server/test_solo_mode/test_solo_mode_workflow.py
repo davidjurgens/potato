@@ -861,9 +861,19 @@ class TestLLMPredictedPool:
         assert "x" not in selector._llm_predicted_pool
 
     def test_select_from_llm_predicted_pool(self):
-        """When llm_predicted weight is 1.0, selections come from that pool."""
+        """When llm_predicted is the only weight, selections come from that pool.
+
+        The other four weights have to be zeroed explicitly. ``SelectionWeights``
+        is a dataclass with non-zero defaults, so ``SelectionWeights(
+        llm_predicted=1.0)`` sums to 2.0 and normalizes llm_predicted down to
+        0.5 -- leaving a 1-in-10 chance of drawing from the random pool, which
+        holds ``no_pred``. That is what made this test fail roughly one run in
+        thirty.
+        """
         selector = InstanceSelector(
-            weights=SelectionWeights(llm_predicted=1.0)
+            weights=SelectionWeights(
+                low_confidence=0.0, diverse=0.0, random=0.0,
+                disagreement=0.0, llm_predicted=1.0)
         )
         predictions = {
             "pred_1": {"s": {"confidence_score": 0.9}},

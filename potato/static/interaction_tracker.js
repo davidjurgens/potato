@@ -12,7 +12,25 @@
  *
  * Events are batched and sent periodically to minimize network overhead.
  * Uses sendBeacon API for reliable delivery on page unload.
+ *
+ * With `interaction_tracking.enabled: false` (window.interactionTrackingConfig)
+ * the ambient stream -- clicks, focus, scroll, keys -- is not recorded at all.
+ * The instance id is still tracked, because the other trackers and
+ * annotation.js rely on it, and AI-assistant usage and the annotation change
+ * trail are still sent: those are provenance of the saved answer, not ambient
+ * behaviour. Time per item is kept too: item loads, saves, navigation and a
+ * content-free `activity` mark (no target, no key, at most one per
+ * ACTIVITY_MARK_MS while the annotator is using the page) are still posted, so
+ * BehavioralData.active_time_ms() -- and the throughput, adjudication and
+ * dashboard timings built on it -- does not drop to zero.
  */
+
+/** Event types still recorded when interaction tracking is off. */
+const TIMING_EVENT_TYPES = new Set(['navigation', 'save', 'activity']);
+
+/** At most one `activity` mark per this many ms when tracking is off. */
+const ACTIVITY_MARK_MS = 15000;
+
 class InteractionTracker {
     constructor() {
         this.events = [];
@@ -25,6 +43,11 @@ class InteractionTracker {
         this.lastFlush = Date.now();
         this.isInitialized = false;
         this.debugMode = false;
+        const cfg = (typeof window !== 'undefined' && window.interactionTrackingConfig) || {};
+        this.enabled = cfg.enabled !== false;
+        // false on a phase page outside interaction_tracking.phases: nothing
+        // is sent, not even the timing marks (there is no item to time).
+        this.record = cfg.record !== false;
 
         // Don't auto-init - wait for explicit init call or DOMContentLoaded
         if (document.readyState === 'loading') {
@@ -37,6 +60,10 @@ class InteractionTracker {
     init() {
         if (this.isInitialized) return;
         this.isInitialized = true;
+        if (!this.enabled) {
+            this.initTimingOnly();
+            return;
+        }
 
         // Track clicks on annotation elements
         document.addEventListener('click', (e) => this.trackClick(e), true);
@@ -61,6 +88,30 @@ class InteractionTracker {
         if (this.debugMode) {
             console.log('[InteractionTracker] Initialized');
         }
+    }
+
+    /**
+     * Tracking off: keep only what time-per-item needs. Any input marks the
+     * page as in use, throttled to one `activity` event per ACTIVITY_MARK_MS;
+     * the event carries no target and no detail of what was done.
+     */
+    initTimingOnly() {
+        this.lastActivityMark = 0;
+        const mark = () => {
+            const now = Date.now();
+            if (now - this.lastActivityMark < ACTIVITY_MARK_MS) return;
+            this.lastActivityMark = now;
+            this.addEvent('activity', '');
+        };
+        ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((type) => {
+            document.addEventListener(type, mark, { capture: true, passive: true });
+        });
+        document.addEventListener('pointermove', mark, { capture: true, passive: true });
+        window.addEventListener('scroll', mark, { passive: true });
+
+        window.addEventListener('beforeunload', () => this.flush(true));
+        window.addEventListener('pagehide', () => this.flush(true));
+        this.flushTimer = setInterval(() => this.flush(false), this.flushInterval);
     }
 
     /**
@@ -223,18 +274,25 @@ class InteractionTracker {
      * @param {*} oldValue - Previous value
      * @param {*} newValue - New value
      * @param {string} source - What triggered the change (user, ai_accept, keyboard, prefill)
+     * @param {string} [oldLabel] - The label the answer moved AWAY from. Single-select
+     *   schemas (radio/likert/confidence) store one key per option, so a revision
+     *   changes the label as well as the value; without this the trail cannot show
+     *   which option was superseded.
      */
-    trackAnnotationChange(schemaName, labelName, action, oldValue, newValue, source = 'user') {
+    trackAnnotationChange(schemaName, labelName, action, oldValue, newValue, source = 'user',
+                          oldLabel = null) {
         this.addEvent('annotation_change', `schema:${schemaName}`, {
             label: labelName,
             action: action,
+            old_label: oldLabel,
             old_value: oldValue,
             new_value: newValue,
             source: source,
         });
 
         // Also send to dedicated annotation change endpoint for persistence
-        this.sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source);
+        this.sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source,
+                                  oldLabel);
     }
 
     /**
@@ -370,6 +428,7 @@ class InteractionTracker {
      * @param {Object} metadata - Additional metadata
      */
     addEvent(eventType, target, metadata = {}) {
+        if (!this.enabled && !TIMING_EVENT_TYPES.has(eventType)) return;
         const event = {
             event_type: eventType,
             timestamp: Date.now() / 1000,  // Unix timestamp in seconds
@@ -396,6 +455,11 @@ class InteractionTracker {
      * @param {boolean} isFinal - Whether this is a final flush (page unload)
      */
     async flush(isFinal) {
+        if (!this.record) {
+            this.events = [];
+            this.focusTime = {};
+            return;
+        }
         if (this.events.length === 0 && Object.keys(this.focusTime).length === 0) {
             return;
         }
@@ -464,7 +528,8 @@ class InteractionTracker {
     /**
      * Send annotation change to dedicated endpoint
      */
-    async sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source) {
+    async sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source,
+                               oldLabel = null) {
         try {
             await fetch('/api/track_annotation_change', {
                 method: 'POST',
@@ -474,6 +539,7 @@ class InteractionTracker {
                     schema_name: schemaName,
                     label_name: labelName,
                     action: action,
+                    old_label: oldLabel,
                     old_value: oldValue,
                     new_value: newValue,
                     source: source,

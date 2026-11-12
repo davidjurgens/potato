@@ -59,6 +59,9 @@ class VideoAnnotationManager {
         this.activeLabelColor = null;
         this.isPlaying = false;
         this.annotationCounter = 0;
+        // Ids unique to this page (see audio-annotation.js): the counter
+        // restarts at 1 on every load.
+        this.idNonce = Math.random().toString(36).slice(2, 8);
 
         // Video metadata
         this.videoMetadata = {
@@ -141,6 +144,13 @@ class VideoAnnotationManager {
         this._updateTimeDisplay();
         this._updateFrameDisplay();
 
+        // Peaks.js's UMD bundle exports lowercase 'peaks'; alias to uppercase
+        // 'Peaks' if needed (matches audio-annotation.js). Do this here so the
+        // check below is robust regardless of script load order.
+        if (typeof Peaks === 'undefined' && typeof peaks !== 'undefined') {
+            window.Peaks = peaks;
+        }
+
         // Check if Peaks.js is available
         if (typeof Peaks === 'undefined') {
             console.warn('[VideoAnnotation] Peaks.js not available - video will play without timeline visualization');
@@ -168,11 +178,15 @@ class VideoAnnotationManager {
             logger: console.error.bind(console),
             zoomLevels: [256, 512, 1024, 2048, 4096],
             ...waveformSource,
-            segments: {
+            // segments must be an array (empty initially, added later); the
+            // marker/overlay styling goes under segmentOptions (matching audio).
+            segments: [],
+            segmentOptions: {
                 markers: true,
                 overlay: true,
                 startMarkerColor: '#4a90d9',
-                endMarkerColor: '#4a90d9'
+                endMarkerColor: '#4a90d9',
+                waveformColor: 'rgba(74, 144, 217, 0.4)'
             },
             zoomview: {
                 container: this.zoomviewEl,
@@ -200,6 +214,9 @@ class VideoAnnotationManager {
             // Set up Peaks.js-specific event listeners
             this._setupPeaksEventListeners();
 
+            // Right-click-drag range selection on the timeline + overview
+            this._setupDragSelection();
+
             // Load existing annotations if any
             this._loadExistingAnnotations();
 
@@ -209,11 +226,28 @@ class VideoAnnotationManager {
             }
 
         } catch (error) {
-            console.error('Failed to initialize Peaks.js:', error);
-            // Hide timeline containers since they won't work
+            // A video with no audio track is the common case here, and it is
+            // not an error: there is no waveform to draw, and everything else
+            // on the widget works. Logged at `warn`, in one line that says so.
+            // At `console.error` it was indistinguishable from the
+            // tiered_annotation initialiser genuinely giving up, and an audit
+            // spent time telling them apart.
+            const silent = /EncodingError|Unable to decode audio/i.test(
+                String(error && error.message || error));
             if (this.zoomviewEl) this.zoomviewEl.style.display = 'none';
             if (this.overviewEl) this.overviewEl.style.display = 'none';
-            console.warn('[VideoAnnotation] Waveform visualization unavailable. Video playback still works.');
+            if (silent) {
+                console.warn('[VideoAnnotation] No decodable audio track, so '
+                    + 'there is no waveform to draw. The timeline, segments '
+                    + 'and playback all still work.');
+            } else {
+                console.error('[VideoAnnotation] Peaks.js failed to '
+                    + 'initialize, so the waveform is unavailable. Video '
+                    + 'playback and segments still work:', error);
+            }
+            // Still restore existing annotations even without a working timeline —
+            // otherwise navigating away and back loses saved segments.
+            this._loadExistingAnnotations();
         }
     }
 
@@ -296,23 +330,24 @@ class VideoAnnotationManager {
         const player = this.peaks.player;
         const view = this.peaks.views.getView('zoomview');
 
-        // Playback events
-        player.on('player.playing', () => {
+        // Playback events — subscribe on the Peaks instance (this.peaks.on),
+        // not this.peaks.player, which has no .on() in this Peaks build.
+        this.peaks.on('player.playing', () => {
             this.isPlaying = true;
             this._updatePlayButton();
         });
 
-        player.on('player.pause', () => {
+        this.peaks.on('player.pause', () => {
             this.isPlaying = false;
             this._updatePlayButton();
         });
 
-        player.on('player.ended', () => {
+        this.peaks.on('player.ended', () => {
             this.isPlaying = false;
             this._updatePlayButton();
         });
 
-        player.on('player.timeupdate', (time) => {
+        this.peaks.on('player.timeupdate', (time) => {
             this._updateTimeDisplay(time);
             this._updateFrameDisplay();
         });
@@ -327,8 +362,9 @@ class VideoAnnotationManager {
             this._selectAnnotation(event.point.id);
         });
 
-        // Double-click to create segment at position
-        if (view) {
+        // Double-click to create segment at position (optional; some Peaks
+        // builds don't expose view-level events, so guard against it).
+        if (view && typeof view.on === 'function') {
             view.on('dblclick', (event) => {
                 const time = event.time;
                 if (this.config.mode === 'segment' || this.config.mode === 'combined') {
@@ -337,6 +373,56 @@ class VideoAnnotationManager {
                     this.createSegment(time, endTime);
                 }
             });
+        }
+    }
+
+    /**
+     * Set up right-click-drag range selection on the zoomview and overview.
+     *
+     * - Zoomview: precise selection within the visible window, with edge
+     *   auto-scroll so a drag can extend past the visible edge.
+     * - Overview: coarse selection across the whole clip.
+     *
+     * Left-click stays with Peaks.js for seeking; Peaks' native segment
+     * drag/resize continues to edit existing segments. Uses the shared
+     * attachPeaksRangeSelection helper (peaks-range-select.js).
+     */
+    _setupDragSelection() {
+        if (!this.peaks) return;
+        if (typeof window.attachPeaksRangeSelection !== 'function') {
+            console.warn('peaks-range-select.js not loaded; drag selection unavailable');
+            return;
+        }
+        if (this.config.mode && this.config.mode !== 'segment' && this.config.mode !== 'combined') {
+            // Only segment/combined modes create time ranges by dragging
+            return;
+        }
+
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+        }
+        this._rangeSelectDetach = [];
+
+        const onCreate = (start, end) => {
+            videoDebugLog('Creating segment from right-click drag', { start, end });
+            this.createSegment(start, end);
+        };
+
+        if (this.zoomviewEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.zoomviewEl, 'zoomview', {
+                    onCreate,
+                    edgeScroll: true,
+                })
+            );
+        }
+        if (this.overviewEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.overviewEl, 'overview', {
+                    onCreate,
+                    fullDuration: true,
+                })
+            );
         }
     }
 
@@ -352,6 +438,9 @@ class VideoAnnotationManager {
      */
     _onVideoTimeUpdate() {
         this._updateFrameDisplay();
+        if (!this.peaks) {
+            this._updateTimeDisplay();   // Peaks' own timeupdate does it otherwise
+        }
 
         // Update tracking overlay if in tracking mode
         if (this.config.mode === 'tracking' || this.config.mode === 'combined') {
@@ -365,7 +454,24 @@ class VideoAnnotationManager {
      * Get current frame number
      */
     getCurrentFrame() {
-        return Math.floor(this.videoEl.currentTime * this.videoMetadata.fps);
+        // The epsilon is not a rounding preference; it is the whole point.
+        //
+        // `seekToFrame(n)` sets currentTime = n / fps, and the browser stores
+        // that as a float a hair BELOW the exact value: asking for frame 14 of
+        // a 12 fps clip gives back 1.166666, and 1.166666 * 12 is 13.999992.
+        // A plain floor therefore answers 13 — so seeking to a frame and
+        // drawing on it filed the annotation one frame early, every time, for
+        // every annotator. Measured in a real browser at frames 14, 26 and 40.
+        //
+        // Floor is still right for a time in the MIDDLE of a frame, which is
+        // where playback leaves it; only the representation error is absorbed.
+        // The tolerance is in FRAMES and has to clear the browser's own
+        // rounding: currentTime comes back truncated to six decimal places, so
+        // the error in frames is fps * 1e-6 — 1.2e-5 at 12 fps, 3e-5 at 30.
+        // A thousandth of a frame is far above that and far below any time a
+        // seek or playback actually lands on (33 microseconds at 30 fps).
+        const fps = this.videoMetadata.fps;
+        return Math.floor(this.videoEl.currentTime * fps + 1e-3);
     }
 
     /**
@@ -514,7 +620,7 @@ class VideoAnnotationManager {
             return null;
         }
 
-        const segmentId = id || `segment_${++this.annotationCounter}`;
+        const segmentId = id || `segment_${this.idNonce}_${++this.annotationCounter}`;
         const segmentLabel = label || this.activeLabel || 'unlabeled';
         const segmentColor = color || this.activeLabelColor || '#4ECDC4';
 
@@ -549,6 +655,48 @@ class VideoAnnotationManager {
 
         videoDebugLog('Created segment:', segment);
         return segment;
+    }
+
+    /**
+     * Hide or show segments by label.
+     *
+     * The video half of the shared per-class show/hide (see
+     * label-visibility.js, which owns the state). A timeline of stacked
+     * segments is as unreadable as an image of stacked boxes, and the
+     * annotator wants the same affordance in both.
+     *
+     * Hidden segments are removed from the Peaks *view* only — they stay in
+     * `this.segments`, so they are still saved and exported. Hiding a class
+     * must never delete work.
+     *
+     * @param {Set<string>} hidden - Label names to hide
+     */
+    applyLabelVisibility(hidden) {
+        this.hiddenLabels = hidden || new Set();
+        if (!this.peaks) {
+            this._updateAnnotationList();
+            return;
+        }
+
+        this.segments.forEach(seg => {
+            const shouldHide = this.hiddenLabels.has(seg.label);
+            const onTimeline = !!this.peaks.segments.getSegment(seg.id);
+
+            if (shouldHide && onTimeline) {
+                this.peaks.segments.removeById(seg.id);
+            } else if (!shouldHide && !onTimeline) {
+                this.peaks.segments.add({
+                    id: seg.id,
+                    startTime: seg.startTime,
+                    endTime: seg.endTime,
+                    labelText: seg.label,
+                    color: seg.color,
+                    editable: true,
+                });
+            }
+        });
+
+        this._updateAnnotationList();
     }
 
     /**
@@ -643,7 +791,7 @@ class VideoAnnotationManager {
         const keyframeLabel = label || this.activeLabel || 'keyframe';
 
         const keyframe = {
-            id: `keyframe_${++this.annotationCounter}`,
+            id: `keyframe_${this.idNonce}_${++this.annotationCounter}`,
             frame: frame,
             time: time,
             label: keyframeLabel,
@@ -691,7 +839,7 @@ class VideoAnnotationManager {
         const frame = this.getCurrentFrame();
 
         if (!objectId) {
-            objectId = `object_${++this.annotationCounter}`;
+            objectId = `object_${this.idNonce}_${++this.annotationCounter}`;
         }
 
         if (!this.trackingData[objectId]) {
@@ -723,6 +871,7 @@ class VideoAnnotationManager {
         if (!this.trackingCanvas) return;
 
         const ctx = this.trackingCanvas.getContext('2d');
+        if (!ctx) return;
         ctx.clearRect(0, 0, this.trackingCanvas.width, this.trackingCanvas.height);
 
         const currentFrame = this.getCurrentFrame();
@@ -752,6 +901,50 @@ class VideoAnnotationManager {
         this.activeAnnotationId = annotationId;
         this._updateAnnotationList();
         this._updateDeleteButton();
+        this._showQuestionsPanel(annotationId);
+    }
+
+    /**
+     * Show the per-segment question form for the selected segment.
+     *
+     * `segmentSchemes` reached the browser in the JS config and the string did
+     * not appear anywhere in this file: no panel, no placeholder, nothing. The
+     * segment was stored with an empty `annotations` object whatever the config
+     * asked for. The fields come from the hidden <template> the server renders
+     * from `segment_schemes`.
+     */
+    _showQuestionsPanel(segmentId) {
+        if (!this.questionsEl) return;
+
+        const segment = this.segments.find(s => s.id === segmentId);
+        if (!segment || !this.config.segmentSchemes || !this.config.segmentSchemes.length) {
+            this.questionsEl.style.display = 'none';
+            return;
+        }
+
+        const contentEl = this.questionsEl.querySelector('.segment-questions-content');
+        if (!contentEl) return;
+
+        const header = document.createElement('p');
+        header.className = 'segment-questions-header';
+        header.textContent = `Annotating: ${segment.label} `
+            + `(${this._formatTime(segment.startTime)} - ${this._formatTime(segment.endTime)})`;
+
+        contentEl.innerHTML = '';
+        contentEl.appendChild(header);
+
+        const fields = document.createElement('div');
+        fields.className = 'segment-questions-fields';
+        contentEl.appendChild(fields);
+
+        const rendered = window.SegmentQuestions && window.SegmentQuestions.render({
+            schemaName: this.config.schemaName,
+            container: fields,
+            segment: segment,
+            onChange: () => this._saveData(),
+        });
+
+        this.questionsEl.style.display = rendered ? 'block' : 'none';
     }
 
     /**
@@ -806,18 +999,14 @@ class VideoAnnotationManager {
      * Handle keydown events
      */
     _handleKeydown(event) {
-        // Debug: Log all key presses to help diagnose keyboard issues
-        console.log('[VideoAnnotation] Keydown:', event.key, 'code:', event.code, 'target:', event.target.tagName);
-
-        // Don't handle if typing in input/textarea
+        // Don't handle if typing in input/textarea. (Every key, typed text
+        // included, used to be logged to the console here.)
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-            console.log('[VideoAnnotation] Ignoring: in text input');
             return;
         }
 
         // Check if this container exists (simplified check - removed offsetParent)
         if (!this.container) {
-            console.log('[VideoAnnotation] Ignoring: no container');
             return;
         }
 
@@ -827,13 +1016,11 @@ class VideoAnnotationManager {
         // Handle bracket keys explicitly using both key and code for cross-platform compatibility
         // code is more reliable across different keyboard layouts
         if (key === '[' || code === 'BracketLeft') {
-            console.log('[VideoAnnotation] Handling [ key (code:', code, ')');
             event.preventDefault();
             this.setSelectionStart();
             return;
         }
         if (key === ']' || code === 'BracketRight') {
-            console.log('[VideoAnnotation] Handling ] key (code:', code, ')');
             event.preventDefault();
             this.setSelectionEnd();
             return;
@@ -886,6 +1073,12 @@ class VideoAnnotationManager {
                 break;
 
             case 'k': // Mark keyframe
+                // Plain k only. Ctrl/Cmd+K sets a TRACKING keyframe in
+                // tracking-ui.js, and both handlers are bound to `document`,
+                // so an unguarded letter case fires on the modified press too
+                // -- one keystroke would mark a keyframe here AND pin a
+                // tracking keyframe there.
+                if (event.ctrlKey || event.metaKey) break;
                 event.preventDefault();
                 this.markKeyframe(this.activeLabel);
                 break;
@@ -918,8 +1111,12 @@ class VideoAnnotationManager {
                 break;
 
             default:
-                // Check for label shortcuts
-                this._handleLabelShortcut(key);
+                // Label shortcuts. preventDefault so a label elsewhere on the
+                // page bound to the same key does not fire as well.
+                if (!event.ctrlKey && !event.metaKey && !event.altKey
+                        && this._handleLabelShortcut(keyLower)) {
+                    event.preventDefault();
+                }
                 break;
         }
     }
@@ -930,7 +1127,10 @@ class VideoAnnotationManager {
     _handleLabelShortcut(key) {
         const labels = this.config.labels || [];
         for (const label of labels) {
-            if (label.key_value && label.key_value.toLowerCase() === key) {
+            // String(): `key_value: 1` in YAML arrives as a number, and
+            // number.toLowerCase() threw on every unhandled key.
+            if (label.key_value != null && label.key_value !== ''
+                    && String(label.key_value).toLowerCase() === key) {
                 this.setActiveLabel(label.name, label.color);
                 // Update UI
                 const buttons = this.container.querySelectorAll('.label-btn');
@@ -938,31 +1138,56 @@ class VideoAnnotationManager {
                     btn.classList.toggle('active', btn.dataset.label === label.name);
                 });
                 this._showToast(`Selected: ${label.name}`);
-                break;
+                return true;
             }
         }
+        return false;
     }
 
     // ==================== Zoom Controls ====================
 
-    zoomIn() {
+    /**
+     * Halve or double the visible window, keeping its centre.
+     *
+     * See the same method in audio-annotation.js for why this is expressed in
+     * seconds read back off the view: `view.getZoom()` does not exist in the
+     * bundled Peaks build (it is on `peaks.zoom`), so the old
+     * `setZoom({scale:'auto'}); view.getZoom()` pair threw on every click and
+     * both buttons were dead; and `peaks.zoom.zoomIn()` steps an index the
+     * view never updates, so the first press does nothing.
+     *
+     * @param {number} factor <1 magnifies, >1 widens.
+     */
+    _zoomByFactor(factor) {
         if (!this.peaks) return;
         const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            view.setZoom({ scale: 'auto' });
-            const zoomLevel = view.getZoom();
-            view.setZoom({ seconds: zoomLevel * 0.75 });
+        if (!view || typeof view.getStartTime !== 'function') return;
+
+        const start = view.getStartTime();
+        const current = view.getEndTime() - start;
+        if (!isFinite(current) || current <= 0) return;
+
+        const duration = this.peaks.player ? this.peaks.player.getDuration() : 0;
+        let next = current * factor;
+        if (isFinite(duration) && duration > 0) next = Math.min(next, duration);
+        next = Math.max(next, 0.1);
+        if (Math.abs(next - current) < 1e-6) return;
+
+        const centre = start + current / 2;
+        view.setZoom({ seconds: next });
+        if (typeof view.setStartTime === 'function') {
+            const span = (isFinite(duration) && duration > 0) ? duration : next;
+            const maxStart = Math.max(0, span - next);
+            view.setStartTime(Math.min(Math.max(0, centre - next / 2), maxStart));
         }
     }
 
+    zoomIn() {
+        this._zoomByFactor(0.5);
+    }
+
     zoomOut() {
-        if (!this.peaks) return;
-        const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            view.setZoom({ scale: 'auto' });
-            const zoomLevel = view.getZoom();
-            view.setZoom({ seconds: zoomLevel * 1.25 });
-        }
+        this._zoomByFactor(2);
     }
 
     zoomToFit() {
@@ -1008,8 +1233,13 @@ class VideoAnnotationManager {
     }
 
     _updateTimeDisplay(time = null) {
-        const currentTime = time !== null ? time : (this.peaks ? this.peaks.player.getCurrentTime() : 0);
-        const duration = this.peaks ? this.peaks.player.getDuration() : 0;
+        // Peaks.js does not start on a video with no audio track; the readout
+        // then stayed at 0:00 / 0:00. The video element knows both numbers.
+        const video = this.videoEl;
+        const currentTime = time !== null ? time
+            : (this.peaks ? this.peaks.player.getCurrentTime() : (video ? video.currentTime : 0));
+        const duration = this.peaks ? this.peaks.player.getDuration()
+            : (video && isFinite(video.duration) ? video.duration : 0);
 
         const currentTimeEl = this.container.querySelector('.current-time');
         const totalTimeEl = this.container.querySelector('.total-time');
@@ -1060,6 +1290,10 @@ class VideoAnnotationManager {
         if (this.segments.length > 0) {
             html += '<div class="annotation-group"><h5>Segments</h5>';
             for (const segment of this.segments) {
+                // Keep the list in step with the timeline: a hidden class that
+                // still appears in the list is worse than no filter at all,
+                // because it reads as "the timeline lost my segment".
+                if (this.hiddenLabels && this.hiddenLabels.has(segment.label)) continue;
                 const isActive = this.activeAnnotationId === segment.id;
                 html += `
                     <div class="annotation-item ${isActive ? 'active' : ''}" data-id="${segment.id}">
@@ -1151,6 +1385,10 @@ class VideoAnnotationManager {
     // ==================== Data Persistence ====================
 
     _saveData() {
+        this._declareCompleteness();
+        // Restoring a stored answer writes nothing: the input already holds
+        // it, and a rewrite partway through the restore held only part of it.
+        if (this._hydrating) return;
         const data = {
             video_metadata: this.videoMetadata,
             segments: this.segments.map(s => ({
@@ -1164,7 +1402,12 @@ class VideoAnnotationManager {
             })),
             frame_annotations: this.frameAnnotations,
             keyframes: this.keyframes,
-            tracking: this.trackingData
+            tracking: this.trackingData,
+            // Object tracks from TrackingUIManager (tracking-ui.js). Before
+            // the tracker existed (or when it never loads) the tracks that
+            // came with the item are kept, so a save cannot drop them.
+            tracks: this.trackingManager ? this.trackingManager.getTrackingData()
+                                         : (this.loadedTracks || {})
         };
 
         // Always log save operations for debugging
@@ -1176,6 +1419,10 @@ class VideoAnnotationManager {
         if (this.inputEl) {
             this.inputEl.value = JSON.stringify(data);
             console.log('[VideoAnnotation] Set input value, length:', this.inputEl.value.length);
+            // Assigning `.value` fires nothing; without this the shared
+            // autosave in annotation.js cannot see the timeline change and the
+            // work reaches the server only when the annotator navigates.
+            this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
             console.error('[VideoAnnotation] ERROR: inputEl is null, cannot save data!');
         }
@@ -1183,102 +1430,200 @@ class VideoAnnotationManager {
         videoDebugLog('Saved annotation data:', data);
     }
 
-    _loadExistingAnnotations() {
-        // Always log to help debug loading issues
-        console.log('[VideoAnnotation] _loadExistingAnnotations called');
+
+    /**
+     * Say what is still missing, in the annotator's terms.
+     *
+     * `min_segments` reached the browser as `minSegments` and was read by
+     * nobody: a scheme declaring `min_segments: 2` was satisfied by one
+     * segment, and by the hidden input merely being non-empty. The form-level
+     * `data-incomplete-reason` is the contract validateRequiredFields reads
+     * for composite widgets (see agent_scorecard), so this is where the count
+     * belongs. Unlabelled segments count too -- a segment with no label is a
+     * region of time nobody classified.
+     */
+    _declareCompleteness() {
+        const form = this.inputEl && this.inputEl.closest('.annotation-form');
+        if (!form) return;
+        const need = parseInt(this.config.minSegments, 10) || 0;
+        const have = this.segments.length;
+        const bits = [];
+        if (need && have < need) {
+            bits.push(`${have} of ${need} segments marked`);
+        }
+        const unlabelled = this.segments.filter(s => !s.label).length;
+        if (unlabelled) {
+            bits.push(`${unlabelled} segment${unlabelled === 1 ? '' : 's'} with no label`);
+        }
+        if (bits.length) form.setAttribute('data-incomplete-reason', bits.join('; '));
+        else form.removeAttribute('data-incomplete-reason');
+    }
+
+    /**
+     * Put the hidden input's answer on screen, replacing whatever is drawn.
+     *
+     * It used to append: a second call (the stored answer re-read, or a
+     * teammate's answer in a live session) drew every segment twice. It also
+     * saved partway through: each restored segment went through
+     * createSegment -> _saveData, which wrote the input with the segments so
+     * far and NO keyframes or frame classifications (those load after the
+     * segments), then fired `change`. The autosave then stored that partial
+     * answer, so reloading an item with keyframes lost them. Restoring now
+     * writes nothing (`_hydrating`): the input keeps the answer it arrived
+     * with until a real edit.
+     *
+     * @param {Object} [options]
+     * @param {boolean} [options.trusted] - the value is known to belong to
+     *     this item (a live-session apply), so skip the bfcache duration check
+     */
+    _loadExistingAnnotations(options = {}) {
+        this._annotationsLoaded = true;
 
         // Re-fetch the input element in case it was replaced during page render
         if (!this.inputEl) {
             this.inputEl = document.getElementById(this.inputId);
-            console.log('[VideoAnnotation] Re-fetched inputEl:', this.inputEl);
         }
 
-        console.log('[VideoAnnotation] inputEl:', this.inputEl);
-        console.log('[VideoAnnotation] inputEl id:', this.inputEl ? this.inputEl.id : 'N/A');
-        console.log('[VideoAnnotation] inputEl value length:', this.inputEl && this.inputEl.value ? this.inputEl.value.length : 0);
-
-        // Log first 200 chars of value for debugging
+        let data = null;
         if (this.inputEl && this.inputEl.value) {
-            console.log('[VideoAnnotation] inputEl value (first 200 chars):', this.inputEl.value.substring(0, 200));
+            try {
+                data = JSON.parse(this.inputEl.value);
+            } catch (e) {
+                console.warn('[VideoAnnotation] Failed to parse stored annotations:', e);
+                return;
+            }
         }
 
-        if (!this.inputEl || !this.inputEl.value) {
-            console.log('[VideoAnnotation] _loadExistingAnnotations: No input element or empty value, returning');
-            return;
+        // Validate that the stored data is for this video by checking video
+        // metadata. This protects against browser form restoration (bfcache)
+        // loading data from a different video.
+        if (data && data.video_metadata && !options.trusted) {
+            const storedDuration = data.video_metadata.duration;
+            const currentDuration = this.videoMetadata.duration;
+            // Allow 0.5 second tolerance for floating point differences
+            if (Math.abs(storedDuration - currentDuration) > 0.5) {
+                console.warn('[VideoAnnotation] Stored duration', storedDuration,
+                    'does not match this video\'s', currentDuration,
+                    '- browser-cached data from a different video; clearing it.');
+                this.inputEl.value = '';
+                data = null;
+            }
         }
 
+        this._hydrating = true;
         try {
-            const data = JSON.parse(this.inputEl.value);
-            console.log('[VideoAnnotation] _loadExistingAnnotations: Parsed data:', data);
-            console.log('[VideoAnnotation] Found', data.segments ? data.segments.length : 0, 'segments to load');
-
-            // Validate that the stored data is for this video by checking video metadata
-            // This protects against browser form restoration (bfcache) loading data from a different video
-            if (data.video_metadata) {
-                const storedDuration = data.video_metadata.duration;
-                const currentDuration = this.videoMetadata.duration;
-
-                // Allow 0.5 second tolerance for floating point differences
-                if (Math.abs(storedDuration - currentDuration) > 0.5) {
-                    console.warn('[VideoAnnotation] Video metadata mismatch detected!');
-                    console.warn('[VideoAnnotation] Stored duration:', storedDuration, 'Current duration:', currentDuration);
-                    console.warn('[VideoAnnotation] This appears to be browser-cached data from a different video. Clearing stale data.');
-
-                    // Clear the stale data
-                    this.inputEl.value = '';
-                    return;
-                }
-
-                console.log('[VideoAnnotation] Video metadata validated - data is for current video');
-            }
-
-            // Load segments
-            if (data.segments) {
-                for (const segment of data.segments) {
-                    this.createSegment(
-                        segment.start_time,
-                        segment.end_time,
-                        segment.label,
-                        segment.color,
-                        segment.id
-                    );
-                }
-            }
-
-            // Load frame annotations
-            if (data.frame_annotations) {
-                for (const frame in data.frame_annotations) {
-                    const fa = data.frame_annotations[frame];
-                    this.frameAnnotations[frame] = fa;
-                    this._addFrameMarker(parseInt(frame), fa.label, fa.color);
-                }
-            }
-
-            // Load keyframes
-            if (data.keyframes) {
-                for (const kf of data.keyframes) {
-                    this.keyframes.push(kf);
-                    this.peaks.points.add({
-                        id: kf.id,
-                        time: kf.time,
-                        labelText: `KF: ${kf.label}`,
-                        color: kf.color,
-                        editable: true
-                    });
-                }
-            }
-
-            // Load tracking data
-            if (data.tracking) {
-                this.trackingData = data.tracking;
-            }
-
-            this._updateAnnotationList();
-            videoDebugLog('Loaded existing annotations:', data);
-
+            this._clearAllAnnotations();
+            if (data) this._restoreFrom(data);
         } catch (e) {
             console.warn('Failed to load existing annotations:', e);
+        } finally {
+            this._hydrating = false;
         }
+
+        if (this.activeAnnotationId && !this._hasAnnotation(this.activeAnnotationId)) {
+            this.activeAnnotationId = null;
+        }
+        this._declareCompleteness();
+        this._updateAnnotationList();
+        this._updateSegmentCount();
+        this._updateDeleteButton();
+        // The tracker (tracking-ui.js) owns the canvas when it is there, and
+        // redrew it when it loaded the tracks; this one would clear its boxes.
+        if (!this.trackingManager) this._renderTrackingOverlay();
+        videoDebugLog('Loaded existing annotations:', data);
+    }
+
+    /** Drop every segment, keyframe, frame label and track, on screen too. */
+    _clearAllAnnotations() {
+        if (this.peaks) {
+            const drop = (collection, id) => {
+                try { collection.removeById(id); } catch (e) { /* not drawn */ }
+            };
+            this.segments.forEach(s => drop(this.peaks.segments, s.id));
+            this.keyframes.forEach(k => drop(this.peaks.points, k.id));
+            Object.keys(this.frameAnnotations).forEach(f => drop(this.peaks.points, `frame_${f}`));
+        }
+        this.segments = [];
+        this.keyframes = [];
+        this.frameAnnotations = {};
+        this.trackingData = {};
+        this.loadedTracks = {};
+        if (this.trackingManager) this.trackingManager.loadTrackingData({});
+    }
+
+    /** Rebuild the state from one stored answer (state already cleared). */
+    _restoreFrom(data) {
+        for (const segment of (data.segments || [])) {
+            const created = this.createSegment(
+                segment.start_time,
+                segment.end_time,
+                segment.label,
+                segment.color || this._labelColor(segment.label),
+                segment.id
+            );
+            // createSegment starts every segment with no answers; the
+            // per-segment questions' answers were dropped on every reload.
+            if (created && segment.annotations) created.annotations = segment.annotations;
+        }
+
+        const frames = data.frame_annotations || {};
+        for (const frame in frames) {
+            const fa = frames[frame];
+            this.frameAnnotations[frame] = fa;
+            this._addFrameMarker(parseInt(frame, 10), fa.label, fa.color);
+        }
+
+        for (const kf of (data.keyframes || [])) {
+            this.keyframes.push(kf);
+            if (this.peaks) {
+                this.peaks.points.add({
+                    id: kf.id,
+                    time: kf.time,
+                    labelText: `KF: ${kf.label}`,
+                    color: kf.color,
+                    editable: true
+                });
+            }
+        }
+
+        if (data.tracking && typeof data.tracking === 'object') {
+            this.trackingData = data.tracking;
+        }
+        // Object tracks, handed to TrackingUIManager when it starts.
+        if (data.tracks && typeof data.tracks === 'object') {
+            this.loadedTracks = data.tracks;
+            if (this.trackingManager) this.trackingManager.loadTrackingData(data.tracks);
+        }
+    }
+
+    _hasAnnotation(id) {
+        return this.segments.some(s => s.id === id)
+            || this.keyframes.some(k => k.id === id)
+            || Object.values(this.frameAnnotations).some(f => f && f.id === id);
+    }
+
+    /** A label's configured colour; segments are saved without one. */
+    _labelColor(label) {
+        const labels = this.config.labels || [];
+        const found = labels.find(l => l && l.name === label);
+        return found ? found.color : null;
+    }
+
+    /**
+     * Show a teammate's answer (live sessions): replace everything drawn
+     * with ``value`` (the answer JSON, or null for none) without saving.
+     * Before the video has loaded there is nothing drawn yet, and the first
+     * load reads the input, so writing the input is enough.
+     */
+    applyRemoteAnswer(value) {
+        if (!this.inputEl) this.inputEl = document.getElementById(this.inputId);
+        if (!this.inputEl) return false;
+        const json = value || '';
+        if (this.inputEl.value !== json) this.inputEl.value = json;
+        this._cachedInputValue = null;
+        if (!this._annotationsLoaded) return true;
+        this._loadExistingAnnotations({ trusted: true });
+        return true;
     }
 
     serialize() {
@@ -1287,7 +1632,12 @@ class VideoAnnotationManager {
             segments: this.segments,
             frame_annotations: this.frameAnnotations,
             keyframes: this.keyframes,
-            tracking: this.trackingData
+            tracking: this.trackingData,
+            // Object tracks from TrackingUIManager (tracking-ui.js). Before
+            // the tracker existed (or when it never loads) the tracks that
+            // came with the item are kept, so a save cannot drop them.
+            tracks: this.trackingManager ? this.trackingManager.getTrackingData()
+                                         : (this.loadedTracks || {})
         };
     }
 
@@ -1341,11 +1691,34 @@ class VideoAnnotationManager {
         document.removeEventListener('keydown', this._handleKeydown, true);
         this.videoEl.removeEventListener('timeupdate', this._onVideoTimeUpdate);
 
+        // Detach range-selection (zoomview + overview) window listeners
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+            this._rangeSelectDetach = [];
+        }
+
         if (this.peaks) {
             this.peaks.destroy();
             this.peaks = null;
         }
     }
+}
+
+// Live collaborative sessions: show a teammate's answer without a reload
+// (see collab.js applyWidget). collab.js has already written the answer into
+// the hidden input; the manager redraws from it without saving.
+if (typeof window !== 'undefined') {
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets['video_annotation'] = {
+        apply(ctx) {
+            const sel = (window.CSS && CSS.escape) ? CSS.escape(ctx.schema) : ctx.schema;
+            const box = (ctx.form && ctx.form.querySelector('.video-annotation-container'))
+                || document.querySelector(`.video-annotation-container[data-schema="${sel}"]`);
+            const m = box && box.videoAnnotationManager;
+            if (!m || typeof m.applyRemoteAnswer !== 'function') return false;
+            return m.applyRemoteAnswer(ctx.value) === true;
+        }
+    };
 }
 
 // Export for use in modules

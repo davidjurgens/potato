@@ -1,9 +1,8 @@
 """
 Item State Management Module
 
-This module provides the core data structures and management logic for annotation items
-in the Potato platform. It handles item storage, assignment strategies, and tracking
-of annotation progress across users.
+The core data structures and management logic for annotation items: item
+storage, assignment strategies, and annotation progress across users.
 
 The module includes:
 - Item class: Represents individual annotation items with metadata
@@ -19,7 +18,7 @@ active learning, and diversity-based assignment to optimize annotation efficienc
 from __future__ import annotations
 
 # Need to import UserState as a type hint for the ItemStateManager
-from typing import TYPE_CHECKING, Dict, Set, List, Optional
+from typing import TYPE_CHECKING, Dict, Set, List, Optional, Tuple
 if TYPE_CHECKING:
     from potato.user_state_management import UserState
 
@@ -32,9 +31,30 @@ import threading
 import json
 import os
 
+from potato.item_store import build_store as build_item_store
+
 # Singleton instance of the ItemStateManager with thread-safe lock
 ITEM_STATE_MANAGER = None
 _ITEM_STATE_MANAGER_LOCK = threading.Lock()
+
+#: The project's ``item_properties.text_key``, published here so ``Item`` can
+#: read it. ``Item`` predates any config plumbing and is constructed in places
+#: that have none (tests, the item store, migration tools), so this is set once
+#: at manager init and defaults to None -- with no config the old guesswork is
+#: exactly what happens.
+_CONFIGURED_TEXT_KEY = None
+
+
+def set_configured_text_key(key):
+    """Record ``item_properties.text_key`` for :meth:`Item.get_text`."""
+    global _CONFIGURED_TEXT_KEY
+    _CONFIGURED_TEXT_KEY = key if isinstance(key, str) and key else None
+
+
+def get_configured_text_key():
+    """The configured text key, or None when no project has been loaded."""
+    return _CONFIGURED_TEXT_KEY
+
 
 def init_item_state_manager(config: dict) -> ItemStateManager:
     """
@@ -76,6 +96,7 @@ def clear_item_state_manager():
     global ITEM_STATE_MANAGER
     with _ITEM_STATE_MANAGER_LOCK:
         ITEM_STATE_MANAGER = None
+        set_configured_text_key(None)
 
 def get_item_state_manager() -> ItemStateManager:
     """
@@ -116,16 +137,108 @@ class Item:
             item_data: Dictionary containing the item's data (text, context, etc.)
         """
         self.item_id = item_id
-        self.item_data = item_data
-        self.metadata = {}
+        self._item_data = item_data
+        # Set when a paged store owns this item's payload; see the note on the
+        # item_data property. None under the default in-memory store, which is
+        # what keeps that path free of any lookup at all.
+        self._store = None
 
-        # This data structure keeps the label-based annotations the user has
-        # completed so far
-        self.labels = {}
+        # metadata, labels and span_annotations are created on first use rather
+        # than in the constructor. Three empty dicts cost 192 bytes per item —
+        # measured, and half of the whole resident cost of an item whose
+        # payload has been paged out — and the overwhelming majority of items
+        # never receive any of the three. `scripts/benchmark_item_store.py`
+        # reproduces the figure.
+        #
+        # Lazily, and not via __slots__, which saves a further 48 bytes and
+        # would turn any attribute assignment anywhere in the codebase, a fork
+        # or a plugin into an AttributeError. 96% of the saving for none of
+        # that.
+        self._metadata = None
+        self._labels = None
+        self._span_annotations = None
 
-        # This data structure keeps the span-based annotations the user has
-        # completed so far
-        self.span_annotations = {}
+    @property
+    def metadata(self):
+        """
+        Item metadata. Created on first access, including a read.
+
+        Created on *read* because callers mutate what they are given —
+        ``automation/actions.py:48`` does ``item.metadata["triage_priority"] = p``
+        — and handing back a fresh dict each time would accept that write and
+        drop it.
+        """
+        data = self.__dict__.get("_metadata")
+        if data is None:
+            data = self.__dict__["_metadata"] = {}
+        return data
+
+    @metadata.setter
+    def metadata(self, value):
+        self.__dict__["_metadata"] = value
+
+    @property
+    def labels(self):
+        """
+        Label annotations. **Nothing in the tree reads or writes this** —
+        annotations live in ``UserState``, as this class's docstring says — but
+        it is kept because it has been public for years and a fork may use it.
+        """
+        data = self.__dict__.get("_labels")
+        if data is None:
+            data = self.__dict__["_labels"] = {}
+        return data
+
+    @labels.setter
+    def labels(self, value):
+        self.__dict__["_labels"] = value
+
+    @property
+    def span_annotations(self):
+        """Span annotations. Vestigial in the same way as :attr:`labels`."""
+        data = self.__dict__.get("_span_annotations")
+        if data is None:
+            data = self.__dict__["_span_annotations"] = {}
+        return data
+
+    @span_annotations.setter
+    def span_annotations(self, value):
+        self.__dict__["_span_annotations"] = value
+
+    @property
+    def item_data(self):
+        """
+        The item's raw data, faulted in from the store when it has been paged out.
+
+        The payload is the only part of an ``Item`` that can be evicted, and
+        this property is why. ``metadata``, ``labels`` and ``span_annotations``
+        are written *through the live object* — the overlap sampler, the
+        automation engine and adaptive boost all call ``add_metadata`` on an
+        item they were handed and expect it to stick — so evicting whole items
+        and rebuilding them on demand would drop those writes silently, under
+        memory pressure, which is the worst possible way to lose a write.
+
+        Under the default in-memory store ``_store`` is None and this is a
+        plain attribute read.
+        """
+        data = self.__dict__.get("_item_data")
+        if data is None:
+            store = self.__dict__.get("_store")
+            if store is not None:
+                data = store.load_payload(self.__dict__.get("item_id"))
+        return data
+
+    @item_data.setter
+    def item_data(self, value):
+        store = self.__dict__.get("_store")
+        if store is not None:
+            # Write through, and do not keep a strong copy: the store's cache
+            # decides how long it stays resident. Keeping one here would make
+            # every updated item permanently unevictable.
+            store.store_payload(self.__dict__.get("item_id"), value)
+            self.__dict__["_item_data"] = None
+        else:
+            self.__dict__["_item_data"] = value
 
     def __getattr__(self, name):
         """Expose raw data fields as attributes for template access.
@@ -141,9 +254,13 @@ class Item:
         never shadowed. Names absent from the data dict still raise
         AttributeError so Jinja's Undefined handling and copy/pickle behave.
         """
-        if name.startswith("__") and name.endswith("__"):
+        if name.startswith("_"):
+            # Underscored names are never data fields, and answering for them
+            # would recurse: the item_data property reads self._item_data,
+            # which lands back here before __init__ has set it (during
+            # unpickling, or copy).
             raise AttributeError(name)
-        data = self.__dict__.get("item_data")
+        data = self.item_data
         if isinstance(data, dict) and name in data:
             return data[name]
         raise AttributeError(name)
@@ -164,15 +281,32 @@ class Item:
         """
         Get the text content from the item data.
 
-        This method intelligently extracts text from various data structures,
-        trying common keys first, then falling back to string conversion.
+        Prefers the project's configured ``item_properties.text_key``, then the
+        conventional field names, then any string field.
+
+        The configured key has to come first. Without it the guesses run in
+        dict order, and a study whose text lives under a name of its own --
+        ``review``, ``post``, ``report`` -- gets whichever string field the
+        loader happened to write first, which for most data files is the id.
+        That is not a display bug; it is what gets sent to the model. An LLM
+        judge asked to grade instance ``P08`` answered, accurately, that it had
+        been given "a single alphanumeric code ... and contains no text", and
+        the resulting non-verdict was recorded as the judge's opinion of the
+        item and scored against the human's.
 
         Returns:
             str: The text content for annotation
         """
         if isinstance(self.item_data, dict):
-            # Try to get text from common keys
-            for key in ['text', 'content', 'message', 'title']:
+            configured = get_configured_text_key()
+            keys = ([configured] if configured else []) + [
+                k for k in ('text', 'content', 'message', 'title')
+                if k != configured
+            ]
+            for key in keys:
+                # Presence, not type: a dialogue item's `text` is a list, and
+                # callers have always received it as one. Only the ordering of
+                # the keys changed here.
                 if key in self.item_data:
                     return self.item_data[key]
             # If no text key found, return the first string value
@@ -188,11 +322,67 @@ class Item:
         return self.get_text()
 
     def get_metadata(self, metadata_name: str):
-        """Get metadata value by name"""
-        return self.metadata.get(metadata_name, None)
+        """
+        Get metadata value by name.
+
+        Reads ``_metadata`` rather than the property so that asking an item
+        whether it has metadata does not give it any. Every assignment
+        strategy calls this on every candidate item on every request; going
+        through the property would materialize a dict for the whole corpus on
+        the first pass and undo the laziness completely.
+        """
+        data = self.__dict__.get("_metadata")
+        return data.get(metadata_name, None) if data else None
 
     def __str__(self):
-        return f"Item(id:{self.item_id}, data:{self.item_data}, metadata:{self.metadata})"
+        return (f"Item(id:{self.item_id}, data:{self.item_data}, "
+                f"metadata:{self.__dict__.get('_metadata') or {}})")
+
+
+class TemplateItem:
+    """
+    The view of an :class:`Item` that templates get as ``instance_obj``.
+
+    ``Item.__getattr__`` exposes data fields as attributes, but Python calls it
+    only when normal lookup fails. A data field named after a real attribute
+    therefore never reaches the template: ``{{instance_obj.labels[0]}}`` over a
+    record with a ``labels`` column resolved to ``Item.labels``, the empty
+    annotation dict, and every dynamic label rendered blank (issue #170).
+
+    This wrapper resolves data fields first and delegates everything else to
+    the item, so a data column can carry any name. It does not change ``Item``
+    itself: ``labels`` and ``span_annotations`` stay writable for the forks
+    that use them, and Python callers keep the real object.
+    """
+
+    def __init__(self, item):
+        self._item = item
+
+    def __getattr__(self, name):
+        # Underscored names are never data fields. Answering for them here
+        # would also recurse through _item before __init__ has set it.
+        if not name.startswith("_"):
+            data = self._item.item_data
+            if isinstance(data, dict) and name in data:
+                return data[name]
+        return getattr(self._item, name)
+
+    def __getitem__(self, key):
+        data = self._item.item_data
+        if isinstance(data, dict):
+            return data[key]
+        raise KeyError(key)
+
+    def __contains__(self, key):
+        data = self._item.item_data
+        return isinstance(data, dict) and key in data
+
+    def __str__(self):
+        return str(self._item)
+
+    def __repr__(self):
+        return f"TemplateItem({self._item!r})"
+
 
 class Label:
     """
@@ -700,12 +890,26 @@ class AssignmentStrategy(Enum):
     - RANDOM: Maximizes diversity and reduces bias
     - FIXED_ORDER: Ensures consistent ordering across users
     - ACTIVE_LEARNING: Prioritizes items with high uncertainty
-    - LLM_CONFIDENCE: Uses AI model confidence for prioritization
+    - LLM_CONFIDENCE: Serves every item, least-confident model prediction
+      first, then items whose predictions carry no confidence, then items
+      with no prediction in their configured order
     - MAX_DIVERSITY: Prioritizes items with high disagreement
     - LEAST_ANNOTATED: Prioritizes items with fewest annotations
     - CATEGORY_BASED: Assigns items matching user's qualified categories
     - DIVERSITY_CLUSTERING: Samples items round-robin from embedding clusters
     - BATCH: Restricts assignment to configured annotator/item cohorts
+    - PRIORITY: Serves items by a triage signal (errors/low-score first)
+    - PSYCHOMETRIC: Routes items by expected information gain under a live
+      IRT model (annotator ability x item uncertainty); confident items
+      stop consuming annotation budget
+    - MODEL_REVIEW: Serves prelabelled items least-confident first, for
+      human QC of model output. Items the model predicted NOTHING on are
+      excluded -- they have no confidence to rank and reviewing them is a
+      separate job (see potato/model_review.py)
+    - ENGINE: Serves the labeling engine's human requests (calibration,
+      verification, audit, adjudication) in the engine's priority order. The
+      engine decides which items need a person and how they were sampled;
+      see potato/labeling_engine/
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -716,6 +920,10 @@ class AssignmentStrategy(Enum):
     CATEGORY_BASED = 'category_based'
     DIVERSITY_CLUSTERING = 'diversity_clustering'
     BATCH = 'batch'
+    PRIORITY = 'priority'
+    PSYCHOMETRIC = 'psychometric'
+    MODEL_REVIEW = 'model_review'
+    ENGINE = 'engine'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -730,27 +938,50 @@ class AssignmentStrategy(Enum):
         Raises:
             ValueError: If the string doesn't match any known strategy
         """
-        phase = phase.lower()
-        if phase == "random":
-            return AssignmentStrategy.RANDOM
-        elif phase == "fixed_order":
-            return AssignmentStrategy.FIXED_ORDER
-        elif phase == "active_learning":
-            return AssignmentStrategy.ACTIVE_LEARNING
-        elif phase == "llm_confidence":
-            return AssignmentStrategy.LLM_CONFIDENCE
-        elif phase == "max_diversity":
-            return AssignmentStrategy.MAX_DIVERSITY
-        elif phase == "least_annotated":
-            return AssignmentStrategy.LEAST_ANNOTATED
-        elif phase == "category_based":
-            return AssignmentStrategy.CATEGORY_BASED
-        elif phase == "diversity_clustering":
-            return AssignmentStrategy.DIVERSITY_CLUSTERING
-        elif phase == "batch":
-            return AssignmentStrategy.BATCH
-        else:
-            raise ValueError(f"Unknown phase: {phase}")
+        # Derived from the enum rather than a hand-written if/elif chain.
+        # The chain was a fourth registration point that nothing forced you to
+        # remember: a strategy added to the enum, to the config whitelist and
+        # to both assignment branches would still raise "Unknown phase" the
+        # first time a real config used it.
+        wanted = (phase or "").lower()
+        for strategy in AssignmentStrategy:
+            if strategy.value == wanted:
+                return strategy
+        raise ValueError(f"Unknown phase: {phase}")
+
+
+# Items a user must never be handed through normal assignment, from features
+# that give them the item another way. A member of a live collaborative team
+# works the team's items on the team's page; a solo copy of the same item
+# would be a second, non-independent judgement from the same person.
+#
+# Each provider maps a username to the item ids to keep from them.
+_assignment_exclusion_providers: List = []
+
+
+def register_assignment_exclusion(provider) -> None:
+    """Add ``provider(username) -> iterable of item ids`` (idempotent)."""
+    if provider not in _assignment_exclusion_providers:
+        _assignment_exclusion_providers.append(provider)
+
+
+def unregister_assignment_exclusion(provider) -> None:
+    if provider in _assignment_exclusion_providers:
+        _assignment_exclusion_providers.remove(provider)
+
+
+def excluded_items_for(username) -> Set[str]:
+    """Union of every provider's exclusions for ``username``."""
+    if not username or not _assignment_exclusion_providers:
+        return set()
+    excluded: Set[str] = set()
+    for provider in list(_assignment_exclusion_providers):
+        try:
+            excluded.update(provider(str(username)) or ())
+        except Exception as exc:  # noqa: BLE001 - one feature must not stop assignment
+            logging.getLogger(__name__).warning(
+                "Assignment exclusion provider %r failed: %s", provider, exc)
+    return excluded
 
 
 class ItemStateManager:
@@ -772,13 +1003,16 @@ class ItemStateManager:
         # Cache the config for later
         self.config = config
         self.logger = logging.getLogger(__name__)
+        set_configured_text_key(
+            (config.get('item_properties', {}) or {}).get('text_key'))
 
         # Thread-safe lock for concurrent access to item data
         self._lock = threading.RLock()
 
-        # This data structure keeps the ordering of the items that are being annotated
-        # and a mapping from item ID to the Item object
-        self.instance_id_to_instance = OrderedDict()
+        # Where item payloads live. In-memory by default — see potato/item_store.py
+        # for the measurement behind that default and for what the paged
+        # alternative does and does not evict.
+        self._store = build_item_store(config)
 
         self.instance_id_ordering = []
 
@@ -801,16 +1035,43 @@ class ItemStateManager:
             'boost_to': int(adaptive_cfg.get('boost_to', 0)),
         }
 
-        # Minimum coverage floor; forces continued assignment even if some
-        # users have not yet rated an item.
+        # `num_annotators_per_item.min`, parsed and stored. Nothing reads it.
+        #
+        # The comment that stood here said it "forces continued assignment
+        # even if some users have not yet rated an item", which was never
+        # true: no assignment or retirement decision has ever consulted this
+        # attribute. config_module.warn_unenforced_coverage_floor says so at
+        # load rather than leaving the claim in a comment nobody reads.
+        #
+        # The flat spelling `min_annotators_per_instance` used to land here
+        # too. It now resolves through `resolve_num_annotators_per_item` into
+        # `max_annotations_per_item` above, as a deprecated alias for the cap
+        # -- the only reading under which the number an author wrote reaches
+        # the assigner.
         self.min_annotations_per_item = None
         if isinstance(nap, dict) and nap.get('min') is not None:
             self.min_annotations_per_item = int(nap['min'])
-        elif config.get('min_annotators_per_instance') is not None:
-            self.min_annotations_per_item = int(config['min_annotators_per_instance'])
 
         # Track which annotators have worked on each item
         self.instance_annotators = defaultdict(set)
+        # Who currently HOLDS each item, whether or not they have submitted.
+        #
+        # The per-item cap was counted against `instance_annotators`, which is
+        # populated on annotation, so an item could be handed to any number of
+        # people at once and the cap only bit after somebody submitted. With
+        # `num_annotators_per_item: 1` over three items, five successive users
+        # were each assigned all three -- and the fourth onward were annotating
+        # items that already had their full complement.
+        self.instance_assignees = defaultdict(set)
+        # Whether an outstanding hold counts against an item's cap. True in
+        # normal operation; cleared for the fallback pass in
+        # `_assign_instances_to_user_inner` so holds can never deadlock a study.
+        self._holds_are_binding = True
+        # assignment_hold_minutes: in the fallback pass, a hold by someone who
+        # was given the item or saved anything this recently stays binding.
+        # Off (None) keeps the rule that nobody is sent away with no work.
+        minutes = config.get('assignment_hold_minutes')
+        self.hold_seconds = float(minutes) * 60 if minutes else None
 
         # Track assignment timestamps for stale reclamation: {instance_id: {username: timestamp}}
         self.assignment_timestamps = defaultdict(dict)
@@ -824,12 +1085,27 @@ class ItemStateManager:
         # Queue of remaining instances to be assigned
         self.remaining_instance_ids = deque()
 
+        # Runtime assignment pause switch. When True, assign_instances_to_user
+        # is a no-op so admins can freeze new assignments (e.g. while curating an
+        # eval dataset or investigating). Existing assignments are untouched.
+        self._assignment_paused = False
+
         # NOTE: We use an extra set to keep track of completed instances to allow for
         # O(1) tests of whether an item needs to be removed from the remaining list
         self.completed_instance_ids = set()
 
         # Initialize item annotation counts for tracking
         self.item_annotation_counts = defaultdict(int)
+
+        # Signal-based triage: score each item into a priority from the
+        # `triage` config block (errors / thumbs-down / low score first). The
+        # scorer runs in add_item, so it covers both statically loaded data and
+        # traces ingested at runtime. None when triage is disabled.
+        try:
+            from potato.server_utils.triage import build_scorer
+            self.triage_scorer = build_scorer(config)
+        except ImportError:
+            self.triage_scorer = None
 
         # Load how we want to assign items to users
         if 'assignment_strategy' in config:
@@ -840,6 +1116,10 @@ class ItemStateManager:
                 self.assignment_strategy = AssignmentStrategy.fromstr(strat['name'])
             else:
                 raise ValueError("Invalid assignment_strategy in config")
+        elif self.triage_scorer is not None:
+            # Triage enabled without an explicit strategy: prioritize the queue
+            # by the triage signal (the whole point of enabling triage).
+            self.assignment_strategy = AssignmentStrategy.PRIORITY
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
 
@@ -848,9 +1128,28 @@ class ItemStateManager:
         self.random = random.Random(self.random_seed)
         self.logger.info(f"ItemStateManager initialized with random_seed={self.random_seed}")
 
-        # Category-based assignment support
+        # Category-based assignment support.
+        #
+        # Both spellings are read. `category_assignment.category_key` was
+        # documented, given an example, accepted by validation and read by
+        # nothing: an author who put the key in the block named after the
+        # feature got a study that ran perfectly with zero categories in it,
+        # because every item fell into the `uncategorized` fallback and the
+        # whole corpus was handed over. Putting it where the code read it gave
+        # a study that correctly refused to serve. Both drew the identical
+        # validator warning -- a true alarm in one case and a false one in the
+        # other.
         item_properties = config.get('item_properties', {})
-        self.category_key = item_properties.get('category_key', None)
+        category_assignment = config.get('category_assignment') or {}
+        self.category_key = (item_properties.get('category_key')
+                             or category_assignment.get('category_key')
+                             or None)
+        if (category_assignment.get('category_key')
+                and not item_properties.get('category_key')):
+            self.logger.info(
+                "Reading the item category from category_assignment."
+                "category_key=%r. item_properties.category_key is the other "
+                "accepted spelling.", self.category_key)
 
         # Maps category name to set of instance IDs in that category
         self.category_to_instance_ids: Dict[str, Set[str]] = defaultdict(set)
@@ -865,8 +1164,13 @@ class ItemStateManager:
         category_assignment_config = config.get('category_assignment', {})
         self.category_fallback = category_assignment_config.get('fallback', 'uncategorized')
 
-        # Dynamic expertise mode - uses probabilistic routing based on annotator agreement
-        dynamic_config = category_assignment_config.get('dynamic', {})
+        # Dynamic expertise mode - uses probabilistic routing based on annotator agreement.
+        # `dynamic: true` is the natural shorthand and is refused at config
+        # validation; the isinstance guard is so a manager built directly
+        # (tests, tooling) gets a disabled flag rather than an AttributeError.
+        dynamic_config = category_assignment_config.get('dynamic')
+        if not isinstance(dynamic_config, dict):
+            dynamic_config = {}
         self.dynamic_expertise_enabled = dynamic_config.get('enabled', False)
 
         # Batch assignment restricts items to explicit annotator cohorts. Groups
@@ -877,7 +1181,21 @@ class ItemStateManager:
             'assigned_annotators',
         )
         self.batch_assignment_id_key = config.get('item_properties', {}).get('id_key', 'id')
+        self.batch_auto_assign_annotators = bool(
+            self.batch_assignment_config.get('auto_assign_annotators', False)
+        )
+        # A `conditions` factor whose levels name the auto-groups: each
+        # participant gets the group of their assigned level, so a condition
+        # can carry its own stimulus set.
+        self.batch_group_by_condition = self.batch_assignment_config.get('group_by_condition')
+        # Each participant gets their list in their own order. Every reader
+        # on a list used to see its items in file order.
+        self.batch_randomize_within_list = bool(
+            self.batch_assignment_config.get('randomize_within_list', False))
         self.batch_user_to_instance_ids: Dict[str, List[str]] = defaultdict(list)
+        self.batch_auto_groups: List[Dict[str, object]] = []
+        self.batch_auto_user_to_group: Dict[str, int] = {}
+        self.batch_auto_group_to_users: Dict[int, Set[str]] = defaultdict(set)
         self._load_batch_assignment_groups()
 
     def _load_batch_assignment_groups(self) -> None:
@@ -895,6 +1213,11 @@ class ItemStateManager:
                 'instances_file',
                 group.get('items_file', group.get('instance_ids_file')),
             )
+            if not file_entry:
+                file_entry = group.get(
+                    'data_file',
+                    group.get('input_data_file', group.get('input_file')),
+                )
             if file_entry:
                 instance_ids = list(instance_ids) if isinstance(instance_ids, list) else []
                 instance_ids.extend(self._load_batch_instance_ids_from_file(file_entry))
@@ -908,10 +1231,26 @@ class ItemStateManager:
                 for instance_id in instance_ids
                 if isinstance(instance_id, str) and instance_id
             ]
+            if self.batch_auto_assign_annotators and not users:
+                self.batch_auto_groups.append(
+                    {
+                        'name': group.get('name') or f"batch_{len(self.batch_auto_groups) + 1}",
+                        'instance_ids': instance_ids,
+                        'max_annotators': self._resolve_batch_group_max_annotators(group),
+                    }
+                )
+                continue
             for user_id in users:
                 for instance_id in instance_ids:
                     if instance_id not in self.batch_user_to_instance_ids[user_id]:
                         self.batch_user_to_instance_ids[user_id].append(instance_id)
+
+    def _resolve_batch_group_max_annotators(self, group: dict) -> Optional[int]:
+        for key in ('max_annotators', 'annotator_count', 'slots'):
+            value = group.get(key)
+            if value is not None:
+                return int(value)
+        return self.max_annotations_per_item if self.max_annotations_per_item > 0 else None
 
     def _resolve_batch_file_path(self, path: str) -> str:
         """Resolve a batch assignment file path relative to task_dir."""
@@ -1008,7 +1347,7 @@ class ItemStateManager:
 
     def _item_batch_annotators(self, instance_id: str) -> Set[str]:
         """Return annotators allowed by an item's batch annotator key."""
-        item = self.instance_id_to_instance.get(instance_id)
+        item = self._store.get(instance_id)
         if item is None:
             return set()
         item_data = item.get_data()
@@ -1023,8 +1362,132 @@ class ItemStateManager:
             return set()
         return {value for value in annotators if isinstance(value, str) and value}
 
-    def _batch_candidate_ids_for_user(self, user_id: str) -> List[str]:
-        """Return batch-eligible item IDs for a user in deterministic order."""
+    def _select_auto_batch_group_for_user(
+        self, user_id: str, persist: bool = False
+    ) -> Optional[Tuple[int, Dict[str, object], bool]]:
+        """Choose an auto-batch group for a user.
+
+        Returns ``(group_index, group, newly_pinned)`` or ``None`` when
+        auto-assignment is disabled or every group is full. When ``persist`` is
+        set and the user is not already pinned, the pin is committed atomically
+        under ``self._lock`` (so concurrent new users balance correctly) and
+        ``newly_pinned`` is ``True``. Callers roll a fresh pin back via
+        :meth:`_rollback_auto_batch_pin` when it ends up yielding no items.
+        """
+        if not self.batch_auto_assign_annotators or not self.batch_auto_groups:
+            return None
+
+        with self._lock:
+            if user_id in self.batch_auto_user_to_group:
+                index = self.batch_auto_user_to_group[user_id]
+                return index, self.batch_auto_groups[index], False
+
+            if self.batch_group_by_condition:
+                routed = self._condition_group_index(user_id)
+                if routed is not None:
+                    group = self.batch_auto_groups[routed]
+                    max_annotators = group.get('max_annotators')
+                    if (max_annotators is not None and
+                            len(self.batch_auto_group_to_users[routed]) >= int(max_annotators)):
+                        return None
+                    newly_pinned = False
+                    if persist:
+                        self.batch_auto_user_to_group[user_id] = routed
+                        self.batch_auto_group_to_users[routed].add(user_id)
+                        newly_pinned = True
+                    return routed, group, newly_pinned
+
+            available = []
+            for index, group in enumerate(self.batch_auto_groups):
+                assigned_count = len(self.batch_auto_group_to_users[index])
+                max_annotators = group.get('max_annotators')
+                if max_annotators is not None and assigned_count >= int(max_annotators):
+                    continue
+                available.append((assigned_count, index, group))
+
+            if not available:
+                return None
+
+            _, index, group = min(available, key=lambda entry: (entry[0], entry[1]))
+            newly_pinned = False
+            if persist:
+                self.batch_auto_user_to_group[user_id] = index
+                self.batch_auto_group_to_users[index].add(user_id)
+                newly_pinned = True
+            return index, group, newly_pinned
+
+    def _condition_group_index(self, user_id: str) -> Optional[int]:
+        """The auto-group named after this participant's condition level, or
+        None when they have no condition (a machine rater, or no `conditions`)."""
+        try:
+            from potato.user_state_management import get_user_state_manager
+            usm = get_user_state_manager()
+            user_state = usm.get_user_state(user_id)
+            conditions = usm.ensure_conditions(user_state) or {}
+        except Exception:
+            return None
+        level = conditions.get(self.batch_group_by_condition)
+        if level is None:
+            return None
+        for index, group in enumerate(self.batch_auto_groups):
+            if str(group.get('name')) == str(level):
+                return index
+        return None
+
+    def _rollback_auto_batch_pin(self, user_id: str, group_index: int) -> None:
+        """Undo a pin created this pass when it yielded no assignable items.
+
+        Only removes the pin if it still points at ``group_index`` (so a
+        concurrent re-pin is never clobbered).
+        """
+        with self._lock:
+            if self.batch_auto_user_to_group.get(user_id) == group_index:
+                del self.batch_auto_user_to_group[user_id]
+                self.batch_auto_group_to_users[group_index].discard(user_id)
+
+    def get_group_name_for_user(self, user_id: str) -> Optional[str]:
+        """Return the batch-assignment cohort name for a user, or None.
+
+        Resolves membership from two sources (read-only; never creates a pin):
+          1. Explicit config groups: the first ``batch_assignment.groups`` entry
+             whose ``annotators``/``users`` list contains ``user_id``.
+          2. Auto-assigned pin: ``batch_auto_user_to_group`` -> the pinned
+             auto-group's name.
+
+        Used by the per-cohort schema resolver to pick a user's scheme set.
+        """
+        if not user_id:
+            return None
+
+        # Explicit config groups (may be unnamed -> synthesize a stable name).
+        for idx, group in enumerate(self.batch_assignment_config.get('groups') or []):
+            if not isinstance(group, dict):
+                continue
+            users = group.get('annotators', group.get('users', []))
+            if isinstance(users, str):
+                users = [users]
+            if user_id in (users or []):
+                return group.get('name') or f"group_{idx}"
+
+        # Auto-assigned pin (set during item assignment).
+        index = self.batch_auto_user_to_group.get(user_id)
+        if index is not None and 0 <= index < len(self.batch_auto_groups):
+            group = self.batch_auto_groups[index]
+            name = group.get('name')
+            if name:
+                return str(name)
+
+        return None
+
+    def _batch_candidate_ids_for_user(
+        self, user_id: str, assign_auto: bool = False
+    ) -> Tuple[List[str], Optional[int]]:
+        """Return ``(batch-eligible item IDs, rollback_group_index)`` for a user.
+
+        ``rollback_group_index`` is the index of an auto-group this call freshly
+        pinned the user to; the caller must roll it back if it assigns nothing.
+        It is ``None`` unless a new pin was committed this call.
+        """
         candidate_ids = []
         seen = set()
 
@@ -1033,6 +1496,20 @@ class ItemStateManager:
                 candidate_ids.append(instance_id)
                 seen.add(instance_id)
 
+        rollback_group_index = None
+        selection = self._select_auto_batch_group_for_user(
+            user_id,
+            persist=assign_auto and not candidate_ids,
+        )
+        if selection is not None and not candidate_ids:
+            group_index, auto_group, newly_pinned = selection
+            if newly_pinned:
+                rollback_group_index = group_index
+            for instance_id in auto_group.get('instance_ids', []):
+                if instance_id not in seen:
+                    candidate_ids.append(instance_id)
+                    seen.add(instance_id)
+
         for instance_id in self.remaining_instance_ids:
             if instance_id in seen:
                 continue
@@ -1040,11 +1517,76 @@ class ItemStateManager:
                 candidate_ids.append(instance_id)
                 seen.add(instance_id)
 
-        return candidate_ids
+        if self.batch_randomize_within_list and candidate_ids:
+            from potato.server_utils.presentation_order import order_seed
+            random.Random(order_seed(str(user_id), "__batch_list__", "order")).shuffle(candidate_ids)
+
+        return candidate_ids, rollback_group_index
+
+    def rebuild_auto_batch_pins_from_users(
+        self, user_id_to_instance_ids: Dict[str, Set[str]]
+    ) -> None:
+        """Reconstruct auto-batch cohort pins from persisted user assignments.
+
+        Called once at boot (after items and auto-groups are loaded, before the
+        server serves requests) so the in-memory pins survive a restart. Each
+        user is pinned to the auto-group holding the majority of their
+        assigned/annotated items (ties broken by lowest group index). Users
+        whose items match no auto-group are left unpinned and treated as new.
+
+        Existing pins are authoritative: a group may end up over ``max_annotators``
+        here, which only gates *new* users in
+        :meth:`_select_auto_batch_group_for_user`.
+        """
+        if not self.batch_auto_assign_annotators or not self.batch_auto_groups:
+            return
+
+        # Reverse index: instance_id -> group index. Warn on overlap since
+        # auto-groups are meant to be disjoint input batches.
+        instance_to_group: Dict[str, int] = {}
+        for index, group in enumerate(self.batch_auto_groups):
+            for instance_id in group.get('instance_ids', []):
+                if instance_id in instance_to_group and instance_to_group[instance_id] != index:
+                    self.logger.warning(
+                        "Auto-batch groups overlap on item %s (groups %s and %s); "
+                        "reconstruction will attribute it to the first group",
+                        instance_id,
+                        instance_to_group[instance_id],
+                        index,
+                    )
+                    continue
+                instance_to_group[instance_id] = index
+
+        with self._lock:
+            self.batch_auto_user_to_group.clear()
+            self.batch_auto_group_to_users = defaultdict(set)
+
+            for user_id, instance_ids in user_id_to_instance_ids.items():
+                counts: Dict[int, int] = defaultdict(int)
+                for instance_id in instance_ids:
+                    group_index = instance_to_group.get(instance_id)
+                    if group_index is not None:
+                        counts[group_index] += 1
+
+                if not counts:
+                    continue
+
+                if len(counts) > 1:
+                    self.logger.warning(
+                        "User %s has items spanning multiple auto-batch groups %s; "
+                        "pinning to the majority group",
+                        user_id,
+                        sorted(counts),
+                    )
+
+                # Majority group, ties broken by lowest index.
+                best_index = min(counts, key=lambda idx: (-counts[idx], idx))
+                self.batch_auto_user_to_group[str(user_id)] = best_index
+                self.batch_auto_group_to_users[best_index].add(str(user_id))
 
     def has_item(self, instance_id: str) -> bool:
         """Returns True if the item is in the state manager"""
-        return instance_id in self.instance_id_to_instance
+        return instance_id in self._store
 
     def add_item(self, instance_id: str, instance_data: dict):
         """
@@ -1059,15 +1601,48 @@ class ItemStateManager:
         """
         with self._lock:
             item = Item(instance_id, instance_data)
-            if instance_id in self.instance_id_to_instance:
+            if instance_id in self._store:
                 raise ValueError(f"Duplicate Item ID! Item with ID {instance_id} already exists in the state manager")
 
-            self.instance_id_to_instance[instance_id] = item
+            self._store.put(instance_id, item)
             self.instance_id_ordering.append(instance_id)
             self.remaining_instance_ids.append(instance_id)
 
+            # Signal-based triage: store the quality-signal priority + reason on
+            # the item so the PRIORITY assignment strategy and the inline badge
+            # can read it. Runs for both static and runtime-ingested items.
+            if self.triage_scorer is not None:
+                try:
+                    score = self.triage_scorer.score(instance_data)
+                    for k, v in score.to_metadata().items():
+                        item.add_metadata(k, v)
+                except Exception as e:
+                    self.logger.warning(f"Triage scoring failed for {instance_id}: {e}")
+
             # Index categories for this item
             self._index_item_categories(instance_id, instance_data)
+
+        # Automation rules (Phase 4): run OUTSIDE the lock so action execution
+        # (dataset writes, notifies; heavy actions are dispatched to a worker)
+        # never holds the item-state lock. Runs after triage so add_to_queue can
+        # override the triage priority. Guarded — must never break ingestion.
+        try:
+            from potato.automation.manager import get_automation_manager
+            automation = get_automation_manager()
+            if automation is not None:
+                automation.process_item(instance_id, instance_data)
+        except Exception as e:
+            self.logger.warning(f"Automation processing failed for {instance_id}: {e}")
+
+        # Semantic curation: optionally embed the item into the search index on
+        # ingest (opt-in via curation.embed_on_ingest; guarded + lazy).
+        try:
+            from potato.curation.manager import get_curation_manager
+            curation = get_curation_manager()
+            if curation is not None and curation.embed_on_ingest:
+                curation.embed_instance(instance_id)
+        except Exception as e:
+            self.logger.warning(f"Curation embed-on-ingest failed for {instance_id}: {e}")
 
     def update_item(self, instance_id: str, instance_data: dict) -> bool:
         """
@@ -1085,9 +1660,9 @@ class ItemStateManager:
             bool: True if the item was updated, False if the item doesn't exist
         """
         with self._lock:
-            if instance_id not in self.instance_id_to_instance:
+            item = self._store.get(instance_id)
+            if item is None:
                 return False
-            item = self.instance_id_to_instance[instance_id]
             # Update item_data while preserving labels, span_annotations, and metadata
             item.item_data = instance_data
             return True
@@ -1249,7 +1824,7 @@ class ItemStateManager:
 
         Returns -1 to mean unlimited (matching the legacy convention).
         """
-        item = self.instance_id_to_instance.get(instance_id)
+        item = self._store.get(instance_id)
         if item is not None:
             per_item = item.get_metadata('required_annotations')
             if per_item is not None:
@@ -1259,18 +1834,261 @@ class ItemStateManager:
                     pass
         return self.max_annotations_per_item
 
+    def _committed_annotator_count(self, instance_id: str) -> int:
+        """How many annotators this item is spoken for by.
+
+        Everyone who has annotated it, and -- when holds can be taken back --
+        everyone currently holding an assignment for it.
+
+        Counting only submitters let an item be handed out without limit until
+        somebody actually submitted: with `num_annotators_per_item: 1` over
+        three items, five successive users were each assigned all three, and
+        every one of them past the first was annotating an item that already
+        had its full complement. The study pays for those.
+
+        Counting holds is also what spreads annotators across the dataset. The
+        default strategy walks the item list from the top, so five annotators
+        arriving at a three-item study with `num_annotators_per_item: 1` were
+        all handed item_0 while item_1 and item_2 sat untouched.
+
+        `_holds_are_binding` is cleared for a second pass when the first finds
+        nothing, so a hold can slow an item down but never lock the study: an
+        annotator who takes items and walks away does not strand them, whether
+        or not `instance_reclaim` is on to take them back properly.
+        """
+        if not self._holds_are_binding:
+            if not getattr(self, 'hold_seconds', None):
+                return len(self.instance_annotators[instance_id])
+            # The fallback pass with assignment_hold_minutes: an item the
+            # holder has been shown, while they are still working, stays
+            # theirs. Relaxing every hold handed coder 1's unfinished items to
+            # coder 2 the moment coder 2 ran out, and an overlap_sample study
+            # that asked for 15 double-coded items got 41. Items the holder
+            # has not reached are not counted; the fallback pass moves them
+            # (`_move_unreached_holds`) instead of sharing them.
+            return len(self.instance_annotators[instance_id]
+                       | {u for u in self.instance_assignees[instance_id]
+                          if self._hold_is_active(instance_id, u)})
+        return len(self.instance_annotators[instance_id]
+                   | self.instance_assignees[instance_id])
+
+    @staticmethod
+    def _holder_state(user_id: str):
+        try:
+            from potato.user_state_management import get_user_state_manager
+            return get_user_state_manager().get_user_state(user_id)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _holder_has_reached(ustate, instance_id: str) -> bool:
+        """Whether the holder has been shown ``instance_id``: it sits at or
+        before their current position in their queue."""
+        try:
+            return (ustate.instance_id_ordering.index(instance_id)
+                    <= ustate.get_current_instance_index())
+        except (AttributeError, ValueError):
+            return False
+
+    def _move_unreached_holds(self, receiver: 'UserState', instance_ids) -> None:
+        """Take items just given to ``receiver`` out of the queues of holders
+        whose hold did not bind (they had not reached the item, or have been
+        inactive past assignment_hold_minutes), so the item moves instead of
+        being coded twice. A lapsed holder used to keep the item: both saved
+        it, under a cap of one."""
+        receiver_id = getattr(receiver, 'user_id', None) or receiver.get_user_id()
+        for iid in instance_ids:
+            for holder_id in list(self.instance_assignees.get(iid, ())):
+                if holder_id == receiver_id:
+                    continue
+                holder = self._holder_state(holder_id)
+                if holder is None or holder.has_annotated(iid) \
+                        or self._hold_is_active(iid, holder_id):
+                    continue
+                self._reclaim_unannotated_assignment(
+                    holder, iid, reason="assignment_hold_minutes")
+
+    def _hold_is_active(self, instance_id: str, user_id: str) -> bool:
+        """Whether ``user_id``'s hold on ``instance_id`` binds under
+        assignment_hold_minutes: they have been shown the item, and were given
+        it or saved anything within that many minutes."""
+        ustate = self._holder_state(user_id)
+        if ustate is None or not self._holder_has_reached(ustate, instance_id):
+            return False
+        import time
+        now = time.time()
+        assigned = (self.assignment_timestamps.get(instance_id) or {}).get(user_id)
+        if assigned is not None and now - assigned <= self.hold_seconds:
+            return True
+        last = getattr(ustate, "last_activity_time", None)
+        try:
+            seen = last.timestamp() if hasattr(last, "timestamp") else float(last)
+        except (TypeError, ValueError):
+            return False
+        return now - seen <= self.hold_seconds
+
     def _item_is_saturated(self, instance_id: str) -> bool:
-        """True if the item has reached its annotator cap (per-item or global)."""
+        """True if the item cannot be handed out right now.
+
+        Counts holds as well as submissions, so it answers "is this spoken
+        for?". Use `_item_is_complete` to decide whether an item is *finished*
+        -- a held item is not, and evicting it from `remaining_instance_ids`
+        on this predicate would strand it the moment its holder walked away.
+        """
+        cap = self._get_annotator_cap_for_item(instance_id)
+        return cap >= 0 and self._committed_annotator_count(instance_id) >= cap
+
+    def _item_is_complete(self, instance_id: str) -> bool:
+        """True if the item has all the ANNOTATIONS its cap asks for.
+
+        The retirement test. Only a submitted annotation retires an item from
+        the queue; a hold merely makes it unavailable for now.
+        """
         cap = self._get_annotator_cap_for_item(instance_id)
         return cap >= 0 and len(self.instance_annotators[instance_id]) >= cap
 
+    def count_over_collected_items(self) -> Dict[str, int]:
+        """Items carrying MORE annotations than their cap asks for.
+
+        Returns ``{instance_id: annotation_count}`` for every item over
+        its cap, empty when the study collected what it was configured
+        to. Items with an unlimited cap can never be over-collected and
+        are not counted.
+
+        This is possible without anything being broken: the assignment
+        relaxation hands out an item that is held but unanswered, so two
+        annotators can both be assigned an item neither has submitted
+        yet, and nothing re-checks the cap at submission. Before this it
+        left no trace -- no warning, no count -- and an agreement number
+        computed over an over-collected item is quietly not the design
+        that was configured.
+        """
+        over = {}
+        for instance_id, annotators in self.instance_annotators.items():
+            cap = self._get_annotator_cap_for_item(instance_id)
+            if cap >= 0 and len(annotators) > cap:
+                over[str(instance_id)] = len(annotators)
+        return over
+
+    def _model_review_candidates(self, user_state: 'UserState') -> list:
+        """
+        Prelabelled items this user has not seen, least confident first.
+
+        Shared by the assignment branch and by
+        ``has_unlabeled_items_for_user`` on purpose: two implementations of
+        "what is available" is how an assignment strategy comes to report
+        work it will not hand out, which /annotate experiences as a redirect
+        loop.
+        """
+        from potato import model_review
+
+        field_name = model_review.prediction_field(self.config)
+        schema_names = [s.get('name') for s in
+                        self.config.get('annotation_schemes', []) or []
+                        if s.get('name')]
+
+        summaries = []
+        for iid in list(self.remaining_instance_ids):
+            if self._item_is_complete(iid):
+                if iid in self.remaining_instance_ids:
+                    self.remaining_instance_ids.remove(iid)
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if self._already_with_user(user_state, iid):
+                continue
+            item = self._store.get(iid)
+            data = item.get_data() if item is not None else {}
+            summaries.append(model_review.summarize_predictions(
+                iid, data, field_name, schema_names))
+
+        return model_review.review_order(summaries)
+
+    def _llm_confidence_candidates(self, user_state: 'UserState') -> list:
+        """
+        Every item this user may take, least confident prediction first.
+
+        Unlike ``_model_review_candidates`` nothing is left out: an item with
+        no prediction is still work, so it is served last, in queue order,
+        rather than dropped, and the study can finish. Predictions without a
+        confidence come between the two, for the reason ``review_order``
+        gives. Shared with ``has_unlabeled_items_for_user``.
+
+        A prediction with an ``acquisition`` score (a trainer's margin,
+        entropy, BALD or core-set setting) goes ahead of the rest, highest
+        score first: the trainer was asked for a better ordering than
+        confidence gives, and this is it.
+        """
+        from potato import model_review
+
+        field_name = model_review.prediction_field(self.config)
+        schema_names = [s.get('name') for s in
+                        self.config.get('annotation_schemes', []) or []
+                        if s.get('name')]
+
+        acquired, scored, unscored, unpredicted = [], [], [], []
+        for position, iid in enumerate(list(self.remaining_instance_ids)):
+            if self._item_is_complete(iid):
+                if iid in self.remaining_instance_ids:
+                    self.remaining_instance_ids.remove(iid)
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if self._already_with_user(user_state, iid):
+                continue
+            item = self._store.get(iid)
+            data = item.get_data() if item is not None else {}
+            summary = model_review.summarize_predictions(
+                iid, data, field_name, schema_names)
+            if summary.empty:
+                unpredicted.append(iid)
+            elif summary.max_acquisition is not None:
+                acquired.append((-summary.max_acquisition, position, iid))
+            elif summary.min_confidence is None:
+                unscored.append(iid)
+            else:
+                scored.append((summary.min_confidence, position, iid))
+
+        acquired.sort()
+        scored.sort()
+        return ([iid for _, _, iid in acquired] + [iid for _, _, iid in scored]
+                + unscored + unpredicted)
+
+    def _holds_unannotated_item(self, user_state: 'UserState') -> bool:
+        """True if the user is already holding something they have not answered.
+
+        Saturation asks "may this item go to somebody NEW"; it is not the
+        question here. Once holds began counting against an item's cap, an
+        annotator's own hold made their own queue look unavailable: with
+        `num_annotators_per_item: 2`, the second annotator was assigned all
+        three items, every one of them then read as saturated (one submitter
+        plus their own hold), `has_unlabeled_items_for_user` said there was no
+        work, and they were moved to DONE while holding three blank items.
+
+        The loss was silent and total. `_label_container` routes writes by the
+        user's current phase, so every annotation they submitted afterwards
+        went into `phase_to_page_to_label_to_value[DONE]` instead of the
+        instance store, and each one overwrote the last. Every save returned
+        200. Their work simply did not exist, and the agreement report over the
+        study showed one annotator.
+        """
+        for iid in user_state.get_assigned_instance_ids():
+            if not user_state.has_annotated(iid):
+                return True
+        return False
+
     def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
         """Check whether any items remain for this user to annotate (read-only)."""
+        # Anything already in their queue counts, whatever the pool looks like.
+        if self._holds_unannotated_item(user_state):
+            return True
+
         if self.assignment_strategy == AssignmentStrategy.BATCH:
             user_id = getattr(user_state, 'user_id', None)
             if not user_id:
                 return False
-            for iid in self._batch_candidate_ids_for_user(str(user_id)):
+            candidate_ids, _ = self._batch_candidate_ids_for_user(str(user_id))
+            for iid in candidate_ids:
                 if iid not in self.remaining_instance_ids:
                     continue
                 if self._item_is_saturated(iid):
@@ -1278,6 +2096,48 @@ class ItemStateManager:
                 if not user_state.has_annotated(iid):
                     return True
             return False
+
+        if self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
+            # Without this branch the generic loop below reports items as
+            # available that the strategy will then refuse to serve (every
+            # item the model predicted nothing on), and /annotate
+            # redirect-loops between "you have work" and "there is none".
+            return bool(self._model_review_candidates(user_state))
+
+        if self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
+            return bool(self._llm_confidence_candidates(user_state))
+
+        if self.assignment_strategy == AssignmentStrategy.ENGINE:
+            # The engine's ledger is the queue: work exists exactly when it
+            # holds a request this person may take. Without this branch the
+            # generic loop below would report the whole dataset as available.
+            from potato.labeling_engine.integration.hooks import has_work_for_user
+            return has_work_for_user(user_state,
+                                     exclude=user_state.get_assigned_instance_ids())
+
+        if self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
+            # Early-stopped (resolved) items are excluded from assignment, so
+            # they must not count as available either — otherwise users spin
+            # on an "annotate" page that will never serve them anything.
+            candidates = [
+                iid for iid in self.remaining_instance_ids
+                if not self._item_is_saturated(iid)
+                and not user_state.has_annotated(iid)
+            ]
+            if not candidates:
+                return False
+            try:
+                from potato.psychometrics import get_psychometrics_manager
+                pm = get_psychometrics_manager()
+            except ImportError:
+                pm = None
+            if pm is None:
+                return True  # random fallback will serve these candidates
+            user_id = getattr(user_state, 'user_id', 'anonymous')
+            ranked = pm.rank_items(user_id, candidates)
+            if ranked is None:
+                return True  # cold start: random fallback serves them
+            return len(ranked) > 0
 
         for iid in self.remaining_instance_ids:
             if self._item_is_saturated(iid):
@@ -1293,7 +2153,8 @@ class ItemStateManager:
             return 0
         already_assigned = user_state.get_assigned_instance_ids()
         count = 0
-        for iid in self._batch_candidate_ids_for_user(str(user_id)):
+        candidate_ids, _ = self._batch_candidate_ids_for_user(str(user_id))
+        for iid in candidate_ids:
             if iid not in self.remaining_instance_ids:
                 continue
             if self._item_is_saturated(iid):
@@ -1304,6 +2165,68 @@ class ItemStateManager:
                 continue
             count += 1
         return count
+
+    def pause_assignment(self) -> None:
+        """Freeze new assignments (admin control). Idempotent."""
+        self._assignment_paused = True
+
+    def resume_assignment(self) -> None:
+        """Resume new assignments (admin control). Idempotent."""
+        self._assignment_paused = False
+
+    def is_assignment_paused(self) -> bool:
+        return self._assignment_paused
+
+    def _dataset_assignment_count(self, user_state) -> int:
+        """How many of the user's assigned items came out of the dataset.
+
+        Attention checks and gold items are injected into the queue by the
+        platform, not drawn from the pool, but they land in
+        ``assigned_instance_ids`` like anything else. Counting them against the
+        per-annotator quota means every injected check costs the annotator one
+        real item: on a six-item task with two checks and the default quota, two
+        articles are simply never served, and the only visible sign is a
+        progress bar that ends early.
+        """
+        assigned = user_state.get_assigned_instance_ids()
+        try:
+            from potato.quality_control import count_dataset_items
+        except Exception:
+            return len(assigned)
+        return count_dataset_items(assigned)
+
+    def _in_queue_order(self, ids) -> List[str]:
+        """``ids`` in the order items were loaded, for reproducible sampling."""
+        ids = set(ids)
+        ordered = [iid for iid in self.remaining_instance_ids if iid in ids]
+        seen = set(ordered)
+        return ordered + sorted(i for i in ids if i not in seen)
+
+    def _already_with_user(self, user_state, iid) -> bool:
+        """True when the user already holds this item, annotated or not.
+
+        Assignment tops up incrementally: three items up front, then one at a
+        time as the annotator works. A strategy that filters only on
+        ``has_annotated`` will happily re-pick an item the user has been given
+        but not yet reached. ``assign_instance`` drops the duplicate silently,
+        the strategy still reports one item assigned, and the queue stops
+        growing -- which is how ``assignment_strategy: random`` on a six-item
+        task hands an annotator three items and then nothing, with the progress
+        counter simply stopping early and no warning anywhere.
+        """
+        return (iid in user_state.get_assigned_instance_ids()
+                or user_state.has_annotated(iid)
+                or self._excluded_for_user(user_state, iid))
+
+    def _excluded_for_user(self, user_state, iid) -> bool:
+        """True when a feature has claimed this item for the user elsewhere."""
+        if not _assignment_exclusion_providers:
+            return False
+        username = getattr(user_state, 'user_id', None)
+        cache = getattr(self, '_exclusion_cache', None)
+        if cache is not None and username in cache:
+            return iid in cache[username]
+        return iid in excluded_items_for(username)
 
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
@@ -1331,25 +2254,117 @@ class ItemStateManager:
         """
         self.logger.debug(f"Assigning instances to user {getattr(user_state, 'user_id', None)} with strategy {self.assignment_strategy} and random_seed={self.random_seed}")
 
-        # Snapshot existing assignments so we can record timestamps for new ones
-        existing_assignments = set(user_state.get_assigned_instance_ids()) if self.reclaim_enabled else None
+        # Respect the runtime pause switch — freeze new assignments without
+        # disturbing anything already assigned.
+        if self._assignment_paused:
+            self.logger.info("Assignment is paused; skipping new assignments")
+            return 0
 
-        result = self._assign_instances_to_user_inner(user_state)
+        # Snapshot existing assignments. Taken unconditionally, not only under
+        # `reclaim_enabled`: `instance_assignees` is what makes the per-item cap
+        # count holders as well as submitters, and every strategy has its own
+        # `user_state.assign_instance(...)` call, so diffing here is the one
+        # place that catches all of them.
+        username = getattr(user_state, 'user_id', None)
+        existing_assignments = set(user_state.get_assigned_instance_ids())
 
-        # Record timestamps for newly assigned instances
-        if self.reclaim_enabled and existing_assignments is not None:
-            import time
-            username = getattr(user_state, 'user_id', None)
-            if username:
+        # Strategies ask about exclusions once per candidate item; work the
+        # set out once per pass. Keyed by user because passes for different
+        # users can run on different request threads.
+        if _assignment_exclusion_providers and username:
+            if getattr(self, '_exclusion_cache', None) is None:
+                self._exclusion_cache = {}
+            self._exclusion_cache[username] = excluded_items_for(username)
+        try:
+            result = self._assign_instances_to_user_inner(user_state)
+        finally:
+            cache = getattr(self, '_exclusion_cache', None)
+            if cache is not None:
+                cache.pop(username, None)
+
+        new_assignments = (set(user_state.get_assigned_instance_ids())
+                           - existing_assignments)
+        # Strategies filter candidates their own way, and some (engine, LLM
+        # confidence, category) pick through code that never asks
+        # `_already_with_user`. Whatever they picked, an excluded item does not
+        # stay with the user.
+        excluded = new_assignments & excluded_items_for(username)
+        for iid in excluded:
+            user_state.unassign_instance(iid)
+        if excluded:
+            self.logger.info("Withheld %d item(s) from %s that another feature "
+                             "gives them: %s", len(excluded), username,
+                             sorted(excluded)[:5])
+            new_assignments -= excluded
+            result = max(0, result - len(excluded))
+        if username and new_assignments:
+            # Recorded, but NOT retired from `remaining_instance_ids`. A hold is
+            # not a completed annotation: the strategies already skip a
+            # saturated item via `_item_is_saturated`, and taking it out of the
+            # queue here would also hide it from the fallback pass, which is the
+            # thing that keeps a hold from stranding an item.
+            for iid in new_assignments:
+                self.instance_assignees[iid].add(username)
+
+            # When each hold was taken: instance_reclaim reads it, and so does
+            # the fallback pass under assignment_hold_minutes.
+            if self.reclaim_enabled or getattr(self, 'hold_seconds', None):
+                import time
                 now = time.time()
-                new_assignments = set(user_state.get_assigned_instance_ids()) - existing_assignments
                 for iid in new_assignments:
                     self.assignment_timestamps[iid][username] = now
 
         return result
 
     def _assign_instances_to_user_inner(self, user_state: 'UserState') -> int:
-        """Inner assignment logic called by assign_instances_to_user."""
+        """Assign, and if holds were the only thing in the way, assign anyway.
+
+        A hold counts against an item's cap so that annotators spread across
+        the dataset instead of piling onto its first item. But a hold is not a
+        submission: an annotator who takes items and closes the tab would
+        otherwise strand them, and `instance_reclaim` -- the machinery that
+        takes stale holds back -- is off by default.
+
+        So the cap is enforced, and then relaxed if enforcing it would have sent
+        somebody away empty-handed. The second pass still respects annotations
+        *at assignment time* -- it will not hand out an item that already has
+        its full complement of submitted annotations. That is not a guarantee
+        about the collected data: two annotators can both be assigned an item
+        neither has answered yet, and nothing re-checks the cap at submission,
+        so an over-subscribed pool can end with an item carrying more
+        annotations than num_annotators_per_item. `count_over_collected_items`
+        is what makes that visible afterwards.
+        """
+        assigned = self._assign_pass(user_state)
+        if assigned:
+            return assigned
+
+        # Nothing available under the strict rule. If some item is held but
+        # unannotated, hand it out rather than declaring the study finished.
+        before = set(user_state.get_assigned_instance_ids())
+        self._holds_are_binding = False
+        try:
+            assigned = self._assign_pass(user_state)
+        finally:
+            self._holds_are_binding = True
+        if assigned and getattr(self, 'hold_seconds', None):
+            self._move_unreached_holds(
+                user_state, set(user_state.get_assigned_instance_ids()) - before)
+        if assigned:
+            # The advice is only advice when it is not already taken: on a
+            # study running instance_reclaim this used to tell the operator
+            # to turn on the feature they were watching work.
+            hint = ("" if self.reclaim_enabled else
+                    " Enable instance_reclaim to hand those back "
+                    "automatically instead.")
+            self.logger.info(
+                "Assigned %d item(s) to %s that another annotator holds but "
+                "has not submitted.%s",
+                assigned, getattr(user_state, 'user_id', None), hint)
+        return assigned
+
+    def _assign_pass(self, user_state: 'UserState') -> int:
+        """One assignment attempt under the current cap rule."""
 
         # Check if we should assign a verification task from ICL labeling
         verification_assigned = self._maybe_assign_icl_verification(user_state)
@@ -1366,7 +2381,7 @@ class ItemStateManager:
             return 0
 
         # Determine how many instances to assign
-        current_assignments = user_state.get_assigned_instance_count()
+        current_assignments = self._dataset_assignment_count(user_state)
         max_assignments = user_state.get_max_assignments()
 
         if max_assignments > 0:
@@ -1410,14 +2425,14 @@ class ItemStateManager:
             # Random assignment strategy
             unlabeled_items = []
             for iid in self.remaining_instance_ids:
-                annotation_count = len(self.instance_annotators[iid])
+                annotation_count = self._committed_annotator_count(iid)
                 cap = self._get_annotator_cap_for_item(iid)
                 self.logger.debug(f"[ASSIGNMENT] Considering {iid}: annotation_count={annotation_count}, cap={cap}")
                 # Always skip items that have reached max annotations, but do not remove here
                 if cap >= 0 and annotation_count >= cap:
                     self.logger.debug(f"[ASSIGNMENT] Skipping {iid}: reached annotation cap")
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
                 else:
                     self.logger.debug(f"User {getattr(user_state, 'user_id', None)} already annotated {iid}, skipping.")
@@ -1428,17 +2443,22 @@ class ItemStateManager:
             to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
             self.logger.debug(f"Randomly assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
             # Least annotated strategy: prioritize items with fewest annotations
             candidates = []
             for iid in list(self.remaining_instance_ids):
-                annotation_count = len(self.instance_annotators[iid])
+                annotation_count = self._committed_annotator_count(iid)
                 cap = self._get_annotator_cap_for_item(iid)
                 if cap >= 0 and annotation_count >= cap:
-                    if iid in self.remaining_instance_ids:
+                    # Retire only when the ANNOTATIONS are in; a hold makes the
+                    # item unavailable now, not finished.
+                    if (self._item_is_complete(iid)
+                            and iid in self.remaining_instance_ids):
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._excluded_for_user(user_state, iid):
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
                     candidates.append((iid, annotation_count))
@@ -1448,19 +2468,23 @@ class ItemStateManager:
             candidates.sort(key=lambda x: (x[1], x[0]))
             assigned = 0
             for item_id, _ in candidates[:instances_to_assign]:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
                 assigned += 1
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
             # Fixed order assignment strategy
             assigned = 0
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
+                if self._item_is_saturated(iid):
+                    continue
+                if self._excluded_for_user(user_state, iid):
+                    continue
                 if iid not in user_state.get_assigned_instance_ids():
-                    user_state.assign_instance(self.instance_id_to_instance[iid])
+                    user_state.assign_instance(self._store.get(iid))
                     assigned += 1
                     if assigned >= instances_to_assign:
                         break
@@ -1469,11 +2493,13 @@ class ItemStateManager:
             # Maximum diversity assignment strategy
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if self._item_is_saturated(iid):
+                    continue
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
@@ -1486,7 +2512,7 @@ class ItemStateManager:
             sorted_items = sorted(item_disagreement_scores.keys(), key=lambda x: item_disagreement_scores[x], reverse=True)
             assigned = 0
             for item_id in sorted_items[:instances_to_assign]:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
                 assigned += 1
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
@@ -1498,35 +2524,56 @@ class ItemStateManager:
             # simply the configured order.
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if self._item_is_saturated(iid):
+                    continue
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
             to_assign = unlabeled_items[:instances_to_assign]
             self.logger.debug(f"Active learning: assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
-            # LLM confidence assignment strategy (currently falls back to random)
-            unlabeled_items = []
-            for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
-                    if iid in self.remaining_instance_ids:
-                        self.remaining_instance_ids.remove(iid)
-                    continue
-                if not user_state.has_annotated(iid):
-                    unlabeled_items.append(iid)
-            if not unlabeled_items:
+            candidates = self._llm_confidence_candidates(user_state)
+            if not candidates:
                 return 0
-            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
-            self.logger.debug(f"LLM confidence (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
+            to_assign = candidates[:instances_to_assign]
+            self.logger.debug(
+                f"LLM confidence: assigning {to_assign} (least confident first) "
+                f"to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
+            return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.ENGINE:
+            from potato.labeling_engine.integration.hooks import claim_for_user
+            held = user_state.get_assigned_instance_ids()
+            claimed = claim_for_user(user_state, instances_to_assign, exclude=held)
+            n = 0
+            for item_id in claimed:
+                item = self._store.get(item_id)
+                if item is None:
+                    self.logger.warning(
+                        f"Labeling engine requested {item_id}, which is not loaded")
+                    continue
+                user_state.assign_instance(item)
+                n += 1
+            return n
+        elif self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
+            candidates = self._model_review_candidates(user_state)
+            if not candidates:
+                return 0
+            to_assign = candidates[:instances_to_assign]
+            self.logger.debug(
+                f"Model review: assigning {to_assign} (least confident first) "
+                f"to user {getattr(user_state, 'user_id', None)}")
+            for item_id in to_assign:
+                user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.CATEGORY_BASED:
             # Category-based assignment strategy
@@ -1557,9 +2604,11 @@ class ItemStateManager:
                     candidate_ids = set(self.remaining_instance_ids)
                 # 'none' fallback means no assignment
 
-            # Filter candidates: not already annotated by user, not completed
+            # Filter candidates: not already annotated by user, not completed.
+            # In queue order: iterating the set made a seeded sample depend on
+            # PYTHONHASHSEED, so `random_seed` did not reproduce an assignment.
             unlabeled_items = []
-            for iid in candidate_ids:
+            for iid in self._in_queue_order(candidate_ids):
                 # Skip if item is not in remaining (already completed)
                 if iid not in self.remaining_instance_ids:
                     continue
@@ -1567,7 +2616,7 @@ class ItemStateManager:
                 if self._item_is_saturated(iid):
                     continue
                 # Skip if user already annotated this item
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
 
             self.logger.debug(f"Category-based: {len(unlabeled_items)} unlabeled items available for user {user_id}")
@@ -1580,7 +2629,7 @@ class ItemStateManager:
             self.logger.debug(f"Category-based: assigning items {to_assign} to user {user_id}")
 
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
 
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.DIVERSITY_CLUSTERING:
@@ -1598,8 +2647,8 @@ class ItemStateManager:
                     # Skip if item has reached annotation limit
                     if self._item_is_saturated(iid):
                         continue
-                    # Skip if user already annotated
-                    if user_state.has_annotated(iid):
+                    # Skip if the user already holds or annotated it
+                    if self._already_with_user(user_state, iid):
                         continue
                     available_ids.append(iid)
 
@@ -1616,28 +2665,109 @@ class ItemStateManager:
 
                 # Assign items from diverse order
                 assigned = 0
+                served = []
                 for item_id in diverse_order[:instances_to_assign]:
-                    user_state.assign_instance(self.instance_id_to_instance[item_id])
+                    user_state.assign_instance(self._store.get(item_id))
+                    served.append(item_id)
                     assigned += 1
+                dm.note_assigned(user_id, served)
 
                 return assigned
             else:
                 # Fallback to random if diversity manager unavailable
                 self.logger.debug("Diversity manager not available, falling back to random")
                 return self._assign_random_fallback(user_state, instances_to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
+            # Psychometric adaptive routing: rank candidates by expected
+            # information gain for THIS annotator under the live IRT model.
+            from potato.psychometrics import get_psychometrics_manager
+            pm = get_psychometrics_manager()
+
+            if pm is not None:
+                # Get available items (respecting per-item / global annotator caps)
+                available_ids = []
+                for iid in self.remaining_instance_ids:
+                    if self._item_is_saturated(iid):
+                        continue
+                    if self._already_with_user(user_state, iid):
+                        continue
+                    available_ids.append(iid)
+
+                if not available_ids:
+                    return 0
+
+                user_id = getattr(user_state, 'user_id', 'anonymous')
+                ranked = pm.rank_items(user_id, available_ids)
+
+                if ranked is not None:
+                    assigned = 0
+                    for item_id in ranked[:instances_to_assign]:
+                        user_state.assign_instance(self._store.get(item_id))
+                        assigned += 1
+                    return assigned
+                # rank_items returned None: cold start — random assignment
+                # builds the annotator overlap the model needs to identify.
+
+            self.logger.debug(
+                "Psychometrics unavailable or in cold start, falling back to random")
+            return self._assign_random_fallback(user_state, instances_to_assign)
         elif self.assignment_strategy == AssignmentStrategy.BATCH:
             return self._assign_batch(user_state, instances_to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.PRIORITY:
+            # Signal-based triage: serve items by their stored triage priority
+            # (errors / thumbs-down / low score first). Mirrors MAX_DIVERSITY but
+            # sorts by the ingestion-time signal in item metadata instead of
+            # disagreement. Ties broken by the original queue order for
+            # determinism. `triage.order: asc` flips to lowest-priority-first.
+            candidates = []
+            for iid in list(self.remaining_instance_ids):
+                if self._item_is_complete(iid):
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
+                    continue
+                if iid in user_state.get_assigned_instance_ids():
+                    continue
+                if user_state.has_annotated(iid):
+                    continue
+                if self._excluded_for_user(user_state, iid):
+                    continue
+                candidates.append(iid)
+            if not candidates:
+                return 0
+            order_index = {iid: i for i, iid in enumerate(self.instance_id_ordering)}
+
+            def _priority_of(iid):
+                p = self._store.get(iid).get_metadata("triage_priority")
+                return p if p is not None else 0
+
+            ascending = bool(self.triage_scorer) and self.triage_scorer.order == "asc"
+            # Sort by priority (desc by default), tie-break by original order asc.
+            candidates.sort(key=lambda iid: (
+                _priority_of(iid) if ascending else -_priority_of(iid),
+                order_index.get(iid, 0),
+            ))
+            assigned = 0
+            for iid in candidates[:instances_to_assign]:
+                user_state.assign_instance(self._store.get(iid))
+                assigned += 1
+            return assigned
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
             assigned = 0
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
+                if self._item_is_saturated(iid):
+                    continue
+                if self._excluded_for_user(user_state, iid):
+                    continue
                 if iid not in user_state.get_assigned_instance_ids():
-                    user_state.assign_instance(self.instance_id_to_instance[iid])
+                    user_state.assign_instance(self._store.get(iid))
                     assigned += 1
                     if assigned >= instances_to_assign:
                         break
@@ -1658,8 +2788,11 @@ class ItemStateManager:
         assigned = 0
         already_assigned = user_state.get_assigned_instance_ids()
 
-        for item_id in self._batch_candidate_ids_for_user(str(user_id)):
-            if item_id not in self.instance_id_to_instance:
+        candidate_ids, rollback_group_index = self._batch_candidate_ids_for_user(
+            str(user_id), assign_auto=True
+        )
+        for item_id in candidate_ids:
+            if item_id not in self._store:
                 self.logger.warning(
                     "Batch assignment references unknown item %s for user %s",
                     item_id,
@@ -1676,12 +2809,20 @@ class ItemStateManager:
                 continue
             if user_state.has_annotated(item_id):
                 continue
+            if self._excluded_for_user(user_state, item_id):
+                continue
 
-            user_state.assign_instance(self.instance_id_to_instance[item_id])
+            user_state.assign_instance(self._store.get(item_id))
             already_assigned.add(item_id)
             assigned += 1
             if assigned >= instances_to_assign:
                 break
+
+        # Don't consume an auto-batch slot for a user that received nothing this
+        # pass (e.g. the chosen group is fully saturated) — release the fresh pin
+        # so it stays reconstructable from real assignments after a restart.
+        if assigned == 0 and rollback_group_index is not None:
+            self._rollback_auto_batch_pin(str(user_id), rollback_group_index)
 
         return assigned
 
@@ -1719,7 +2860,7 @@ class ItemStateManager:
 
             for category, instance_ids in self.category_to_instance_ids.items():
                 eligible_items = []
-                for iid in instance_ids:
+                for iid in self._in_queue_order(instance_ids):
                     # Skip if item is not in remaining (already completed)
                     if iid not in self.remaining_instance_ids:
                         continue
@@ -1727,7 +2868,7 @@ class ItemStateManager:
                     if self._item_is_saturated(iid):
                         continue
                     # Skip if user already annotated this item
-                    if not user_state.has_annotated(iid):
+                    if not self._already_with_user(user_state, iid):
                         eligible_items.append(iid)
 
                 if eligible_items:
@@ -1736,12 +2877,12 @@ class ItemStateManager:
 
             # Also check uncategorized instances
             uncategorized_eligible = []
-            for iid in self.uncategorized_instance_ids:
+            for iid in self._in_queue_order(self.uncategorized_instance_ids):
                 if iid not in self.remaining_instance_ids:
                     continue
                 if self._item_is_saturated(iid):
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     uncategorized_eligible.append(iid)
 
             if not available_categories and not uncategorized_eligible:
@@ -1768,7 +2909,7 @@ class ItemStateManager:
                 break
 
             # Assign the selected instance
-            user_state.assign_instance(self.instance_id_to_instance[selected_item])
+            user_state.assign_instance(self._store.get(selected_item))
             assigned_count += 1
 
             self.logger.debug(
@@ -1784,7 +2925,7 @@ class ItemStateManager:
         for iid in self.remaining_instance_ids:
             if self._item_is_saturated(iid):
                 continue
-            if not user_state.has_annotated(iid):
+            if not self._already_with_user(user_state, iid):
                 unlabeled_items.append(iid)
 
         if not unlabeled_items:
@@ -1792,13 +2933,114 @@ class ItemStateManager:
 
         to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
         for item_id in to_assign:
-            user_state.assign_instance(self.instance_id_to_instance[item_id])
+            user_state.assign_instance(self._store.get(item_id))
 
         return len(to_assign)
 
-    def _calculate_disagreement_score(self, instance_id: str) -> float:
+    @staticmethod
+    def _has_left_item(ustate, instance_id: str) -> bool:
+        """Whether the annotator has gone past the item, or finished.
+
+        Past, not merely away: going back with Previous to fix an earlier item
+        leaves this one half-done, and counting its blanks then escalated an
+        item both annotators went on to agree on.
+        """
+        try:
+            from potato.phase import UserPhase
+            if ustate.get_phase() != UserPhase.ANNOTATION:
+                return True
+            ordering = list(getattr(ustate, "instance_id_ordering", None) or [])
+            if str(instance_id) in [str(i) for i in ordering]:
+                position = [str(i) for i in ordering].index(str(instance_id))
+                return ustate.get_current_instance_index() > position
+            return str(ustate.get_current_instance_id()) != str(instance_id)
+        except Exception:
+            return True
+
+    def reevaluate_adaptive_boost(self, instance_id: str) -> None:
+        """Check the item's boost again, after an annotator has left it."""
+        if not (self.adaptive_boost.get('enabled')
+                and self.adaptive_boost.get('boost_to', 0) >= 2):
+            return
+        if len(self.instance_annotators.get(instance_id, ())) < 2:
+            return
+        try:
+            self._update_adaptive_boost(instance_id)
+        except Exception:
+            self.logger.warning("Could not re-check the adaptive boost on %s",
+                                instance_id, exc_info=True)
+
+    def _update_adaptive_boost(self, instance_id: str) -> None:
+        """Raise the item's cap on disagreement, or withdraw a raise that no
+        longer holds.
+
+        This runs on every save, autosaves included, so a reviewer's misclick
+        raised the item before the correction a second later, and a raised
+        item stayed raised: it went to the expert anyway. A boost is withdrawn
+        when the disagreement is gone and nobody beyond the original cap has
+        annotated or been handed the item yet. After that, the extra
+        annotator's work stands.
+        """
+        current_count = len(self.instance_annotators[instance_id])
+        if current_count < 2:
+            return
+        boost_to = self.adaptive_boost['boost_to']
+        threshold = self.adaptive_boost.get('threshold', 0.5)
+        boosts = self.__dict__.setdefault('_adaptive_boosts', {})
+        item = self._store.get(instance_id)
+        if item is None:
+            return
+        if instance_id not in boosts:
+            current_cap = self._get_annotator_cap_for_item(instance_id)
+            if current_cap < 0 or current_cap >= boost_to:
+                return
+            if self._calculate_disagreement_score(instance_id) < threshold:
+                return
+            boosts[instance_id] = (item.get_metadata('required_annotations'), current_cap)
+            item.add_metadata('required_annotations', boost_to)
+            self.logger.info(
+                "Adaptive boost: %s raised to %d annotators (current=%d)",
+                instance_id, boost_to, current_count,
+            )
+            if instance_id in self.completed_instance_ids:
+                self.completed_instance_ids.discard(instance_id)
+                if instance_id not in self.remaining_instance_ids:
+                    self.remaining_instance_ids.append(instance_id)
+            return
+        previous, original_cap = boosts[instance_id]
+        if self._calculate_disagreement_score(instance_id) >= threshold:
+            return
+        spoken_for = len(self.instance_annotators[instance_id]
+                         | self.instance_assignees[instance_id])
+        if spoken_for > original_cap:
+            return
+        if previous is None:
+            item.metadata.pop('required_annotations', None)
+        else:
+            item.add_metadata('required_annotations', previous)
+        del boosts[instance_id]
+        self.logger.info(
+            "Adaptive boost withdrawn: %s agrees again, back to %d annotators",
+            instance_id, original_cap,
+        )
+
+    def _calculate_disagreement_score(self, instance_id: str,
+                                      kinds: str = "all") -> float:
         """
         Calculate a disagreement score in [0, 1] for an instance.
+
+        ``kinds`` selects which raters are counted: ``"all"`` (every
+        participant), ``"human"``, or ``"machine"``. Both existing callers use
+        the default, so no study's scores move.
+
+        The separation matters when a project declares machine raters. Tools
+        that share a reference database disagree with people far more than they
+        disagree with each other, so a score over everyone measures the
+        distance between the two groups rather than how contested the item is
+        within either. Which of the three a project should route on is a
+        judgement about that project -- whether tool-versus-tool conflict
+        should pull in another human is not something this function can decide
+        -- so the choice is exposed and nothing here picks for you.
 
         Walks every user who has annotated this instance and, per schema,
         computes the ratio of distinct labels (or distinct span-set
@@ -1822,30 +3064,111 @@ class ItemStateManager:
         if len(annotators) < 2:
             return 0.0
 
-        # Aggregate per-schema labels + spans
+        # Aggregate per-schema labels + spans.
+        #
+        # Both accessors return the FLAT container -- `{Label: value}` and
+        # `{SpanAnnotation: value}` -- despite docstrings that promise a
+        # mapping keyed by schema name. Unpacking either two names at a time
+        # bound the first to the annotation OBJECT and the second to the value
+        # string, which the comprehension then iterated one character at a
+        # time: "eligible" became ('b','e','e','g','i','i','l','l').
+        #
+        # The consequence was a constant 0.0, for two reasons at once. Two
+        # annotators who agree carry the same key, so their tuples match and
+        # the ratio is (1-1)/(2-1). Two who DISAGREE carry different keys --
+        # eligibility/eligible against eligibility/ineligible -- so each group
+        # holds one user, is skipped for having fewer than two, and the
+        # function returns 0.0 having collected nothing. Grouping by label
+        # also split a multiselect's ticked boxes apart, so a set of labels was
+        # never compared as a set.
+        from potato.server_utils import annotation_values
+        from potato.server_utils.iaa.dispatcher import packed_answer
+
+        schemes = [sc for sc in (self.config.get("annotation_schemes") or [])
+                   if isinstance(sc, dict)]
+        schemes_by_name = {str(sc.get("name")): sc for sc in schemes}
+
         schema_to_user_value: Dict[str, Dict[str, tuple]] = defaultdict(dict)
+        if kinds != "all":
+            from potato.annotator_origin import is_machine
+
+        counted = []
+        # Annotators who have moved on from the item: only their blanks are
+        # answers. Every autosave reaches here, and a question the annotator
+        # has not got to yet is not a disagreement.
+        finished = []
         for uid in annotators:
             ustate = usm.get_user_state(uid) if hasattr(usm, "get_user_state") else None
             if ustate is None:
                 continue
-            for schema, labels in (ustate.get_label_annotations(instance_id) or {}).items():
-                # Represent as a tuple of label names so dict-style equality works.
-                value = tuple(sorted(
-                    str(getattr(l, "name", l.get("name") if isinstance(l, dict) else l))
-                    for l in labels
-                ))
-                schema_to_user_value[schema][uid] = value
-            for schema, spans in (ustate.get_span_annotations(instance_id) or {}).items():
-                value = tuple(sorted(
-                    (int(getattr(s, "start", s["start"] if isinstance(s, dict) else 0)),
-                     int(getattr(s, "end", s["end"] if isinstance(s, dict) else 0)),
-                     str(getattr(s, "name", s.get("name") if isinstance(s, dict) else "")))
-                    for s in spans
-                ))
-                schema_to_user_value[f"__span__{schema}"][uid] = value
+            if kinds == "human" and is_machine(ustate):
+                continue
+            if kinds == "machine" and not is_machine(ustate):
+                continue
+            counted.append(uid)
+            if self._has_left_item(ustate, instance_id):
+                finished.append(uid)
+            # Pairwise answers in data order: under randomize_order two
+            # annotators who preferred the same response store "A" and "B".
+            grouped = annotation_values.user_values(ustate, instance_id, schemes)
+            for schema, values in grouped.items():
+                # The names chosen, which is where the answer lives: radio
+                # stores {"eligible": True} and likert {"4": "4"}. Shared with
+                # the agreement report and adjudication so the three cannot
+                # disagree about what a person answered. A packed type keeps
+                # its answer in the value (pairwise {"selection": "A"}), and
+                # reading names made every pairwise annotator agree.
+                scheme = schemes_by_name.get(schema)
+                names = packed_answer(scheme, values) if scheme else None
+                if names is None:
+                    names = annotation_values.selected_labels(values)
+                if not names:
+                    continue
+                schema_to_user_value[schema][uid] = tuple(sorted(names))
+
+            for span, _ in (ustate.get_span_annotations(instance_id) or {}).items():
+                schema = str(getattr(span, "schema",
+                                     span.get("schema") if isinstance(span, dict)
+                                     else ""))
+                key = f"__span__{schema}"
+                signature = (
+                    int(getattr(span, "start",
+                                span["start"] if isinstance(span, dict) else 0)),
+                    int(getattr(span, "end",
+                                span["end"] if isinstance(span, dict) else 0)),
+                    str(getattr(span, "name",
+                                span.get("name") if isinstance(span, dict) else "")),
+                )
+                # One signature per span, accumulated into a sorted tuple: a
+                # user's answer for a span schema is the SET of spans they drew,
+                # so overwriting per span would have compared only the last one.
+                schema_to_user_value[key][uid] = tuple(sorted(
+                    schema_to_user_value[key].get(uid, ()) + (signature,)))
 
         if not schema_to_user_value:
             return 0.0
+
+        # An annotator who saved the item and left a question blank disagrees
+        # with one who answered it. Skipping blanks found 5 of 13 real
+        # disagreements in a camera-trap review, where a species left empty
+        # beside a named one is the disagreement that matters. Free-text
+        # questions are left out: a comment one reviewer wrote and another
+        # did not is not a disagreement about the item.
+        from potato.server_utils.iaa.dispatcher import SchemaKind, classify_schema
+        for key, values_by_user in schema_to_user_value.items():
+            name = key[len("__span__"):] if key.startswith("__span__") else key
+            scheme = schemes_by_name.get(name)
+            # TEXT and UNSUPPORTED: what the agreement report does not score
+            # (`text` itself classifies as UNSUPPORTED).
+            if scheme is None or classify_schema(scheme) in (SchemaKind.TEXT,
+                                                             SchemaKind.UNSUPPORTED):
+                continue
+            # A question display_logic can hide may be blank because this
+            # annotator never saw it.
+            if scheme.get("display_logic"):
+                continue
+            for uid in finished:
+                values_by_user.setdefault(uid, ())
 
         scores = []
         for values_by_user in schema_to_user_value.values():
@@ -1898,6 +3221,7 @@ class ItemStateManager:
                         reason="stale_assignment",
                     )
                 else:
+                    self.instance_assignees[iid].discard(username)
                     if iid not in self.completed_instance_ids and iid not in self.remaining_instance_ids:
                         self.remaining_instance_ids.append(iid)
                     self.instance_annotators[iid].discard(username)
@@ -1930,6 +3254,15 @@ class ItemStateManager:
         unassigned = user_state.unassign_instance(instance_id)
         if not unassigned:
             return False
+
+        # The hold is the thing being released. Leaving it in
+        # `instance_assignees` would keep the item counted against its own cap
+        # forever, so a reclaimed item could never be given to anyone else.
+        self.instance_assignees[instance_id].discard(user_id)
+
+        if instance_id in self.completed_instance_ids:
+            if not self._item_is_saturated(instance_id):
+                self.completed_instance_ids.discard(instance_id)
 
         if instance_id not in self.completed_instance_ids and instance_id not in self.remaining_instance_ids:
             self.remaining_instance_ids.append(instance_id)
@@ -1968,6 +3301,7 @@ class ItemStateManager:
 
         had_annotator_credit = user_id in self.instance_annotators[instance_id]
         self.instance_annotators[instance_id].discard(user_id)
+        self.instance_assignees[instance_id].discard(user_id)
         if had_annotator_credit and self.item_annotation_counts[instance_id] > 0:
             self.item_annotation_counts[instance_id] -= 1
 
@@ -2145,11 +3479,11 @@ class ItemStateManager:
                     continue
 
                 # Check if instance exists in our manager
-                if instance_id not in self.instance_id_to_instance:
+                if instance_id not in self._store:
                     continue
 
                 # Assign the verification instance
-                item = self.instance_id_to_instance[instance_id]
+                item = self._store.get(instance_id)
                 user_state.assign_instance(item)
 
                 # Mark this as a verification task in the user's metadata
@@ -2188,13 +3522,58 @@ class ItemStateManager:
         # For now, it's a placeholder
         return None
 
+    # ------------------------------------------------------------------
+    # The item accessors.
+    #
+    # Every consumer outside this class goes through these rather than
+    # reaching into the container. That is not tidiness: while the container
+    # *was* a dict that every module indexed by name, no backend could ever
+    # be put behind it, and `tests/unit/test_item_store.py` fails the build
+    # if a new direct reference appears.
+    # ------------------------------------------------------------------
+
     def get_instance_ids(self) -> list[str]:
         """Get all instance IDs in the manager"""
-        return list(self.instance_id_to_instance.keys())
+        return self._store.ids()
 
     def get_item(self, instance_id: str) -> Item:
-        """Get an item by its ID"""
-        return self.instance_id_to_instance[instance_id]
+        """The item, raising KeyError when it is absent."""
+        item = self._store.get(instance_id)
+        if item is None:
+            raise KeyError(instance_id)
+        return item
+
+    def find_item(self, instance_id: str):
+        """The item, or None. The ``.get()`` half of the old dict access."""
+        return self._store.get(instance_id)
+
+    def iter_items(self):
+        """
+        ``(instance_id, Item)`` pairs, lazily.
+
+        Prefer this to :meth:`items` anywhere the loop does not need the whole
+        corpus at once — a report that iterates is the case a paged store can
+        serve in constant memory, and ``.items()`` on a dict was a hard floor
+        that no backend could lower.
+        """
+        return self._store.iter_items()
+
+    def item_count(self) -> int:
+        return len(self._store)
+
+    @property
+    def instance_id_to_instance(self):
+        """
+        Deprecated. The live id-to-``Item`` mapping.
+
+        Kept because it was the public surface for years and third-party
+        configs and forks index it directly. It is a **view of real state**,
+        not a rebuilt copy — a copy would silently discard ``add_metadata``
+        writes made through it — so it stays correct; it is just no longer the
+        way to reach an item. Under a paged store, reading payloads through it
+        faults them in one at a time, which is the right incentive.
+        """
+        return self._store.as_mapping()
 
     def get_annotators_for_item(self, instance_id: str) -> set[str]:
         """Get the set of annotators who have worked on this item"""
@@ -2226,9 +3605,71 @@ class ItemStateManager:
             count += 1
         return count
 
+    def get_progress_pending_ids_for_user(self, user_state: UserState) -> list[str]:
+        """Ids this annotator still has to do: their own holds, plus the pool.
+
+        `get_total_assignable_items_for_user` counts what is left in the
+        *shared pool*, and a hold counts against an item's cap -- so once a
+        second annotator is holding every item, every item is saturated and
+        the pool reads zero for them. Their progress counter was
+        finished + 0: "0/0" before their first save and "N/N" after it, from
+        their very first item, while their ordering held the whole study.
+
+        What they have already been assigned is the part that was missing.
+        Returned as ids rather than a count so the caller can discount
+        platform-injected items (attention checks, gold) the same way it
+        discounts them from the numerator.
+        """
+        assigned = set(user_state.get_assigned_instance_ids())
+        pending = [iid for iid in assigned if not user_state.has_annotated(iid)]
+
+        if getattr(self, "assignment_strategy", None) == AssignmentStrategy.ENGINE:
+            # The engine asks people for a sample, not the corpus: counting
+            # the pool showed "0/481" to someone who would be asked for 20.
+            from potato.labeling_engine.integration.hooks import work_item_ids_for_user
+            seen = set(pending)
+            pending += [iid for iid in work_item_ids_for_user(user_state)
+                        if iid not in seen and not user_state.has_annotated(iid)]
+            return pending
+
+        candidates = self.remaining_instance_ids
+        if getattr(self, "assignment_strategy", None) == AssignmentStrategy.BATCH:
+            # Other cohorts and unrostered items cannot be assigned to this
+            # participant. Use the same read-only eligibility lookup as the
+            # batch allocator, without pinning an automatic cohort here.
+            candidates, _ = self._batch_candidate_ids_for_user(user_state.get_user_id())
+
+        for iid in candidates:
+            if iid not in self.remaining_instance_ids:
+                continue
+            if iid in assigned:
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if user_state.has_annotated(iid):
+                continue
+            pending.append(iid)
+        return pending
+
     def items(self) -> list[Item]:
         """Get all items in the manager"""
-        return list(self.instance_id_to_instance.values())
+        return [item for _, item in self._store.iter_items()]
+
+    def register_assignee(self, instance_id: str, user_id: str) -> None:
+        """
+        Record that a user currently holds an assignment for an instance.
+
+        Used to rebuild `instance_assignees` from persisted user state at
+        startup. Assignment itself records this centrally in
+        `assign_instances_to_user`; this is the restart path, without which a
+        bounce forgets every outstanding hold and the per-item cap goes back to
+        counting only people who have already submitted.
+
+        Args:
+            instance_id: The instance being held
+            user_id: Who is holding it
+        """
+        self.instance_assignees[instance_id].add(user_id)
 
     def register_annotator(self, instance_id: str, user_id: str):
         """
@@ -2254,25 +3695,9 @@ class ItemStateManager:
 
         # Adaptive boost: when an item has begun gathering annotations under
         # the default cap and shows real disagreement, raise its per-item cap
-        # so we keep gathering votes. The boost is one-shot per item.
+        # so we keep gathering votes.
         if self.adaptive_boost.get('enabled') and self.adaptive_boost.get('boost_to', 0) >= 2:
-            current_count = len(self.instance_annotators[instance_id])
-            current_cap = self._get_annotator_cap_for_item(instance_id)
-            boost_to = self.adaptive_boost['boost_to']
-            if 2 <= current_count and current_cap >= 0 and current_cap < boost_to:
-                threshold = self.adaptive_boost.get('threshold', 0.5)
-                if self._calculate_disagreement_score(instance_id) >= threshold:
-                    item = self.instance_id_to_instance.get(instance_id)
-                    if item is not None:
-                        item.add_metadata('required_annotations', boost_to)
-                        self.logger.info(
-                            "Adaptive boost: %s raised to %d annotators (current=%d)",
-                            instance_id, boost_to, current_count,
-                        )
-                        if instance_id in self.completed_instance_ids:
-                            self.completed_instance_ids.discard(instance_id)
-                            if instance_id not in self.remaining_instance_ids:
-                                self.remaining_instance_ids.append(instance_id)
+            self._update_adaptive_boost(instance_id)
 
         # Check if this item has reached its annotation limit
         if self._item_is_saturated(instance_id):
@@ -2293,6 +3718,19 @@ class ItemStateManager:
                 except Exception as exc:
                     self.logger.debug("Adjudication auto-route skipped: %s", exc)
 
+    def unregister_annotator(self, instance_id: str, user_id: str):
+        """Undo register_annotator for a user who has cleared every answer on
+        an item, so the item counts them no longer and can be offered again
+        once it is below its cap."""
+        annotators = self.instance_annotators.get(instance_id)
+        if not annotators or user_id not in annotators:
+            return
+        annotators.discard(user_id)
+        if instance_id in self.completed_instance_ids and not self._item_is_saturated(instance_id):
+            self.completed_instance_ids.discard(instance_id)
+            if instance_id not in self.remaining_instance_ids:
+                self.remaining_instance_ids.append(instance_id)
+
     def update_annotation_count(self, instance_id: str, delta=1):
         """
         Update the annotation count for an instance.
@@ -2302,6 +3740,62 @@ class ItemStateManager:
             delta: The change in annotation count (default: +1)
         """
         self.item_annotation_counts[instance_id] += delta
+
+    def set_prediction(self, instance_id: str, schema_name: str,
+                       payload, field: str = "predictions") -> bool:
+        """
+        Attach one model prediction to an item, as a prelabel.
+
+        The only way the training subsystem writes into item state, and
+        deliberately the narrowest one available. It merges a single key into
+        the ``predictions`` map and leaves every other field of ``item_data``
+        untouched.
+
+        It cannot corrupt human annotations, because it cannot address them:
+        annotations live in ``UserState`` and on this ``Item``'s separate
+        ``labels`` / ``span_annotations`` / ``metadata`` attributes, which the
+        ``item_data`` property above explains are written through the live
+        object. Nor does it use ``update_item()``, which replaces an item's
+        whole payload and would clobber a concurrent field write.
+
+        Returns False when there is no such item, so the caller can count it.
+        """
+        with self._lock:
+            item = self.find_item(instance_id)
+            if item is None:
+                return False
+
+            data = dict(item.item_data or {})
+            predictions = dict(data.get(field) or {})
+            predictions[schema_name] = payload
+            data[field] = predictions
+            item.item_data = data
+            return True
+
+    def clear_prediction(self, instance_id: str, schema_name: str,
+                         field: str = "predictions") -> bool:
+        """Remove one prelabel that ``set_prediction`` wrote. True if removed."""
+        with self._lock:
+            item = self.find_item(instance_id)
+            if item is None:
+                return False
+            data = dict(item.item_data or {})
+            predictions = dict(data.get(field) or {})
+            if schema_name not in predictions:
+                return False
+            del predictions[schema_name]
+            data[field] = predictions
+            item.item_data = data
+            return True
+
+    def get_remaining_instance_ids(self) -> List[str]:
+        """
+        Instance IDs still available for assignment, in serving order.
+
+        A snapshot rather than the live deque, so a caller can iterate it while
+        annotators are being served without tripping over a mutation.
+        """
+        return list(self.remaining_instance_ids)
 
     def reorder_instances(self, new_order: List[str]):
         """
@@ -2314,11 +3808,19 @@ class ItemStateManager:
             This method preserves instances that are not in the new_order list
             by appending them to the end of the ordering.
         """
+        # Deduplicate, preserving first occurrence. A caller that interleaves
+        # a ranked list with an exploration sample drawn from that same list
+        # hands us every sampled id twice, and without this the duplicates
+        # propagate straight into instance_id_ordering and
+        # remaining_instance_ids -- so the same item is served repeatedly and
+        # the queue length stops meaning anything.
+        new_order = list(dict.fromkeys(new_order))
+
         # Create a set of instances in the new order for efficient lookup
         new_order_set = set(new_order)
 
         # Filter out instances that don't exist in our manager
-        valid_new_order = [instance_id for instance_id in new_order if instance_id in self.instance_id_to_instance]
+        valid_new_order = [instance_id for instance_id in new_order if instance_id in self._store]
 
         # Find instances that are not in the new order
         remaining_instances = [instance_id for instance_id in self.instance_id_ordering if instance_id not in new_order_set]
@@ -2336,9 +3838,10 @@ class ItemStateManager:
 
     def clear(self):
         """Clear all data from the manager (for testing)"""
-        self.instance_id_to_instance.clear()
+        self._store.clear()
         self.instance_id_ordering.clear()
         self.remaining_instance_ids.clear()
         self.completed_instance_ids.clear()
         self.instance_annotators.clear()
+        self.instance_assignees.clear()
         self.item_annotation_counts.clear()

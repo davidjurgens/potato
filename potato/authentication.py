@@ -1,9 +1,8 @@
 """
 Authentication System Module
 
-This module provides a comprehensive authentication system for the Potato annotation platform.
-It supports multiple authentication backends including in-memory storage, database storage,
-and third-party SSO providers like Clerk.
+The authentication system for the Potato annotation platform, with backends for
+in-memory storage, database storage, and third-party SSO providers such as Clerk.
 
 The system is designed to be extensible and supports both password-based and passwordless
 authentication modes. It includes user management, session validation, and secure
@@ -90,6 +89,22 @@ def _verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(expected_hash, actual_hash)
 
 
+_timing_dummy_hash = None
+
+
+def _timing_dummy() -> str:
+    """A hash to verify against for unknown users, made on first use.
+
+    Computing it at import cost every process 100k PBKDF2 iterations, CLI
+    tools included, and broke the import under Pyodide, whose hashlib has
+    no pbkdf2_hmac.
+    """
+    global _timing_dummy_hash
+    if _timing_dummy_hash is None:
+        _timing_dummy_hash = _hash_password_with_salt(secrets.token_hex(8))
+    return _timing_dummy_hash
+
+
 class AuthBackend(ABC):
     """
     Abstract base class for authentication backends.
@@ -127,6 +142,10 @@ class AuthBackend(ABC):
         """Load user with already-hashed password (for file loading). Override in subclasses."""
         raise NotImplementedError("This backend does not support loading pre-hashed passwords")
 
+    def has_settable_password(self, username: str) -> bool:
+        """Whether Potato holds this account's password, so it can be reset."""
+        return self.is_valid_username(username)
+
 
 class InMemoryAuthBackend(AuthBackend):
     """
@@ -140,6 +159,10 @@ class InMemoryAuthBackend(AuthBackend):
 
     def authenticate(self, username: str, password: Optional[str]) -> bool:
         if username not in self.users:
+            # Spend the same hashing time as a wrong password, so response
+            # time does not reveal which usernames exist.
+            if password:
+                _verify_password(password, _timing_dummy())
             return False
         if password is None:  # Passwordless login
             return True
@@ -285,6 +308,8 @@ class DatabaseAuthBackend(AuthBackend):
             (username,), fetch="one"
         )
         if not row:
+            if password:
+                _verify_password(password, _timing_dummy())
             return False
         if password is None:  # Passwordless login
             return True
@@ -380,6 +405,12 @@ class ClerkAuthBackend(AuthBackend):
             )
             if response.status_code == 200:
                 user_data = response.json()
+                # A valid session proves who its owner is, not that they are
+                # `username`: the form field is the caller's claim. Accept only
+                # an active session whose Clerk user is that username.
+                if user_data.get("status") != "active" or user_data.get("user_id") != username:
+                    logger.warning("Clerk session does not belong to %r", username)
+                    return False
                 self.users[username] = user_data
                 return True
             return False
@@ -396,8 +427,42 @@ class ClerkAuthBackend(AuthBackend):
     def update_password(self, username: str, new_password: str) -> bool:
         raise NotImplementedError("Password management is handled by Clerk")
 
+    def has_settable_password(self, username: str) -> bool:
+        return False
+
     def get_all_users(self) -> List[str]:
         return list(self.users.keys())
+
+
+def _parse_authorized_users(user_config: dict) -> list:
+    """Build the authorized-username roster from a config's ``user_config`` block.
+
+    Accepts both shapes that appear in the wild::
+
+        user_config:
+          users: ["alice", "bob"]
+          # or
+          users:
+            - {username: alice, password: hunter2}
+    """
+    roster = []
+    entries = user_config.get("users") or []
+    if isinstance(entries, str):
+        entries = [entries]
+    for entry in entries:
+        if isinstance(entry, str):
+            username = entry
+        elif isinstance(entry, dict):
+            username = entry.get("username") or entry.get("user") or entry.get("id")
+        else:
+            logger.warning(
+                "Ignoring unrecognized user_config.users entry of type %s",
+                type(entry).__name__,
+            )
+            continue
+        if username and username not in roster:
+            roster.append(username)
+    return roster
 
 
 class UserAuthenticator:
@@ -409,16 +474,23 @@ class UserAuthenticator:
     and can be configured for passwordless operation.
     """
 
-    def __init__(self, user_config_path, auth_method="in_memory", auth_config=None):
-        self.allow_all_users = True
+    def __init__(self, user_config_path, auth_method="in_memory", auth_config=None,
+                 require_password=True, allow_all_users=True, authorized_users=None):
+        # allow_all_users / authorized_users / require_password are set here rather
+        # than by the caller after construction because the user-file load below
+        # goes through add_single_user(), which consults all three. Assigning them
+        # afterwards would load the roster under the wrong policy — in particular a
+        # passwordless deployment whose user file lists bare usernames would have
+        # every row rejected for "Missing password in user info".
+        self.allow_all_users = allow_all_users
         self.user_config_path = user_config_path
         self.user_config_path_explicit = False  # Set to True if path was explicitly configured
-        self.authorized_users = []
+        self.authorized_users = list(authorized_users or [])
         self.userlist = []
         self.usernames = set()
         self.users = {}
         self.required_user_info_keys = ["username", "password"]
-        self.require_password = True
+        self.require_password = require_password
         self.auth_method = auth_method
         self.auth_config = auth_config or {}
         self.auth_backend = self._initialize_backend(auth_method, auth_config)
@@ -431,6 +503,8 @@ class UserAuthenticator:
         # (e.g. wrong-format) user file. F-036.
         self.users_loaded_from_file = 0
         self.user_file_parse_errors = 0
+        #: Say where the roster lives once, not on every registration.
+        self._roster_path_announced = False
 
         # Load users from config file if it exists
         if os.path.isfile(self.user_config_path):
@@ -460,6 +534,13 @@ class UserAuthenticator:
                     else:
                         self.add_single_user(single_user)
             self.users_loaded_from_file = len(self.users) - before
+            # Users provisioned through the user file are the roster an admin
+            # explicitly wrote down, so they are authorized by definition. Without
+            # this, `allow_all_users: false` plus a user_config_path but no
+            # `user_config.users` list would lock out the very people it provisions.
+            for username in self.users:
+                if username not in self.authorized_users:
+                    self.authorized_users.append(username)
 
     def _initialize_backend(self, auth_method: str, auth_config: dict = None) -> AuthBackend:
         if auth_method == "in_memory":
@@ -480,6 +561,11 @@ class UserAuthenticator:
             if not auth_config:
                 raise ValueError("OAuth authentication requires an 'authentication' config section with 'providers'")
             return OAuthBackend(auth_config)
+        elif auth_method == "saml":
+            from potato.auth_backends.saml_backend import SAMLBackend
+            if not auth_config or not auth_config.get("saml"):
+                raise ValueError("SAML authentication requires an 'authentication.saml' section")
+            return SAMLBackend(auth_config)
         else:
             logger.error(f"Unknown authentication method: {auth_method}")
             raise ValueError(f"Unknown authentication method: {auth_method}")
@@ -525,8 +611,49 @@ class UserAuthenticator:
 
                     auth_config = config.get("authentication", {})
 
-                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method, auth_config)
-                    USER_AUTHENTICATOR_SINGLETON.require_password = require_password
+                    # user_config gates self-registration. Default stays True so
+                    # existing configs keep open enrolment; setting it to false is
+                    # what closes the task to a named roster.
+                    user_config = config.get("user_config", {}) or {}
+                    allow_all_users = user_config.get("allow_all_users", True)
+                    authorized_users = _parse_authorized_users(user_config)
+
+                    # A declared machine annotator is expected by the study just
+                    # as a listed person is, so closed enrolment must admit it.
+                    # Without this a study that sets
+                    # machine_annotators.require_declaration -- which demands
+                    # allow_all_users: false -- would lock out the very raters
+                    # it declared: they are not on the human roster, so
+                    # add_user() would refuse them and they could never log in.
+                    #
+                    # Merged here rather than in add_user() because the
+                    # constructor loads the roster file under this policy, and
+                    # because both enrolment and the login check read
+                    # authorized_users; folding it in once covers both.
+                    try:
+                        from potato.annotator_origin import parse_machine_annotators
+
+                        for declared_id in parse_machine_annotators(config):
+                            if declared_id not in authorized_users:
+                                authorized_users.append(declared_id)
+                    except Exception:
+                        logger.debug(
+                            "machine_annotators roster unavailable while "
+                            "building the authorized-user list", exc_info=True)
+                    if not allow_all_users and not authorized_users:
+                        logger.warning(
+                            "user_config.allow_all_users is false but no roster was "
+                            "given via user_config.users or "
+                            "authentication.user_config_path. Only users already "
+                            "present in the auth backend will be able to log in."
+                        )
+
+                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(
+                        user_config_path, auth_method, auth_config,
+                        require_password=require_password,
+                        allow_all_users=allow_all_users,
+                        authorized_users=authorized_users,
+                    )
                     USER_AUTHENTICATOR_SINGLETON.user_config_path_explicit = path_explicit
 
                     # F-036: a user file was explicitly configured and exists, but
@@ -536,7 +663,7 @@ class UserAuthenticator:
                     _auth = USER_AUTHENTICATOR_SINGLETON
                     if (path_explicit and os.path.isfile(user_config_path)
                             and _auth.users_loaded_from_file == 0):
-                        allow_all = config.get("user_config", {}).get("allow_all_users", False)
+                        allow_all = allow_all_users
                         logger.warning(
                             "user_config_path '%s' was configured but loaded 0 users "
                             "(%d malformed line(s)). Expected JSONL — one object per "
@@ -562,8 +689,13 @@ class UserAuthenticator:
     def authenticate(username: str, password: Optional[str]) -> bool:
         authenticator = UserAuthenticator.get_instance()
 
-        if not authenticator.auth_backend.is_valid_username(username):
-            logger.warning(f"Authentication failed: user '{username}' does not exist")
+        # Clerk accounts live with Clerk; its backend verifies the token itself
+        # and learns the user on first sign-in.
+        if (not isinstance(authenticator.auth_backend, ClerkAuthBackend)
+                and not authenticator.auth_backend.is_valid_username(username)):
+            logger.debug(f"Authentication failed: user '{username}' does not exist")
+            if password and authenticator.require_password:
+                _verify_password(password, _timing_dummy())
             return False
 
         if not authenticator.require_password:
@@ -574,10 +706,37 @@ class UserAuthenticator:
 
     def add_user(self, username, password: Optional[str], **kwargs):
         """Add a user to the authentication system."""
+        # The roster check is independent of password mode. Passwordless only means
+        # "no password is required to prove you are alice"; it does not mean anyone
+        # may become alice. Previously this was an elif, so `require_password: false`
+        # silently disabled closed enrolment entirely.
+        if not self.allow_all_users and not self.is_authorized_user(username):
+            logger.warning(
+                "Rejected registration for '%s': allow_all_users is false and the "
+                "user is not in the authorized roster", username
+            )
+            return "Unauthorized user"
         if not self.require_password:
             logger.debug(f"Passwordless mode - allowing any user: {username}")
-        elif self.allow_all_users == False and not self.is_authorized_user(username):
-            return "Unauthorized user"
+
+        # The username names the account's directory on disk; see usernames.py.
+        from potato.server_utils.usernames import colliding_username, username_problem
+        problem = username_problem(username)
+        if problem:
+            logger.warning("Rejected registration for %r: %s", username, problem)
+            return problem
+        existing = list(self.userlist)
+        try:
+            from potato.user_state_management import get_user_state_manager
+            existing += list(get_user_state_manager().get_user_ids())
+        except Exception:
+            pass
+        clash = colliding_username(username, existing)
+        if clash is not None:
+            logger.warning("Rejected registration for %r: it shares a directory "
+                           "with the existing account %r on case-insensitive "
+                           "file systems", username, clash)
+            return "That username is already in use on this task."
 
         result = self.auth_backend.add_user(username, password, **kwargs)
         if result == "Success":
@@ -606,10 +765,10 @@ class UserAuthenticator:
 
     def add_single_user(self, single_user):
         """Add a single user to the full user dict."""
+        # No roster check here: this is the provisioning path (the user file), and
+        # its contents ARE the roster. Self-registration is gated in add_user().
         if not self.require_password:
             logger.debug(f"Passwordless mode - allowing any user: {single_user['username']}")
-        elif self.allow_all_users == False and not self.is_authorized_user(single_user["username"]):
-            return "Unauthorized user"
 
         if not self.require_password:
             required_keys = ["username"]
@@ -621,10 +780,15 @@ class UserAuthenticator:
                 logger.error(f"Missing {key} in user info")
                 return f"Missing {key} in user info"
 
+        extra = {k: v for k, v in single_user.items() if k not in ["username", "password"]}
+        if self.auth_method in ("oauth", "saml") and not single_user.get("password"):
+            # A passwordless roster row on an SSO task names someone who signs
+            # in through the provider, not a local account.
+            extra.setdefault("oauth_provider", None)
         result = self.auth_backend.add_user(
             single_user["username"],
             single_user.get("password"),
-            **{k: v for k, v in single_user.items() if k not in ["username", "password"]}
+            **extra
         )
 
         if result == "Success":
@@ -633,33 +797,59 @@ class UserAuthenticator:
 
         return result
 
+    def has_settable_password(self, username: str) -> bool:
+        """Whether this account's password can be reset here. False for an SSO
+        identity, whose provider holds its password."""
+        check = getattr(self.auth_backend, "has_settable_password", None)
+        if check is None:
+            return self.auth_backend.is_valid_username(username)
+        return bool(check(username))
+
     def update_password(self, username: str, new_password: str) -> bool:
         """Update a user's password via the backend."""
+        if not self.has_settable_password(username):
+            return False
         result = self.auth_backend.update_password(username, new_password)
         if result and username in self.users:
-            # Update the stored user dict with the new hash for save_user_config
+            # Update the stored user dict with the new hash for save_user_config.
+            # The OAuth backend keeps local accounts in its own `_local` store;
+            # its `users` holds SSO identities only.
             if isinstance(self.users[username], dict):
-                self.users[username]["password"] = self.auth_backend.users[username] \
-                    if hasattr(self.auth_backend, 'users') else _hash_password_with_salt(new_password)
+                store = getattr(getattr(self.auth_backend, "_local", None), "users", None)
+                if store is None:
+                    store = getattr(self.auth_backend, "users", None)
+                self.users[username]["password"] = (
+                    store[username] if store and username in store
+                    else _hash_password_with_salt(new_password))
         return result
 
     def save_user_config(self):
-        """Save user config to file.
+        """Write the roster, so an account survives a restart.
 
-        Saves when:
-        - auth_method is in_memory AND user_config_path was explicitly configured
-        - auth_method is not in_memory and not database (other file-based methods)
+        Saves for every method except `database`, which persists its own.
 
-        Skips when:
-        - auth_method is database (DB handles its own persistence)
-        - auth_method is in_memory with auto-generated default path (preserve old behavior)
+        This used to skip `in_memory` unless `authentication.user_config_path`
+        was set explicitly -- the default configuration, and the one every
+        example ships. An annotator who signed up, worked through the study and
+        came back after a restart was told their account did not exist, and the
+        sign-up form then accepted the same username with ANY password and
+        handed over the directory holding their annotations, because the
+        annotator directory is keyed on the username alone. Across a restart
+        the username WAS the whole credential. Nothing in the config could
+        change that: `secret_key` and `persist_sessions` cover the Flask
+        session, not the account.
+
+        The file is written to `authentication.user_config_path` when the
+        author names one, and next to the output directory otherwise.
         """
         if self.auth_method == "database":
             logger.debug("User config not saved - using database authentication (DB handles persistence)")
             return
 
-        if self.auth_method == "in_memory" and not self.user_config_path_explicit:
-            logger.debug("User config not saved - using in_memory with default path")
+        # Nothing to write, and no file to keep in step: don't create one. A
+        # task nobody has registered on should not sprout an empty roster in
+        # its directory.
+        if not self.userlist and not os.path.isfile(self.user_config_path or ""):
             return
 
         if self.user_config_path:
@@ -674,7 +864,14 @@ class UserAuthenticator:
                         f.write(json.dumps(output) + "\n")
                     else:
                         f.write(json.dumps({"username": k}) + "\n")
-            logger.info(f"User info file saved at: {self.user_config_path}")
+            if not self._roster_path_announced:
+                self._roster_path_announced = True
+                logger.info(
+                    "Accounts are stored in %s. Keep it with the annotation "
+                    "output: without it, a restart forgets every account that "
+                    "signed up.", self.user_config_path)
+            else:
+                logger.debug(f"User info file saved at: {self.user_config_path}")
         else:
             logger.warning("WARNING: user_config_path not specified, user registration info are not saved")
 
@@ -691,6 +888,9 @@ class UserAuthenticator:
             The token string, or None if user doesn't exist
         """
         if not self.auth_backend.is_valid_username(username):
+            return None
+        if not self.has_settable_password(username):
+            # An SSO identity: the link would only fail when used.
             return None
 
         token = secrets.token_urlsafe(32)
@@ -759,8 +959,13 @@ class UserAuthenticator:
             return self.auth_backend
         return None
 
+    def get_saml_backend(self):
+        if self.auth_method == "saml":
+            return self.auth_backend
+        return None
+
     def get_login_providers(self) -> list:
-        oauth_backend = self.get_oauth_backend()
-        if oauth_backend:
-            return oauth_backend.get_login_providers()
+        sso_backend = self.get_oauth_backend() or self.get_saml_backend()
+        if sso_backend:
+            return sso_backend.get_login_providers()
         return []

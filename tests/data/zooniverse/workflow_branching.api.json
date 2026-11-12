@@ -1,0 +1,81 @@
+{
+ "workflows": [
+  {
+   "id": "202",
+   "display_name": "Branching",
+   "version": "1.4",
+   "first_task": "T0",
+   "steps": [],
+   "tasks": {
+    "T0": {
+     "type": "single",
+     "question": "Pick a route",
+     "answers": [
+      {
+       "label": "A",
+       "next": "T1"
+      },
+      {
+       "label": "B",
+       "next": "T2"
+      },
+      {
+       "label": "C"
+      }
+     ]
+    },
+    "T1": {
+     "type": "single",
+     "question": "Then",
+     "answers": [
+      {
+       "label": "X",
+       "next": "T3"
+      },
+      {
+       "label": "Y",
+       "next": "T4"
+      }
+     ]
+    },
+    "T2": {
+     "type": "dropdown-simple",
+     "instruction": "Colour",
+     "next": "T3",
+     "options": [
+      {
+       "label": "Red",
+       "value": "r"
+      },
+      {
+       "label": "Blue",
+       "value": "b"
+      }
+     ]
+    },
+    "T3": {
+     "type": "text",
+     "instruction": "Why?",
+     "next": "T4"
+    },
+    "T4": {
+     "type": "single",
+     "question": "Again?",
+     "answers": [
+      {
+       "label": "Again",
+       "next": "T1"
+      },
+      {
+       "label": "Done"
+      }
+     ]
+    },
+    "T9": {
+     "type": "text",
+     "instruction": "Nobody sees this"
+    }
+   }
+  }
+ ]
+}

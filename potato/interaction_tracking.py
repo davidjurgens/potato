@@ -1,13 +1,52 @@
 """
 Interaction tracking data structures and utilities for behavioral analysis.
 
-This module provides dataclasses for tracking user interactions during annotation,
+Dataclasses for tracking user interactions during annotation,
 including clicks, focus changes, navigation, AI assistance usage, and annotation changes.
 All data is designed to be serializable for persistence and later analysis.
 """
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Any, Optional
 import time
+
+
+#: Behavioral data is bucketed by instance id. Phase pages -- consent,
+#: instructions, training, prestudy and poststudy surveys -- have no instance:
+#: the annotation template leaves the id empty and the client posts null. They
+#: all share this one bucket, and the `phase`/`page` fields stamped server-side
+#: are what tell them apart.
+PHASE_PAGE_SENTINEL = "__phase_page__"
+
+#: What a missing instance id looks like by the time it has been through
+#: JSON and a template. `None` is the honest case; the strings are what
+#: `str(null)` and friends produce on the way.
+_MISSING_INSTANCE_IDS = frozenset({"", "null", "None", "undefined"})
+
+
+def normalize_instance_id(instance_id: Any) -> str:
+    """Map a phase page's absent instance id onto the shared sentinel.
+
+    Every tracking endpoint needs this and each one grew its own version, or
+    none at all: `track_annotation_change` rejected a null id outright, so no
+    change made on a survey or training page was ever recorded, and
+    `track_interactions` passed it through unnormalized, which created a
+    behavioral-data bucket literally keyed "null" alongside the real one.
+    """
+    if instance_id is None:
+        return PHASE_PAGE_SENTINEL
+    text = str(instance_id)
+    return PHASE_PAGE_SENTINEL if text in _MISSING_INSTANCE_IDS else text
+
+
+#: A gap between two events longer than this counts as this long: the
+#: annotator stopped working. Five minutes leaves room to read a long item.
+IDLE_GAP_CAP_SECONDS = 300.0
+
+#: Event types /api/track_interactions keeps when ``interaction_tracking.enabled``
+#: is false: enough for :meth:`BehavioralData.active_time_ms`, nothing about
+#: what was clicked, focused or typed. ``activity`` is a content-free mark the
+#: browser posts at most every 15 s while the page is in use (interaction_tracker.js).
+TIMING_EVENT_TYPES = frozenset({"navigation", "save", "activity"})
 
 
 @dataclass
@@ -69,7 +108,9 @@ class AIUsageEvent:
         suggestions_shown: List of labels/values the AI suggested
         response_timestamp: When the AI response was received
         suggestion_accepted: The value the user accepted (None if rejected/ignored)
+        accept_clicked: True when suggestion_accepted came from an accept click
         final_annotation: What the user ultimately annotated for this schema
+        reconstructed: True when the request half was never seen
         time_to_decision_ms: Milliseconds from response to user action
     """
     request_timestamp: float
@@ -79,6 +120,21 @@ class AIUsageEvent:
     suggestion_accepted: Optional[str] = None
     final_annotation: Optional[str] = None
     time_to_decision_ms: Optional[int] = None
+    #: What the saved answer did with the suggestion, decided on every save
+    #: of the item (so the last save wins): ``accepted`` when the answer holds
+    #: every suggested label, ``partial`` when it holds some, ``rejected``
+    #: when none. None until the scheme is saved.
+    decision: Optional[str] = None
+    #: True when the request half of the exchange was never seen, so this
+    #: record was assembled from the decision alone. A reload between request
+    #: and accept, an expired session, or a client that only reports decisions
+    #: all produce one. Without it, such a record is indistinguishable from a
+    #: complete exchange whose timing happens to be missing.
+    reconstructed: bool = False
+    #: True when ``suggestion_accepted`` was set by an accept click. A later
+    #: save then decides ``decision`` but leaves the click in place, so the
+    #: record keeps both what was taken and what was submitted.
+    accept_clicked: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -90,6 +146,9 @@ class AIUsageEvent:
             'suggestion_accepted': self.suggestion_accepted,
             'final_annotation': self.final_annotation,
             'time_to_decision_ms': self.time_to_decision_ms,
+            'decision': self.decision,
+            'reconstructed': self.reconstructed,
+            'accept_clicked': self.accept_clicked,
         }
 
     @classmethod
@@ -103,6 +162,9 @@ class AIUsageEvent:
             suggestion_accepted=data.get('suggestion_accepted'),
             final_annotation=data.get('final_annotation'),
             time_to_decision_ms=data.get('time_to_decision_ms'),
+            decision=data.get('decision'),
+            reconstructed=bool(data.get('reconstructed', False)),
+            accept_clicked=bool(data.get('accept_clicked', False)),
         )
 
 
@@ -116,17 +178,29 @@ class AnnotationChange:
         schema_name: Which schema was modified
         label_name: Which label was affected (if applicable)
         action: Type of change ("select", "deselect", "update", "clear")
+        old_label: The label the answer moved AWAY from. Single-select schemas
+            (radio/likert/confidence) store one entry per option, so a revision changes
+            the label as well as the value — recording only old_value cannot express
+            "moved from scale point 5 to scale point 4".
         old_value: Previous value (if any)
         new_value: New value after the change
         source: What triggered the change ("user", "ai_accept", "prefill", "keyboard")
+        phase: Workflow phase the change happened in ("annotation", "prestudy", ...).
+            Behavioral data is bucketed by instance id, and every non-annotation page
+            shares the sentinel "__phase_page__", so without phase/page the trail
+            cannot say which survey a change belongs to.
+        page: The phase page name, for non-annotation phases.
     """
     timestamp: float
     schema_name: str
     action: str
     label_name: Optional[str] = None
+    old_label: Optional[str] = None
     old_value: Any = None
     new_value: Any = None
     source: str = "user"
+    phase: Optional[str] = None
+    page: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -134,23 +208,33 @@ class AnnotationChange:
             'timestamp': self.timestamp,
             'schema_name': self.schema_name,
             'label_name': self.label_name,
+            'old_label': self.old_label,
             'action': self.action,
             'old_value': self.old_value,
             'new_value': self.new_value,
             'source': self.source,
+            'phase': self.phase,
+            'page': self.page,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AnnotationChange':
-        """Reconstruct from serialized dictionary."""
+        """Reconstruct from serialized dictionary.
+
+        Every field added after the original release is read with .get(), so records
+        written by older Potato versions deserialize unchanged.
+        """
         return cls(
             timestamp=data.get('timestamp', 0),
             schema_name=data.get('schema_name', ''),
             label_name=data.get('label_name'),
+            old_label=data.get('old_label'),
             action=data.get('action', ''),
             old_value=data.get('old_value'),
             new_value=data.get('new_value'),
             source=data.get('source', 'user'),
+            phase=data.get('phase'),
+            page=data.get('page'),
         )
 
 
@@ -214,6 +298,25 @@ class BehavioralData:
         focus_time_by_element: Milliseconds spent focused on each element
         scroll_depth_max: Maximum scroll percentage reached (0-100)
         keyword_highlights_shown: Keyword highlights displayed (from randomization feature)
+        presentation_order: Which order each scheme's options were shown in,
+            ``{schema_name: [label names]}``. Recorded whether or not
+            randomization is on, because a fixed order biases every annotator
+            the same way -- which inflates agreement while biasing the
+            estimate -- and the only way to correct a study afterwards is to
+            know what each annotator actually saw. See
+            potato/server_utils/presentation_order.py.
+        chat_history: Messages exchanged with the LLM assistant sidebar
+        typing_summaries: Per-field typing-dynamics sketch, keyed
+            "{schema}:::{label}". Only the compact summary lives here — the raw
+            keystroke event streams go to SQLite (potato/typing_store.py), because
+            user_state.json is fully re-serialized on every annotation save and a
+            single long response is thousands of events. See
+            potato/typing_dynamics.py.
+        annotation_telemetry: Per-schema drawing-dynamics sketch, keyed by
+            schema name. Same split and same reasoning as typing_summaries —
+            raw event streams live in SQLite
+            (potato/annotation_telemetry_store.py). See
+            potato/annotation_telemetry.py.
     """
     instance_id: str
     session_start: float = field(default_factory=time.time)
@@ -221,12 +324,43 @@ class BehavioralData:
     total_time_ms: int = 0
     interactions: List[InteractionEvent] = field(default_factory=list)
     ai_usage: List[AIUsageEvent] = field(default_factory=list)
+    #: schema -> the value a model seeded this instance with, before the
+    #: annotator touched it. An accepted seed is otherwise indistinguishable
+    #: from an independent answer: an "accepter" who changed nothing stores
+    #: exactly the prediction file, in a record of identical shape to someone
+    #: who worked it out. Without this a study using `pre_annotation` cannot
+    #: report its own model-acceptance rate from its own data. The mirror of
+    #: `AIUsageEvent.final_annotation`, which is the same fact from the other
+    #: end -- ai_support records what was accepted and never what was saved.
+    pre_annotation_seeds: Dict[str, Any] = field(default_factory=dict)
     annotation_changes: List[AnnotationChange] = field(default_factory=list)
     navigation_history: List[Dict[str, Any]] = field(default_factory=list)
     focus_time_by_element: Dict[str, int] = field(default_factory=dict)
     scroll_depth_max: float = 0.0
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
+    presentation_order: Dict[str, List[str]] = field(default_factory=dict)
+    # Timed-trial record (trial_timing). The authoritative copy is
+    # user_state.instance_id_to_trial; this mirror travels with the item's
+    # other behavioural data into exports.
+    trial: Dict[str, Any] = field(default_factory=dict)
     chat_history: List[ChatMessage] = field(default_factory=list)
+    typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    #: Page-level authenticity paradata for this item -- leaving the page,
+    #: copying the item, pasting external text, automation signals -- as
+    #: ``{views: {view_id: {...}}, summary: {...}, verdict: {...}}``. Counts and
+    #: durations only, never text. See potato/authenticity.py.
+    authenticity: Dict[str, Any] = field(default_factory=dict)
+    #: schema -> the multiplayer room this answer was produced in, mirrored
+    #: from user_state.instance_id_to_room_provenance so that every consumer
+    #: reading behavioural data gets it without knowing about a second store.
+    #: A room answer is a group answer; nothing else in the record says so.
+    room_provenance: Dict[str, Any] = field(default_factory=dict)
+    #: Time from a page that labels many items at once (the grid), where no
+    #: single item has events of its own: ``{view, page_items,
+    #: page_active_ms, active_ms, saved_at}``. ``active_ms`` is this item's
+    #: equal share of the page's active time, and active_time_ms() adds it.
+    bulk: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -239,6 +373,7 @@ class BehavioralData:
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.interactions
             ],
+            'pre_annotation_seeds': dict(self.pre_annotation_seeds),
             'ai_usage': [
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.ai_usage
@@ -251,10 +386,17 @@ class BehavioralData:
             'focus_time_by_element': self.focus_time_by_element,
             'scroll_depth_max': self.scroll_depth_max,
             'keyword_highlights_shown': self.keyword_highlights_shown,
+            'presentation_order': self.presentation_order,
+            'trial': self.trial,
             'chat_history': [
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.chat_history
             ],
+            'typing_summaries': self.typing_summaries,
+            'annotation_telemetry': self.annotation_telemetry,
+            'authenticity': self.authenticity,
+            'room_provenance': dict(self.room_provenance),
+            'bulk': dict(self.bulk),
         }
 
     @classmethod
@@ -277,6 +419,9 @@ class BehavioralData:
         ]
 
         # Reconstruct AI usage events
+        seeds = data.get('pre_annotation_seeds')
+        if isinstance(seeds, dict):
+            bd.pre_annotation_seeds = dict(seeds)
         ai_usage = data.get('ai_usage', [])
         bd.ai_usage = [
             AIUsageEvent.from_dict(e) if isinstance(e, dict) else e
@@ -294,6 +439,8 @@ class BehavioralData:
         bd.focus_time_by_element = data.get('focus_time_by_element', {})
         bd.scroll_depth_max = data.get('scroll_depth_max', 0.0)
         bd.keyword_highlights_shown = data.get('keyword_highlights_shown', [])
+        bd.presentation_order = data.get('presentation_order', {}) or {}
+        bd.trial = data.get('trial', {}) or {}
 
         # Reconstruct chat history
         chat_history = data.get('chat_history', [])
@@ -301,6 +448,19 @@ class BehavioralData:
             ChatMessage.from_dict(e) if isinstance(e, dict) else e
             for e in chat_history
         ]
+
+        # Read with .get() so states written before typing dynamics existed
+        # deserialize unchanged.
+        bd.typing_summaries = data.get('typing_summaries', {})
+        bd.annotation_telemetry = data.get('annotation_telemetry', {})
+        bd.authenticity = data.get('authenticity', {}) or {}
+        bd.room_provenance = data.get('room_provenance', {}) or {}
+        bd.bulk = data.get('bulk', {}) or {}
+
+        # States saved before total_time_ms was computed carry 0 beside a
+        # full event log; derive it so old studies get real times too.
+        if not bd.total_time_ms and bd.interactions:
+            bd.total_time_ms = bd.active_time_ms()
 
         return bd
 
@@ -326,19 +486,139 @@ class BehavioralData:
         self.ai_usage.append(event)
         return event
 
+    def record_pre_annotation_seeds(self, values_by_schema: Dict[str, Any]) -> None:
+        """Note which schemas a model answered before the annotator saw them.
+
+        Recorded once, when the seed is applied. A later save does not clear
+        it: the point is to be able to compare what was suggested with what was
+        submitted, which needs both.
+        """
+        for schema, value in values_by_schema.items():
+            self.pre_annotation_seeds.setdefault(schema, value)
+
+    def record_final_annotations(self, values_by_schema: Dict[str, Any]) -> int:
+        """Stamp what was actually saved onto this instance's AI usage events.
+
+        `final_annotation` is documented as "What the user ultimately annotated
+        for this schema" and was declared, serialized and read back -- and
+        never assigned. It read `null` on a record where the annotator accepted
+        a suggestion and saved it unchanged.
+
+        It is the field the whole subsystem exists for. `suggestion_accepted`
+        records the CLICK. An annotator who accepts a suggestion and then
+        changes their mind before saving leaves a record saying they accepted
+        it and nothing saying what they submitted, so the acceptance rate you
+        can compute is the one at the moment of the click rather than the one
+        that survived into the dataset -- and the second is the number a paper
+        reports.
+
+        Returns how many events were stamped.
+        """
+        stamped = 0
+        for event in self.ai_usage:
+            schema = (event.schema_name if hasattr(event, "schema_name")
+                      else event.get("schema_name"))
+            if schema not in values_by_schema:
+                continue
+            value = values_by_schema[schema]
+            if hasattr(event, "final_annotation"):
+                event.final_annotation = value
+            else:
+                event["final_annotation"] = value
+            stamped += 1
+        return stamped
+
+    #: The longest share one item can take from a grid page: an hour.
+    MAX_BULK_MS = 3_600_000
+
+    def record_bulk_time(self, timing: Dict[str, Any], view: str = "grid",
+                         now: Optional[float] = None) -> None:
+        """Store this item's share of a bulk page's active time.
+
+        The share comes from the page, which measured its own active time
+        (idle gaps capped as here) and split it equally among the items it
+        saved. Values are clamped: a share is never negative or over an hour.
+        """
+        def number(key, default=0):
+            try:
+                return max(0, int(float(timing.get(key, default))))
+            except (TypeError, ValueError):
+                return default
+        self.bulk = {
+            "view": view,
+            "page_items": max(1, number("page_items", 1)),
+            "page_active_ms": min(number("page_active_ms"), self.MAX_BULK_MS * 50),
+            "active_ms": min(number("active_ms"), self.MAX_BULK_MS),
+            "saved_at": time.time() if now is None else now,
+        }
+
+    def record_decisions(self, chosen_by_schema: Dict[str, Any],
+                         now: Optional[float] = None) -> int:
+        """Decide, from the saved answer, what each suggestion led to.
+
+        ``chosen_by_schema`` is ``{scheme: set of labels saved}``. For each AI
+        usage event on a saved scheme that showed suggestions, the answer is
+        ``accepted`` when it holds every suggested label, ``partial`` when it
+        holds some, ``rejected`` when none. Run on every save of the item, so
+        an annotator who takes a suggestion and then changes their mind is
+        recorded by what they saved last, and a multiselect is judged as a
+        set rather than by whichever box was ticked first.
+
+        ``suggestion_accepted`` holds the accepted label(s) for an accept and
+        None otherwise, unless the annotator clicked accept: that click stays,
+        so taking a suggestion and then saving something else reads
+        ``suggestion_accepted`` = the click, ``decision`` = ``rejected``.
+        ``time_to_decision_ms`` runs from the suggestion to this save.
+        Returns how many events were decided.
+        """
+        now = time.time() if now is None else now
+        decided = 0
+        for event in self.ai_usage:
+            get = (lambda k, e=event: getattr(e, k, None)) if not isinstance(event, dict) \
+                else (lambda k, e=event: e.get(k))
+            schema, shown = get("schema_name"), get("suggestions_shown") or []
+            if not shown or schema not in chosen_by_schema:
+                continue
+            offered = {str(x) for x in shown}
+            answer = {str(x) for x in chosen_by_schema[schema] or ()}
+            if not answer:
+                continue
+            overlap = offered & answer
+            decision = "accepted" if offered <= answer else ("partial" if overlap else "rejected")
+            response = get("response_timestamp")
+            updates = {
+                "decision": decision,
+                "time_to_decision_ms": int((now - response) * 1000) if response else None,
+            }
+            if not get("accept_clicked"):
+                updates["suggestion_accepted"] = (", ".join(sorted(overlap))
+                                                  if decision == "accepted" else None)
+            for key, value in updates.items():
+                if isinstance(event, dict):
+                    event[key] = value
+                else:
+                    setattr(event, key, value)
+            decided += 1
+        return decided
+
     def add_annotation_change(self, schema_name: str, action: str,
                              label_name: Optional[str] = None,
                              old_value: Any = None, new_value: Any = None,
-                             source: str = "user") -> None:
+                             source: str = "user", old_label: Optional[str] = None,
+                             phase: Optional[str] = None,
+                             page: Optional[str] = None) -> None:
         """Record an annotation change."""
         self.annotation_changes.append(AnnotationChange(
             timestamp=time.time(),
             schema_name=schema_name,
             label_name=label_name,
+            old_label=old_label,
             action=action,
             old_value=old_value,
             new_value=new_value,
             source=source,
+            phase=phase,
+            page=page,
         ))
 
     def add_navigation(self, action: str, from_instance: Optional[str] = None,
@@ -361,10 +641,66 @@ class BehavioralData:
         if depth > self.scroll_depth_max:
             self.scroll_depth_max = depth
 
+    def set_typing_summary(self, schema_name: str, label_name: str,
+                          summary: Dict[str, Any]) -> None:
+        """Store the typing-dynamics sketch for one free-text field.
+
+        Keyed the same way annotation labels are (`schema:::label`), so a field
+        can be joined back to its annotation without a separate mapping.
+        """
+        self.typing_summaries[f"{schema_name}:::{label_name}"] = summary
+
+    def set_annotation_telemetry(self, schema_name: str,
+                                 summary: Dict[str, Any]) -> None:
+        """Store the drawing-dynamics sketch for one geometry schema.
+
+        Keyed by schema alone rather than `schema:::label`: a drawn annotation
+        is stored under the single `_data` key, so there is no label to key on
+        and inventing one would create a join that does not exist.
+        """
+        self.annotation_telemetry[schema_name] = summary
+
     def finalize_session(self) -> None:
         """Mark session as ended and calculate total time."""
         self.session_end = time.time()
         self.total_time_ms = int((self.session_end - self.session_start) * 1000)
+
+    def active_time_ms(self, idle_cap_seconds: float = IDLE_GAP_CAP_SECONDS) -> int:
+        """Time spent on this instance, from its own interaction events.
+
+        The sum of the gaps between consecutive events, each capped at
+        ``idle_cap_seconds`` so a tab left open over lunch does not count as
+        work. A gap that ends in an ``instance_load`` is the time AWAY from the
+        instance between two visits, and counts nothing. Client clocks are used
+        when every event has one, since the gaps are what matter and the client
+        stamps them where they happen.
+
+        Nothing called ``finalize_session``, so ``total_time_ms`` stayed 0 for
+        every instance: the dashboard showed 0h worked, 0 annotations per hour,
+        and every annotator as answering faster than the "fast" threshold.
+        """
+        bulk = int((self.bulk or {}).get("active_ms") or 0)
+        events = [e for e in self.interactions if getattr(e, "timestamp", None) is not None]
+        if len(events) < 2:
+            return bulk
+        use_client = all(getattr(e, "client_timestamp", None) for e in events)
+
+        def when(e):
+            return e.client_timestamp / 1000.0 if use_client else e.timestamp
+
+        events.sort(key=when)
+        total = 0.0
+        for previous, current in zip(events, events[1:]):
+            if current.event_type == "navigation" and current.target == "instance_load":
+                continue
+            total += min(max(when(current) - when(previous), 0.0), idle_cap_seconds)
+        return int(total * 1000) + bulk
+
+    def refresh_total_time(self) -> None:
+        """Recompute ``total_time_ms`` and ``session_end`` from the events."""
+        self.total_time_ms = self.active_time_ms()
+        if self.interactions:
+            self.session_end = max(e.timestamp for e in self.interactions)
 
 
 def create_behavioral_data(instance_id: str) -> BehavioralData:

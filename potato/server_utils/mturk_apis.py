@@ -1,7 +1,7 @@
 """
 Utility functions for handling Amazon Mechanical Turk APIs.
 
-This module provides wrapper classes for interacting with the MTurk API
+Wrapper classes for interacting with the MTurk API
 via boto3 to manage HITs and assignments.
 
 The MTurk API requires AWS credentials and uses different endpoints for
@@ -24,14 +24,33 @@ from collections import OrderedDict, defaultdict
 
 logger = logging.getLogger(__name__)
 
-# Optional boto3 import - only required if using MTurk API features
+# boto3 is optional and imported on first use: it ships in the published image
+# for the backup client, and importing it here put ~35ms of botocore on every
+# server boot whether or not the task used MTurk.
+import importlib.util
+
 try:
-    import boto3
-    from botocore.exceptions import ClientError
-    BOTO3_AVAILABLE = True
-except ImportError:
+    BOTO3_AVAILABLE = importlib.util.find_spec("boto3") is not None
+except (ImportError, ValueError):
     BOTO3_AVAILABLE = False
+if not BOTO3_AVAILABLE:
     logger.debug("boto3 not available - MTurk API features will be disabled")
+
+
+class ClientError(Exception):
+    """Placeholder until boto3 loads; rebound to botocore's ClientError then.
+
+    The ``except ClientError`` clauses below look the name up when they run,
+    so rebinding the module global is enough.
+    """
+
+
+def _boto3():
+    global ClientError
+    import boto3
+    from botocore.exceptions import ClientError as _ClientError
+    ClientError = _ClientError
+    return boto3
 
 
 class MTurkBase:
@@ -84,7 +103,7 @@ class MTurkBase:
         if aws_secret_access_key:
             client_kwargs['aws_secret_access_key'] = aws_secret_access_key
 
-        self.client = boto3.client(**client_kwargs)
+        self.client = _boto3().client(**client_kwargs)
 
         env_type = "SANDBOX" if sandbox else "PRODUCTION"
         logger.info(f"MTurk API client initialized ({env_type})")
@@ -470,6 +489,12 @@ def init_mturk_hit(config):
     if not mturk_config.get('enabled', False):
         logger.debug("MTurk API not enabled in config")
         return None
+
+    logger.warning(
+        "Amazon Mechanical Turk closed to new customers on 2026-07-30 and is in "
+        "maintenance mode. Existing requester accounts keep working, but consider "
+        "migrating to another platform (see docs/deployment/crowdsourcing-platforms.md)."
+    )
 
     config_file_path = mturk_config.get('config_file_path')
     if not config_file_path:

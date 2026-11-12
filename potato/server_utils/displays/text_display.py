@@ -8,7 +8,21 @@ Supports span annotation targeting when used with span annotation schemes.
 import html
 from typing import Dict, Any, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length, display_text
+
+
+def _format_list(items):
+    """Render a list-valued field the way the main text field renders one.
+
+    Falls back to newline-joined items when `get_displayed_text` cannot be
+    reached (a display rendered outside a running server, e.g. the preview
+    tool), because a readable fallback beats a repr.
+    """
+    try:
+        from potato.flask_server import get_displayed_text
+        return get_displayed_text(items)
+    except Exception:  # noqa: BLE001 - rendering must not fail over formatting
+        return "<br>".join(html.escape(str(item)) for item in items)
 
 
 class TextDisplay(BaseDisplay):
@@ -23,6 +37,10 @@ class TextDisplay(BaseDisplay):
     required_fields = ["key"]
     optional_fields = {
         "collapsible": False,
+        # Only meaningful with `collapsible`. Without it a collapsible field
+        # could only ever open expanded, so a long case file sat between the
+        # instructions and the questions on every item.
+        "collapsed_by_default": False,
         "max_height": None,
         "preserve_whitespace": True,
     }
@@ -56,8 +74,21 @@ class TextDisplay(BaseDisplay):
         if data is None:
             return '<span class="text-placeholder">No content</span>'
 
-        # Convert to string if needed
-        text = str(data)
+        # `str()` on a list is a Python repr, and an annotator was shown
+        # ['open', 'unverified', 'priority-1'] -- square brackets and single
+        # quotes -- for a list-valued field. Route lists through the same
+        # formatter the main text field uses, so `list_as_text` governs both.
+        #
+        # That formatter returns markup (the item prefixes are <b> tags), so
+        # it is sanitized rather than escaped: escaping it a second time shows
+        # the annotator the tags themselves.
+        # A dict got `str()` here, which is a Python repr -- and the DEFAULT
+        # rendering path (`flask_server.get_displayed_text`) has always emitted
+        # indented JSON for one. The two disagreed, and this is the path the
+        # docs push authors toward, so it was the worse of the two on exactly
+        # the data an author most likely has a structured record for.
+        is_formatted_list = isinstance(data, list)
+        text = _format_list(data) if is_formatted_list else display_text(data)
 
         # Get display options
         options = self.get_display_options(field_config)
@@ -66,7 +97,7 @@ class TextDisplay(BaseDisplay):
         max_height = options.get("max_height")
 
         # Process the text
-        if self.allow_html:
+        if self.allow_html or is_formatted_list:
             # Sanitize HTML but allow safe tags
             from potato.server_utils.html_sanitizer import sanitize_html
             content = str(sanitize_html(text))
@@ -84,8 +115,11 @@ class TextDisplay(BaseDisplay):
         if preserve_whitespace and not self.allow_html:
             wrapper_classes.append("preserve-whitespace")
 
-        if max_height:
-            wrapper_style.append(f"max-height: {max_height}px")
+        # `css_length` appends px only to a bare number; appending it always
+        # turned `max_height: "50vh"` into `50vhpx`, which the browser drops.
+        max_height_css = css_length(max_height) if max_height else ""
+        if max_height_css:
+            wrapper_style.append(f"max-height: {html.escape(max_height_css)}")
             wrapper_style.append("overflow-y: auto")
 
         # Check if this is a span target - add special wrapper for span annotations
@@ -100,7 +134,10 @@ class TextDisplay(BaseDisplay):
         class_attr = f'class="{" ".join(wrapper_classes)}"'
 
         if collapsible:
-            return self._render_collapsible(content, class_attr, style_attr, field_config)
+            return self._render_collapsible(
+                content, class_attr, style_attr, field_config,
+                collapsed=bool(options.get("collapsed_by_default", False)),
+            )
 
         return f'<div {class_attr}{style_attr}>{content}</div>'
 
@@ -109,7 +146,8 @@ class TextDisplay(BaseDisplay):
         content: str,
         class_attr: str,
         style_attr: str,
-        field_config: Dict[str, Any]
+        field_config: Dict[str, Any],
+        collapsed: bool = False,
     ) -> str:
         """
         Render content in a collapsible container.
@@ -126,6 +164,8 @@ class TextDisplay(BaseDisplay):
         field_key = field_config.get("key", "text")
         collapse_id = f"collapse-{field_key}"
         label = field_config.get("label", "")
+        expanded = "false" if collapsed else "true"
+        show_class = "" if collapsed else " show"
 
         # Build header row with label and button inline
         label_html = f'<span class="collapsible-label">{label}</span>' if label else ''
@@ -138,13 +178,13 @@ class TextDisplay(BaseDisplay):
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#{collapse_id}"
-                        aria-expanded="true"
+                        aria-expanded="{expanded}"
                         aria-controls="{collapse_id}">
                     <span class="collapse-text-show">Show</span>
                     <span class="collapse-text-hide">Hide</span>
                 </button>
             </div>
-            <div class="collapse show" id="{collapse_id}">
+            <div class="collapse{show_class}" id="{collapse_id}">
                 <div {class_attr}{style_attr}>
                     {content}
                 </div>

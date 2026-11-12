@@ -1,10 +1,10 @@
 """
 Inter-Annotator Agreement Calculation Module
 
-This module provides functionality for calculating inter-annotator agreement metrics,
-including Krippendorff's alpha, Cohen's kappa (pairwise), and Fleiss' kappa
-(N raters), from annotation data. It supports both rating agreement (interval
-metric) and skip agreement (nominal metric) calculations.
+Calculates inter-annotator agreement metrics from annotation data:
+Krippendorff's alpha, Cohen's kappa (pairwise), and Fleiss' kappa (N raters).
+Covers both rating agreement (interval metric) and skip agreement (nominal
+metric).
 
 The module processes annotation files in JSON format and outputs agreement statistics
 along with a CSV file containing the processed annotation data.
@@ -14,7 +14,7 @@ import argparse
 from itertools import combinations
 import simpledorff
 from simpledorff.metrics import *
-import ujson
+import json
 import pandas as pd
 
 from collections import defaultdict
@@ -53,7 +53,8 @@ def cohen_kappa_pairwise(reliability_df):
             {annotator_a, annotator_b, kappa, n_items}), n_pairs_evaluated,
             n_pairs_skipped.
     """
-    from sklearn.metrics import cohen_kappa_score
+    # The report's own kappa, so this table and /admin/iaa agree.
+    from potato.server_utils.iaa.nominal import cohen_kappa as _kappa
 
     annotators = sorted(reliability_df["annotator"].unique())
     pairs = []
@@ -70,8 +71,13 @@ def cohen_kappa_pairwise(reliability_df):
         y_a = a_rows.loc[shared].astype(str).tolist()
         y_b = b_rows.loc[shared].astype(str).tolist()
         try:
-            kappa = float(cohen_kappa_score(y_a, y_b))
+            kappa = float(_kappa(y_a, y_b))
         except Exception:
+            skipped += 1
+            continue
+        if kappa != kappa:
+            # Both annotators used one label throughout: chance agreement is
+            # 1 and kappa is 0/0. Averaging the NaN in made mean_kappa NaN.
             skipped += 1
             continue
         pairs.append({
@@ -94,12 +100,11 @@ def fleiss_kappa(reliability_df):
     """
     Compute Fleiss' kappa for N raters over a categorical label set.
 
-    Fleiss' kappa assumes the same number of ratings per item but tolerates
-    different rater identities per item. Items with fewer than 2 ratings are
-    dropped; the remaining items are padded by repeating their available
-    ratings up to the per-item rater count (`n_raters = max ratings per item`).
-    When per-item rater counts vary widely the metric is approximate; we report
-    `n_raters` and `n_items_evaluated` so the caller can judge.
+    Different rater identities and different numbers of raters per item are
+    both allowed: each item's agreement is over its own rater pairs and the
+    category marginals pool every rating, which is Fleiss' formula exactly when
+    the counts are equal. Items with fewer than 2 ratings are dropped.
+    `n_raters` reports the largest per-item count.
 
     Args:
         reliability_df: long-format DataFrame with columns
@@ -129,24 +134,19 @@ def fleiss_kappa(reliability_df):
     n_items = int(counts_by_item.shape[0])
     n_categories = int(counts_by_item.shape[1])
 
-    matrix = counts_by_item.to_numpy(dtype=float)
-    row_sums = matrix.sum(axis=1, keepdims=True)
-    row_sums[row_sums == 0] = 1.0
-    matrix = matrix * (n_raters / row_sums)
-
-    p_j = matrix.sum(axis=0) / (n_items * n_raters)
-    if n_raters < 2:
+    # Each item's agreement over its own rater pairs, marginals over every
+    # rating. Rescaling every item to the largest rater count used to give a
+    # 2-rater disagreement a P_i of 0.25 instead of 0.
+    from potato.server_utils.iaa.nominal import fleiss_kappa as _fleiss
+    kappa = _fleiss([{c: int(v) for c, v in row.items() if v}
+                     for _unit, row in counts_by_item.iterrows()])
+    if kappa != kappa:
         return {"kappa": None, "n_items_evaluated": n_items, "n_raters": n_raters,
                 "n_categories": n_categories,
-                "interpretation": "Need >=2 raters per item"}
-    p_i = (np.sum(matrix ** 2, axis=1) - n_raters) / (n_raters * (n_raters - 1))
-    p_bar = float(p_i.mean())
-    p_e = float(np.sum(p_j ** 2))
-
-    if p_e >= 1.0:
-        kappa = 1.0 if p_bar >= 1.0 else 0.0
-    else:
-        kappa = (p_bar - p_e) / (1 - p_e)
+                "interpretation": (
+                    "Undefined: every rating used one label, so chance "
+                    "agreement is 1. Perfect agreement, not a failed "
+                    "computation." if n_categories < 2 else "Undefined")}
 
     return {
         "kappa": round(float(kappa), 4),
@@ -215,7 +215,7 @@ def main(args):
     """
     # Load annotation data from JSON file
     with open(args.file, "r") as f:
-        annotations = [ujson.loads(line)["annotations"] for line in f]
+        annotations = [json.loads(line)["annotations"] for line in f]
 
     # Extract unique user IDs from all annotations
     users = set([a["user"] for ann in annotations for a in ann])
@@ -260,7 +260,7 @@ def main(args):
     # Calculate and print Krippendorff's alpha for skip agreement
     # Uses nominal metric for binary skip/no-skip decisions
     print("skip agreement:")
-    print(simpledorff.calculate_krippendorffs_alpha(pd.DataFrame(data),metric_fn=nominal_metric))
+    print(simpledorff.calculate_krippendorffs_alpha(pd.DataFrame(skip_data),metric_fn=nominal_metric))
 
     # Write processed data to CSV file
     with open(args.outfile, "w") as f:

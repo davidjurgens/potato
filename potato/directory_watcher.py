@@ -1,7 +1,7 @@
 """
 Directory Watcher Module
 
-This module provides functionality for loading annotation instances from a directory
+Loading annotation instances from a directory
 and optionally watching that directory for new or modified files. When watching is
 enabled, a background thread periodically scans the directory and dynamically loads
 new instances or updates existing ones.
@@ -30,12 +30,6 @@ import threading
 import glob
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
-
-try:
-    import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
 
 if TYPE_CHECKING:
     from potato.item_state_management import ItemStateManager
@@ -110,6 +104,11 @@ class DirectoryWatcher:
         Raises:
             ValueError: If data_directory is not configured or doesn't exist
         """
+        # Kept so a scan can reindex search: the boot index runs before the
+        # directory load, so anything this watcher brings in is otherwise
+        # annotatable and unfindable.
+        self.config = config
+
         self.data_directory = config.get("data_directory")
         if not self.data_directory:
             raise ValueError("data_directory must be configured")
@@ -172,7 +171,27 @@ class DirectoryWatcher:
                 except Exception as e:
                     logger.error(f"Error loading {file_path}: {e}")
 
-        logger.info(f"Directory load complete: {total_added} total instances loaded")
+        if total_added:
+            logger.info(
+                f"Directory load complete: {total_added} total instances loaded")
+        else:
+            # A study with no items is not a state anyone asks for, and it is
+            # indistinguishable at INFO from a study that loaded fine. Every
+            # cause lands here -- wrong directory, wrong extension, empty
+            # files -- so this is the one line worth raising.
+            skipped = self._skipped_files(files)
+            detail = ""
+            if skipped:
+                shown = ", ".join(skipped[:5])
+                if len(skipped) > 5:
+                    shown += f", and {len(skipped) - 5} more"
+                detail = (f" {len(skipped)} file(s) were skipped because their "
+                          f"extension is not one of "
+                          f"{', '.join(self.SUPPORTED_EXTENSIONS)}: {shown}.")
+            logger.warning(
+                f"Loaded 0 instances from data_directory "
+                f"'{self.data_directory}'. Annotators will see an empty "
+                f"study.{detail}")
         return total_added
 
     def start_watching(self) -> None:
@@ -276,6 +295,7 @@ class DirectoryWatcher:
                 added, updated = self._scan_and_process()
                 if added > 0 or updated > 0:
                     logger.info(f"Directory scan: {added} instances added, {updated} updated")
+                    self._reindex_search()
             except Exception as e:
                 logger.error(f"Error in directory watch loop: {e}", exc_info=True)
 
@@ -283,6 +303,20 @@ class DirectoryWatcher:
             self._stop_event.wait(timeout=self.poll_interval)
 
         logger.debug("Directory watch loop ended")
+
+    def _reindex_search(self) -> None:
+        """Put newly arrived items into the search index.
+
+        Without this an item that arrives after boot is annotatable and
+        unfindable: /admin/api/search reports a count that silently excludes
+        everything the watcher brought in.
+        """
+        try:
+            from potato.search import reindex_from_item_state
+
+            reindex_from_item_state(self.config)
+        except Exception as e:
+            logger.warning(f"Search reindex after directory scan skipped: {e}")
 
     def _scan_and_process(self) -> Tuple[int, int]:
         """
@@ -347,6 +381,29 @@ class DirectoryWatcher:
             files.extend(glob.glob(pattern))
         return sorted(files)
 
+    def _skipped_files(self, loaded: List[str]) -> List[str]:
+        """Files in the directory this watcher will not read.
+
+        Reported because the alternative is a study that boots clean and hands
+        the first annotator nothing: a directory of `.md` or `.txt` is scanned,
+        matched by no pattern, and the only trace is `0 total instances` at
+        INFO.
+        """
+        loaded_set = {os.path.abspath(path) for path in loaded}
+        skipped = []
+        try:
+            entries = sorted(os.listdir(self.data_directory))
+        except OSError:
+            return skipped
+        for name in entries:
+            path = os.path.join(self.data_directory, name)
+            if not os.path.isfile(path) or name.startswith("."):
+                continue
+            if os.path.abspath(path) in loaded_set:
+                continue
+            skipped.append(name)
+        return skipped
+
     def _process_file(self, file_path: str) -> Tuple[int, int]:
         """
         Process a single data file, adding or updating instances.
@@ -382,6 +439,22 @@ class DirectoryWatcher:
                     continue
 
                 instance_id = str(instance_data[self.id_key])
+
+                # The same id twice: data_files refuses the file at boot.
+                # Here the server is already running, so keep the first row
+                # and say so. Overwriting silently replaced the item a user
+                # may already have annotated with an unrelated row.
+                if instance_id in new_instance_ids:
+                    logger.error(
+                        f"Duplicate instance ID '{instance_id}' in {file_path}; "
+                        f"keeping the first row and ignoring this one")
+                    continue
+                owner = self._instance_to_file.get(instance_id)
+                if self._item_state_manager.has_item(instance_id) and owner != file_path:
+                    logger.error(
+                        f"Duplicate instance ID '{instance_id}' in {file_path}: already "
+                        f"loaded from {owner or 'another data source'}; keeping the first")
+                    continue
                 new_instance_ids.add(instance_id)
 
                 # Check if text_key is missing (warning only)
@@ -390,7 +463,12 @@ class DirectoryWatcher:
 
                 # Add or update the instance
                 if self._item_state_manager.has_item(instance_id):
-                    # Update existing instance
+                    if self._text_change_would_orphan_annotations(instance_id, instance_data):
+                        logger.error(
+                            f"Not updating the text of '{instance_id}' from {file_path}: it "
+                            f"has already been annotated, and span offsets point into the "
+                            f"old text. Give the edited item a new id instead.")
+                        continue
                     if self._item_state_manager.update_item(instance_id, instance_data):
                         updated_count += 1
                         logger.debug(f"Updated instance: {instance_id}")
@@ -423,6 +501,16 @@ class DirectoryWatcher:
 
         return added_count, updated_count
 
+    def _text_change_would_orphan_annotations(self, instance_id: str, new_data: dict) -> bool:
+        """True when an edit changes the text of an item someone has annotated."""
+        index = getattr(self._item_state_manager, "instance_annotators", None)
+        annotators = index.get(instance_id) if isinstance(index, dict) else None
+        if not annotators:
+            return False
+        item = self._item_state_manager.get_item(instance_id)
+        old_data = item.get_data() if item is not None else {}
+        return old_data.get(self.text_key) != new_data.get(self.text_key)
+
     def _parse_file(self, file_path: str) -> List[dict]:
         """
         Parse a data file and return a list of instance dictionaries.
@@ -452,8 +540,14 @@ class DirectoryWatcher:
         Parse a JSON or JSONL file.
 
         Supports both:
-        - JSONL format: One JSON object per line
-        - JSON format: Single JSON array or object per line
+        - JSON format: one array or object spanning the whole file
+        - JSONL format: one JSON object per line
+
+        The whole-file parse is tried first. It used to read line by line
+        only, so a pretty-printed `.json` array -- which is what everyone
+        writes, and what the `data_files` loader has always accepted -- failed
+        on line 1 and the study loaded zero instances from a directory whose
+        files were perfectly good.
 
         Args:
             file_path: Path to the JSON/JSONL file
@@ -461,27 +555,39 @@ class DirectoryWatcher:
         Returns:
             List[dict]: List of parsed instance dictionaries
         """
+        from potato.data_sources.parsing import read_text
+        whole = read_text(file_path, self.encoding)
+
+        stripped = whole.strip()
+        if stripped.startswith('['):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Invalid JSON array in {file_path}: {e}") from e
+            if not isinstance(parsed, list):
+                raise ValueError(f"Expected a JSON array in {file_path}")
+            return [item for item in parsed if isinstance(item, dict)]
+
         instances = []
 
-        with open(file_path, 'rt', encoding=self.encoding) as f:
-            for line_no, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
+        for line_no, line in enumerate(stripped.splitlines(), 1):
+            line = line.strip()
+            if not line:
+                continue
 
-                try:
-                    item = json.loads(line)
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Invalid JSON at line {line_no} in {file_path}: {e}"
+                ) from e
 
-                    # Handle both single objects and arrays
-                    if isinstance(item, list):
-                        instances.extend(item)
-                    else:
-                        instances.append(item)
-
-                except json.JSONDecodeError as e:
-                    raise ValueError(
-                        f"Invalid JSON at line {line_no} in {file_path}: {e}"
-                    ) from e
+            # Handle both single objects and arrays
+            if isinstance(item, list):
+                instances.extend(item)
+            else:
+                instances.append(item)
 
         return instances
 
@@ -497,29 +603,14 @@ class DirectoryWatcher:
             List[dict]: List of row dictionaries
 
         Raises:
-            ImportError: If pandas is not available
             ValueError: If required columns are missing
         """
-        if not HAS_PANDAS:
-            raise ImportError(
-                "pandas is required for CSV/TSV file support. "
-                "Install it with: pip install pandas"
-            )
-
-        df = pd.read_csv(file_path, sep=separator, encoding=self.encoding)
-
-        # Validate ID column exists
-        if self.id_key not in df.columns:
+        # Cells verbatim, as data_files reads them (see data_sources.parsing).
+        from potato.data_sources.parsing import read_text, parse_delimited
+        rows = parse_delimited(read_text(file_path, self.encoding), separator, file_path)
+        if rows and self.id_key not in rows[0]:
             raise ValueError(f"ID column '{self.id_key}' not found in {file_path}")
-
-        # Convert ID column to string
-        df[self.id_key] = df[self.id_key].astype(str)
-
-        # Convert text column to string if present
-        if self.text_key in df.columns:
-            df[self.text_key] = df[self.text_key].astype(str)
-
-        return df.to_dict('records')
+        return rows
 
 
 def init_directory_watcher(config: dict) -> Optional[DirectoryWatcher]:

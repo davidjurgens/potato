@@ -4,7 +4,6 @@ server_name: potato database test
 annotation_task_name: Database Backend Test
 task_dir: output/database-test
 output_annotation_dir: output/database-test
-output_annotation_format: json
 annotation_codebook_url: ''
 max_annotations_per_user: 10
 assignment_strategy: fixed_order

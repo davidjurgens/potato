@@ -62,7 +62,6 @@ server_name: Video Annotation Test
 annotation_task_name: Video Annotation Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/test_videos.json
@@ -395,10 +394,17 @@ site_dir: default
         )
         assert initial_count == 1, "Should have 1 segment initially"
 
-        # Find and click delete button on the segment
+        # Find and click delete button on the segment. The timeline now renders
+        # above the annotation list, so the button can sit low on tall pages;
+        # scroll it to center before clicking so a native click isn't intercepted.
         delete_btn = self.wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, ".annotation-delete"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".annotation-delete"))
         )
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});", delete_btn
+        )
+        time.sleep(0.1)
+        self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".annotation-delete")))
         delete_btn.click()
         time.sleep(0.1)
 
@@ -555,7 +561,6 @@ server_name: Video Test No Peaks
 annotation_task_name: Video Test No Peaks
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/test_videos.json

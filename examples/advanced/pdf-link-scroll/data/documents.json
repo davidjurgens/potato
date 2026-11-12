@@ -1,0 +1,12 @@
+[
+  {
+    "id": "paper_001",
+    "title": "Scroll view — link anchors across pages",
+    "pdf": "/media/sample-paper.pdf"
+  },
+  {
+    "id": "paper_002",
+    "title": "Scroll view — second document",
+    "pdf": "/media/sample-paper.pdf"
+  }
+]

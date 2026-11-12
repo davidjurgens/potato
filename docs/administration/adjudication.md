@@ -2,9 +2,9 @@
 
 ## Overview
 
-Adjudication is a quality assurance workflow that allows designated reviewers (adjudicators) to resolve disagreements between annotators and produce gold-standard final labels. In any multi-annotator project, annotators will inevitably disagree on some items -- whether due to ambiguous text, gaps in annotation guidelines, or genuine annotator error. Adjudication provides a structured process for a subject-matter expert to review these disagreements, examine each annotator's response alongside timing data and agreement scores, and render a final decision.
+Adjudication is a quality assurance workflow in which designated reviewers (adjudicators) resolve disagreements between annotators and produce gold-standard final labels. In any multi-annotator project some items will be labeled differently by different people, whether because the text is ambiguous, the guidelines have a gap, or an annotator was wrong. A subject-matter expert reviews those disagreements, reads each annotator's response alongside timing data and agreement scores, and makes the final call.
 
-Adjudication in Potato is implemented as a **parallel workflow**, not a phase. Adjudicators access a dedicated `/adjudicate` route with its own interface, separate from the standard annotation flow. This design avoids disrupting the existing phase progression system (consent, instructions, training, annotation, post-study) while giving adjudicators a purpose-built environment for reviewing and resolving conflicts.
+Adjudication in Potato is implemented as a **parallel workflow**, not a phase. Adjudicators access a dedicated `/adjudicate` route with its own interface, separate from the standard annotation flow. That keeps the phase progression (consent, instructions, training, annotation, post-study) untouched and gives adjudicators an interface built for reviewing conflicts.
 
 ### When to Use Adjudication
 
@@ -121,6 +121,20 @@ adjudication:
     # top_k: 5
     # precompute_on_start: true
 
+  # Whether declared machine annotators (see machine_annotators.md) count
+  # toward min_annotations and appear in the queue. When false, their
+  # labels are left out of the queue entirely.
+  # Type: bool
+  # Default: false
+  include_machine_annotators: false
+
+  # Minimum number of human (non-machine) annotations an item needs before
+  # it can be queued, separate from min_annotations. 0 allows an item
+  # labeled only by machine annotators, with the adjudicator as the human.
+  # Type: int
+  # Default: 0
+  min_human_annotations: 0
+
   # Subdirectory name within the annotation output directory where
   # adjudication decisions are stored.
   # Type: string
@@ -139,7 +153,7 @@ max_annotations_per_item: 3
 
 ---
 
-## How It Works
+## The three stages
 
 The adjudication workflow consists of three stages: annotation, adjudication, and export.
 
@@ -151,12 +165,18 @@ Regular annotators complete their work through the standard `/annotate` interfac
 
 When an adjudicator logs in and navigates to `/adjudicate`, the system builds the adjudication queue by scanning all items. An item enters the queue when:
 
-1. It has at least `min_annotations` completed annotations (excluding adjudicator users).
-2. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true).
+1. It has at least `min_annotations` completed annotations. Adjudicator users never count, and declared [machine annotators](../advanced/machine_annotators.md) count only when `include_machine_annotators` is true.
+2. It has at least `min_human_annotations` annotations from humans (default 0).
+3. Its overall agreement score falls below `agreement_threshold` (unless `show_all_items` is true), or it has no score at all.
+
+An item has no score when none of its schemas can be compared: a span-only item,
+or one where every schema was answered by a single annotator. Such items are
+queued with a **no score** badge, ahead of the scored ones: without a score,
+nothing says their annotators agreed.
 
 Agreement is computed as pairwise percentage agreement: for each annotation schema, the system counts how many annotator pairs chose the same label and divides by the total number of pairs. The overall agreement is the mean across all schemas.
 
-The queue is sorted with pending items first (lowest agreement first), followed by in-progress items, and finally completed items. This ordering ensures adjudicators address the most contentious items first.
+The queue is sorted with pending items first (lowest agreement first), followed by in-progress items, and finally completed items. Adjudicators therefore reach the most contentious items first.
 
 ### Stage 3: Export
 
@@ -166,7 +186,7 @@ After adjudication is complete (or at any point during the process), you can gen
 - **Adjudicated items**: An adjudicator reviewed the disagreement and submitted a decision. The adjudicator's decision is used.
 - **Unresolved items**: Annotators disagreed but no adjudication decision has been submitted yet. These are excluded by default but can be included with a flag.
 
-Each item in the exported dataset includes a `source` field indicating its provenance (`"unanimous"`, `"adjudicated"`, or `"unresolved"`).
+Each item in the exported dataset includes a `source` field indicating its provenance (`"unanimous"`, `"unanimous_machine"`, `"unanimous_mixed"`, `"adjudicated"`, or `"unresolved"`). A unanimous item is `"unanimous"` when every annotator who agreed is human, `"unanimous_machine"` when all of them are declared machine annotators, and `"unanimous_mixed"` when they include both.
 
 ### Data Flow Diagram
 
@@ -259,15 +279,18 @@ python -m potato.adjudication_export --config config.yaml --output final_dataset
 
 The adjudication interface is a dedicated page with three main areas: the sidebar queue, the main content area, and the bottom navigation bar.
 
+On a wide screen the first pending item opens as soon as the page loads. If the queue is empty, the main area says why: nothing left to adjudicate, no decisions yet (on the **Done** filter), or no item has met `min_annotations` and `agreement_threshold` yet.
+
 ### Sidebar Queue
 
 The left sidebar displays the adjudication queue as a scrollable list. Each item shows:
 
-- The instance ID.
+- The instance ID, with "Done" or "Skipped" beside it once it has been handled.
+- The first line of the item's text, so you can triage without opening each one.
 - The number of annotators who labeled it.
-- A color-coded agreement badge (red for low, amber for medium, green for high).
+- An agreement badge such as "33% agree", colored by level: red below 50%, amber from 50% to 74%, green from 75%.
 
-Items are sorted by status (pending first) and then by agreement score (lowest first). Three filter buttons at the top of the sidebar allow switching between views:
+Items are sorted by status (pending first) and then by agreement score (lowest first). Three filter buttons at the top of the sidebar switch between views:
 
 - **Pending** -- Items that have not yet been adjudicated (default view).
 - **All** -- All items in the queue regardless of status.
@@ -275,55 +298,83 @@ Items are sorted by status (pending first) and then by agreement score (lowest f
 
 A progress bar at the top of the sidebar shows overall completion percentage.
 
+The queue is one stop in the Tab order. Tab into it to reach the open item, move with Up/Down (Home/End jump to either end), and press Enter or Space to open the focused item.
+
+On a phone the queue sits above the item as a drawer. It is open when the page loads; choosing an item folds it into a "Queue (N)" bar, and tapping the bar opens it again.
+
 ### Main Content Area
 
-When you select an item from the queue, the main area displays:
+The main area shows the open item:
 
-1. **Item Header** -- The instance ID, agreement score badge, and annotator count.
+1. **Item Header** -- The instance ID, agreement badge, and annotator count.
 
-2. **Item Text** -- The full text (or data fields) of the item being adjudicated. If the item has multiple data fields, each field is displayed with its key as a label.
+2. **The Item** -- Rendered through the project's `instance_display` when one is configured, so the adjudicator sees exactly what the annotators saw, images included. Projects without `instance_display` fall back to the item's text fields, captioned with their keys when there is more than one. Fields Potato writes for itself, such as `displayed_text`, and the id field (already in the header) are not shown.
 
-3. **Annotator Responses** -- For each annotation schema, a grouped panel shows what each annotator selected. Each annotator's response appears in a card with:
-   - The annotator's username (or "Annotator" if `show_annotator_names` is false).
-   - Their selected label(s) or text response.
+3. **Annotators** -- One row per annotator, in a section you can fold away (the page remembers the choice). Each row shows:
+   - The annotator's username, or a per-item alias if `show_annotator_names` is false.
+   - What they answered on every schema, side by side.
    - Time spent on the item (if `show_timing_data` is true), with a warning icon if the time was below `fast_decision_warning_ms`.
-   - A per-schema agreement badge (if `show_agreement_scores` is true).
+   - Quality flags, where any apply, once per annotator. Each names its own scope: "many edits on this item" is about this item, "low agreement across all items" is about the annotator's record across the whole task, so an annotator can carry it on a schema everyone agreed on. Hover a flag for the number behind it.
 
-4. **Your Decision** -- For each schema, a compact decision form is rendered based on the annotation type:
-   - **Radio/single-choice**: Options listed vertically with radio buttons. Colored annotator chips appear next to each option showing which annotators chose it. Click an option or an annotator chip to select it.
-   - **Multiselect/checkbox**: Similar to radio but with checkboxes for multiple selection.
-   - **Likert/slider**: A track showing dots for each annotator's rating, plus a slider for the adjudicator's decision. Click an annotator dot to adopt their value.
-   - **Text/number**: Each annotator's text response is shown as a clickable card. Click a card to adopt its text into your response textarea, or type your own.
+4. **Your decision** -- For each schema, a compact decision form based on the annotation type, with the schema's agreement badge (if `show_agreement_scores` is true) on its heading:
+   - **Radio/single-choice**: Options listed vertically. Beside each option, a chip for every annotator who chose it, with their time. Click anywhere on the row to select it.
+   - **Multiselect/checkbox**: The same, with checkboxes for multiple selection.
+   - **Likert/slider**: A track showing a dot for each annotator's rating, plus a slider for the adjudicator's decision. Click an annotator's dot to adopt their value.
+   - **Text/number**: Each annotator's text response is shown as a clickable card. Select one or more and use **Use Selected** or **Merge Selected** to fill your response, or type your own.
+   - **Span, image, audio and video**: Each annotator's spans, shapes or segments, with adopt controls. Here every annotator has their own outline color, and the chip that names them carries a matching swatch, because their work is drawn over the same text or image. Elsewhere the chips are neutral gray.
+   - **Everything else**: A list of the answers annotators actually gave, one radio each. Pick one and it becomes the decision, in the same shape and value space as the answers it resolves. This covers the composite widgets, whose answers cannot be re-elicited from a generic input: `constant_sum`, `soft_label`, `hierarchical_multiselect`, `ranking` and `card_sort`.
+
+   A likert that declares a `labels:` list renders as a radio group here, not a slider, because that is how the annotators answered it. A slider would store `3` against their `"Good"`.
 
 5. **Decision Metadata** -- Below the schema forms:
-   - **Confidence** (if `require_confidence` is true): A dropdown to select high, medium, or low confidence.
-   - **Error Type**: Clickable tags from the `error_taxonomy` list. Select one or more to classify the source of disagreement.
+   - **Confidence** (if `require_confidence` is true): A dropdown for high, medium, or low, with nothing preselected. Submit without a choice and a message appears under the dropdown and nothing is saved. The submit endpoint also returns HTTP 400 for a decision without a confidence, so a script cannot skip it either.
+   - **Error type**: One checkbox row per entry in `error_taxonomy`. Select any that apply.
    - **Notes**: A free-text area for optional notes about the decision.
-   - **Flag for Guideline Update**: A checkbox to flag items that reveal a gap or ambiguity in the annotation guidelines, with an optional text field to describe the issue.
+   - **Flag for guideline update**: A checkbox to flag items that reveal a gap or ambiguity in the annotation guidelines, with an optional text field to describe the issue.
+
+   Reopening an item you already decided shows the confidence, error types and notes you saved with it.
 
 ### Bottom Navigation Bar
 
-The navigation bar provides three actions:
+The navigation bar has three actions, plus a reminder of the keyboard shortcuts:
 
-- **Previous** -- Go to the previous item in the queue.
+- **Previous** -- Go back to the item you were on before.
 - **Skip** -- Mark the current item as skipped and move to the next.
-- **Submit & Next** -- Submit the decision and advance to the next item.
+- **Submit and continue** -- Submit the decision and advance to the next item.
+
+If a decision cannot be submitted, the reason appears next to the buttons.
 
 ---
 
 ## Keyboard Shortcuts
 
-The following keyboard shortcuts are available when focus is not in an input field, textarea, or dropdown:
-
 | Key | Action |
 |-----|--------|
 | `n` or Right Arrow | Navigate to the next item in the queue |
-| `p` or Left Arrow | Navigate to the previous item in the queue |
-| `Ctrl+Enter` | Submit the current decision and advance to the next item |
+| `p` or Left Arrow | Navigate to the previous item |
+| `Ctrl+Enter` (`Cmd+Enter` on a Mac) | Submit the current decision and advance to the next item |
+| Up/Down, Home/End | Move through the queue when it has focus |
 
-These shortcuts are disabled when you are typing in a textarea (such as notes or text-based annotation decisions) or interacting with a select dropdown.
+`n`, `p` and the arrow keys are ignored while you are typing in a field or using a dropdown. `Ctrl+Enter` also works while typing, so you can submit from the notes box.
 
 ---
+
+## Getting the decisions out
+
+`python -m potato.export -c <config.yaml> -f adjudication -o <dir>` writes the decisions themselves:
+`adjudicated.csv`, one row per (item, schema) with the value, its source and the
+adjudicator's confidence, plus `adjudication_log.jsonl` with the notes, error
+taxonomy and timings. It runs from the same place as every other format,
+including the admin export API. See
+[Export formats](../data-export/export_formats.md).
+
+The CLI below merges those decisions with the items annotators already agreed
+on, to make one final dataset. Reach for it if you want that merge. The
+exporter gives you the decisions on their own.
+
+The `csv`, `jsonl` and `parquet` formats carry neither. They read per-annotator
+state, so an export made after adjudication ships the disagreements and not the
+resolution.
 
 ## Export CLI
 
@@ -383,7 +434,7 @@ Each item in the exported dataset includes the following fields:
 | `instance_id` | The unique identifier for the item |
 | `item_data` | The original item data (JSONL/JSON only) |
 | `labels` | The final label decisions (keyed by schema name) |
-| `source` | Provenance: `"unanimous"`, `"adjudicated"`, or `"unresolved"` |
+| `source` | Provenance: `"unanimous"`, `"unanimous_machine"`, `"unanimous_mixed"`, `"adjudicated"`, or `"unresolved"` |
 | `adjudicator` | Username of the adjudicator (adjudicated items only) |
 | `confidence` | Adjudicator's confidence level (adjudicated items only) |
 | `provenance` | Per-schema source mapping (adjudicated items only) |
@@ -436,6 +487,7 @@ The file contains a JSON object with a `decisions` array and a `last_updated` ti
 - `label_decisions` -- The final labels (keyed by schema name).
 - `span_decisions` -- Any span annotation decisions.
 - `source` -- Per-schema provenance (which annotator's response was adopted, or `"adjudicator"` for a novel decision).
+- `source_origins` -- Recorded only in a study with declared [machine annotators](../advanced/machine_annotators.md). Per schema, what produced the final answer, as it stood when the decision was made: the adopted annotator (`"human"`, or e.g. `"pipeline_a 2.1.0 (tool)"`), or, when the adjudicator chose the value themselves, everyone who had given that value, joined with `"; "`. A value no annotator gave has no entry.
 - `confidence` -- The adjudicator's confidence rating.
 - `notes` -- Free-text notes.
 - `error_taxonomy` -- Selected error classification tags.
@@ -490,7 +542,7 @@ The sample data (`data/adjudication-example.json`) contains items designed to pr
 ]
 ```
 
-Items like `item_001` with mixed sentiment ("amazing food but terrible service") are likely to produce disagreement between annotators, making them good candidates for adjudication.
+Items like `item_001` with mixed sentiment ("amazing food but terrible service") are likely to produce disagreement between annotators, so they are good candidates for adjudication.
 
 ---
 

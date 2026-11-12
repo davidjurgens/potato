@@ -1,0 +1,10 @@
+[
+  {"id": "cats",
+   "image": "/media/cats.jpg"},
+
+  {"id": "bus",
+   "image": "/media/bus.jpg"},
+
+  {"id": "stop-sign",
+   "image": "/media/stop-sign.jpg"}
+]

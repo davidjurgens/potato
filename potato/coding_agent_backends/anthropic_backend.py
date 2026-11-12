@@ -28,7 +28,8 @@ class AnthropicToolUseBackend(CodingAgentBackend):
 
     def __init__(self, config: dict):
         self._config = config
-        ai = config.get("ai_config", {})
+        from potato.ai.ai_endpoint import without_unresolved_api_key
+        ai = without_unresolved_api_key(config.get("ai_config", {}))
         self._model = ai.get("model", "claude-sonnet-4-20250514")
         self._api_key = ai.get("api_key", "")
         self._max_tokens = ai.get("max_tokens", 8192)
@@ -160,7 +161,7 @@ class AnthropicToolUseBackend(CodingAgentBackend):
                     })
 
                     # Execute the tool
-                    output = execute_tool(tool_name, tool_input, self._working_dir)
+                    output = execute_tool(tool_name, tool_input, self.sandbox)
 
                     # Classify output type
                     output_type = self._classify_output_type(tool_name)

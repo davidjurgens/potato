@@ -1,7 +1,7 @@
 """
 Admin Dashboard Module
 
-This module provides comprehensive admin functionality for the annotation platform,
+Admin functionality for the annotation platform,
 including dashboard data generation, timing analysis, and configuration management.
 
 The admin dashboard offers:
@@ -41,6 +41,7 @@ Access Control:
 
 import json
 import logging
+import statistics
 import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from collections import defaultdict, Counter
@@ -53,6 +54,9 @@ from potato.flask_server import (
 )
 from potato.annotation_history import AnnotationHistoryManager, AnnotationAction
 from potato.quality_control import get_quality_control_manager
+from potato.server_utils.answer_collapse import collapse_entries
+from potato.phase import UserPhase
+
 
 @dataclass
 class AnnotatorTimingData:
@@ -80,7 +84,7 @@ class AnnotatorTimingData:
     fastest_action_time_ms: int
     slowest_action_time_ms: int
     actions_per_minute: float
-    suspicious_score: float
+    suspicious_score: Optional[float]
     suspicious_level: str
     fast_actions_count: int
     burst_actions_count: int
@@ -115,6 +119,35 @@ class InstanceData:
     num_ai_instance: int
     average_time_per_annotation: Optional[float]
 
+def _unwrap_admin_result(result):
+    """Normalize an admin method's return to a plain dict.
+
+    Admin methods signal failure by returning ``(payload, status_code)``. When
+    one is embedded in another method's response rather than returned straight
+    to Flask, the tuple would land in the JSON as a two-element array; unwrap it
+    so the caller always sees a dict.
+    """
+    if isinstance(result, tuple):
+        return result[0]
+    return result
+
+
+def _memo_issue_counts(config) -> Dict[str, Any]:
+    """Open and resolved issue counts, or nothing when memos are off."""
+    try:
+        from potato.memos.api import memos_enabled
+        if not memos_enabled(config):
+            return {}
+        from potato.memos import store
+        issues = store.list_issues(config.get("task_dir", "."),
+                                   config.get("annotation_task_name") or "default")
+    except Exception as exc:  # noqa: BLE001 - the overview must still load
+        logging.getLogger(__name__).warning("Could not count memo issues: %s", exc)
+        return {}
+    return {"open_issues": sum(1 for m in issues if m.get("status") == "open"),
+            "resolved_issues": sum(1 for m in issues if m.get("status") == "resolved")}
+
+
 class AdminDashboard:
     """
     Main class for admin dashboard functionality.
@@ -138,9 +171,10 @@ class AdminDashboard:
         Returns:
             bool: True if admin access is granted, False otherwise
         """
-        from potato.server_utils.admin_key import validate_admin_api_key
-        api_key = request.headers.get('X-API-Key') or session.get('admin_api_key')
-        return validate_admin_api_key(api_key, config)
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        return get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session
+        )
 
     def get_dashboard_overview(self) -> Dict[str, Any]:
         """
@@ -161,24 +195,30 @@ class AdminDashboard:
             return {"error": "Admin access required"}, 403
 
         try:
+            from potato.server_utils.progress_stats import compute_project_progress
+
             usm = get_user_state_manager()
-            ism = get_item_state_manager()
 
             # Get all users and their states
             users = get_users()
-            total_annotations = get_total_annotations()
 
-            # Calculate user statistics
-            active_users = 0
+            # Project-level aggregate progress (shared with the annotator-facing
+            # progress dashboard so the two never drift).
+            progress = compute_project_progress()
+            total_annotations = progress["total_annotations"]
+            total_items = progress["total_items"]
+            items_with_annotations = progress["items_with_annotations"]
+            completion_percentage = progress["completion_percentage"]
+            total_assignments = progress["total_assignments"]
+            active_users = progress["active_annotators"]
+
+            # Admin-only extras: completed-user count and total working time.
             completed_users = 0
             total_working_time = 0
-
             for username in users:
                 user_state = usm.get_user_state(username)
                 if user_state:
-                    if user_state.get_phase().value == "ANNOTATION":
-                        active_users += 1
-                    elif user_state.get_phase().value == "DONE":
+                    if user_state.get_phase().name.lower() == "done":
                         completed_users += 1
 
                     # Get timing data
@@ -186,39 +226,43 @@ class AdminDashboard:
                     if timing_data:
                         total_working_time += timing_data.total_seconds
 
-            # Get item statistics
-            items = ism.items()
-            items_with_annotations = 0
-            total_assignments = 0
+            # Format total working time. The seconds are a float sum, and
+            # floor-dividing a float keeps it a float, so this printed
+            # "0.0h 7.0m". Whole minutes, and no "0h" in front of them.
+            total_seconds_int = int(round(total_working_time))
+            hours, minutes = total_seconds_int // 3600, (total_seconds_int % 3600) // 60
+            formatted_time = f"{hours}h {minutes}m" if hours else f"{minutes}m"
 
-            for item in items:
-                item_id = item.get_id()
-                annotators = ism.get_annotators_for_item(item_id)
-                if annotators:
-                    items_with_annotations += 1
-                    total_assignments += len(annotators)
-
-            # Calculate completion percentages
-            total_items = len(items)
-            completion_percentage = (items_with_annotations / total_items * 100) if total_items > 0 else 0
-
-            # Format total working time
-            hours = total_working_time // 3600
-            minutes = (total_working_time % 3600) // 60
-            formatted_time = f"{hours}h {minutes}m"
+            # Items carrying more annotations than the cap asked for. The
+            # assignment relaxation can hand out an item that is held but
+            # unanswered, so two annotators can both be assigned an item
+            # neither has submitted; nothing re-checks the cap at
+            # submission. Left uncounted, an agreement number computed
+            # over those items is quietly not the design configured.
+            try:
+                over_collected = (
+                    get_item_state_manager().count_over_collected_items())
+            except Exception:
+                self.logger.debug("over-collection count unavailable",
+                                  exc_info=True)
+                over_collected = {}
 
             return {
                 "overview": {
+                    "over_collected_items": len(over_collected),
+                    "over_collected_item_ids": sorted(over_collected)[:20],
                     "total_users": len(users),
                     "active_users": active_users,
                     "completed_users": completed_users,
                     "total_annotations": total_annotations,
                     "total_items": total_items,
                     "items_with_annotations": items_with_annotations,
-                    "completion_percentage": round(completion_percentage, 1),
+                    "completion_percentage": completion_percentage,
                     "total_assignments": total_assignments,
                     "total_working_time": formatted_time,
-                    "average_annotations_per_item": round(total_annotations / total_items, 1) if total_items > 0 else 0
+                    "total_working_seconds": total_seconds_int,
+                    "average_annotations_per_item": round(total_annotations / total_items, 1) if total_items > 0 else 0,
+                    **_memo_issue_counts(config),
                 },
                 "config": {
                     "annotation_task_name": config.get("annotation_task_name", "Unknown"),
@@ -291,8 +335,13 @@ class AdminDashboard:
                             "training_total_questions": timing_data.training_total_questions
                         })
 
-            # Sort by suspicious score (highest first)
-            annotators_data.sort(key=lambda x: x["suspicious_score"], reverse=True)
+            # Sort by suspicious score (highest first); unscored last.
+            annotators_data.sort(
+                key=lambda x: (x["suspicious_score"] is not None,
+                               x["suspicious_score"] or 0),
+                reverse=True)
+            scored = [a["suspicious_score"] for a in annotators_data
+                      if a["suspicious_score"] is not None]
 
             return {
                 "total_annotators": len(annotators_data),
@@ -302,7 +351,8 @@ class AdminDashboard:
                     "medium_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] == "Medium"]),
                     "low_suspicious_count": len([a for a in annotators_data if a["suspicious_level"] == "Low"]),
                     "normal_count": len([a for a in annotators_data if a["suspicious_level"] == "Normal"]),
-                    "average_suspicious_score": sum(a["suspicious_score"] for a in annotators_data) / len(annotators_data) if annotators_data else 0
+                    "not_enough_data_count": len([a for a in annotators_data if a["suspicious_score"] is None]),
+                    "average_suspicious_score": sum(scored) / len(scored) if scored else None
                 }
             }
 
@@ -430,25 +480,39 @@ class AdminDashboard:
             ism = get_item_state_manager()
             items = ism.items()
 
+            # One pass over annotators for every statistic below. Asking the
+            # single-instance helpers for each item instead would re-walk every
+            # annotator per item, and the label helper would rebuild each
+            # annotator's whole annotation set on every one of those walks.
+            aggregates = self._build_instance_aggregates()
+            max_annotations = config.get("max_annotations_per_item", -1)
+
             # Convert items to InstanceData objects
             instances_data = []
+            label_summaries: Dict[str, List[Dict[str, Any]]] = {}
             for item in items:
                 item_id = item.get_id()
                 annotators = ism.get_annotators_for_item(item_id)
                 annotation_count = len(annotators) if annotators else 0
 
                 # Calculate completion percentage
-                max_annotations = config.get("max_annotations_per_item", -1)
                 if max_annotations > 0:
                     completion_percentage = min(100, (annotation_count / max_annotations) * 100)
                 else:
                     completion_percentage = 100 if annotation_count > 0 else 0
 
-                # Calculate most frequent label and disagreement
-                most_frequent_label, disagreement = self._calculate_label_statistics(item_id)
-
-                # Calculate average time per annotation
-                avg_time = self._calculate_average_time_per_annotation(item_id)
+                stats = aggregates.get(item_id)
+                if stats is None:
+                    most_frequent_label, disagreement = None, 0.0
+                    avg_time = None
+                    ai_count = 0
+                else:
+                    most_frequent_label, disagreement = self._label_stats_from_names(stats["labels"])
+                    label_summaries[item_id] = self._label_summary_by_schema(
+                        stats.get("labels_by_schema") or {})
+                    timed = stats["timed_count"]
+                    avg_time = stats["total_seconds"] / timed if timed else None
+                    ai_count = stats["ai_count"]
 
                 instance_data = InstanceData(
                     id=item_id,
@@ -460,7 +524,7 @@ class AdminDashboard:
                     label_disagreement=disagreement,
                     annotators=list(annotators) if annotators else [],
                     average_time_per_annotation=avg_time,
-                    num_ai_instance=self._calculate_total_instance_ai(item_id)
+                    num_ai_instance=ai_count
                 )
                 instances_data.append(instance_data)
 
@@ -499,6 +563,7 @@ class AdminDashboard:
                     "annotation_count": instance.annotation_count,
                     "completion_percentage": round(instance.completion_percentage, 1),
                     "most_frequent_label": instance.most_frequent_label,
+                    "label_summary_by_schema": label_summaries.get(instance.id, []),
                     "label_disagreement": round(instance.label_disagreement, 2),
                     "annotators": instance.annotators,
                     "num_ai_instance": instance.num_ai_instance,
@@ -600,37 +665,52 @@ class AdminDashboard:
 
                     for username in users:
                         user_state = get_user_state_manager().get_user_state(username)
-                        if user_state:
-                            label_annotations = user_state.get_label_annotations(item_id)
-                            for label, value in label_annotations.items():
-                                label_schema = None
-                                label_name = None
-                                if hasattr(label, 'get_schema'):
-                                    label_schema = label.get_schema()
-                                    label_name = label.get_name()
-                                elif hasattr(label, 'schema'):
-                                    label_schema = label.schema
-                                    label_name = getattr(label, 'name', None)
-                                elif isinstance(label, str):
-                                    label_schema = label
+                        if not user_state:
+                            continue
+                        # One answer per annotator, through the same collapse
+                        # the export and display logic use. Each stored Label
+                        # used to be appended separately as its NAME, so a
+                        # slider read as the string "slider" (no numbers to
+                        # chart), a text box as "text", and a multiselect as
+                        # one string per tick, which the list-only multiselect
+                        # analysis never counted.
+                        entries = []
+                        for label, value in user_state.get_label_annotations(item_id).items():
+                            if hasattr(label, 'get_schema'):
+                                label_schema, label_name = label.get_schema(), label.get_name()
+                            elif hasattr(label, 'schema'):
+                                label_schema = label.schema
+                                label_name = getattr(label, 'name', None)
+                            elif isinstance(label, str):
+                                label_schema, label_name = label, None
+                            else:
+                                continue
+                            if label_schema == scheme_name:
+                                entries.append((label_name, value))
+                        if not entries:
+                            continue
+                        answer, _w, _m = collapse_entries(
+                            entries, schema=scheme_name, annotation_type=annotation_type)
+                        if answer is None and annotation_type in ["radio", "select"]:
+                            # A schema-keyed record holding the answer as a
+                            # dict ({"name": "positive", "score": 0.97}).
+                            answer = next((v for _n, v in entries if isinstance(v, dict)), None)
+                        if answer is None:
+                            continue
 
-                                if label_schema == scheme_name:
-                                    normalized_value = label_name if label_name else value
+                        if annotation_type in ["radio", "select"]:
+                            answer = self._normalize_categorical_value(answer)
+                        elif annotation_type == "multiselect":
+                            answer = [
+                                normalized for normalized in (
+                                    self._normalize_categorical_value(v)
+                                    for v in (answer if isinstance(answer, list) else [answer]))
+                                if normalized is not None
+                            ]
 
-                                    if annotation_type in ["radio", "select"]:
-                                        normalized_value = self._normalize_categorical_value(normalized_value)
-                                    elif annotation_type == "multiselect" and isinstance(normalized_value, list):
-                                        normalized_value = [
-                                            normalized_label
-                                            for normalized_label in (
-                                                self._normalize_categorical_value(v) for v in normalized_value
-                                            )
-                                            if normalized_label is not None
-                                        ]
-
-                                    if normalized_value is not None:
-                                        all_annotations.append(normalized_value)
-                                        item_annotations[item_id].append(normalized_value)
+                        if answer is not None and answer != []:
+                            all_annotations.append(answer)
+                            item_annotations[item_id].append(answer)
 
                 analysis = self._analyze_annotation_scheme(
                     annotation_type, scheme, all_annotations, item_annotations
@@ -703,32 +783,32 @@ class AdminDashboard:
             # Multi-label data - show label frequency and co-occurrence
             label_counts = Counter()
             co_occurrence = defaultdict(int)
-            labels = scheme.get("labels", [])
+            labels = [
+                normalized for normalized in
+                (self._normalize_categorical_value(label) for label in scheme.get("labels", []))
+                if normalized is not None
+            ]
 
             for annotations in item_annotations.values():
-                if isinstance(annotations, list):
-                    # Count individual labels
-                    for annotation in annotations:
-                        if isinstance(annotation, list):
-                            for label in annotation:
-                                label_counts[label] += 1
-
-                    # Count co-occurrences
-                    for i, annotation1 in enumerate(annotations):
-                        if isinstance(annotation1, list):
-                            for j, annotation2 in enumerate(annotations):
-                                if i != j and isinstance(annotation2, list):
-                                    for label1 in annotation1:
-                                        for label2 in annotation2:
-                                            if label1 < label2:
-                                                co_occurrence[(label1, label2)] += 1
+                for annotation in annotations:
+                    if not isinstance(annotation, list):
+                        continue
+                    chosen = sorted(set(annotation))
+                    label_counts.update(chosen)
+                    # Co-occurrence is two labels chosen together by ONE
+                    # annotator. Pairing labels across different annotators
+                    # measured disagreement, not co-occurrence.
+                    for i, label1 in enumerate(chosen):
+                        for label2 in chosen[i + 1:]:
+                            co_occurrence[f"{label1}|{label2}"] += 1
 
             analysis.update({
                 "visualization_type": "multiselect_analysis",
                 "data": {
                     "labels": labels,
                     "counts": [label_counts.get(label, 0) for label in labels],
-                    "percentages": [round(label_counts.get(label, 0) / len(item_annotations) * 100, 1)
+                    # Share of answers that chose the label.
+                    "percentages": [round(label_counts.get(label, 0) / len(all_annotations) * 100, 1)
                                   for label in labels],
                     "co_occurrence": dict(co_occurrence)
                 },
@@ -758,15 +838,15 @@ class AdminDashboard:
                         "bins": self._create_histogram_bins(numeric_values, scheme),
                         "statistics": {
                             "mean": round(sum(numeric_values) / len(numeric_values), 2),
-                            "median": round(sorted(numeric_values)[len(numeric_values)//2], 2),
+                            "median": round(statistics.median(numeric_values), 2),
                             "min": min(numeric_values),
                             "max": max(numeric_values),
                             "std": round((sum((x - sum(numeric_values)/len(numeric_values))**2
                                             for x in numeric_values) / len(numeric_values))**0.5, 2)
                         }
                     },
-                    "range": scheme.get("min", 0) if "min" in scheme else None,
-                    "max": scheme.get("max", 10) if "max" in scheme else None
+                    "range": scheme.get("min_value", scheme.get("min")),
+                    "max": scheme.get("max_value", scheme.get("max"))
                 })
             else:
                 analysis["error"] = "No valid numeric values found"
@@ -833,10 +913,120 @@ class AdminDashboard:
             else:
                 analysis["error"] = "No valid span annotations found"
 
+        elif annotation_type == "image_annotation":
+            analysis.update(self._analyze_geometry(scheme, all_annotations,
+                                                   item_annotations))
+
         else:
             analysis["error"] = f"Unsupported annotation type: {annotation_type}"
 
         return analysis
+
+    def _analyze_geometry(self, scheme: dict, all_annotations: list,
+                          item_annotations: dict) -> dict:
+        """
+        Summarize drawn annotations for the admin Questions view.
+
+        This view reported "Unsupported annotation type: image_annotation" —
+        an admin running an image project could see how many annotations
+        existed but nothing about them: not which classes were used, not
+        whether the dataset was balanced, not whether annotators agreed.
+
+        The counts are per INSTANCE, not per annotation: an image project's
+        interesting quantity is how many objects of each class exist, which a
+        histogram over opaque JSON blobs cannot show.
+        """
+        from potato.server_utils import annotation_values
+
+        scheme_def = {"annotation_type": "image_annotation",
+                      "name": scheme.get("name")}
+
+        label_counts = Counter()
+        type_counts = Counter()
+        per_image_counts = []
+        mask_fractions = []
+
+        for stored in all_annotations:
+            objects = annotation_values.geometry_objects(scheme_def, stored)
+            per_image_counts.append(len(objects))
+            for obj in objects:
+                if obj.get("label"):
+                    label_counts[obj["label"]] += 1
+                type_counts[obj.get("type") or "shape"] += 1
+                rle = obj.get("rle") or {}
+                counts, size = rle.get("counts") or [], rle.get("size") or []
+                if counts and len(size) == 2 and size[0] and size[1]:
+                    on = sum(counts[1::2])
+                    mask_fractions.append(on / (size[0] * size[1]))
+
+        declared = []
+        for label in scheme.get("labels", []) or []:
+            name = label.get("name") if isinstance(label, dict) else label
+            if name:
+                declared.append(name)
+        # Show declared classes even at zero — a class nobody ever used is the
+        # single most actionable thing on this screen.
+        ordered = declared + [l for l in label_counts if l not in declared]
+
+        total = sum(label_counts.values())
+        result = {
+            "visualization_type": "histogram",
+            "data": {
+                "labels": ordered,
+                "counts": [label_counts.get(l, 0) for l in ordered],
+                "percentages": [
+                    round(label_counts.get(l, 0) / total * 100, 1) if total else 0.0
+                    for l in ordered
+                ],
+            },
+            "shape_types": dict(type_counts),
+            "total_objects": total,
+            "images_annotated": len(per_image_counts),
+            "objects_per_image": (
+                round(sum(per_image_counts) / len(per_image_counts), 2)
+                if per_image_counts else 0.0
+            ),
+            "empty_images": sum(1 for n in per_image_counts if n == 0),
+            "unused_labels": [l for l in declared if not label_counts.get(l)],
+        }
+
+        if mask_fractions:
+            result["mask_coverage"] = {
+                "mean_fraction_of_image": round(sum(mask_fractions) / len(mask_fractions), 4),
+                "min": round(min(mask_fractions), 4),
+                "max": round(max(mask_fractions), 4),
+            }
+
+        agreement = self._geometry_agreement_percent(scheme_def, item_annotations)
+        if agreement is not None:
+            result["agreement_score"] = agreement
+
+        return result
+
+    def _geometry_agreement_percent(self, scheme_def: dict,
+                                    item_annotations: dict) -> Optional[float]:
+        """
+        Mean pairwise geometry agreement across items, as a percentage.
+
+        The generic ``_calculate_agreement_score`` counts identical values, and
+        two annotators never draw byte-identical shapes — so it reported near
+        zero agreement for even excellent annotation.
+        """
+        from potato.server_utils import annotation_values
+
+        scores = []
+        for annotations in (item_annotations or {}).values():
+            if not isinstance(annotations, list) or len(annotations) < 2:
+                continue
+            values = [annotation_values.comparable_value(scheme_def, a)
+                      for a in annotations]
+            for i in range(len(values)):
+                for j in range(i + 1, len(values)):
+                    d = annotation_values.distance(scheme_def, values[i], values[j])
+                    if d is not None:
+                        scores.append(1.0 - d)
+
+        return round(sum(scores) / len(scores) * 100, 1) if scores else None
 
     def _calculate_agreement_score(self, item_annotations: dict) -> float:
         """Calculate agreement score for categorical annotations."""
@@ -858,8 +1048,15 @@ class AdminDashboard:
         if not values:
             return {"bins": [], "counts": []}
 
-        min_val = scheme.get("min", min(values))
-        max_val = scheme.get("max", max(values))
+        # Sliders declare their scale as min_value/max_value; older configs
+        # use min/max.
+        min_val = float(scheme.get("min_value", scheme.get("min", min(values))))
+        max_val = float(scheme.get("max_value", scheme.get("max", max(values))))
+        min_val, max_val = min(min_val, min(values)), max(max_val, max(values))
+        if max_val == min_val:
+            # Every answer is the same number: one bin holds them all.
+            return {"bins": [round(min_val, 2), round(max_val, 2)],
+                    "counts": [len(values)]}
 
         # Create 10 bins
         bin_size = (max_val - min_val) / 10
@@ -986,7 +1183,7 @@ class AdminDashboard:
                 fastest_action_time_ms=performance_metrics.get('fastest_action_time_ms', 0),
                 slowest_action_time_ms=performance_metrics.get('slowest_action_time_ms', 0),
                 actions_per_minute=performance_metrics.get('actions_per_minute', 0.0),
-                suspicious_score=suspicious_analysis.get('suspicious_score', 0.0),
+                suspicious_score=suspicious_analysis.get('suspicious_score'),
                 suspicious_level=suspicious_analysis.get('suspicious_level', 'Normal'),
                 fast_actions_count=suspicious_analysis.get('fast_actions_count', 0),
                 burst_actions_count=suspicious_analysis.get('burst_actions_count', 0),
@@ -1303,8 +1500,24 @@ class AdminDashboard:
                     "suspicious_level": timing_data.suspicious_level if timing_data else "Normal",
                 }
 
+                # The platform the worker arrived through, recorded at arrival.
+                # Users registered before that was recorded fall back to which
+                # IDs they carry. Never the username: "Paul" is not a Prolific
+                # worker and "Alice" is not an MTurk one.
+                provider = stored_data.get('crowd_provider')
+                # The legacy url_direct provider serves `login.type: prolific`
+                # too, so its workers are classified by the IDs they carry.
+                if provider in (None, "url_direct"):
+                    if mturk_assignment_id or mturk_hit_id:
+                        provider = "mturk"
+                    elif prolific_session_id or prolific_study_id:
+                        provider = "prolific"
+                if provider not in ("prolific", "mturk"):
+                    provider = None
+                worker_info["arrival_provider"] = stored_data.get('crowd_provider')
+
                 # Check for Prolific workers
-                if prolific_session_id or prolific_study_id or username.startswith('P'):
+                if provider == "prolific":
                     worker_info["platform"] = "prolific"
                     worker_info["session_id"] = prolific_session_id
                     worker_info["study_id"] = prolific_study_id
@@ -1313,7 +1526,7 @@ class AdminDashboard:
                         prolific_study_ids.add(prolific_study_id)
 
                 # Check for MTurk workers
-                elif mturk_assignment_id or mturk_hit_id or username.startswith('A'):
+                elif provider == "mturk":
                     worker_info["platform"] = "mturk"
                     worker_info["assignment_id"] = mturk_assignment_id
                     worker_info["hit_id"] = mturk_hit_id
@@ -1341,8 +1554,12 @@ class AdminDashboard:
                     }
                 total_annotations = sum(w["total_annotations"] for w in workers)
                 total_time = sum(w["total_seconds"] for w in workers)
-                completed = len([w for w in workers if w["phase"] == "Phase.DONE"])
-                in_progress = len([w for w in workers if w["phase"] == "Phase.ANNOTATION"])
+                # str(UserPhase.DONE) is "done". These compared against
+                # "Phase.DONE", which no phase renders as, so both were always 0.
+                done, not_started = str(UserPhase.DONE), str(UserPhase.LOGIN)
+                completed = len([w for w in workers if w["phase"] == done])
+                in_progress = len([w for w in workers
+                                   if w["phase"] not in (done, not_started, "unknown")])
                 return {
                     "count": len(workers),
                     "total_annotations": total_annotations,
@@ -1353,6 +1570,21 @@ class AdminDashboard:
                     "in_progress_count": in_progress,
                 }
 
+            # Active crowd-provider info (generalized platforms beyond
+            # prolific/mturk report through this block)
+            provider_info = {}
+            try:
+                from potato.crowdsourcing import get_crowd_provider
+                provider = get_crowd_provider()
+                if provider is not None:
+                    provider_info = {
+                        "name": provider.name,
+                        "platform_label": provider.platform_label(),
+                    }
+                    provider_info.update(provider.admin_summary())
+            except Exception as e:
+                self.logger.debug(f"Could not collect crowd provider summary: {e}")
+
             return {
                 "summary": {
                     "total_workers": len(all_workers),
@@ -1362,6 +1594,7 @@ class AdminDashboard:
                     "prolific_studies": len(prolific_study_ids),
                     "mturk_hits": len(mturk_hit_ids),
                 },
+                "provider": provider_info,
                 "prolific": {
                     "stats": calc_stats(prolific_workers),
                     "study_ids": list(prolific_study_ids),
@@ -1383,6 +1616,68 @@ class AdminDashboard:
             return {"error": f"Failed to get crowdsourcing data: {str(e)}"}, 500
 
 
+    def _multilabel_agreement(self, valid_items) -> Dict[str, Any]:
+        """Agreement for a multi-label schema, the way /admin/iaa measures it.
+
+        Each annotator's answer is a set of labels. Comparing whole sets as
+        nominal categories scored {neutrophil, T cell} against {neutrophil} as
+        complete disagreement, and Cohen's and Fleiss' kappa on those sets
+        reported -0.5 for annotators who agreed on most labels. Krippendorff's
+        alpha with MASI distance credits partial overlap, and mean Jaccard is
+        the plain overlap; both are the shared helpers /admin/iaa uses.
+        """
+        from potato.server_utils.iaa import multilabel
+
+        long_rows = []
+        sets_by_user: Dict[str, Dict[str, frozenset]] = defaultdict(dict)
+        for item_id, annots in valid_items.items():
+            for annot in annots:
+                labels = frozenset(annot["names"])
+                long_rows.append((annot["user"], item_id, labels))
+                sets_by_user[annot["user"]][item_id] = labels
+
+        # With min_overlap: 1 an item can have a single annotator. If none has
+        # two there is no pair to compare, mean Jaccard is NaN, and jsonify
+        # writes a bare NaN that response.json() cannot parse.
+        if not any(len(annots) >= 2 for annots in valid_items.values()):
+            return {
+                "error": "No items with 2+ annotators",
+                "items_count": len(valid_items),
+            }
+        jaccard = multilabel.mean_jaccard(sets_by_user)
+        result = {
+            "metric_type": "masi",
+            "items_evaluated": len(valid_items),
+            "total_annotations": len(long_rows),
+            "mean_jaccard": round(jaccard, 4) if jaccard == jaccard else None,
+            "metric_note": (
+                "Multi-label answers are compared as sets: Krippendorff's alpha "
+                "with MASI distance, and mean Jaccard overlap. Cohen's and "
+                "Fleiss' kappa are not reported because they treat each set "
+                "as one category. /admin/iaa has the same measures."
+            ),
+        }
+        if len({labels for _u, _i, labels in long_rows}) < 2:
+            result.update({
+                "krippendorff_alpha": None,
+                "percent_agreement": 1.0,
+                "interpretation": "Undefined",
+                "note": (
+                    "every annotator chose the same labels on every item, so "
+                    "chance agreement is 1 and alpha is undefined. Perfect "
+                    "agreement, not a failed computation; percent_agreement "
+                    "shows it."
+                ),
+            })
+            return result
+        alpha_value = multilabel.alpha_masi(long_rows)
+        if alpha_value != alpha_value:      # NaN: no pairable answers
+            result.update({"krippendorff_alpha": None, "interpretation": "Undefined"})
+            return result
+        result["krippendorff_alpha"] = round(float(alpha_value), 4)
+        result["interpretation"] = self._interpret_alpha(alpha_value)
+        return result
+
     def get_agreement_metrics(self) -> Dict[str, Any]:
         """
         Get inter-annotator agreement metrics using Krippendorff's alpha.
@@ -1400,13 +1695,31 @@ class AdminDashboard:
             from simpledorff.metrics import nominal_metric, interval_metric
             import pandas as pd
 
+            from potato.server_utils import annotation_values
+            from potato.server_utils.iaa import dispatcher
+
             agreement_config = config.get("agreement_metrics", {})
             min_overlap = agreement_config.get("min_overlap", 2)
 
             ism = get_item_state_manager()
             usm = get_user_state_manager()
             annotation_schemes = config.get("annotation_schemes", [])
-            users = get_users()
+
+            # Human raters only, matching the /admin/iaa headline. This report
+            # and that one must not disagree about the same study, and a
+            # coefficient over a mixed human/machine matrix estimates neither
+            # group's reliability -- see potato/annotator_origin.py.
+            from potato.annotator_origin import describe, is_machine
+
+            all_users = get_users()
+            users = []
+            excluded_machines = []
+            for username in all_users:
+                state = usm.get_user_state(username)
+                if state is not None and is_machine(state):
+                    excluded_machines.append((username, describe(state)))
+                else:
+                    users.append(username)
 
             metrics = {
                 "enabled": agreement_config.get("enabled", True),
@@ -1415,9 +1728,35 @@ class AdminDashboard:
                 "warnings": []
             }
 
+            if excluded_machines:
+                metrics["machine_annotators_excluded"] = [
+                    {"user_id": uid, "origin": label}
+                    for uid, label in excluded_machines
+                ]
+                metrics["warnings"].append(
+                    f"{len(excluded_machines)} declared machine rater(s) are "
+                    f"excluded from these figures: "
+                    f"{', '.join(uid for uid, _ in excluded_machines)}. "
+                    f"See /admin/iaa for the machine-machine and pooled "
+                    f"partitions."
+                )
+
+            from potato.server_utils.iaa.structured import (
+                SEGMENT_TYPES, SPATIAL_TYPES, TRACE_TYPES)
+            structured = set(SEGMENT_TYPES) | set(SPATIAL_TYPES) | set(TRACE_TYPES)
             for scheme in annotation_schemes:
                 schema_name = scheme.get("name", "Unknown")
                 annotation_type = scheme.get("annotation_type", "unknown")
+
+                # Steps, segments, regions and 3D objects are not label names.
+                # Reduced to names here, every annotator "chose" the scheme
+                # itself and agreed perfectly while /admin/iaa, which matches
+                # the structures, measured 0.56. Point there instead.
+                kind = dispatcher.classify_schema(scheme)
+                refused = _not_a_label_answer(scheme, structured)
+                if refused is not None:
+                    metrics["by_schema"][schema_name] = refused
+                    continue
 
                 # Collect annotations per item for this schema
                 annotations_by_item = {}
@@ -1439,22 +1778,68 @@ class AdminDashboard:
                         instance_annotations = all_annotations[item_id]
                         labels = instance_annotations.get("labels", {})
 
-                        # Find annotation for this schema
-                        for label, value in labels.items():
-                            label_schema = None
-                            if hasattr(label, 'schema'):
-                                label_schema = label.schema
-                            elif hasattr(label, 'get_schema'):
-                                label_schema = label.get_schema()
+                        # The answer is the NAME of the label whose stored value
+                        # is truthy, not the value: radio stores
+                        # {"eligible": True} and likert {"4": "4"}, so reading
+                        # the value gave True for every annotator on every
+                        # categorical schema -- unanimous agreement whatever
+                        # anyone picked. Shared with /admin/iaa and with
+                        # adjudication so the two reports cannot disagree about
+                        # what a person answered.
+                        # Pairwise answers in data order, as /admin/iaa reads
+                        # them: under randomize_order the stored letter is the
+                        # screen position, which differs per annotator.
+                        from potato.server_utils.presentation_order import source_oriented
+                        values = source_oriented(
+                            [scheme], annotation_values.group_by_schema(labels),
+                            user_state.get_presentation_order(item_id)
+                            if hasattr(user_state, "get_presentation_order") else {},
+                        ).get(schema_name)
+                        if not values:
+                            continue
+                        names = (dispatcher.packed_answer(scheme, values)
+                                 or annotation_values.selected_labels(values))
+                        if not names:
+                            continue
 
-                            if label_schema == schema_name:
-                                item_annotations.append({
-                                    "user": username,
-                                    "value": value
-                                })
+                        # One row per annotator. A multiselect chooses several
+                        # names at once; appending them separately gave
+                        # simpledorff two rows for the same (item, annotator)
+                        # and counted one person as meeting a two-annotator
+                        # overlap on their own.
+                        item_annotations.append({
+                            "user": username,
+                            "names": names,
+                        })
 
                     if item_annotations:
                         annotations_by_item[item_id] = item_annotations
+
+                # One shape per SCHEMA, decided by the whole column rather than
+                # by each answer's own length. A multiselect where one annotator
+                # ticks two boxes and another ticks one produced a tuple beside
+                # a string, and simpledorff sorts the class column to build the
+                # coincidence matrix: "'<' not supported between instances of
+                # 'tuple' and 'str'". That is nearly every real multiselect
+                # study, and it fires without needing anyone to disagree.
+                #
+                # Schemas that only ever hold one answer -- radio, likert --
+                # stay scalar, which is what keeps the interval path below
+                # working and the reports readable.
+                multi_valued = any(
+                    len(annot["names"]) > 1
+                    for annots in annotations_by_item.values()
+                    for annot in annots
+                )
+                for annots in annotations_by_item.values():
+                    for annot in annots:
+                        # A list, so the shared normalizer turns EVERY answer in
+                        # this schema into a sorted tuple -- single-label ones
+                        # included. Handing it an already-made tuple would work
+                        # by accident, because the normalizer only unpacks lists
+                        # and would stringify the tuple instead.
+                        annot["value"] = (list(annot["names"])
+                                          if multi_valued else annot["names"][0])
 
                 # Filter items with minimum overlap
                 valid_items = {
@@ -1470,20 +1855,18 @@ class AdminDashboard:
                     }
                     continue
 
+                if kind == dispatcher.SchemaKind.MULTILABEL:
+                    metrics["by_schema"][schema_name] = self._multilabel_agreement(
+                        valid_items)
+                    continue
+
                 # Format for simpledorff
                 try:
-                    reliability_data = []
-                    for item_id, annots in valid_items.items():
-                        for annot in annots:
-                            reliability_data.append({
-                                "unit": item_id,
-                                "annotator": annot["user"],
-                                "annotation": self._normalize_annotation_value(annot["value"])
-                            })
-
-                    df = pd.DataFrame(reliability_data)
-
-                    # Choose metric based on annotation type
+                    # An interval metric subtracts the two values, so a rating
+                    # has to reach simpledorff as a number. The shared
+                    # normalizer stringifies everything, which is right for
+                    # nominal comparison and fatal here, so a rating scale
+                    # takes its own path.
                     if annotation_type in ["likert", "slider", "number"]:
                         metric_fn = interval_metric
                         metric_name = "interval"
@@ -1491,8 +1874,79 @@ class AdminDashboard:
                         metric_fn = nominal_metric
                         metric_name = "nominal"
 
-                    # Calculate alpha
-                    alpha = simpledorff.calculate_krippendorffs_alpha(
+                    fell_back = False
+                    if metric_name == "interval":
+                        numeric = self._numeric_annotation_values(valid_items)
+                        if numeric is None:
+                            # A rating scale whose answers are not numbers is a
+                            # nominal variable, and reporting nothing at all
+                            # helps nobody. Say which measure was used.
+                            metric_fn = nominal_metric
+                            metric_name = "nominal"
+                            fell_back = True
+
+                    reliability_data = []
+                    for item_id, annots in valid_items.items():
+                        for annot in annots:
+                            value = annot["value"]
+                            reliability_data.append({
+                                "unit": item_id,
+                                "annotator": annot["user"],
+                                "annotation": (
+                                    numeric[(item_id, annot["user"])]
+                                    if metric_name == "interval"
+                                    else self._normalize_annotation_value(value)
+                                ),
+                            })
+
+                    df = pd.DataFrame(reliability_data)
+
+                    if len({str(r["annotation"]) for r in reliability_data}) < 2:
+                        # One value throughout: expected disagreement is 0, so
+                        # alpha and both kappas are 0/0. simpledorff raised
+                        # "float division by zero" and the schema came back as
+                        # an error, where /admin/iaa reports the same data as
+                        # undefined with percent agreement 1.0.
+                        metrics["by_schema"][schema_name] = {
+                            "krippendorff_alpha": None,
+                            "percent_agreement": 1.0,
+                            "metric_type": metric_name,
+                            "items_evaluated": len(valid_items),
+                            "total_annotations": len(reliability_data),
+                            "interpretation": "Undefined",
+                            "note": (
+                                "every annotator gave the same label on every "
+                                "item, so chance agreement is 1 and kappa and "
+                                "alpha are undefined. Perfect agreement, not a "
+                                "failed computation; percent_agreement shows it."
+                            ),
+                        }
+                        if metric_name == "nominal":
+                            # The helpers' usual objects with null inside, so a
+                            # client reading fleiss_kappa["kappa"] gets None
+                            # rather than a TypeError on a bare null.
+                            undefined = metrics["by_schema"][schema_name]
+                            try:
+                                from potato.agreement import (
+                                    cohen_kappa_pairwise, fleiss_kappa,
+                                )
+                                undefined["cohen_kappa"] = cohen_kappa_pairwise(df)
+                                undefined["fleiss_kappa"] = fleiss_kappa(df)
+                            except Exception as e:
+                                undefined["kappa_error"] = str(e)
+                        continue
+
+                    # `calculate_krippendorffs_alpha` takes an
+                    # experiment-by-annotator TABLE and one metric. The
+                    # function that takes a long dataframe and the three column
+                    # names is `..._for_df`, which is what every other call
+                    # site in the tree uses. Calling the wrong one raised
+                    # TypeError on the first statement of this try, so the
+                    # kappas below were never reached and every schema came
+                    # back as an error string with a 200 -- the whole feature
+                    # produced no numbers for anyone who had two annotators,
+                    # which is the only condition under which it runs at all.
+                    alpha = simpledorff.calculate_krippendorffs_alpha_for_df(
                         df,
                         experiment_col="unit",
                         annotator_col="annotator",
@@ -1507,6 +1961,15 @@ class AdminDashboard:
                         "total_annotations": len(reliability_data),
                         "interpretation": self._interpret_alpha(alpha)
                     }
+                    if fell_back:
+                        note = (
+                            f"'{schema_name}' is a {annotation_type} scheme but "
+                            "its answers are not numbers, so agreement was "
+                            "measured nominally rather than on an interval "
+                            "scale."
+                        )
+                        schema_metrics["metric_note"] = note
+                        metrics["warnings"].append(note)
 
                     # Cohen's kappa (pairwise) and Fleiss' kappa apply to
                     # categorical schemas; skip for interval-metric data where
@@ -1535,7 +1998,7 @@ class AdminDashboard:
             alphas = [
                 m["krippendorff_alpha"]
                 for m in metrics["by_schema"].values()
-                if "krippendorff_alpha" in m
+                if m.get("krippendorff_alpha") is not None
             ]
             if alphas:
                 avg_alpha = sum(alphas) / len(alphas)
@@ -1590,9 +2053,43 @@ class AdminDashboard:
         else:
             return "Poor agreement"
 
+    def _numeric_annotation_values(self, valid_items) -> Optional[Dict]:
+        """Every answer as a float, or ``None`` if any one of them is not.
+
+        Krippendorff's alpha on an interval metric differences the two values.
+        A rating stored as ``"4"`` -- which is what the shared normalizer
+        produces, and what a checkbox-flavoured answer looks like too --
+        raises ``TypeError`` inside the metric, and the caller reports the
+        schema as broken rather than measuring it the other way.
+        """
+        numeric = {}
+        for item_id, annots in valid_items.items():
+            for annot in annots:
+                value = annot["value"]
+                if isinstance(value, bool) or not isinstance(
+                        value, (str, int, float)):
+                    # A tuple lands here when the schema turned out to be
+                    # multi-valued, and a set of labels has no interval
+                    # distance -- the caller falls back to nominal.
+                    return None
+                try:
+                    numeric[(item_id, annot["user"])] = float(value)
+                except (TypeError, ValueError):
+                    return None
+        return numeric
+
     def _normalize_annotation_value(self, value: Any) -> Any:
-        """Normalize annotation value for comparison."""
-        if isinstance(value, list):
+        """Normalize annotation value for comparison.
+
+        Sets are unpacked whether they arrive as a list or a tuple. Matching
+        only ``list`` meant a caller who built the tuple itself fell through to
+        ``str(value)`` and got ``"(\'age\', \'meds\')"`` -- one string per
+        distinct set, so it compared correctly, sorted correctly and passed its
+        tests while doing something nobody wrote down. The first draft of the
+        multiselect fix in 00fb6f21 did exactly that, and only an A/B against
+        the line it replaced showed the guard was not testing what it claimed.
+        """
+        if isinstance(value, (list, tuple, set, frozenset)):
             return tuple(sorted(str(v) for v in value))
         elif isinstance(value, bool):
             return str(value).lower()
@@ -1654,22 +2151,7 @@ class AdminDashboard:
                     all_anns = user_state.get_all_annotations()
                     if instance_id not in all_anns:
                         continue
-                    instance_anns = all_anns[instance_id]
-                    labels = instance_anns.get("labels", {}) or {}
-                    for label, value in labels.items():
-                        schema_name = self._schema_for_label_key(label)
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for code in self._labels_from_value(value):
-                            codes.add(f"{schema_name}::{code}")
-                    spans = instance_anns.get("spans", {}) or {}
-                    for schema_name, span_list in spans.items():
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for span in span_list or []:
-                            code = span.get("label") or span.get("annotation")
-                            if code:
-                                codes.add(f"{schema_name}::{code}")
+                    codes |= self._codes_applied(all_anns[instance_id], schema_filter)
                 if codes:
                     codes_per_instance[instance_id] = codes
 
@@ -1768,22 +2250,7 @@ class AdminDashboard:
                     all_anns = user_state.get_all_annotations()
                     if instance_id not in all_anns:
                         continue
-                    instance_anns = all_anns[instance_id]
-                    labels = instance_anns.get("labels", {}) or {}
-                    for label, value in labels.items():
-                        schema_name = self._schema_for_label_key(label)
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for code in self._labels_from_value(value):
-                            codes.add(f"{schema_name}::{code}")
-                    spans = instance_anns.get("spans", {}) or {}
-                    for schema_name, span_list in spans.items():
-                        if schema_filter and schema_name != schema_filter:
-                            continue
-                        for span in span_list or []:
-                            code = span.get("label") or span.get("annotation")
-                            if code:
-                                codes.add(f"{schema_name}::{code}")
+                    codes |= self._codes_applied(all_anns[instance_id], schema_filter)
 
                 for code in codes:
                     codes_seen.add(code)
@@ -1817,16 +2284,60 @@ class AdminDashboard:
             return label_key.get_schema()
         return str(label_key)
 
-    @staticmethod
-    def _labels_from_value(value) -> List[str]:
-        """Pull individual code names out of an annotation value blob."""
-        if value is None or value == "":
-            return []
-        if isinstance(value, dict):
-            return [k for k, v in value.items() if v]
-        if isinstance(value, list):
-            return [str(x) for x in value]
-        return [str(value)]
+    def _codes_applied(self, instance_anns: dict,
+                       schema_filter: Optional[str] = None) -> set:
+        """``schema::code`` for every code one annotator applied to one item.
+
+        Labels are ``{Label(schema, name): value}`` and the code is the label
+        NAME; the value is the page's own marker ("on", "true", the name
+        again). Reading the value merged every code posted as "on" into one
+        `themes::on`, and showed a slider's number as a code. Spans are
+        ``{SpanAnnotation: value}``, not ``{schema: [dict]}``: iterating them
+        as the latter raised on the first span and the endpoint returned 500.
+        """
+        schema_types = {
+            sc.get("name"): sc.get("annotation_type")
+            for sc in (config.get("annotation_schemes", []) or [])
+            if isinstance(sc, dict)
+        }
+        from potato.server_utils.annotation_values import group_by_schema
+
+        codes: set = set()
+        # In memory: {Label: value}. MySQL: {schema: {label: value}}.
+        for schema_name, by_label in group_by_schema(instance_anns.get("labels") or {}).items():
+            if schema_filter and schema_name != schema_filter:
+                continue
+            if not isinstance(by_label, dict):
+                continue
+            answer, winner, method = collapse_entries(
+                list(by_label.items()), schema=schema_name,
+                annotation_type=schema_types.get(schema_name))
+            # A selection collapses to its label (answer == winner) or to a
+            # list of labels; a number, free text or nothing is not a code.
+            if answer is None or not (method == "multi" or
+                                      (winner is not None and answer == winner)):
+                continue
+            for code in (answer if isinstance(answer, list) else [answer]):
+                codes.add(f"{schema_name}::{code}")
+        for span, value in (instance_anns.get("spans") or {}).items():
+            if isinstance(span, str):
+                # MySQL: {schema: {span_name: {...}}}; legacy: {schema: [dicts]}.
+                if schema_filter and span != schema_filter:
+                    continue
+                if isinstance(value, dict):
+                    names = list(value)
+                else:
+                    names = [item.get("label") or item.get("annotation")
+                             for item in value or [] if isinstance(item, dict)]
+                codes.update(f"{span}::{name}" for name in names if name)
+                continue
+            schema_name = getattr(span, "schema", None)
+            if schema_filter and schema_name != schema_filter:
+                continue
+            code = getattr(span, "name", None) or (value if isinstance(value, str) else None)
+            if schema_name and code:
+                codes.add(f"{schema_name}::{code}")
+        return codes
 
     @staticmethod
     def _get_item_data(item) -> dict:
@@ -1871,6 +2382,55 @@ class AdminDashboard:
             self.logger.error(f"Error getting quality control data: {e}")
             return {"error": f"Failed to get quality control data: {str(e)}"}, 500
 
+    def get_expertise_data(self) -> Dict[str, Any]:
+        """Per-annotator, per-category expertise for the dynamic router.
+
+        Reports the scores AND the counts they were computed from, because a
+        score of 1.0 from four agreements and a score of 1.0 that nothing has
+        ever disagreed with look identical and mean different things.
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.expertise_manager import get_expertise_manager
+
+            manager = get_expertise_manager()
+            if not manager:
+                return {
+                    "enabled": False,
+                    "message": ("Dynamic category expertise is not enabled "
+                                "(category_assignment.dynamic.enabled)"),
+                }
+
+            by_user = {}
+            for user_id, profile in manager.user_profiles.items():
+                by_user[user_id] = {
+                    category: {
+                        "score": expertise.expertise_score,
+                        "agreements": expertise.agreements,
+                        "disagreements": expertise.disagreements,
+                        "evaluated": expertise.total_evaluated,
+                    }
+                    for category, expertise in profile.category_expertise.items()
+                }
+
+            return {
+                "enabled": True,
+                "scored_since_boot": manager.total_scored,
+                "store_path": manager._store_path,
+                "learning_rate": manager.learning_rate,
+                "agreement_method": manager.agreement_method.value,
+                "update_interval_seconds": manager.update_interval_seconds,
+                "min_annotations_for_consensus": manager.min_annotations_for_consensus,
+                "base_probability": manager.base_probability,
+                "by_user": by_user,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting expertise data: {e}")
+            return {"error": f"Failed to get expertise data: {str(e)}"}, 500
+
     def _behavioral_sequence(self, value: Any) -> list:
         """Normalize behavioral list-like values to a safe list."""
         if value is None:
@@ -1886,6 +2446,68 @@ class AdminDashboard:
         if isinstance(payload, dict):
             return payload.get(field_name, default)
         return getattr(payload, field_name, default)
+
+    def get_throughput_data(self) -> Dict[str, Any]:
+        """Items per active hour, time per item and review outcomes (throughput.py)."""
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+        from potato.annotator_origin import HUMAN, origin_of, parse_machine_annotators
+        from potato.throughput import compute_throughput
+
+        usm = get_user_state_manager()
+        machines = parse_machine_annotators(config)
+        behavior: Dict[str, Dict[str, Any]] = {}
+        saved: Dict[str, Any] = {}
+        for user in usm.get_user_ids():
+            state = usm.get_user_state(user)
+            if state is None or user in machines:
+                continue
+            if origin_of(getattr(state, "origin", None)).get("kind", HUMAN) != HUMAN:
+                continue  # machine raters have no working time to report
+            try:
+                saved[user] = set(state.get_annotated_instance_ids())
+            except Exception:  # noqa: BLE001
+                continue
+            behavior[user] = dict(getattr(state, "instance_id_to_behavioral_data", {}) or {})
+
+        qc_items = set()
+        qc = get_quality_control_manager()
+        if qc is not None:
+            for ids in saved.values():
+                qc_items.update(i for i in ids
+                                if qc.is_attention_check(i) or qc.is_gold_standard(i))
+
+        transitions = None
+        try:
+            from potato import review_workflow
+            if review_workflow.review_enabled(config):
+                db = review_workflow._db(config.get("task_dir", "."))
+                rows = db.execute(
+                    "SELECT instance_id, from_state, to_state, at FROM review_transitions "
+                    "WHERE project = ?", (review_workflow._project(config),)).fetchall()
+                transitions = [{"instance_id": r[0], "from_state": r[1], "to_state": r[2], "at": r[3]}
+                               for r in rows]
+        except Exception as exc:  # noqa: BLE001 - throughput still reports without review
+            self.logger.warning("Could not read review transitions: %s", exc)
+        return compute_throughput(behavior, saved, transitions, qc_items)
+
+    def get_ai_influence_data(self) -> Dict[str, Any]:
+        """Assisted against held-out answers (assist_effect.py) for the admin tab."""
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+        from potato.assist_effect import assist_effect
+
+        usm = get_user_state_manager()
+        states = {uid: usm.get_user_state(uid) for uid in usm.get_user_ids()}
+        ism = get_item_state_manager()
+        items = {}
+        for iid, item in ism.iter_items():
+            data = item.get_data() if hasattr(item, "get_data") else None
+            if isinstance(data, dict):
+                items[iid] = data
+        qc = get_quality_control_manager()
+        gold = dict(getattr(qc, "gold_labels", {}) or {}) if qc is not None else {}
+        return assist_effect(config, states, items, gold)
 
     def get_behavioral_analytics_data(self) -> Dict[str, Any]:
         """
@@ -1911,11 +2533,25 @@ class AdminDashboard:
             interaction_counts = Counter()
             change_sources = Counter()
             total_interactions = 0
+            instances_with_interaction_log = 0
             total_changes = 0
             total_ai_requests = 0
             users_with_fast_annotations = 0
             users_with_low_interaction = 0
             users_with_no_changes = 0
+
+            # With interaction_tracking.enabled: false the log holds only item
+            # loads, saves and activity marks, and scroll depth is not
+            # recorded. Low interaction and no-scroll would then score every
+            # annotator as suspicious for ordinary work, so they are unknown
+            # and drop out of the score like any other unmeasured rate. The same
+            # holds when interaction_tracking.phases leaves out annotation.
+            from potato.server_utils.config_module import (
+                get_interaction_tracking_config, tracker_active_in_phase)
+            ambient_tracked = (
+                get_interaction_tracking_config(config).get("enabled", True)
+                and tracker_active_in_phase(config, "interaction_tracking",
+                                            UserPhase.ANNOTATION, "annotation"))
 
             for user_id in users:
                 user_state = usm.get_user_state(user_id)
@@ -1931,32 +2567,56 @@ class AdminDashboard:
                 user_changes = 0
                 user_ai_requests = 0
                 user_ai_accepts = 0
+                user_ai_decided = 0
                 user_fast_count = 0
                 user_low_interaction_count = 0
                 user_no_scroll_count = 0
                 user_no_change_count = 0
+                user_logged_instances = 0
 
                 for instance_id, bd in behavioral_data.items():
+                    # 0 means no time was measured (fewer than two events),
+                    # not that the annotator took no time. Counting it as a
+                    # 0-second answer flagged every such instance as fast.
                     time_ms = self._behavioral_field(bd, 'total_time_ms', 0) or 0
-                    time_sec = time_ms / 1000
-                    user_times.append(time_sec)
-                    all_times.append(time_sec)
+                    if time_ms > 0:
+                        time_sec = time_ms / 1000
+                        user_times.append(time_sec)
+                        all_times.append(time_sec)
+                        if time_sec < 5:
+                            user_fast_count += 1
 
-                    if time_sec < 5:
-                        user_fast_count += 1
-
-                    interactions = self._behavioral_sequence(self._behavioral_field(bd, 'interactions', []))
+                    # Imported or pre-seeded annotations carry their label
+                    # changes but no interaction log. Counting those as zero
+                    # interactions showed "Interactions 0" beside 48 label
+                    # changes and marked every such instance low-interaction,
+                    # which inflated the suspicion score of annotators who did
+                    # nothing wrong. The tracker records every click and
+                    # keydown (interaction_tracker.js), so a label change with
+                    # no interaction event at all means no log was kept --
+                    # as does a record without the field. Unknown, not zero.
+                    raw_interactions = self._behavioral_field(bd, 'interactions', None)
+                    interactions = self._behavioral_sequence(raw_interactions)
+                    n_changes_here = len(self._behavioral_sequence(
+                        self._behavioral_field(bd, 'annotation_changes', [])))
                     user_interactions += len(interactions)
                     total_interactions += len(interactions)
-                    if len(interactions) < 3:
-                        user_low_interaction_count += 1
+                    has_interaction_log = raw_interactions is not None and not (
+                        len(interactions) == 0 and n_changes_here > 0)
+                    if has_interaction_log:
+                        user_logged_instances += 1
+                        instances_with_interaction_log += 1
+                        if len(interactions) < 3:
+                            user_low_interaction_count += 1
 
                     for event in interactions:
                         event_type = self._behavioral_field(event, 'event_type', 'unknown')
                         interaction_counts[event_type] += 1
 
+                    # Scroll depth comes from the same tracker, so without an
+                    # interaction log it was never measured either.
                     scroll = self._behavioral_field(bd, 'scroll_depth_max', 0) or 0
-                    if scroll < 25:
+                    if has_interaction_log and scroll < 25:
                         user_no_scroll_count += 1
 
                     changes = self._behavioral_sequence(self._behavioral_field(bd, 'annotation_changes', []))
@@ -1975,24 +2635,62 @@ class AdminDashboard:
                         total_ai_requests += 1
                         ai_usage_total['requests'] += 1
 
+                        # An accepted label can be "0" or "", so test for
+                        # presence, not truthiness. No accept and no decision
+                        # yet is pending, not a reject.
+                        # A saved answer's `decision` outranks the click: a
+                        # suggestion taken and then changed before saving is
+                        # a reject, and `partial` counts with the rejects.
                         accepted = self._behavioral_field(ai, 'suggestion_accepted', None)
-                        if accepted:
+                        decision = self._behavioral_field(ai, 'decision', None)
+                        decided = (decision is not None
+                                   or self._behavioral_field(ai, 'time_to_decision_ms', None) is not None
+                                   or self._behavioral_field(ai, 'final_annotation', None) is not None)
+                        took = (decision == 'accepted' if decision is not None
+                                else accepted is not None and accepted is not False)
+                        if took:
                             user_ai_accepts += 1
+                            user_ai_decided += 1
                             ai_usage_total['accepts'] += 1
-                        else:
+                        elif decided:
+                            user_ai_decided += 1
                             ai_usage_total['rejects'] += 1
+                        else:
+                            ai_usage_total['pending'] = ai_usage_total.get('pending', 0) + 1
 
                         decision_time = self._behavioral_field(ai, 'time_to_decision_ms', None)
                         if isinstance(decision_time, (int, float)):
                             ai_usage_total['decision_times'].append(decision_time)
 
+                # An annotator with label changes and not one interaction
+                # event anywhere had no tracker running at all; their
+                # change-free instances are no evidence of low effort either.
+                if user_interactions == 0 and user_changes > 0 and user_logged_instances:
+                    instances_with_interaction_log -= user_logged_instances
+                    user_logged_instances = 0
+                    user_low_interaction_count = 0
+                    user_no_scroll_count = 0
+
                 total_instances = len(behavioral_data)
                 if total_instances > 0:
-                    fast_rate = user_fast_count / total_instances
-                    low_interaction_rate = user_low_interaction_count / total_instances
-                    no_scroll_rate = user_no_scroll_count / total_instances
+                    # Fast rate is over the instances whose time was measured.
+                    # With none, it is unknown and drops out of the score,
+                    # whose remaining weights are rescaled to sum to 1.
+                    fast_rate = (user_fast_count / len(user_times)) if user_times else None
+                    # Over the instances that had an interaction log; with
+                    # none it is unknown and drops out like fast_rate.
+                    if not ambient_tracked:
+                        user_low_interaction_count = 0
+                        user_no_scroll_count = 0
+                    low_interaction_rate = ((user_low_interaction_count / user_logged_instances)
+                                            if user_logged_instances and ambient_tracked else None)
+                    no_scroll_rate = ((user_no_scroll_count / user_logged_instances)
+                                      if user_logged_instances and ambient_tracked else None)
                     no_change_rate = user_no_change_count / total_instances
-                    suspicion_score = fast_rate * 0.3 + low_interaction_rate * 0.35 + no_scroll_rate * 0.2 + no_change_rate * 0.15
+                    parts = [(fast_rate, 0.3), (low_interaction_rate, 0.35),
+                             (no_scroll_rate, 0.2), (no_change_rate, 0.15)]
+                    known = [(v, w) for v, w in parts if v is not None]
+                    suspicion_score = sum(v * w for v, w in known) / sum(w for _v, w in known)
 
                     if user_fast_count > 0:
                         users_with_fast_annotations += 1
@@ -2005,16 +2703,18 @@ class AdminDashboard:
                         'user_id': user_id,
                         'total_instances': total_instances,
                         'total_time_sec': sum(user_times),
-                        'avg_time_sec': sum(user_times) / len(user_times) if user_times else 0,
-                        'min_time_sec': min(user_times) if user_times else 0,
-                        'max_time_sec': max(user_times) if user_times else 0,
+                        # None when no instance had a measured time.
+                        'avg_time_sec': sum(user_times) / len(user_times) if user_times else None,
+                        'min_time_sec': min(user_times) if user_times else None,
+                        'max_time_sec': max(user_times) if user_times else None,
                         'total_interactions': user_interactions,
+                        'instances_with_interaction_log': user_logged_instances,
                         'avg_interactions': user_interactions / total_instances,
                         'total_changes': user_changes,
                         'avg_changes': user_changes / total_instances,
                         'ai_requests': user_ai_requests,
                         'ai_accepts': user_ai_accepts,
-                        'ai_accept_rate': (user_ai_accepts / user_ai_requests) if user_ai_requests > 0 else None,
+                        'ai_accept_rate': (user_ai_accepts / user_ai_decided) if user_ai_decided > 0 else None,
                         'fast_annotation_rate': fast_rate,
                         'low_interaction_rate': low_interaction_rate,
                         'no_scroll_rate': no_scroll_rate,
@@ -2028,13 +2728,20 @@ class AdminDashboard:
                 'total_instances': sum(u['total_instances'] for u in user_stats),
                 'total_time_minutes': sum(u['total_time_sec'] for u in user_stats) / 60,
                 'avg_time_per_instance': sum(all_times) / len(all_times) if all_times else 0,
-                'median_time_per_instance': sorted(all_times)[len(all_times)//2] if all_times else 0,
+                'median_time_per_instance': statistics.median(all_times) if all_times else None,
             }
             aggregate_stats = {
                 'total_users': len(user_stats),
                 'total_instances': aggregate['total_instances'],
                 'avg_time_per_instance_sec': aggregate['avg_time_per_instance'],
                 'total_interactions': total_interactions,
+                # How many instances the interaction total is over. 0 means
+                # interactions were not recorded, not that nobody clicked.
+                'instances_with_interaction_log': instances_with_interaction_log,
+                # False: clicks, focus and scroll were not recorded
+                # (interaction_tracking.enabled: false), so the per-user
+                # low-interaction and no-scroll rates are None.
+                'interaction_tracking_enabled': ambient_tracked,
                 'total_changes': total_changes,
                 'total_ai_requests': total_ai_requests,
             }
@@ -2043,7 +2750,12 @@ class AdminDashboard:
                 'total_requests': ai_usage_total['requests'],
                 'total_accepts': ai_usage_total['accepts'],
                 'total_rejects': ai_usage_total['rejects'],
-                'accept_rate': (ai_usage_total['accepts'] / ai_usage_total['requests']) if ai_usage_total['requests'] > 0 else 0,
+                'total_pending': ai_usage_total.get('pending', 0),
+                # Of the suggestions the annotator decided on; pending ones
+                # are neither.
+                'accept_rate': (ai_usage_total['accepts']
+                                / (ai_usage_total['accepts'] + ai_usage_total['rejects'])
+                                if ai_usage_total['accepts'] + ai_usage_total['rejects'] else None),
                 'avg_decision_time_ms': sum(ai_usage_total['decision_times']) / len(ai_usage_total['decision_times']) if ai_usage_total['decision_times'] else 0
             }
 
@@ -2068,7 +2780,20 @@ class AdminDashboard:
                 'quality_summary': quality_summary,
                 'interaction_types': dict(interaction_counts.most_common(20)),
                 'change_sources': dict(change_sources),
-                'users': sorted(user_stats, key=lambda x: -x['suspicion_score'])
+                'users': sorted(user_stats, key=lambda x: -x['suspicion_score']),
+                # Kept as a separate block with its own risk score rather than
+                # folded into suspicion_score: those four weights sum to 1.0 and
+                # every existing deployment's numbers are calibrated against
+                # them, so adding a term would silently reinterpret history.
+                'writing_process': _unwrap_admin_result(self.get_writing_process_data()),
+                # Same reasoning: its own block and its own risk score, so the
+                # drawing-process weights cannot silently reinterpret either of
+                # the two scores that already exist.
+                'annotation_process': _unwrap_admin_result(
+                    self.get_annotation_process_data()),
+                # Page-level authenticity paradata: its own block and its own
+                # risk score, for the same reason as the two above.
+                'authenticity': _unwrap_admin_result(self.get_authenticity_data()),
             }
 
         except Exception as e:
@@ -2076,6 +2801,443 @@ class AdminDashboard:
             import traceback
             traceback.print_exc()
             return {"error": f"Failed to get behavioral analytics data: {str(e)}"}, 500
+
+    #: Weights for writing_process_risk. Deliberately dominated by the two
+    #: signals with the least innocent explanation — text arriving from
+    #: off-screen, and input that was not user-generated at all. Rhythm and speed
+    #: contribute far less because a fast, fluent typist genuinely produces them.
+    WRITING_RISK_WEIGHTS = {
+        'paste_dominant': 0.30,
+        'silent_insertion': 0.30,
+        'offscreen_composition': 0.20,
+        'synthetic_input': 0.15,
+        'transcription_rhythm': 0.03,
+        'implausible_speed': 0.02,
+    }
+
+    def get_writing_process_data(self) -> Dict[str, Any]:
+        """Per-annotator typing-dynamics rollup for the admin dashboard.
+
+        Reads the project's typing-session store. Returns an ``enabled: False``
+        stub when keystroke logging is off or nothing has been recorded, so the
+        dashboard can hide the panel without special-casing errors.
+
+        ``writing_process_risk`` is the share of a user's sessions that fired
+        each flag, weighted by :attr:`WRITING_RISK_WEIGHTS`. It ranks who to look
+        at first. It is not evidence, and the per-session flags with their
+        evidence are what an adjudicator should actually read.
+        """
+        # Behavioural measurements of identifiable annotators. Gated like every
+        # other admin rollup — this must never be readable without the key.
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import get_keystroke_logging_config
+            ks = get_keystroke_logging_config(config)
+        except Exception:
+            ks = {"enabled": False}
+
+        if not ks.get("enabled"):
+            return {"enabled": False, "reason": "keystroke_logging is not enabled"}
+
+        try:
+            from potato import typing_store
+            task_dir = config.get("task_dir") or "."
+            project = config.get("annotation_task_name") or "potato"
+            rollup = typing_store.aggregate_by_user(task_dir, project)
+        except Exception as e:
+            self.logger.warning(f"Could not read typing sessions: {e}")
+            return {"enabled": True, "error": str(e), "users": []}
+
+        if not rollup:
+            return {"enabled": True, "users": [], "reason": "No typing sessions recorded yet"}
+
+        flag_totals = Counter()
+        users = []
+
+        for row in rollup:
+            user_id = row["user_id"]
+            try:
+                sessions = typing_store.sessions_for_user(task_dir, project, user_id)
+            except Exception:
+                sessions = []
+
+            user_flags = Counter()
+            flagged_sessions = []
+            for s in sessions:
+                verdict = s.get("flags") or {}
+                names = verdict.get("flag_names") or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_sessions.append({
+                        "session_id": s["id"],
+                        "instance_id": s["instance_id"],
+                        "schema": s["schema_name"],
+                        "label": s["label_name"],
+                        "level": verdict.get("level", "review"),
+                        "flags": names,
+                        # The evidence is the point: an adjudicator should be able
+                        # to see the numbers, not just the label.
+                        "evidence": {
+                            f.get("name"): f.get("evidence")
+                            for f in verdict.get("flags", [])
+                        },
+                        "explanations": [f.get("explanation") for f in verdict.get("flags", [])],
+                    })
+
+            n = max(1, len(sessions))
+            risk = sum(
+                weight * (user_flags.get(flag, 0) / n)
+                for flag, weight in self.WRITING_RISK_WEIGHTS.items()
+            )
+
+            users.append({
+                "user_id": user_id,
+                "sessions": row.get("sessions", 0),
+                "instances": row.get("instances", 0),
+                "chars": row.get("chars") or 0,
+                "keystrokes": row.get("keystrokes") or 0,
+                "iki_median_ms": round(row.get("iki_median_ms") or 0, 1),
+                "iki_log_cv": round(row.get("iki_log_cv") or 0, 4),
+                "pause_2s_per_100_chars": round(row.get("pause_2s_per_100_chars") or 0, 3),
+                "revision_ratio": round(row.get("revision_ratio") or 0, 4),
+                "paste_events": row.get("paste_events") or 0,
+                "pasted_char_fraction": round(row.get("pasted_char_fraction") or 0, 4),
+                "mean_silent_insert_ratio": round(row.get("mean_silent_insert_ratio") or 0, 4),
+                "max_blur_before_insert_ms": row.get("max_blur_before_insert_ms") or 0,
+                "untrusted_events": row.get("untrusted_events") or 0,
+                "any_virtual_keyboard": row.get("any_virtual_keyboard", False),
+                "flag_counts": dict(user_flags),
+                "flagged_sessions": flagged_sessions[:25],
+                "writing_process_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["writing_process_risk"])
+        total_sessions = sum(u["sessions"] for u in users)
+        flagged_users = [u for u in users if u["flag_counts"]]
+
+        return {
+            "enabled": True,
+            "fidelity": ks.get("fidelity", "events"),
+            "detection_enabled": ks.get("detection", {}).get("enabled", True),
+            "calibrated": bool(ks.get("detection", {}).get("calibrate")),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_sessions": total_sessions,
+                "users_with_flags": len(flagged_users),
+                "flag_totals": dict(flag_totals),
+            },
+            # Surfaced in the UI so nobody reads the ranking as an accusation.
+            "caveat": (
+                "Writing-process flags are evidence for human review, not proof of "
+                "misconduct. Fast, fluent typists and annotators on mobile keyboards "
+                "can legitimately resemble the patterns these rules look for. Read the "
+                "per-session evidence before acting."
+            ),
+        }
+
+    #: Weights for annotation_process_risk. Dominated by rubber-stamping
+    #: because it is the one signal here with a genuinely narrow innocent
+    #: explanation: a human cannot inspect a mask boundary in 300ms. Pace
+    #: contributes far less, because drawing boxes on obvious objects is
+    #: legitimately fast, and never_zoomed almost nothing, because it only
+    #: appears alongside another flag in the first place.
+    ANNOTATION_RISK_WEIGHTS = {
+        'rubber_stamping': 0.70,
+        'hasty': 0.25,
+        'never_zoomed': 0.05,
+    }
+
+    def get_annotation_process_data(self) -> Dict[str, Any]:
+        """Per-annotator drawing-dynamics rollup for the admin dashboard.
+
+        The geometry counterpart of :meth:`get_writing_process_data`, reading
+        the project's telemetry store. Returns an ``enabled: False`` stub when
+        annotation telemetry is off or nothing has been recorded, so the
+        dashboard can hide the panel without special-casing errors.
+
+        ``annotation_process_risk`` is the share of a user's sessions that fired
+        each flag, weighted by :attr:`ANNOTATION_RISK_WEIGHTS`. It ranks who to
+        look at first. It is not evidence, and the per-session flags with their
+        notes are what a reviewer should actually read.
+        """
+        # Behavioural measurements of identifiable annotators. Gated like every
+        # other admin rollup — this must never be readable without the key.
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import (
+                get_annotation_telemetry_config)
+            at = get_annotation_telemetry_config(config)
+        except Exception:
+            at = {"enabled": False}
+
+        if not at.get("enabled"):
+            return {"enabled": False,
+                    "reason": "annotation_telemetry is not enabled"}
+
+        try:
+            from potato import annotation_telemetry_store as telemetry_store
+            task_dir = config.get("task_dir") or "."
+            project = config.get("annotation_task_name") or "potato"
+            rollup = telemetry_store.aggregate_by_user(task_dir, project)
+        except Exception as e:
+            self.logger.warning(f"Could not read telemetry sessions: {e}")
+            return {"enabled": True, "error": str(e), "users": []}
+
+        if not rollup:
+            return {"enabled": True, "users": [],
+                    "reason": "No drawing sessions recorded yet"}
+
+        flag_totals = Counter()
+        users = []
+
+        for row in rollup:
+            user_id = row["user_id"]
+            try:
+                sessions = telemetry_store.sessions_for_user(
+                    task_dir, project, user_id)
+            except Exception:
+                sessions = []
+
+            user_flags = Counter()
+            flagged_sessions = []
+            for s in sessions:
+                verdict = s.get("flags") or {}
+                names = verdict.get("flags") or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_sessions.append({
+                        "session_id": s["id"],
+                        "instance_id": s["instance_id"],
+                        "schema": s["schema_name"],
+                        "flags": names,
+                        # The evidence is the point: a reviewer should be able
+                        # to see the numbers, not just the label.
+                        "scores": verdict.get("scores") or {},
+                        "notes": verdict.get("notes") or {},
+                    })
+
+            n = max(1, len(sessions))
+            risk = sum(
+                weight * (user_flags.get(flag, 0) / n)
+                for flag, weight in self.ANNOTATION_RISK_WEIGHTS.items()
+            )
+
+            users.append({
+                "user_id": user_id,
+                "sessions": row.get("sessions", 0),
+                "instances": row.get("instances", 0),
+                "shapes": row.get("shapes") or 0,
+                # Split out because pace is measured over drawn shapes only:
+                # an accepted suggestion arrives through the same commit path,
+                # so counting it as drawing would flag the annotators who
+                # reviewed each one carefully before accepting.
+                "shapes_drawn": row.get("shapes_drawn") or 0,
+                "shapes_from_ai": row.get("shapes_from_ai") or 0,
+                "shapes_edited": row.get("shapes_edited") or 0,
+                "strokes": row.get("strokes") or 0,
+                "active_ms_per_shape": round(row.get("active_ms_per_shape") or 0, 1),
+                "shape_interval_median_ms": round(
+                    row.get("shape_interval_median_ms") or 0, 1),
+                "revision_ratio": round(row.get("revision_ratio") or 0, 4),
+                "max_zoom": round(row.get("max_zoom") or 1.0, 2),
+                "zoomed_fraction": round(row.get("zoomed_fraction") or 0, 4),
+                "ai_suggested": row.get("ai_suggested") or 0,
+                "ai_accepted": row.get("ai_accepted") or 0,
+                "ai_accept_rate": round(row.get("ai_accept_rate") or 0, 4),
+                "ai_accept_edited_rate": round(
+                    row.get("ai_accept_edited_rate") or 0, 4),
+                "ai_accept_latency_median_ms": (
+                    round(row["ai_accept_latency_median_ms"], 1)
+                    if row.get("ai_accept_latency_median_ms") is not None else None
+                ),
+                "flag_counts": dict(user_flags),
+                "flagged_sessions": flagged_sessions[:25],
+                "annotation_process_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["annotation_process_risk"])
+        total_sessions = sum(u["sessions"] for u in users)
+        flagged_users = [u for u in users if u["flag_counts"]]
+
+        return {
+            "enabled": True,
+            "fidelity": at.get("fidelity", "events"),
+            "detection_enabled": at.get("detection", {}).get("enabled", True),
+            "calibrated": bool(at.get("detection", {}).get("calibrate")),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_sessions": total_sessions,
+                "users_with_flags": len(flagged_users),
+                "flag_totals": dict(flag_totals),
+            },
+            # Surfaced in the UI so nobody reads the ranking as an accusation.
+            "caveat": (
+                "Drawing-process flags are evidence for human review, not proof "
+                "of carelessness. A fast annotator working on obvious objects, "
+                "and an annotator whose AI suggestions are genuinely good, both "
+                "resemble the patterns these rules look for. Read the "
+                "per-session evidence — and look at the suggestions themselves "
+                "— before acting."
+            ),
+        }
+
+    #: Weights for authenticity_risk. Dominated by the two signals that are
+    #: hardest to explain innocently -- an automated browser, and copying the
+    #: item out and bringing an answer back. Leaving the page and a narrow
+    #: window have ordinary explanations (a phone call, a small laptop
+    #: arrangement), so they barely move the ranking.
+    AUTHENTICITY_RISK_WEIGHTS = {
+        'automation': 0.30,
+        'copy_then_paste': 0.25,
+        'copy_then_away': 0.20,
+        'external_paste': 0.08,
+        'pointer_teleport': 0.07,
+        'synthetic_input': 0.07,
+        'item_copied': 0.04,
+        'away_from_task': 0.03,
+        'split_screen': 0.02,
+        'paradata_missing': 0.01,
+    }
+
+    def get_authenticity_data(self) -> Dict[str, Any]:
+        """Per-annotator authenticity-paradata rollup for the admin dashboard.
+
+        Read from the ``authenticity`` record each item's behavioural data
+        carries (see potato/authenticity.py). ``authenticity_risk`` is the share
+        of a user's items that fired each flag, weighted by
+        :attr:`AUTHENTICITY_RISK_WEIGHTS` -- a ranking of whom to look at first,
+        not evidence. The per-item flags and their numbers are the evidence.
+
+        ``paradata_missing`` counts annotated items with no authenticity record
+        at all. That is what blocked or modified scripts look like, but it is
+        also what every item annotated before the feature was switched on looks
+        like, so read it against when the feature was enabled.
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import get_authenticity_config
+            au = get_authenticity_config(config)
+        except Exception:
+            au = {"enabled": False}
+        if not au.get("enabled"):
+            return {"enabled": False, "reason": "authenticity is not enabled"}
+
+        from potato.interaction_tracking import PHASE_PAGE_SENTINEL
+        from potato.server_utils.config_module import tracker_active_in_phase
+        # With authenticity.phases leaving out annotation, no annotated item
+        # has a record by design; counting them as paradata_missing would
+        # raise every annotator's risk.
+        annotation_tracked = tracker_active_in_phase(
+            config, "authenticity", UserPhase.ANNOTATION, "annotation")
+
+        usm = get_user_state_manager()
+        flag_totals = Counter()
+        users = []
+        for user_id in get_users():
+            user_state = usm.get_user_state(user_id)
+            if not user_state:
+                continue
+            behavioral = user_state.instance_id_to_behavioral_data or {}
+
+            user_flags = Counter()
+            flagged_items = []
+            items = 0
+            totals = Counter()
+            webdriver = False
+            recorded_ids = set()
+            for instance_id, bd in behavioral.items():
+                record = self._behavioral_field(bd, 'authenticity', None) or {}
+                summary = record.get('summary') if isinstance(record, dict) else None
+                if not summary:
+                    continue
+                recorded_ids.add(instance_id)
+                items += 1
+                for key in ('away_events', 'away_ms', 'item_copy_events',
+                            'external_paste_events', 'teleport_clicks',
+                            'untrusted_events', 'elapsed_ms'):
+                    totals[key] += int(summary.get(key) or 0)
+                webdriver = webdriver or bool(summary.get('webdriver'))
+                verdict = record.get('verdict') or {}
+                names = verdict.get('flag_names') or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_items.append({
+                        "instance_id": instance_id,
+                        "phase_page": instance_id == PHASE_PAGE_SENTINEL,
+                        "level": verdict.get('level', 'review'),
+                        "flags": names,
+                        "evidence": {f.get('name'): f.get('evidence')
+                                     for f in verdict.get('flags', [])},
+                        "explanations": [f.get('explanation')
+                                         for f in verdict.get('flags', [])],
+                    })
+
+            try:
+                annotated = set(user_state.get_annotated_instance_ids())
+            except Exception:
+                annotated = set()
+            missing = len(annotated - recorded_ids) if annotation_tracked else 0
+            if not items and not annotated:
+                continue
+            if missing:
+                user_flags['paradata_missing'] += missing
+                flag_totals['paradata_missing'] += missing
+
+            n = max(1, items + missing)
+            risk = sum(weight * min(1.0, user_flags.get(flag, 0) / n)
+                       for flag, weight in self.AUTHENTICITY_RISK_WEIGHTS.items())
+            elapsed = totals['elapsed_ms']
+            # Most severe first, so the 25 shown are the ones worth reading.
+            flagged_items.sort(key=lambda f: (f['level'] != 'suspect', f['instance_id']))
+            users.append({
+                "user_id": user_id,
+                "items": items,
+                "items_without_paradata": missing,
+                "away_events": totals['away_events'],
+                "away_fraction": round(min(1.0, totals['away_ms'] / elapsed), 4) if elapsed else 0,
+                "item_copy_events": totals['item_copy_events'],
+                "external_paste_events": totals['external_paste_events'],
+                "teleport_clicks": totals['teleport_clicks'],
+                "untrusted_events": totals['untrusted_events'],
+                "webdriver": webdriver,
+                "flag_counts": dict(user_flags),
+                "flagged_items": flagged_items[:25],
+                "authenticity_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["authenticity_risk"])
+        return {
+            "enabled": True,
+            "detection_enabled": au.get("detection", {}).get("enabled", True),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_items": sum(u["items"] for u in users),
+                "users_with_flags": sum(1 for u in users if u["flag_counts"]),
+                "flag_totals": dict(flag_totals),
+            },
+            "caveat": (
+                "Authenticity flags are evidence for human review, not proof of AI "
+                "use. People leave pages for ordinary reasons, copy text to look up "
+                "a word, and work on small screens. Tasks that ask annotators to "
+                "consult outside sources will trip the paste and away rules by "
+                "design. Read the per-item evidence before acting."
+            ),
+        }
 
     def get_adjudication_overview(self) -> Dict[str, Any]:
         """
@@ -2207,7 +3369,11 @@ class AdminDashboard:
 
     def _calculate_label_statistics(self, instance_id: str) -> Tuple[Optional[str], float]:
         """
-        Calculate most frequent label and disagreement for an instance.
+        Calculate most frequent label and disagreement for one instance.
+
+        Single-instance helper. To do this for many instances, use
+        :meth:`_build_instance_aggregates` instead — calling this in a loop is
+        what made the Instances tab quadratic (see that method's docstring).
 
         Args:
             instance_id: The instance ID to analyze
@@ -2223,31 +3389,190 @@ class AdminDashboard:
             for username in users:
                 user_state = usm.get_user_state(username)
                 if user_state:
-                    annotations = user_state.get_all_annotations()
-                    if instance_id in annotations:
-                        instance_annotations = annotations[instance_id]
-                        if "labels" in instance_annotations:
-                            for label, value in instance_annotations["labels"].items():
-                                if hasattr(label, 'label_name'):
-                                    all_labels.append(label.label_name)
-                                else:
-                                    all_labels.append(str(value))
+                    # get_label_annotations is an O(1) lookup. get_all_annotations()
+                    # rebuilds a dict of every instance this user has touched, which
+                    # is the same answer at many times the cost.
+                    labels = user_state.get_label_annotations(instance_id) or {}
+                    self._collect_label_names(labels, all_labels)
 
-            if not all_labels:
-                return None, 0.0
-
-            label_counts = Counter(all_labels)
-            most_frequent_label = label_counts.most_common(1)[0][0]
-            total_annotations = len(all_labels)
-            most_frequent_count = label_counts[most_frequent_label]
-            disagreement = 1 - (most_frequent_count / total_annotations)
-
-            return most_frequent_label, disagreement
+            return self._label_stats_from_names(all_labels)
 
         except Exception as e:
             self.logger.error(f"Error calculating label statistics for instance {instance_id}: {e}")
             return None, 0.0
 
+    @staticmethod
+    def _collect_label_names(labels: Dict[Any, Any], out: List[str]) -> None:
+        """Append one display name per stored label onto ``out``.
+
+        A ``Label`` carries the answer in its *name* -- ``sentiment:positive``
+        is stored as a Label named "positive" with the value ``True``. Reading
+        the value instead yields "True" for every option of every categorical
+        schema, so every item looks unanimous and disagreement is always 0.
+        That is what this column did until it was keyed on a ``label_name``
+        attribute ``Label`` does not have; the accessor is ``get_name()``, which
+        is what the Questions tab has always used.
+
+        Anything that is not a Label -- a bare string key, a free-text answer --
+        falls back to the string form of its value, which is the best available
+        stand-in for an answer with no label identity.
+        """
+        for label, value in labels.items():
+            name = None
+            if hasattr(label, 'get_name'):
+                name = label.get_name()
+            elif hasattr(label, 'label_name'):
+                name = label.label_name
+            elif hasattr(label, 'name'):
+                name = label.name
+            out.append(name if name else str(value))
+
+    @staticmethod
+    def _collect_labels_by_schema(labels: Dict[Any, Any], out: Dict[str, List[str]]) -> None:
+        """Like ``_collect_label_names``, but keeping each label's schema.
+
+        The pooled list answers "which label was most frequent" across every
+        schema at once, so one column read ``food`` for one item (a topic) and
+        ``positive`` for the next (a sentiment). Kept per schema, the column
+        can say which question each answer belongs to.
+        """
+        for label, value in labels.items():
+            schema = label.get_schema() if hasattr(label, "get_schema") else None
+            if hasattr(label, "get_name"):
+                name = label.get_name()
+            else:
+                name = getattr(label, "label_name", None) or getattr(label, "name", None)
+            out.setdefault(str(schema) if schema else "", []).append(
+                name if name else str(value))
+
+    @staticmethod
+    def _label_summary_by_schema(by_schema: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+        """Modal label per schema, with its count and the number of votes."""
+        summary = []
+        for schema in sorted(by_schema):
+            names = by_schema[schema]
+            if not names:
+                continue
+            label, count = Counter(names).most_common(1)[0]
+            summary.append({"schema": schema, "label": label,
+                            "count": count, "total": len(names)})
+        return summary
+
+    @staticmethod
+    def _label_stats_from_names(all_labels: List[str]) -> Tuple[Optional[str], float]:
+        """Most frequent label and disagreement from a list of label names.
+
+        Disagreement is the share of annotations that did *not* pick the modal
+        label, so 0.0 is unanimity and it rises toward 1 as the votes spread out.
+        Ties go to whichever label was seen first, which is why callers must
+        accumulate in a stable annotator order.
+        """
+        if not all_labels:
+            return None, 0.0
+
+        label_counts = Counter(all_labels)
+        most_frequent_label = label_counts.most_common(1)[0][0]
+        total_annotations = len(all_labels)
+        most_frequent_count = label_counts[most_frequent_label]
+        return most_frequent_label, 1 - (most_frequent_count / total_annotations)
+
+    def _build_instance_aggregates(self) -> Dict[str, Dict[str, Any]]:
+        """Per-instance label / timing / AI aggregates, in one pass over annotators.
+
+        The Instances tab needs three statistics for every instance, and the
+        single-instance helpers each walk every annotator to produce one of
+        them. Called once per instance that is
+        ``instances x annotators`` walks, and because the label helper used to
+        reach for ``get_all_annotations()`` — which rebuilds a dict of every
+        instance a user has annotated — the real cost was quadratic in the
+        corpus. Measured before this method existed: 100 ms at 250 items,
+        488 ms at 500, 2.9 s at 1000, 15 s at 2000, all with five annotators
+        and all to return a single page of 25 rows.
+
+        This inverts the loop. One pass over annotators, each contributing to
+        the instances it actually touched, gives a dict every instance can be
+        looked up in for free. Cost is proportional to the number of
+        annotations that exist rather than to instances squared.
+
+        Annotators are visited in ``get_users()`` order and their labels
+        appended in storage order, which is the order the per-instance helper
+        used; ties in the modal label therefore resolve the same way.
+
+        Returns:
+            ``{instance_id: {"labels": [name, ...], "total_seconds": float,
+            "timed_count": int, "ai_count": int}}``, holding only instances
+            some annotator has touched.
+        """
+        usm = get_user_state_manager()
+        aggregates: Dict[str, Dict[str, Any]] = {}
+
+        def bucket(instance_id: str) -> Dict[str, Any]:
+            entry = aggregates.get(instance_id)
+            if entry is None:
+                entry = {"labels": [], "labels_by_schema": {}, "total_seconds": 0.0,
+                         "timed_count": 0, "ai_count": 0}
+                aggregates[instance_id] = entry
+            return entry
+
+        for username in get_users():
+            user_state = usm.get_user_state(username)
+            if not user_state:
+                continue
+
+            try:
+                annotations = user_state.get_all_annotations() or {}
+            except Exception as e:
+                self.logger.error(f"Error reading annotations for {username}: {e}")
+                annotations = {}
+
+            for instance_id, entry in annotations.items():
+                labels = entry.get("labels") if isinstance(entry, dict) else None
+                if labels:
+                    target = bucket(instance_id)
+                    self._collect_label_names(labels, target["labels"])
+                    self._collect_labels_by_schema(labels, target["labels_by_schema"])
+
+            behavioral = getattr(user_state, "instance_id_to_behavioral_data", None) or {}
+            for instance_id, behavioral_data in behavioral.items():
+                if not behavioral_data:
+                    continue
+                target = bucket(instance_id)
+                target["ai_count"] += self._extract_behavioral_ai_count(behavioral_data)
+                seconds = self._extract_behavioral_total_seconds(behavioral_data, user_state)
+                if seconds is not None:
+                    target["total_seconds"] += seconds
+                    target["timed_count"] += 1
+
+        return aggregates
+
 
 # Global instance
 admin_dashboard = AdminDashboard()
+
+
+def _not_a_label_answer(scheme: dict, structured_types) -> "dict | None":
+    """What /admin/api/agreement says for a scheme whose answers are not
+    label names, or None when it compares them as names.
+
+    Steps, segments, regions, volumes and 3D objects reduced to names gave
+    every annotator the scheme itself, so they agreed perfectly while
+    /admin/iaa, which matches the structures, measured 0.56. Those point
+    there; a type with no measure at all says so.
+    """
+    from potato.server_utils.iaa import dispatcher
+    kind = dispatcher.classify_schema(scheme)
+    if kind == dispatcher.SchemaKind.UNSUPPORTED:
+        return {"error": "This annotation type has no agreement measure."}
+    if scheme.get("annotation_type") in structured_types or kind in (
+            dispatcher.SchemaKind.GEOMETRY, dispatcher.SchemaKind.TEMPORAL,
+            dispatcher.SchemaKind.SPATIAL, dispatcher.SchemaKind.GROUNDING,
+            dispatcher.SchemaKind.EPISODE, dispatcher.SchemaKind.ROLLOUT,
+            dispatcher.SchemaKind.CAPTION, dispatcher.SchemaKind.GLOSS,
+            dispatcher.SchemaKind.RELATION, dispatcher.SchemaKind.COREFERENCE,
+            dispatcher.SchemaKind.EVENT, dispatcher.SchemaKind.VOLUME,
+            dispatcher.SchemaKind.SEGMENTS, dispatcher.SchemaKind.TRACE):
+        return {"error": "Structured answers (steps, segments, regions, glosses, "
+                         "links, chains, events or volumes) are scored in the "
+                         "agreement report at /admin/iaa, not here.",
+                "see": "/admin/iaa"}
+    return None

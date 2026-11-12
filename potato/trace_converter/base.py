@@ -17,6 +17,37 @@ class CanonicalTrace:
 
     This is the normalized representation that all converters produce.
     It maps directly to Potato's data model for annotation.
+
+    Conversation turns are plain dicts with at least ``speaker`` and
+    ``text``.  Converters SHOULD additionally populate these optional,
+    standardized identity keys when the source format provides them
+    (consumed by turn-level annotation bindings, the multi_agent_discussion
+    display, and per-agent analytics):
+
+        turn_id:    stable id for the turn (defaults to index-based ids)
+        agent_id:   machine-readable id of the agent that produced the turn
+        role:       the agent's role (e.g. "planner", "critic")
+        addressee:  agent_id the turn is directed at (agent-to-agent messages)
+        step_type:  explicit step type (thought | action | observation | ...)
+        tool:       tool name for tool-call turns
+        run_id:     id of the run-tree node (sub-agent run) that produced
+                    the turn
+
+    Multi-agent traces SHOULD also declare their roster in
+    ``extra_fields["agents"]`` as a list of ``{"id", "role", "goal"}`` dicts;
+    displays derive agent legends/colors from it.
+
+    Traces with nested sub-agent/tool runs SHOULD preserve the hierarchy in
+    ``extra_fields["run_tree"]``: a flat list of nodes, each::
+
+        {"id": str, "parent_id": str | None, "name": str,
+         "run_type": "chain" | "llm" | "tool" | "retriever",
+         "status": "success" | "error" | None,
+         "turn_range": [start, end] | None}   # inclusive conversation indexes
+
+    The agent_trace display renders this as a collapsible tree sidebar
+    (``show_run_tree``); ``turn_binding.runs`` filters per-turn schemes to
+    the turns of specific runs.
     """
     id: str
     task_description: str

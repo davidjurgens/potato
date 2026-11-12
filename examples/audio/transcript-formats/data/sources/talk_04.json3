@@ -1,0 +1,67 @@
+{
+  "wireMagic": "pb3",
+  "pens": [{}],
+  "wsWinStyles": [{}],
+  "wpWinPositions": [{}],
+  "events": [
+    {
+      "tStartMs": 0,
+      "dDurationMs": 5400,
+      "segs": [
+        {"utf8": "the"},
+        {"utf8": " thing", "tOffsetMs": 180},
+        {"utf8": " nobody", "tOffsetMs": 520},
+        {"utf8": " tells", "tOffsetMs": 1020},
+        {"utf8": " you", "tOffsetMs": 1340},
+        {"utf8": " about", "tOffsetMs": 1560},
+        {"utf8": " auto", "tOffsetMs": 1980},
+        {"utf8": " captions", "tOffsetMs": 2440}
+      ]
+    },
+    {
+      "tStartMs": 5400,
+      "dDurationMs": 6100,
+      "segs": [
+        {"utf8": "is"},
+        {"utf8": " that", "tOffsetMs": 160},
+        {"utf8": " they", "tOffsetMs": 420},
+        {"utf8": " have", "tOffsetMs": 680},
+        {"utf8": " no", "tOffsetMs": 940},
+        {"utf8": " punctuation", "tOffsetMs": 1180},
+        {"utf8": " you", "tOffsetMs": 2100},
+        {"utf8": " can", "tOffsetMs": 2340},
+        {"utf8": " rely", "tOffsetMs": 2600},
+        {"utf8": " on", "tOffsetMs": 2980}
+      ]
+    },
+    {
+      "tStartMs": 11500,
+      "dDurationMs": 5800,
+      "segs": [
+        {"utf8": "so"},
+        {"utf8": " sentence", "tOffsetMs": 240},
+        {"utf8": " level", "tOffsetMs": 780},
+        {"utf8": " annotation", "tOffsetMs": 1120},
+        {"utf8": " is", "tOffsetMs": 1840},
+        {"utf8": " basically", "tOffsetMs": 2060},
+        {"utf8": " guesswork", "tOffsetMs": 2680}
+      ]
+    },
+    {
+      "tStartMs": 17300,
+      "dDurationMs": 6400,
+      "segs": [
+        {"utf8": "annotate"},
+        {"utf8": " the", "tOffsetMs": 460},
+        {"utf8": " caption", "tOffsetMs": 640},
+        {"utf8": " windows", "tOffsetMs": 1080},
+        {"utf8": " instead", "tOffsetMs": 1580},
+        {"utf8": " they", "tOffsetMs": 2200},
+        {"utf8": " are", "tOffsetMs": 2400},
+        {"utf8": " at", "tOffsetMs": 2580},
+        {"utf8": " least", "tOffsetMs": 2760},
+        {"utf8": " real", "tOffsetMs": 3060}
+      ]
+    }
+  ]
+}

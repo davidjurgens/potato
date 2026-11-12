@@ -64,7 +64,9 @@ def _generate_confidence_layout_internal(annotation_scheme):
     validation = generate_validation_attribute(annotation_scheme)
 
     if scale_type == "likert":
-        labels = custom_labels if custom_labels else DEFAULT_LABELS[:scale_points]
+        # A copy: padding the config's own list wrote "Level N" entries into
+        # the scheme every other reader (export, agreement) then saw.
+        labels = list(custom_labels) if custom_labels else DEFAULT_LABELS[:scale_points]
         # Pad labels if fewer than scale points
         while len(labels) < scale_points:
             labels.append(f"Level {len(labels) + 1}")

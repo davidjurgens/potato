@@ -33,6 +33,48 @@ under QDA Mode — paid annotators must not reshape the shared codebook.
 Every default above can be overridden explicitly; QDA Mode only changes
 the *starting point*.
 
+## Coming from another QDA tool
+
+Potato reads and writes REFI-QDA `.qdpx`, the interchange format NVivo,
+ATLAS.ti, MAXQDA, Quirkos and QDA Miner all support:
+
+```bash
+python -m potato.importers --input project.qdpx --output-dir my-study/
+python -m potato.export -c my-study/config.yaml -f qdpx -o ./export/
+```
+
+The codebook keeps its hierarchy, along with the codings; each imported span
+records the analyst who made it. See
+[Bringing a Project Into Potato](../guides/migrating-into-potato.md).
+
+## Interview audio
+
+Interviews arrive as audio, and Potato handles both halves of getting them
+ready to code.
+
+If you already have transcripts, it reads Whisper, WhisperX, whisper.cpp,
+Deepgram, AssemblyAI and AWS Transcribe output directly, in whichever of their
+formats you have, and it handles the trap those formats share: some report time
+in seconds and some in milliseconds.
+
+If you only have the recordings, it transcribes them:
+
+```bash
+pip install "potato-annotation[transcribe]"
+potato transcripts ./interviews --transcribe --diarize --num-speakers 2 \
+    -o data/interviews.json
+```
+
+That runs Whisper and speaker clustering on your own machine. The audio never
+leaves it. No account, no credits, no per-minute charge.
+
+Speaker labels come across when the upstream tool produced them, or from
+`--diarize`. Either way annotators can correct or supply them in the interface,
+which on a small corpus is usually faster than tuning a clustering threshold.
+
+See [Working with Transcripts](../guides/working_with_transcripts.md) for model
+choices, air-gapped installs, and the rest.
+
 ## Quick start
 
 ```yaml
@@ -55,7 +97,7 @@ cases:                     # group excerpts into units of analysis
   key: participant_id
   attributes: [condition]
 
-search:                    # let the coder jump to any matching excerpt
+search:                    # let the coder add matching excerpts to their queue
   enabled: true
   annotator_claim: true
 
@@ -72,7 +114,7 @@ QDA Mode already turns cases and memos on. Write them only to tune the
 defaults (e.g. choose the `cases.key`, or enable `annotator_claim`).
 
 A complete runnable example lives in
-[`examples/advanced/qda-mode-example/`](../../examples/advanced/qda-mode-example/):
+[`examples/advanced/qda-mode-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/qda-mode-example/):
 
 ```bash
 python potato/flask_server.py start \
@@ -85,20 +127,20 @@ python potato/flask_server.py start \
 qda_mode:
   enabled: true
   memos:
-    enabled: true                 # QDA-Mode memo defaults
+    enabled: true                 # with the next key: start the Notes sidebar open
     show_sidebar_by_default: true
   codebook:
-    enabled: true
+    enabled: true                 # informational; see the table
     mode: open                    # open | extensible | fixed
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `qda_mode.enabled` | `false` | Master switch. Initialises QDA Mode and applies the qualitative defaults above. |
-| `qda_mode.memos.enabled` | `true` | QDA-Mode memo default. (Memo storage is universal — see [Memos](memos.md).) |
-| `qda_mode.memos.show_sidebar_by_default` | `true` | Whether the Notes sidebar starts open. |
-| `qda_mode.codebook.enabled` | `true` | Whether the codebook is active. |
-| `qda_mode.codebook.mode` | `open` | Annotator edit rights — `open` / `extensible` / `fixed` (see [Codebook modes](codebook.md#modes)). Equivalent to top-level `codebook_mode`. |
+| `qda_mode.memos.enabled` | `true` | Together with `show_sidebar_by_default`, decides whether the Notes sidebar starts open; set it to `false` and the sidebar starts closed. It does not turn memos off: use `annotation_ui.memos: false` for that. (Memo storage is universal — see [Memos](memos.md).) |
+| `qda_mode.memos.show_sidebar_by_default` | `true` | Whether the Notes sidebar starts open (only while `qda_mode.memos.enabled` is true). |
+| `qda_mode.codebook.enabled` | `true` | Informational: reported by `/qda/status`, read by nothing else. The codebook is on under QDA Mode either way; set top-level `codebook.enabled: false` to turn it off. |
+| `qda_mode.codebook.mode` | `open` | Annotator edit rights — `open` / `extensible` / `fixed` (see [Codebook modes](codebook.md#modes)). Equivalent to top-level `codebook_mode`; when both are set, `codebook_mode` (or `codebook.mode`) wins. A crowdsourcing backend still force-locks `fixed`. |
 
 Unknown `qda_mode.*` keys are preserved (not rejected) so you can write
 forward-compatible YAML for features that land in later phases.
@@ -131,8 +173,9 @@ universal namespaces — see the linked feature docs.
   document) and lift case-level attributes (e.g. `condition`) so the
   admin **code crosstab** can tabulate codes by participant-level
   variables.
-- **Search** (FTS5) lets you find any excerpt by text; with
-  `annotator_claim: true` you can pull a match into your queue.
+- **Search** (FTS5) finds excerpts by text. With
+  `annotator_claim: true`, Claim adds a match to the end of your queue;
+  it does not open it, and you reach it by paging forward with Next.
 
 ## Exporting your coding
 
@@ -145,8 +188,8 @@ Two exporters turn coded data into qualitative-research deliverables:
   append memo rows too.
 
 ```bash
-python -m potato.export config.yaml --format quotation_report \
-  --option include_memos=true -o quotations.csv
+python -m potato.export -c config.yaml -f quotation_report \
+  --option include_memos=true -o ./export/
 ```
 
 See [Export formats](../data-export/export_formats.md) for the column

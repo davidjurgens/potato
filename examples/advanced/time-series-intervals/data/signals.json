@@ -1,0 +1,5 @@
+[
+  {"id": "psg-01", "note": "Synthetic polysomnogram, 5 minutes (EDF+)", "signal": "psg-synthetic.edf"},
+  {"id": "accel-01", "note": "Synthetic wrist accelerometer, 2 minutes (CSV)", "signal": "accel-synthetic.csv",
+   "events": "accel-synthetic_events.tsv"}
+]

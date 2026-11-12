@@ -1,0 +1,120 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# ConvoKit: Conversations Gone Awry
+#
+# Annotate Wikipedia talk-page threads for derailment — the task behind Cornell's
+# "Conversations Gone Awry" corpus (Zhang et al., ACL 2018). Each item is one
+# conversation; annotators judge the thread as a whole and flag the individual
+# comments that turn hostile.
+#
+# This example exists to demonstrate the ConvoKit integration end to end:
+#
+#   * Items come straight from a ConvoKit corpus via `potato convokit`.
+#   * Each turn's `turn_id` IS the real ConvoKit utterance id, so the per-turn
+#     annotations below export back into utterance metadata by direct lookup.
+#   * `indent_replies` renders the reply-to tree, which matters here: Wikipedia
+#     threads branch, and a flat list hides who is answering whom.
+#   * The corpus's own `toxicity` score is shown as a per-turn chip, so the
+#     annotator can see the automatic signal while making a human judgement.
+#
+# Get the data first (downloads ~40MB to ~/.convokit/saved-corpora on first run):
+#
+#   ./setup_data.sh
+#
+# Then run from the repository root:
+#
+#   python potato/flask_server.py start examples/conversation/convokit-awry/config.yaml -p 8000
+
+annotation_task_name: "Conversations Gone Awry"
+
+data_files:
+  - data/awry.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    # `convo_meta` is a dict; rendering it with `type: text` would print a raw
+    # Python repr. Promote the fields worth showing to top-level item keys with
+    # --promote-meta and display those instead.
+    - key: page_title
+      type: text
+      label: "Wikipedia page"
+
+    - key: conversation
+      type: dialogue
+      label: "Talk page thread"
+      # Spans and per-comment widgets coexist on one field: widget subtrees are
+      # excluded from the span offset basis, so rating a comment never shifts a
+      # highlight. Exported spans are split back onto the utterances they fall in.
+      span_target: true
+      display_options:
+        show_turn_numbers: true
+        # Render the reply-to structure. Depth comes from the `depth` key the
+        # importer computes by walking reply_to.
+        indent_replies: true
+        show_reply_lines: true
+        show_timestamps: true
+        timestamp_format: absolute
+        # Surface the corpus's own automatic scores next to each turn.
+        turn_meta_fields:
+          - toxicity
+
+annotation_schemes:
+  # --- whole-thread judgement ------------------------------------------------
+  - annotation_type: radio
+    name: derailed
+    description: "Does this conversation derail into a personal attack?"
+    labels:
+      - "no"
+      - "yes"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: civility
+    description: "Overall civility of the thread"
+    min_label: "Hostile"
+    max_label: "Civil"
+    size: 5
+
+  # --- per-comment judgements ------------------------------------------------
+  # turn_level schemes attach a widget to each matching turn. Values are stored
+  # keyed by turn_id — which here is the ConvoKit utterance id.
+  - annotation_type: multiselect
+    name: turn_problems
+    description: "Problems in this comment"
+    labels:
+      - personal_attack
+      - condescension
+      - bad_faith_accusation
+      - profanity
+    turn_level: true
+    turn_binding:
+      field: conversation
+
+  # --- evidence for the judgement -------------------------------------------
+  # Spans are scoped to the field, so a highlight can cross comments; the
+  # exporter splits it back onto the utterances it covers.
+  - annotation_type: span
+    name: hostility
+    description: "Highlight the language that makes this thread hostile"
+    labels:
+      - insult
+      - dismissal
+      - accusation
+
+  - annotation_type: text
+    name: notes
+    description: "Anything else worth noting about this thread"
+
+user_config:
+  allow_all_users: true

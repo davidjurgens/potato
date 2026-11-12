@@ -1,9 +1,8 @@
 """
 User State Management Module
 
-This module provides comprehensive user state tracking and management for the Potato
-annotation platform. It handles user progress through annotation phases, instance
-assignments, annotation storage, and state persistence.
+User state tracking and management: progress through annotation phases, instance
+assignments, annotation storage, and persistence.
 
 Key Components:
 - UserStateManager: Singleton manager for all user states
@@ -44,6 +43,19 @@ from potato.phase import UserPhase
 from potato.item_state_management import get_item_state_manager, Item, SpanAnnotation, Label, SpanLink, EventAnnotation
 from potato.annotation_history import AnnotationAction, AnnotationHistoryManager
 from dataclasses import dataclass
+
+def upgrade_flow_record(rec: dict) -> dict:
+    """Read a flow record written before runtime phases replaced the jsPsych
+    phase: its ``jspsych`` page records become ``runtimes`` (kind jspsych)."""
+    old = rec.get("jspsych") if isinstance(rec, dict) else None
+    if isinstance(old, dict):
+        runtimes = rec.setdefault("runtimes", {})
+        for page, run in old.items():
+            if isinstance(run, dict) and page not in runtimes:
+                runtimes[page] = dict(run, kind=run.get("kind", "jspsych"))
+        del rec["jspsych"]
+    return rec
+
 
 @dataclass
 class TrainingState:
@@ -93,6 +105,9 @@ class TrainingState:
         self.training_instances = []
         self.show_feedback = False
         self.feedback_message = ""
+        self.feedback_type = "info"
+        # Drives the feedback banner's styling: success | error | warning | info.
+        self.feedback_type = "info"
         self.allow_retry = False
         self.max_mistakes = max_mistakes
         self.max_mistakes_per_question = max_mistakes_per_question
@@ -100,6 +115,10 @@ class TrainingState:
         # Per-category performance tracking for category-based assignment
         # Maps category name -> {'correct': int, 'total': int}
         self.category_scores: Dict[str, Dict[str, int]] = {}
+
+        # How many times this annotator has started the training: 1, plus
+        # one per repeat_training restart. passing_criteria.max_attempts caps it.
+        self.rounds_started = 1
 
     def add_answer(self, instance_id: str, is_correct: bool, attempts: int, explanation: str = "") -> None:
         """Add a training answer and update statistics."""
@@ -224,16 +243,19 @@ class TrainingState:
         """Set the list of training instance IDs."""
         self.training_instances = instances
 
-    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool) -> None:
+    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool,
+                     feedback_type: str = "info") -> None:
         """Set feedback state for the current question."""
         self.show_feedback = show_feedback
         self.feedback_message = message
         self.allow_retry = allow_retry
+        self.feedback_type = feedback_type
 
     def clear_feedback(self) -> None:
         """Clear feedback state."""
         self.show_feedback = False
         self.feedback_message = ""
+        self.feedback_type = "info"
         self.allow_retry = False
 
     # =========================================================================
@@ -354,11 +376,13 @@ class TrainingState:
             'current_question_index': self.current_question_index,
             'training_instances': self.training_instances,
             'show_feedback': self.show_feedback,
+            'feedback_type': self.feedback_type,
             'feedback_message': self.feedback_message,
             'allow_retry': self.allow_retry,
             'max_mistakes': self.max_mistakes,
             'max_mistakes_per_question': self.max_mistakes_per_question,
-            'category_scores': self.category_scores
+            'category_scores': self.category_scores,
+            'rounds_started': self.rounds_started,
         }
 
     @classmethod
@@ -374,19 +398,20 @@ class TrainingState:
         training_state.current_question_index = data.get('current_question_index', 0)
         training_state.training_instances = data.get('training_instances', [])
         training_state.show_feedback = data.get('show_feedback', False)
+        training_state.feedback_type = data.get('feedback_type', 'info')
         training_state.feedback_message = data.get('feedback_message', "")
         training_state.allow_retry = data.get('allow_retry', False)
         training_state.max_mistakes = data.get('max_mistakes', -1)
         training_state.max_mistakes_per_question = data.get('max_mistakes_per_question', -1)
         training_state.category_scores = data.get('category_scores', {})
+        training_state.rounds_started = int(data.get('rounds_started', 1) or 1)
         return training_state
 
-# Database imports
-try:
-    from potato.database import DatabaseManager, MysqlUserState
-    DATABASE_AVAILABLE = True
-except ImportError:
-    DATABASE_AVAILABLE = False
+# The MySQL backend is imported only when a config asks for it (see
+# UserStateManager.__init__). A module-level import here was circular:
+# potato.database.mysql_user_state subclasses UserState from this module, which
+# was still half-initialised, and the swallowed ImportError left the backend
+# off in every install while the server quietly wrote to files instead.
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -467,6 +492,13 @@ class UserStateManager:
             config: Configuration dictionary containing user management settings
         """
         self.config = config
+
+        # Declared non-human raters, keyed by the user id they annotate under.
+        # Parsed once: a live config edit does not reach a running study
+        # anyway, and re-parsing per user would put a config walk in add_user.
+        from potato.annotator_origin import parse_machine_annotators
+        self._machine_annotator_roster = parse_machine_annotators(config)
+
         self.user_to_annotation_state = {}
         self.task_assignment = {}
         self.prolific_study = None
@@ -494,23 +526,61 @@ class UserStateManager:
         self.db_manager = None
         self.use_database = False
 
-        # Initialize database if configured
-        if DATABASE_AVAILABLE and 'database' in config:
-            db_config = config['database']
-            if db_config.get('type') == 'mysql':
-                try:
-                    self.db_manager = DatabaseManager(config)
-                    self.use_database = True
-                    self.db_manager.create_tables()
-                    logger.info("Initialized MySQL database backend")
-                except Exception as e:
-                    logger.error(f"Failed to initialize database: {e}")
-                    self.use_database = False
+        self._mysql_user_state_cls = None
+
+        # A researcher who configured MySQL expects the annotations there.
+        # Falling back to files when the driver is missing or the server is
+        # unreachable leaves them with an empty database and no warning, so
+        # both stop the server instead.
+        db_config = config.get('database')
+        if isinstance(db_config, dict) and db_config.get('type') == 'mysql':
+            try:
+                from potato.database import DatabaseManager, MysqlUserState
+            except ImportError as e:
+                raise RuntimeError(
+                    "database.type is 'mysql', but the MySQL driver is not "
+                    f"installed ({e}). Install it with: "
+                    "pip install 'potato-annotation[mysql]'") from e
+            try:
+                self.db_manager = DatabaseManager(config)
+                self.db_manager.create_tables()
+            except Exception as e:
+                raise RuntimeError(
+                    f"database.type is 'mysql', but the database at "
+                    f"{db_config.get('host')}:{db_config.get('port', 3306)} could "
+                    f"not be used: {e}. Potato does not fall back to files when "
+                    "a database is configured; fix the connection or remove the "
+                    "database block.") from e
+            self._mysql_user_state_cls = MysqlUserState
+            self.use_database = True
+            logger.info("Initialized MySQL database backend")
+            # The experiment-design record (conditions, page orders, skips,
+            # screen-outs, jsPsych run summaries) and timed-trial records are
+            # kept on the file backend only, like presentation_order.
+            from potato.server_utils.phase_flow import has_flow_rules
+            if (config.get("conditions") or has_flow_rules(config)
+                    or (config.get("trial_timing") or {}).get("enabled")):
+                logger.warning(
+                    "database.type is mysql: condition assignments, page orders, "
+                    "screen-outs and timed-trial records are not stored in MySQL "
+                    "and are lost on restart. Use the file backend for experiment designs.")
 
         self.logger = logging.getLogger(__name__)
         # setting to debug
         self.logger.setLevel(logging.DEBUG)
         logging.basicConfig()
+
+        # Arrival counter for Latin-square page orders in a study without
+        # conditions (with conditions, the within-cell number is used).
+        self._latin_lock = threading.Lock()
+        self._latin_next = 0
+
+        # Between-subjects conditions. Owned here, not as a module singleton,
+        # so a new config gets a new assigner.
+        self.condition_assigner = None
+        if config.get("conditions"):
+            from potato.server_utils.experiment_conditions import ConditionAssigner
+            self.condition_assigner = ConditionAssigner(config)
 
         # Auto-export configuration
         export_formats = config.get("export_annotation_format", [])
@@ -535,6 +605,19 @@ class UserStateManager:
         self._configured_phase_index_cache = {}
         self._phase_page_order_cache.pop(phase_type, None)
         self._phase_page_index_cache.pop(phase_type, None)
+
+    def invalidate_phase_caches(self) -> None:
+        """Drop the derived phase caches after `config["phases"]` is edited.
+
+        The phase loader prunes undefined names out of `phases.order`, and the
+        sequence/page caches are derived from that list, so anything cached
+        before the prune describes a config that no longer exists.
+        """
+        self._ensure_phase_caches()
+        self._configured_phase_sequence_cache = None
+        self._configured_phase_index_cache = {}
+        self._phase_page_order_cache = {}
+        self._phase_page_index_cache = {}
 
     def _ensure_phase_caches(self) -> None:
         """Initialize derived phase caches when older tests bypass __init__."""
@@ -639,17 +722,56 @@ class UserStateManager:
             # Create appropriate user state based on configuration
             if self.use_database and self.db_manager:
                 logger.debug(f"Creating MysqlUserState for user: {user_id} (quota={quota})")
-                user_state = MysqlUserState(user_id, self.db_manager, quota)
+                user_state = self._mysql_user_state_cls(user_id, quota, db_manager=self.db_manager)
             else:
                 logger.debug(f"Creating InMemoryUserState for user: {user_id} (quota={quota})")
                 user_state = InMemoryUserState(user_id, quota)
+
+            self._apply_single_select_schemas(user_state)
+
+            # Stamp a declared machine rater here rather than in /register or
+            # /auth, so a machine that authenticates the ordinary way is still
+            # recorded as one and neither login route needs to change.
+            from potato.annotator_origin import stamp_user_state
+            stamp_user_state(user_state, self._machine_annotator_roster)
 
             self.user_to_annotation_state[user_id] = user_state
             logger.debug(f"User state created and stored: {user_state}")
             logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
             logger.debug(f"=== ADD USER END ===")
 
-            return user_state
+        self.ensure_conditions(user_state)
+        return user_state
+
+    def ensure_conditions(self, user_state) -> Optional[dict]:
+        '''Assign the participant a condition cell if a `conditions` block
+        is configured and they have none yet. Returns their conditions.'''
+        assigner = getattr(self, "condition_assigner", None)
+        if assigner is None or user_state is None:
+            return None
+        # A declared machine rater is not a participant in the design.
+        from potato.annotator_origin import is_machine
+        if is_machine(user_state):
+            return None
+        users = self.get_all_users() if assigner.balance_on == "completed" else None
+        return assigner.ensure(user_state, users)
+
+    def _apply_single_select_schemas(self, user_state: UserState) -> None:
+        """Tell a user state which schemas may hold at most one label (GH #167).
+
+        The manager is the only object with the config, so it resolves the set once and
+        hands it to the state rather than making the storage layer import config. The
+        set spans the global annotation schemes, every cohort's schemes, and the
+        SurveyFlow question schemes, so the invariant holds in every phase.
+        """
+        try:
+            from potato.server_utils.schema_exclusivity import all_single_select_schema_names
+            user_state._single_select_schemas = frozenset(
+                all_single_select_schema_names(self.config)
+            )
+        except Exception as e:  # never block user creation on this
+            logger.warning(f"Could not resolve single-select schemas: {e}")
+            user_state._single_select_schemas = frozenset()
 
     def get_or_create_user(self, user_id: str) -> UserState:
         """
@@ -686,61 +808,33 @@ class UserStateManager:
         """
         self.max_annotations_per_user = max_annotations_per_user
 
-    def old_get_or_create_user(self, user_id: str) -> UserState:
-        if user_id not in self.user_to_annotation_state:
-            self.logger.debug('Previously unknown user "%s"; creating new annotation state' % (user_id))
-
-            if "automatic_assignment" in self.config and self.config["automatic_assignment"]["on"]:
-                # when pre_annotation is set up, only assign the instance when consent question is answered
-                if "prestudy" in self.config and self.config["prestudy"]["on"]:
-                    user_state = UserState(generate_initial_user_dataflow(user_id))
-                    self.user_to_annotation_state[user_id] = user_state
-
-                # when pre_annotation is set up, only assign the instance when consent question is answered
-                elif "pre_annotation" in self.config["automatic_assignment"] \
-                        and "pre_annotation" in self.config["automatic_assignment"]["order"]:
-
-                    user_state = UserState(generate_initial_user_dataflow(user_id))
-                    self.user_to_annotation_state[user_id] = user_state
-
-                # assign instances to new user when automatic assignment is turned on and there is no pre_annotation or prestudy pages
-                else:
-                    user_state = UserState(generate_initial_user_dataflow(user_id))
-                    self.user_to_annotation_state[user_id] = user_state
-                    self.assign_instances_to_user(user_id)
-
-            else:
-                # assign all the instance to each user when automatic assignment is turned off
-                user_state = UserState(user_id)
-                # user_state.real_instance_assigned_count = user_state.get_assigned_instance_count()
-                self.user_to_annotation_state[user_id] = user_state
-        else:
-            user_state = self.user_to_annotation_state[user_id]
-
     def get_user_state(self, user_id: str) -> UserState:
         '''
         Gets a user from the user state manager or None if the user does not exist (thread-safe).'''
         with self._state_lock:
             if user_id not in self.user_to_annotation_state:
-                if self.use_database and self.db_manager:
-                    # Try to load from database
-                    try:
-                        user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
-                        self.user_to_annotation_state[user_id] = user_state
-                        return user_state
-                    except Exception as e:
-                        logger.warning(f"Failed to load user state from database for {user_id}: {e}")
-                else:
-                    # Try to load the user state from disk if it exists
-                    try:
+                # Load a stored state if there is one. An unknown user is
+                # None: the database path used to create a row for any name
+                # asked about, so admin lookups never 404'd.
+                try:
+                    user_state = None
+                    if self.use_database and self.db_manager:
+                        user_state = self._mysql_user_state_cls.load_from_db(
+                            user_id, self.db_manager)
+                    else:
+                        from potato.server_utils.usernames import user_dir as _user_dir
                         output_annotation_dir = self.config["output_annotation_dir"]
-                        user_dir = os.path.join(output_annotation_dir, user_id)
+                        user_dir = _user_dir(output_annotation_dir, user_id)
                         if os.path.exists(user_dir):
                             user_state = InMemoryUserState.load(user_dir)
-                            self.user_to_annotation_state[user_id] = user_state
-                            return user_state
-                    except Exception as e:
-                        logger.warning(f"Failed to load user state for {user_id}: {e}")
+                    # On a case-insensitive file system "Alice" opens alice's
+                    # directory; that is not Alice's state.
+                    if user_state is not None and user_state.get_user_id() == user_id:
+                        self._prepare_loaded_state(user_state)
+                        self.user_to_annotation_state[user_id] = user_state
+                        return user_state
+                except Exception as e:
+                    logger.warning(f"Failed to load user state for {user_id}: {e}")
 
             return self.user_to_annotation_state.get(user_id)
 
@@ -758,11 +852,46 @@ class UserStateManager:
         return user_id in self.user_to_annotation_state
 
     def advance_phase(self, user_id: str) -> None:
-        '''Moves the user to the next page in the current phase or the next phase'''
+        '''Moves the user to the next page in the current phase or the next phase.
+
+        This is the one place a participant leaves a phase page, so it is
+        where `exit_when` (screen-out) is checked and where pages hidden by
+        `show_when` are recorded as skipped. See server_utils/phase_flow.py.
+        '''
+        from potato.server_utils import phase_flow
         user_state = self.get_user_state(user_id)
-        old_phase, _ = user_state.get_current_phase_and_page()
-        phase, page = self.get_next_user_phase_page(user_id)
+        # A participant loaded from disk never went through add_user.
+        self.ensure_conditions(user_state)
+        old_phase, old_page = user_state.get_current_phase_and_page()
+
+        exit_spec = None
+        skipped = []
+        if old_page and old_phase not in (UserPhase.ANNOTATION, UserPhase.DONE,
+                                          UserPhase.LOGIN):
+            exit_spec = phase_flow.should_exit(self.config, user_state, old_page)
+
+        if exit_spec:
+            phase_flow.record_screen_out(user_state, old_page, exit_spec)
+            try:
+                user_state.set_prestudy_status(False)
+            except AttributeError:
+                user_state.prestudy_passed = False
+            logger.info("User %s screened out on page '%s'", user_id, old_page)
+            phase, page = UserPhase.DONE, None
+        else:
+            phase, page, skipped = self._next_flow_step(user_state)
+            for skipped_phase, skipped_page in skipped:
+                phase_flow.record_skip(user_state, skipped_phase, skipped_page)
         user_state.advance_to_phase(phase, page)
+
+        # A skip or screen-out is part of the study record, and most callers
+        # redirect without saving, so it would otherwise only reach disk on
+        # the participant's next answer -- never, for a screen-out.
+        if exit_spec or skipped:
+            try:
+                self.save_user_state(user_state)
+            except Exception as e:
+                logger.warning("Could not save flow record for %s: %s", user_id, e)
 
         # Emit webhook if phase changed
         if phase != old_phase:
@@ -849,55 +978,124 @@ class UserStateManager:
         self._configured_phase_index_cache = {phase: i for i, phase in enumerate(configured)}
         return list(configured)
 
-    def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
-        '''Returns the name and filename of next the page for the user, either
-           in the current phase or next phase. This method handles the
-           case of where there are multiple pages within the same phase type'''
+    def pages_for_user(self, user_state, phase: UserPhase) -> tuple[str, ...]:
+        '''The phase's pages in the order this participant sees them.
+
+        The configured order, with any `phases.counterbalance` groups
+        permuted for this participant. Pages hidden by `show_when` are still
+        listed; visibility is decided when the participant moves.
+        '''
+        from potato.server_utils.phase_flow import apply_counterbalance, uses_latin_square
+        if uses_latin_square(self.config):
+            self.ensure_latin_ordinal(user_state)
+        return apply_counterbalance(self.config, user_state, phase,
+                                    self._get_phase_pages(phase))
+
+    def ensure_latin_ordinal(self, user_state) -> None:
+        """Give the participant an arrival number for Latin-square rows.
+
+        With conditions configured, the condition assigner's within-cell
+        number does this job. Without them, a study-wide counter does, rebuilt
+        from saved states at boot (rebuild_latin_counter).
+        """
+        from potato.server_utils.phase_flow import flow_record
+        rec = flow_record(user_state)
+        if getattr(self, "condition_assigner", None) is not None:
+            self.ensure_conditions(user_state)
+            if isinstance(rec.get("cell_ordinal"), int):
+                return
+        if isinstance(rec.get("latin_ordinal"), int):
+            return
+        if not hasattr(self, "_latin_lock"):
+            self._latin_lock = threading.Lock()
+            self._latin_next = 0
+        with self._latin_lock:
+            if not isinstance(rec.get("latin_ordinal"), int):
+                rec["latin_ordinal"] = self._latin_next
+                self._latin_next += 1
+
+    def rebuild_latin_counter(self) -> None:
+        from potato.server_utils.phase_flow import flow_record
+        top = -1
+        for us in self.get_all_users():
+            value = flow_record(us).get("latin_ordinal")
+            if isinstance(value, int):
+                top = max(top, value)
+        self._latin_next = top + 1
+
+    def _flow_steps(self, user_state) -> list[tuple[UserPhase, Optional[str]]]:
+        '''Every (phase, page) step of the study for this participant, in order.
+
+        ANNOTATION is one step with no page: the annotate route owns it.
+        '''
+        steps = []
+        for phase in self._get_configured_phase_sequence():
+            if phase == UserPhase.ANNOTATION:
+                steps.append((phase, None))
+                continue
+            pages = self.pages_for_user(user_state, phase)
+            if pages:
+                steps.extend((phase, p) for p in pages)
+            else:
+                steps.append((phase, None))
+        return steps
+
+    @staticmethod
+    def _locate_step(steps, phase, page) -> Optional[tuple[int, int]]:
+        '''(first, last) step indices for the participant's position.
+
+        An exact (phase, page) match gives (i, i). A phase that is in the
+        sequence but whose page is not (None, or a page removed from the
+        config) gives the span of that phase's steps, so moving forward goes
+        to the next phase and moving back goes to the previous one, as before.
+        '''
+        for i, (ph, pg) in enumerate(steps):
+            if ph == phase and (ph == UserPhase.ANNOTATION or pg == page):
+                return i, i
+        indices = [i for i, (ph, _) in enumerate(steps) if ph == phase]
+        if indices:
+            return indices[0], indices[-1]
+        return None
+
+    def _step_visible(self, user_state, step, answers) -> bool:
+        from potato.server_utils.phase_flow import page_visible
+        phase, page = step
+        if phase == UserPhase.ANNOTATION or page is None:
+            return True
+        return page_visible(self.config, user_state, page, answers)
+
+    def _next_flow_step(self, user_state):
+        '''(phase, page, skipped) for the next visible step after the current one.'''
+        from potato.server_utils.phase_flow import collect_flow_answers, has_flow_rules
         self._ensure_phase_caches()
-
-        # Get the current user's state
-        user_state = self.get_user_state(user_id)
-
-        # Get the current of their phase
         cur_phase, cur_page = user_state.get_current_phase_and_page()
         if cur_phase == UserPhase.DONE:
-            return UserPhase.DONE, None
+            return UserPhase.DONE, None, []
 
-        pages_for_cur_phase = self._get_phase_pages(cur_phase)
-        if len(pages_for_cur_phase) > 1 and cur_page is not None:
-            cur_page_index = self._phase_page_index_cache.get(cur_phase, {}).get(cur_page)
-            if cur_page_index is not None and cur_page_index < len(pages_for_cur_phase) - 1:
-                return cur_phase, pages_for_cur_phase[cur_page_index + 1]
+        steps = self._flow_steps(user_state)
+        located = self._locate_step(steps, cur_phase, cur_page)
+        start = 0 if located is None else located[1] + 1
 
-        # If there are no more pages in this phase, return the next phase.
-        config_phases = self._get_configured_phase_sequence()
+        answers = (collect_flow_answers(self.config, user_state)
+                   if has_flow_rules(self.config) else {})
+        skipped = []
+        for step in steps[start:]:
+            if self._step_visible(user_state, step, answers):
+                return step[0], step[1], skipped
+            skipped.append(step)
+        return UserPhase.DONE, None, skipped
 
-        cur_phase_index = self._configured_phase_index_cache.get(cur_phase)
-        if cur_phase_index is not None:
-            if cur_phase_index < len(config_phases) - 1:
-                next_phase = config_phases[cur_phase_index + 1]
-                # ANNOTATION phase is handled by the annotate route
-                # and doesn't have entries in phase_type_to_name_to_page
-                if next_phase == UserPhase.ANNOTATION:
-                    return next_phase, None
-                # Use the first page in the next phase
-                next_pages = self._get_phase_pages(next_phase)
-                return next_phase, next_pages[0] if next_pages else None
-        else:
-            # Current phase not in config_phases (e.g., LOGIN).
-            # Advance to the first config phase.
-            if config_phases:
-                first_phase = config_phases[0]
-                if first_phase == UserPhase.ANNOTATION:
-                    return first_phase, None
-                first_pages = self._get_phase_pages(first_phase)
-                return first_phase, first_pages[0] if first_pages else None
-
-        return UserPhase.DONE, None
+    def get_next_user_phase_page(self, user_id: str) -> tuple[UserPhase,str]:
+        '''Returns the next page for the user, either in the current phase or
+           a later one. Pages whose `show_when` does not hold are passed over.'''
+        phase, page, _ = self._next_flow_step(self.get_user_state(user_id))
+        return phase, page
 
     def get_prev_user_phase_page(self, user_id: str) -> tuple[UserPhase, str]:
-        '''Returns the previous page for the user, either in the current phase
-           or the previous configured phase.'''
+        '''Returns the previous visible page for the user, either in the
+           current phase or an earlier one. Hidden pages are passed over, so
+           Previous never lands on a page the participant was never shown.'''
+        from potato.server_utils.phase_flow import collect_flow_answers, has_flow_rules
         self._ensure_phase_caches()
 
         user_state = self.get_user_state(user_id)
@@ -906,32 +1104,28 @@ class UserStateManager:
         if cur_phase == UserPhase.LOGIN:
             return UserPhase.LOGIN, None
 
+        # A screened-out participant stays out: Previous from the end of the
+        # study must not walk them back to the pages they were excluded from.
+        from potato.server_utils.phase_flow import screened_out
+        if cur_phase == UserPhase.DONE and screened_out(user_state):
+            return UserPhase.DONE, None
+
+        steps = self._flow_steps(user_state)
         if cur_phase == UserPhase.DONE:
-            config_phases = self._get_configured_phase_sequence()
-            if config_phases:
-                prev_phase = config_phases[-1]
-                if prev_phase == UserPhase.ANNOTATION:
-                    return prev_phase, None
-                prev_pages = self._get_phase_pages(prev_phase)
-                return prev_phase, prev_pages[-1] if prev_pages else None
+            end = len(steps)
+        else:
+            located = self._locate_step(steps, cur_phase, cur_page)
+            if located is None:
+                return cur_phase, cur_page
+            end = located[0]
+
+        answers = (collect_flow_answers(self.config, user_state)
+                   if has_flow_rules(self.config) else {})
+        for step in reversed(steps[:end]):
+            if self._step_visible(user_state, step, answers):
+                return step
+        if cur_phase == UserPhase.DONE:
             return UserPhase.LOGIN, None
-
-        if cur_phase != UserPhase.ANNOTATION and cur_phase in self.phase_type_to_name_to_page:
-            pages_for_cur_phase = self._get_phase_pages(cur_phase)
-            cur_page_index = self._phase_page_index_cache.get(cur_phase, {}).get(cur_page)
-            if len(pages_for_cur_phase) > 1 and cur_page_index is not None and cur_page_index > 0:
-                return cur_phase, pages_for_cur_phase[cur_page_index - 1]
-
-        config_phases = self._get_configured_phase_sequence()
-        cur_phase_index = self._configured_phase_index_cache.get(cur_phase)
-        if cur_phase_index is not None:
-            if cur_phase_index > 0:
-                prev_phase = config_phases[cur_phase_index - 1]
-                if prev_phase == UserPhase.ANNOTATION:
-                    return prev_phase, None
-                prev_pages = self._get_phase_pages(prev_phase)
-                return prev_phase, prev_pages[-1] if prev_pages else None
-
         return cur_phase, cur_page
 
     def can_user_go_back(self, user_id: str) -> bool:
@@ -987,13 +1181,26 @@ class UserStateManager:
         return UserPhase.POSTSTUDY in self.phase_type_to_name_to_page
 
     def save_user_state(self, user_state: UserState) -> None:
-        '''Saves the user state for the given user ID'''
+        '''Saves the user state for the given user ID.
+
+        A username string is accepted and resolved, because callers reach for
+        one: the MCP submit_annotation tool passed the name and got an
+        AttributeError deep inside this method, which surfaced as a 500 on the
+        one tool that records work.
+        '''
+        if isinstance(user_state, str):
+            resolved = self.get_user_state(user_state)
+            if resolved is None:
+                raise KeyError(f"No such annotator: {user_state}")
+            user_state = resolved
         # Figure out where this user's data would be stored on disk
         output_annotation_dir = self.config["output_annotation_dir"]
         username = user_state.get_user_id()
 
-        # NB: Do some kind of sanitizing on the username to improve security
-        user_dir = os.path.join(output_annotation_dir, username)
+        # Refuses a name that would land outside the output directory or in
+        # another user's directory (usernames.py).
+        from potato.server_utils.usernames import user_dir as _user_dir
+        user_dir = _user_dir(output_annotation_dir, username)
 
         # Save the user state
         user_state.save(user_dir)
@@ -1026,12 +1233,38 @@ class UserStateManager:
 
         output_dir = self.config["output_annotation_dir"]
         schemas = self.config.get("annotation_schemes", [])
-        annotations = load_annotations_from_output_dir(output_dir, schemas)
+        annotations = load_annotations_from_output_dir(output_dir, schemas,
+                                                       self.config)
 
         if not annotations:
             return
 
-        phase_responses = load_phase_responses_from_output_dir(output_dir) if self.config.get("export_include_phase_data", False) else []
+        # Server-side conditional-logic enforcement: when SurveyFlow questions
+        # use display_logic, exclude answers to questions a participant never
+        # saw (hidden by their own answers). Only engages when display_logic is
+        # actually present, so exports are unchanged for everyone else. Opt out
+        # with ``exclude_hidden_survey_answers: false``.
+        surveyflow_schemes = self.config.get("_surveyflow_schemes") or []
+        has_display_logic = any(
+            isinstance(s, dict) and s.get("display_logic") for s in surveyflow_schemes
+        )
+        dl_schemes = (
+            surveyflow_schemes
+            if has_display_logic and self.config.get("exclude_hidden_survey_answers", True)
+            else None
+        )
+        # Resolve any pre-#167 duplicates in survey answers so the export marks the
+        # final answer rather than emitting two indistinguishable rows.
+        from potato.export.single_select import single_select_schema_names
+        ss_schemas = (single_select_schema_names(schemas)
+                      | single_select_schema_names(surveyflow_schemes))
+        phase_responses = (
+            load_phase_responses_from_output_dir(
+                output_dir, display_logic_schemes=dl_schemes,
+                single_select_schemas=ss_schemas, config=self.config)
+            if self.config.get("export_include_phase_data", False)
+            else []
+        )
 
         context = ExportContext(
             config=self.config,
@@ -1065,9 +1298,26 @@ class UserStateManager:
         # Figure out where this user's data would be stored on disk
         output_annotation_dir = self.config["output_annotation_dir"]
 
-        # TODO: make the user state type configurable between in-memory and DB-backed.
         user_state = InMemoryUserState.load(user_dir)
+        return self._register_loaded_state(user_state)
+
+    def load_user_state_from_db(self, user_id: str) -> Optional[UserState]:
+        '''Loads one annotator's state from the MySQL backend at boot.'''
+        user_state = self._mysql_user_state_cls.load_from_db(user_id, self.db_manager)
+        return self._register_loaded_state(user_state) if user_state is not None else None
+
+    def _prepare_loaded_state(self, user_state: UserState) -> None:
+        '''What every loaded state needs, whichever path loaded it.'''
         user_state.prune_missing_assigned_instances()
+        self._apply_single_select_schemas(user_state)
+        # Re-stamp on load in case the declaration changed since the state was
+        # written. stamp_user_state keeps the original recorded_at when nothing
+        # else moved, so the timestamp does not drift on every restart.
+        from potato.annotator_origin import stamp_user_state
+        stamp_user_state(user_state, self._machine_annotator_roster)
+
+    def _register_loaded_state(self, user_state: UserState) -> UserState:
+        self._prepare_loaded_state(user_state)
 
         if user_state.get_user_id() in self.user_to_annotation_state:
             logger.warning(f'User "{user_state.get_user_id()}" already exists in the user state manager, but is being overwritten by load_state()')
@@ -1143,6 +1393,18 @@ class UserState:
     def get_span_annotations(self):
         return self.span_annotations
 
+    def resolve_prelabels(self, instance_id: str) -> None:
+        '''Record that this annotator took over the item's span, link and
+        event prelabels, so they are not offered again.'''
+        resolved = getattr(self, 'prelabels_resolved_ids', None)
+        if resolved is None:
+            resolved = self.prelabels_resolved_ids = set()
+        resolved.add(str(instance_id))
+
+    def prelabels_resolved(self, instance_id: str) -> bool:
+        '''Whether resolve_prelabels() was called for this item.'''
+        return str(instance_id) in getattr(self, 'prelabels_resolved_ids', ())
+
     def get_current_instance_index(self) -> int:
         raise NotImplementedError()
 
@@ -1169,6 +1431,23 @@ class UserState:
     def get_label_annotations(self, instance_id):
         """
         Returns the label-based annotations for the instance.
+        """
+        raise NotImplementedError()
+
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        """
+        Removes every stored label belonging to ``schema_name``.
+
+        Writes go to whichever container ``add_label_annotation`` would use: the
+        instance's labels during the annotation phase, otherwise the current phase
+        page's labels. This is what lets a single call cover annotation, consent,
+        instructions, training, prestudy and poststudy alike (GH #167).
+
+        Labels in ``schema_exclusivity.NON_EXCLUSIVE_LABEL_NAMES`` (notably
+        ``free_response``) are preserved.
+
+        Returns:
+            The number of labels removed.
         """
         raise NotImplementedError()
 
@@ -1401,13 +1680,12 @@ class UserState:
             }
 
         def span_to_dict(s: SpanAnnotation) -> dict[str,any]:
-            return {
-                "schema": s.get_schema(),
-                "name": s.get_name(),
-                "start": s.get_start(),
-                "end": s.get_end(),
-                "title": s.get_title()
-            }
+            # Use SpanAnnotation.to_dict() as the single source of truth so this
+            # stays in sync with to_span() below. Previously this duplicated only
+            # schema/name/start/end/title and silently dropped target_field
+            # (breaking multi-field span rendering across sessions),
+            # id, kb_*, additional_parts and format_coords on every save->reload.
+            return s.to_dict()
 
         def convert_label_dict(d: dict[Label, any]) -> list[tuple[dict[str], str]]:
             return [(label_to_dict(k), v) for k, v in d.items()]
@@ -1444,6 +1722,33 @@ class UserState:
 
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
+
+        # Which order each scheme's options were shown in. Persisted so that a
+        # study can be corrected for position bias after the fact -- see
+        # potato/server_utils/presentation_order.py.
+        d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
+
+        # Which room produced each answer, if any. See
+        # instance_id_to_room_provenance in __init__.
+        d['instance_id_to_room_provenance'] = getattr(
+            self, 'instance_id_to_room_provenance', {})
+        # Who in a live collaborative session contributed to a team answer.
+        d['instance_id_to_collab_provenance'] = getattr(
+            self, 'instance_id_to_collab_provenance', {})
+
+        # Save crowdsourcing platform metadata (provider, study/session IDs)
+        d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
+
+        # Experiment-flow record, timed-trial records and prestudy status.
+        d['flow_record'] = getattr(self, 'flow_record', {})
+        d['instance_id_to_trial'] = getattr(self, 'instance_id_to_trial', {})
+        d['prestudy_passed'] = getattr(self, 'prestudy_passed', None)
+        d['prelabels_resolved_ids'] = sorted(getattr(self, 'prelabels_resolved_ids', ()))
+
+        # Whether this participant is a person, and if not, which machine.
+        # Absent means human, so a state written before this field existed
+        # loads as one. See potato/annotator_origin.py.
+        d['origin'] = getattr(self, 'origin', {})
 
         return d
 
@@ -1501,11 +1806,20 @@ class UserState:
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])
 
-        user_state = InMemoryUserState(j['user_id'], j['max_assignments'])
+        # Read with .get() and the constructor's own defaults. These were
+        # indexed directly, so a state file missing any one of them killed the
+        # server at boot with a bare KeyError naming a dict key -- and the
+        # writers are not all this class. `potato import --seed-user NAME`
+        # writes only `user_id` and `instance_id_to_label_to_value`, so the
+        # project it produces printed "Run it:" and then would not start;
+        # state files written by older Potatoes are the same shape of problem.
+        # An absent key means the user has done nothing yet, which is exactly
+        # what a fresh UserState represents.
+        user_state = InMemoryUserState(j['user_id'], j.get('max_assignments', -1))
 
-        user_state.instance_id_ordering = j['instance_id_ordering']
-        user_state.assigned_instance_ids = set(j['instance_id_ordering'])
-        user_state.current_instance_index = j['current_instance_index']
+        user_state.instance_id_ordering = j.get('instance_id_ordering', [])
+        user_state.assigned_instance_ids = set(user_state.instance_id_ordering)
+        user_state.current_instance_index = j.get('current_instance_index', 0)
 
         # Restore behavioral data (used for interaction tracking)
         from potato.interaction_tracking import BehavioralData
@@ -1516,13 +1830,13 @@ class UserState:
             else:
                 user_state.instance_id_to_behavioral_data[instance_id] = bd_dict
 
-        for iid, l2v in j['instance_id_to_label_to_value'].items():
+        for iid, l2v in j.get('instance_id_to_label_to_value', {}).items():
             user_state.instance_id_to_label_to_value[iid] = {to_label(k): v for k, v in l2v}
 
-        for iid, s2v in j['instance_id_to_span_to_value'].items():
+        for iid, s2v in j.get('instance_id_to_span_to_value', {}).items():
             user_state.instance_id_to_span_to_value[iid] = {to_span(k): v for k, v in s2v}
 
-        for phase, p2l2lv in j['phase_to_page_to_label_to_value'].items():
+        for phase, p2l2lv in j.get('phase_to_page_to_label_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, lv_list in p2l2lv.items():
                 for lv in lv_list:
@@ -1531,7 +1845,7 @@ class UserState:
                     value = lv[1]
                     user_state.phase_to_page_to_label_to_value[phase][page][label] = value
 
-        for phase, p2s2v in j['phase_to_page_to_span_to_value'].items():
+        for phase, p2s2v in j.get('phase_to_page_to_span_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, sv_list in p2s2v.items():
                 for sv in sv_list:
@@ -1540,11 +1854,16 @@ class UserState:
                     value = sv[1]
                     user_state.phase_to_page_to_span_to_value[phase][page][span] = value
 
-        # These require converting the dictionaries back to the original types
-        user_state.current_phase_and_page = to_phase_and_page(j['current_phase_and_page'])
-        user_state.completed_phase_and_pages = [
-            to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
-        ]
+        # These require converting the dictionaries back to the original types.
+        # Assigned only when present, so the constructor's own starting phase
+        # stays authoritative for a state file that never recorded one.
+        if 'current_phase_and_page' in j:
+            user_state.current_phase_and_page = to_phase_and_page(
+                j['current_phase_and_page'])
+        if 'completed_phase_and_pages' in j:
+            user_state.completed_phase_and_pages = [
+                to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
+            ]
 
         # Restore training state if present
         if 'training_state' in j:
@@ -1559,6 +1878,12 @@ class UserState:
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+        if 'instance_id_to_presentation_order' in j:
+            user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
+        if 'instance_id_to_room_provenance' in j:
+            user_state.instance_id_to_room_provenance = j['instance_id_to_room_provenance']
+        if 'instance_id_to_collab_provenance' in j:
+            user_state.instance_id_to_collab_provenance = j['instance_id_to_collab_provenance']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:
@@ -1575,6 +1900,18 @@ class UserState:
                     event_id: EventAnnotation.from_dict(event_data)
                     for event_id, event_data in events_dict.items()
                 }
+
+        # Restore crowdsourcing platform metadata if present
+        user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
+        # Absent in states written before experiment flow existed.
+        user_state.flow_record = upgrade_flow_record(j.get('flow_record', {}) or {})
+        user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
+        user_state.prestudy_passed = j.get('prestudy_passed')
+        user_state.prelabels_resolved_ids = set(j.get('prelabels_resolved_ids') or ())
+
+        # Restore the rater's origin if present. An absent key is a person.
+        user_state.origin = j.get('origin', {}) or {}
 
         return user_state
 
@@ -1630,8 +1967,20 @@ class UserState:
         return suspicious_analysis['suspicious_actions']
 
     def get_performance_metrics(self) -> Dict[str, Any]:
-        """Get current performance metrics."""
-        return self.performance_metrics.copy()
+        """Get current performance metrics (JSON-safe).
+
+        ``fastest_action_time_ms`` starts as ``float('inf')`` as a min() sentinel
+        until the first action. Non-finite floats serialize to the non-standard
+        JSON tokens ``Infinity``/``NaN``, which strict clients (e.g. requests'
+        simplejson) reject — so coerce any non-finite value to None here. This
+        matches the inf->None convention already used in admin.py.
+        """
+        import math
+        metrics = self.performance_metrics.copy()
+        for key, value in metrics.items():
+            if isinstance(value, float) and not math.isfinite(value):
+                metrics[key] = None
+        return metrics
 
     def start_session(self, session_id: str) -> None:
         """Start a new annotation session."""
@@ -1650,42 +1999,74 @@ class UserState:
         return self.training_state
 
     def update_training_answer(self, instance_id: str, annotations: Dict[str, Any]) -> None:
-        """Update training answer and track attempts."""
-        # Count attempts for this question
-        attempts = 1
-        if instance_id in self.training_state.completed_questions:
-            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+        """Record what the user answered for a training question.
 
-        # Store the annotations in the phase-specific storage
-        if self.current_phase_and_page[0] == UserPhase.TRAINING:
-            for schema_name, label_value in annotations.items():
-                # Create a Label object for storage
-                label = Label(schema_name, schema_name)  # Using schema_name as both schema and name
-                self.phase_to_page_to_label_to_value[UserPhase.TRAINING][self.current_phase_and_page[1]][label] = label_value
+        Answer *storage* is not done here — training answers arrive through the same
+        /updateinstance autosave as every other phase, so they already sit in
+        ``phase_to_page_to_label_to_value[TRAINING][page]`` keyed
+        ``Label(schema, label)``. This only keeps a per-question copy for reporting.
+
+        (It used to write ``Label(schema, schema)`` from raw form keys — a key shape
+        unlike any other phase, which also meant a ``schema:::label`` form field was
+        stored as a schema literally named that.)
+        """
+        record = self.training_state.completed_questions.setdefault(instance_id, {})
+        record['answers'] = dict(annotations)
+
+    def get_training_answers(self) -> Dict[str, Any]:
+        """The current training page's answers, collapsed to ``{schema: value}``.
+
+        Uses the shared collapse, so a multiselect compares as the list of selected
+        labels and a radio's ``free_response`` companion does not displace the chosen
+        option — the same semantics display logic and the exporter use.
+        """
+        from potato.server_utils.answer_collapse import collapse_answers
+
+        container = self._label_container('__phase_page__', create=False)
+        if not container:
+            return {}
+
+        by_schema: Dict[str, list] = {}
+        for label, value in container.items():
+            if isinstance(label, Label):
+                by_schema.setdefault(label.get_schema(), []).append(
+                    (label.get_name(), value))
+
+        schema_types = {}
+        try:
+            from potato.server_utils.schema_exclusivity import resolve_annotation_type
+            for schema in by_schema:
+                schema_types[schema] = resolve_annotation_type(schema, self.user_id)
+        except Exception:
+            pass
+
+        return collapse_answers(by_schema, schema_types=schema_types)
+
+    def clear_phase_page_annotations(self) -> int:
+        """Drop every stored answer on the current phase page.
+
+        Every training question shares one phase *page* key, so without this the next
+        question inherits the previous one's answers and grades against them. Uses the
+        non-creating container lookup so an untouched page is not materialised.
+        """
+        container = self._label_container('__phase_page__', create=False)
+        if not container:
+            return 0
+        removed = len(container)
+        container.clear()
+        return removed
 
     def check_training_pass(self, instance_id: str, correct_answers: Dict[str, Any]) -> bool:
-        """Check if the user's answer for a specific instance is correct."""
-        # Get the user's annotations for this instance
-        user_annotations = {}
-        if self.current_phase_and_page[0] == UserPhase.TRAINING:
-            page = self.current_phase_and_page[1]
-            for label, value in self.phase_to_page_to_label_to_value[UserPhase.TRAINING][page].items():
-                user_annotations[label.get_schema()] = value
+        """Grade the current training question against its gold answers."""
+        from potato.server_utils.training_grading import check_training_answer
 
-        # Compare user annotations with correct answers
-        is_correct = True
-        for schema_name, correct_value in correct_answers.items():
-            if schema_name not in user_annotations:
-                is_correct = False
-                break
-            if user_annotations[schema_name] != correct_value:
-                is_correct = False
-                break
+        user_annotations = self.get_training_answers()
+        is_correct = check_training_answer(user_annotations, correct_answers)
 
-        # Update training state with the result
         attempts = 1
         if instance_id in self.training_state.completed_questions:
-            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+            attempts = self.training_state.completed_questions[instance_id].get(
+                'attempts', 0) + 1
 
         self.training_state.add_answer(instance_id, is_correct, attempts)
         return is_correct
@@ -1818,6 +2199,12 @@ class InMemoryUserState(UserState):
         # a user labels for each instance.
         self.instance_id_to_label_to_value = defaultdict(dict)
 
+        # Schema names that may hold at most one label (GH #167). Populated by
+        # UserStateManager, the only place with access to the config. An empty default
+        # means the invariant simply isn't enforced — which is what bare unit tests
+        # that construct a UserState directly want, rather than a crash.
+        self._single_select_schemas = frozenset()
+
         # For non-annotation data, we save the responses for each page in separate
         # dictionaries to keep the data organized and make state-tracking easier.
         self.phase_to_page_to_label_to_value = defaultdict(lambda: defaultdict(dict))
@@ -1842,12 +2229,50 @@ class InMemoryUserState(UserState):
         # How many items a user can be assigned
         self.max_assignments = max_assignments
 
+        # Crowdsourcing platform metadata captured at arrival (provider name,
+        # study/session IDs) so annotation output can be joined with the
+        # platform's submission records.
+        self.crowd_metadata = {}
+
+        # Study-design record for experiment flow: the between-subjects
+        # condition this participant was assigned, the page and question
+        # orders they were shown, the pages a `show_when` skipped, a
+        # screen-out, and a summary of each embedded jsPsych run. One place
+        # so the participants export has a single source. See
+        # potato/server_utils/phase_flow.py.
+        self.flow_record = {}
+
+        # Timed-trial records (trial_timing), keyed by instance id. Kept
+        # beside the labels because a timed-out trial has no label at all.
+        self.instance_id_to_trial = {}
+
+        # Prestudy pass/fail. None until something decides it (a screen-out
+        # sets False). Read by get_prestudy_status().
+        self.prestudy_passed = None
+
+        # Items whose span, link and event prelabels this annotator has taken
+        # over: they stored one, edited one, or moved on with them shown.
+        # After that the prelabels are not offered again, so deleting every
+        # predicted span records "nothing here" instead of bringing the
+        # prediction back. See prelabels_resolved().
+        self.prelabels_resolved_ids = set()
+
+        # Whether this participant is a person, and if not, which machine and
+        # which version of it. Empty means human. Stamped from the
+        # machine_annotators roster by UserStateManager rather than by the
+        # login routes, so a machine that authenticates the ordinary way is
+        # still recorded as one. See potato/annotator_origin.py.
+        self.origin = {}
+
         # Caches the ai hints
         self.ai_hints = defaultdict(dict)
 
         # New: Annotation history tracking
         self.annotation_history: List[AnnotationAction] = []
         self.instance_action_history: Dict[str, List[AnnotationAction]] = defaultdict(list)
+        #: How many of annotation_history are already in annotation_history.jsonl.
+        self._history_saved = 0
+        self._history_lock = threading.Lock()
 
         # New: Session tracking
         self.session_start_time: Optional[datetime.datetime] = None
@@ -1879,6 +2304,33 @@ class InMemoryUserState(UserState):
         # Maps instance_id -> {highlights: [...], seed: int, settings: {...}}
         # This ensures the same user sees the same highlights for an instance across navigation
         self.instance_id_to_keyword_highlight_state: Dict[str, Dict[str, Any]] = {}
+
+        # Which order each scheme's options were shown in, per instance.
+        # Maps instance_id -> {scheme_name: [label names in shown order]}.
+        #
+        # Kept HERE rather than only on behavioural data because
+        # `update_annotation_state` REPLACES instance_id_to_behavioral_data
+        # wholesale on every save, so anything written there at render time is
+        # destroyed by the first autosave. Same reason
+        # instance_id_to_keyword_highlight_state exists, and it is merged into
+        # the behavioural record on save by the same code path.
+        self.instance_id_to_presentation_order: Dict[str, Dict[str, list]] = {}
+
+        # Which multiplayer room an answer was produced in, per instance.
+        # Maps instance_id -> {scheme_name: {room_id, room_type, role, vote,
+        # initial_vote, changed_after_reveal, n_voters, recorded_at}}.
+        #
+        # A room vote is written straight into the annotation store by
+        # rooms/manager.py, so once exported it is indistinguishable from an
+        # independent judgement -- which is the one fact that decides whether
+        # the agreement number computed over it means anything. Kept here
+        # rather than only on behavioural data for the same reason
+        # instance_id_to_presentation_order is: `update_annotation_state`
+        # replaces instance_id_to_behavioral_data wholesale on every save.
+        self.instance_id_to_room_provenance: Dict[str, Dict[str, Any]] = {}
+        # instance_id -> {session_id, team_id, contributors: {user: n_changes},
+        # last_change_at}: set on a team user's answers by potato/collab.
+        self.instance_id_to_collab_provenance: Dict[str, Dict[str, Any]] = {}
 
         # Span link annotations - stores relationships between spans
         # Maps instance_id -> {link_id -> SpanLink}
@@ -1922,6 +2374,58 @@ class InMemoryUserState(UserState):
             state: Dict with 'highlights', 'seed', 'settings' keys
         """
         self.instance_id_to_keyword_highlight_state[instance_id] = state
+
+    def get_presentation_order(self, instance_id: str) -> Dict[str, Any]:
+        """The order each scheme's options were shown in on this instance."""
+        return self.instance_id_to_presentation_order.get(instance_id, {})
+
+    def record_presentation_order(self, instance_id: str,
+                                  orders: Dict[str, Any]) -> None:
+        """
+        Record the shown order for schemes that do not already have one.
+
+        Never overwrites. The first render is what the annotator answered
+        against; a later re-render -- after an admin edits the config, say --
+        must not rewrite history and make a stored answer look as though it
+        was given under an arrangement nobody ever saw.
+        """
+        if not orders:
+            return
+        stored = self.instance_id_to_presentation_order.setdefault(instance_id, {})
+        for scheme_name, order in orders.items():
+            stored.setdefault(scheme_name, list(order))
+
+    def get_room_provenance(self, instance_id: str) -> Dict[str, Any]:
+        """Which room, if any, produced this user's answers on this instance."""
+        return self.instance_id_to_room_provenance.get(instance_id, {})
+
+    def record_collab_contribution(self, instance_id: str, session_id: str,
+                                   team_id: str, username: str, at: float) -> None:
+        """Count one change by ``username`` to this team answer.
+
+        A team answer is a group product: the export names who shaped it, so
+        an agreement statistic over it is read as one team, not N people.
+        """
+        if not hasattr(self, "instance_id_to_collab_provenance"):
+            self.instance_id_to_collab_provenance = {}
+        record = self.instance_id_to_collab_provenance.setdefault(instance_id, {
+            "session_id": session_id, "team_id": team_id, "contributors": {}})
+        record["contributors"][username] = record["contributors"].get(username, 0) + 1
+        record["last_change_at"] = at
+
+    def record_room_provenance(self, instance_id: str, scheme_name: str,
+                               record: Dict[str, Any]) -> None:
+        """Note that a room session produced this user's answer.
+
+        The latest record for a scheme wins. A room can revisit an item and a
+        member can change their vote after the reveal, and the answer that ends
+        up in the export is the last one written, so the provenance beside it
+        has to be the last one too.
+        """
+        if not scheme_name or not record:
+            return
+        stored = self.instance_id_to_room_provenance.setdefault(instance_id, {})
+        stored[scheme_name] = dict(record)
 
     def add_new_assigned_data(self, new_assigned_data):
         """
@@ -2033,12 +2537,99 @@ class InMemoryUserState(UserState):
     def get_span_annotations(self):
         return self.span_annotations
 
-    def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
+    def _label_container(self, instance_id: str, create: bool = True):
+        '''The dict that labels for this instance/page live in.
+
+        Annotation-phase writes are keyed by instance; every other phase (consent,
+        instructions, training, prestudy, poststudy) is keyed by phase+page. Both
+        add_label_annotation and clear_schema_labels must agree on this, or a clear
+        silently targets the wrong container — the second half of GH #167.
+
+        Both backing stores are defaultdicts, so read-only callers must pass
+        create=False; otherwise merely *looking* for stale labels would materialise an
+        empty entry and make an untouched instance look annotated to the exporter.
+        Returns None when create=False and nothing is stored yet.
+        '''
         if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
-            self.instance_id_to_label_to_value[instance_id][label] = value
-        else:
-            self.phase_to_page_to_label_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
-        #print('add_labels ->', self.instance_id_to_label_to_value)
+            if not create and instance_id not in self.instance_id_to_label_to_value:
+                return None
+            return self.instance_id_to_label_to_value[instance_id]
+        phase, page = self.current_phase_and_page
+        if not create:
+            pages = self.phase_to_page_to_label_to_value.get(phase)
+            if pages is None or page not in pages:
+                return None
+            return pages[page]
+        return self.phase_to_page_to_label_to_value[phase][page]
+
+    def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
+        container = self._label_container(instance_id)
+
+        # Single-select invariant. A radio/likert/confidence schema renders one input
+        # per option, each with its own label_name, so writing a changed answer would
+        # otherwise leave the previous option sitting beside it (GH #167). Enforced
+        # here rather than only in the routes so that every write path — including
+        # /submit_annotation and the legacy /updateinstance format — is covered.
+        schema_name = label.get_schema()
+        # A falsy value is a "not selected" marker, not an answer. The legacy v1
+        # template posts the whole fieldset as {name: <bool>} pairs, so letting an
+        # unselected option evict the selected one would destroy the annotation.
+        _is_selection = value is not None and value is not False and value != ""
+        if _is_selection and schema_name in getattr(self, '_single_select_schemas', frozenset()):
+            from potato.server_utils.schema_exclusivity import is_exempt_label
+            if not is_exempt_label(label.get_name()):
+                for stale in [
+                    lbl for lbl in container
+                    if isinstance(lbl, Label)
+                    and lbl.get_schema() == schema_name
+                    and lbl != label
+                    and not is_exempt_label(lbl.get_name())
+                ]:
+                    logger.warning(
+                        "Superseding single-select annotation %s:%s=%r with %s:%s=%r "
+                        "for user %s (%s)",
+                        schema_name, stale.get_name(), container[stale],
+                        schema_name, label.get_name(), value,
+                        self.user_id, instance_id,
+                    )
+                    del container[stale]
+
+        container[label] = value
+
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        '''Removes every stored label for a schema. See UserState.clear_schema_labels.'''
+        from potato.server_utils.schema_exclusivity import is_exempt_label
+
+        container = self._label_container(instance_id, create=False)
+        if not container:
+            return 0
+        stale = [
+            lbl for lbl in container
+            if isinstance(lbl, Label)
+            and lbl.get_schema() == schema_name
+            and not is_exempt_label(lbl.get_name())
+        ]
+        for lbl in stale:
+            del container[lbl]
+        self._drop_empty_label_container(instance_id)
+        return len(stale)
+
+    def remove_label_annotation(self, instance_id: str, label: "Label") -> bool:
+        """Remove one stored label, as a cleared text box or number asks.
+        Returns whether there was one."""
+        container = self._label_container(instance_id, create=False)
+        if not container or label not in container:
+            return False
+        del container[label]
+        self._drop_empty_label_container(instance_id)
+        return True
+
+    def _drop_empty_label_container(self, instance_id: str) -> None:
+        # An empty dict still makes has_annotated() true, so an item whose
+        # answers were all cleared kept counting as done.
+        if (self.current_phase_and_page[0] == UserPhase.ANNOTATION
+                and not self.instance_id_to_label_to_value.get(instance_id, True)):
+            del self.instance_id_to_label_to_value[instance_id]
 
     def add_span_annotation(self, instance_id: str, label: SpanAnnotation, value: any) -> None:
         '''Adds a set of span annotations to the instance or if the user is not
@@ -2321,9 +2912,10 @@ class InMemoryUserState(UserState):
         # NB: Should this be a view/copy?
         return self.instance_id_to_label_to_value[instance_id]
 
-    def get_span_annotations(self, instance_id) -> dict[str,list[SpanAnnotation]]:
+    def get_span_annotations(self, instance_id) -> dict[SpanAnnotation, any]:
         """
-        Returns a mapping from each schema to the span annotations for that schema.
+        Returns the item's spans as a flat ``{SpanAnnotation: value}`` across
+        every span scheme. Filter on ``span.get_schema()`` for one scheme.
         """
         if instance_id not in self.instance_id_to_span_to_value:
             return {}
@@ -2338,7 +2930,42 @@ class InMemoryUserState(UserState):
         return set(self.instance_id_to_label_to_value.keys()) \
                     | set(self.instance_id_to_span_to_value.keys()) \
                     | set(self.instance_id_to_link_to_value.keys()) \
+                    | set(self.instance_id_to_event_to_value.keys()) \
+                    | self._timed_out_instance_ids()
+
+    def get_labeled_instance_ids(self) -> set[str]:
+        """Items this user left an answer on, not counting timed-out trials.
+
+        `get_annotated_instance_ids` answers "is this user done with the
+        item", which a timed-out trial is. This answers "did the item get an
+        annotation", which is what the item side counts toward
+        `max_annotations_per_item`: a participant who lets every trial run out
+        must not use up the items for everyone else.
+        """
+        return set(self.instance_id_to_label_to_value.keys()) \
+                    | set(self.instance_id_to_span_to_value.keys()) \
+                    | set(self.instance_id_to_link_to_value.keys()) \
                     | set(self.instance_id_to_event_to_value.keys())
+
+    def has_labeled(self, instance_id: str) -> bool:
+        """See get_labeled_instance_ids."""
+        return instance_id in self.instance_id_to_label_to_value \
+            or instance_id in self.instance_id_to_span_to_value \
+            or instance_id in self.instance_id_to_link_to_value \
+            or instance_id in self.instance_id_to_event_to_value
+
+    def _timed_out_instance_ids(self) -> set[str]:
+        """Items whose timed trial ran out with no answer (trial_timing).
+
+        Such an item has no label, and without this it would count as never
+        done: the progress counter would stall and the annotator would never
+        reach the end of the task. Empty unless trial_timing is on.
+        """
+        trials = getattr(self, 'instance_id_to_trial', None)
+        if not trials:
+            return set()
+        from potato.trial_timing import excuses_required_answer
+        return {iid for iid, rec in trials.items() if excuses_required_answer(rec)}
 
     def get_annotation_count(self) -> int:
         '''Returns the total number of instances annotated by this user.'''
@@ -2379,7 +3006,9 @@ class InMemoryUserState(UserState):
         return instance_id in self.instance_id_to_label_to_value \
             or instance_id in self.instance_id_to_span_to_value \
             or instance_id in self.instance_id_to_link_to_value \
-            or instance_id in self.instance_id_to_event_to_value
+            or instance_id in self.instance_id_to_event_to_value \
+            or (bool(getattr(self, 'instance_id_to_trial', None))
+                and instance_id in self._timed_out_instance_ids())
 
     def clear_all_annotations(self) -> None:
         '''Clears all annotations for this user'''
@@ -2388,6 +3017,8 @@ class InMemoryUserState(UserState):
         self.instance_id_to_link_to_value.clear()
         self.instance_id_to_event_to_value.clear()
         self.instance_id_to_behavioral_data.clear()
+        if isinstance(getattr(self, 'instance_id_to_trial', None), dict):
+            self.instance_id_to_trial.clear()
         self.ai_hints.clear()
 
     def clear_instance_annotations(self, instance_id: str) -> None:
@@ -2397,6 +3028,9 @@ class InMemoryUserState(UserState):
         self.instance_id_to_link_to_value.pop(instance_id, None)
         self.instance_id_to_event_to_value.pop(instance_id, None)
         self.instance_id_to_behavioral_data.pop(instance_id, None)
+        if isinstance(getattr(self, 'instance_id_to_trial', None), dict):
+            self.instance_id_to_trial.pop(instance_id, None)
+        getattr(self, 'prelabels_resolved_ids', set()).discard(str(instance_id))
         self.ai_hints.pop(instance_id, None)
 
     def has_remaining_assignments(self) -> bool:
@@ -2408,7 +3042,14 @@ class InMemoryUserState(UserState):
         if self.max_assignments >= 0:
             # Explicit cap: the user may annotate up to this many items, but should
             # still finish cleanly if the dataset/eligible pool is exhausted first.
-            return len(self.get_annotated_instance_ids()) < self.max_assignments and has_available_items
+            # Injected attention checks and gold items do not count against it --
+            # assignment already discounts them, and if this did not, the two
+            # disagreed and the annotator was declared finished holding an
+            # unreached item.
+            from potato.quality_control import count_dataset_items
+
+            annotated = count_dataset_items(self.get_annotated_instance_ids())
+            return annotated < self.max_assignments and has_available_items
 
         return has_available_items
 
@@ -2754,13 +3395,12 @@ class InMemoryUserState(UserState):
             }
 
         def span_to_dict(s: SpanAnnotation) -> dict[str,any]:
-            return {
-                "schema": s.get_schema(),
-                "name": s.get_name(),
-                "start": s.get_start(),
-                "end": s.get_end(),
-                "title": s.get_title()
-            }
+            # Use SpanAnnotation.to_dict() as the single source of truth so this
+            # stays in sync with to_span() below. Previously this duplicated only
+            # schema/name/start/end/title and silently dropped target_field
+            # (breaking multi-field span rendering across sessions),
+            # id, kb_*, additional_parts and format_coords on every save->reload.
+            return s.to_dict()
 
         def convert_label_dict(d: dict[Label, any]) -> list[tuple[dict[str], str]]:
             return [(label_to_dict(k), v) for k, v in d.items()]
@@ -2794,12 +3434,29 @@ class InMemoryUserState(UserState):
 
         d['training_state'] = self.training_state.to_dict()
 
+        # Pending ICL verification items: without them, an answer given after
+        # a restart is not recognised as a verification and never scored.
+        d['icl_verification_tasks'] = dict(getattr(self, 'icl_verification_tasks', {}) or {})
+
         # Category qualification data
         d['qualified_categories'] = list(self.qualified_categories)
         d['category_qualification_scores'] = self.category_qualification_scores
 
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
+
+        # Which order each scheme's options were shown in. Persisted so that a
+        # study can be corrected for position bias after the fact -- see
+        # potato/server_utils/presentation_order.py.
+        d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
+
+        # Which room produced each answer, if any. See
+        # instance_id_to_room_provenance in __init__.
+        d['instance_id_to_room_provenance'] = getattr(
+            self, 'instance_id_to_room_provenance', {})
+        # Who in a live collaborative session contributed to a team answer.
+        d['instance_id_to_collab_provenance'] = getattr(
+            self, 'instance_id_to_collab_provenance', {})
 
         # Save span link annotations
         d['instance_id_to_link_to_value'] = {}
@@ -2814,6 +3471,20 @@ class InMemoryUserState(UserState):
             d['instance_id_to_event_to_value'][instance_id] = {
                 event_id: event.to_dict() for event_id, event in events.items()
             }
+
+        # Save crowdsourcing platform metadata (provider, study/session IDs)
+        d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
+
+        # Experiment-flow record, timed-trial records and prestudy status.
+        d['flow_record'] = getattr(self, 'flow_record', {})
+        d['instance_id_to_trial'] = getattr(self, 'instance_id_to_trial', {})
+        d['prestudy_passed'] = getattr(self, 'prestudy_passed', None)
+        d['prelabels_resolved_ids'] = sorted(getattr(self, 'prelabels_resolved_ids', ()))
+
+        # Whether this participant is a person, and if not, which machine.
+        # Absent means human, so a state written before this field existed
+        # loads as one. See potato/annotator_origin.py.
+        d['origin'] = getattr(self, 'origin', {})
 
         return d
 
@@ -2845,6 +3516,52 @@ class InMemoryUserState(UserState):
                 os.unlink(temp_path)
             raise
 
+        self._append_history(user_dir)
+
+    #: Annotation history lives beside user_state.json, appended to rather than
+    #: rewritten: user_state.json is written in full on every save, and the
+    #: history grows by an entry per save. It was never written at all, so a
+    #: restart emptied every annotator's history and with it the suspicious-
+    #: activity analysis on the admin dashboard.
+    HISTORY_FILE = 'annotation_history.jsonl'
+
+    def _append_history(self, user_dir: str) -> None:
+        lock = getattr(self, '_history_lock', None) or threading.Lock()
+        with lock:
+            history = getattr(self, 'annotation_history', []) or []
+            start = getattr(self, '_history_saved', 0)
+            pending = history[start:]
+            if not pending:
+                return
+            path = os.path.join(user_dir, self.HISTORY_FILE)
+            with open(path, 'at', encoding='utf-8') as out:
+                for action in pending:
+                    out.write(json.dumps(action.to_dict(), default=str) + '\n')
+                out.flush()
+                os.fsync(out.fileno())
+            self._history_saved = start + len(pending)
+
+    def _load_history(self, user_dir: str) -> None:
+        path = os.path.join(user_dir, self.HISTORY_FILE)
+        if not os.path.exists(path):
+            return
+        loaded = []
+        with open(path, 'rt', encoding='utf-8') as f:
+            for line_no, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    loaded.append(AnnotationAction.from_dict(json.loads(line)))
+                except Exception:
+                    # A torn last line from a crash mid-append; skip it.
+                    logger.warning("Skipping unreadable annotation history line %d in %s",
+                                   line_no, path)
+        for action in loaded:
+            self.annotation_history.append(action)
+            self.instance_action_history[action.instance_id].append(action)
+        self._history_saved = len(self.annotation_history)
+
     @staticmethod
     def load(user_dir: str) -> UserState:
         '''Loads the user's state from disk'''
@@ -2855,6 +3572,19 @@ class InMemoryUserState(UserState):
         with open(state_file, 'rt', encoding='utf-8') as f:
             j = json.load(f)
 
+        user_state = InMemoryUserState.from_json_dict(j)
+        user_state._load_history(user_dir)
+        user_state._after_history_loaded()
+        return user_state
+
+    @classmethod
+    def from_json_dict(cls, j: dict, **init_kwargs) -> "InMemoryUserState":
+        '''Build a state from the dict to_json() produced, without its history.
+
+        Shared by the file backend and the MySQL backend, which store the same
+        document in different places. ``init_kwargs`` go to the constructor of
+        ``cls`` after the user id and quota.
+        '''
         def to_label(d: dict[str,str]) -> Label:
             return Label(d['schema'], d['name'])
 
@@ -2871,14 +3601,23 @@ class InMemoryUserState(UserState):
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])
 
-        user_state = InMemoryUserState(j['user_id'], j['max_assignments'])
+        # Read with .get() and the constructor's own defaults. These were
+        # indexed directly, so a state file missing any one of them killed the
+        # server at boot with a bare KeyError naming a dict key -- and the
+        # writers are not all this class. `potato import --seed-user NAME`
+        # writes only `user_id` and `instance_id_to_label_to_value`, so the
+        # project it produces printed "Run it:" and then would not start;
+        # state files written by older Potatoes are the same shape of problem.
+        # An absent key means the user has done nothing yet, which is exactly
+        # what a fresh UserState represents.
+        user_state = cls(j['user_id'], j.get('max_assignments', -1), **init_kwargs)
 
-        user_state.instance_id_ordering = j['instance_id_ordering']
-        user_state.assigned_instance_ids = set(j['instance_id_ordering'])
+        user_state.instance_id_ordering = j.get('instance_id_ordering', [])
+        user_state.assigned_instance_ids = set(user_state.instance_id_ordering)
         user_state.instance_id_to_order = user_state.generate_id_order_mapping(
             user_state.instance_id_ordering
         )
-        user_state.current_instance_index = j['current_instance_index']
+        user_state.current_instance_index = j.get('current_instance_index', 0)
 
         # Restore behavioral data (used for interaction tracking)
         from potato.interaction_tracking import BehavioralData
@@ -2889,13 +3628,13 @@ class InMemoryUserState(UserState):
             else:
                 user_state.instance_id_to_behavioral_data[instance_id] = bd_dict
 
-        for iid, l2v in j['instance_id_to_label_to_value'].items():
+        for iid, l2v in j.get('instance_id_to_label_to_value', {}).items():
             user_state.instance_id_to_label_to_value[iid] = {to_label(k): v for k, v in l2v}
 
-        for iid, s2v in j['instance_id_to_span_to_value'].items():
+        for iid, s2v in j.get('instance_id_to_span_to_value', {}).items():
             user_state.instance_id_to_span_to_value[iid] = {to_span(k): v for k, v in s2v}
 
-        for phase, p2l2lv in j['phase_to_page_to_label_to_value'].items():
+        for phase, p2l2lv in j.get('phase_to_page_to_label_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, lv_list in p2l2lv.items():
                 for lv in lv_list:
@@ -2904,7 +3643,7 @@ class InMemoryUserState(UserState):
                     value = lv[1]
                     user_state.phase_to_page_to_label_to_value[phase][page][label] = value
 
-        for phase, p2s2v in j['phase_to_page_to_span_to_value'].items():
+        for phase, p2s2v in j.get('phase_to_page_to_span_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, sv_list in p2s2v.items():
                 for sv in sv_list:
@@ -2913,11 +3652,16 @@ class InMemoryUserState(UserState):
                     value = sv[1]
                     user_state.phase_to_page_to_span_to_value[phase][page][span] = value
 
-        # These require converting the dictionaries back to the original types
-        user_state.current_phase_and_page = to_phase_and_page(j['current_phase_and_page'])
-        user_state.completed_phase_and_pages = [
-            to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
-        ]
+        # These require converting the dictionaries back to the original types.
+        # Assigned only when present, so the constructor's own starting phase
+        # stays authoritative for a state file that never recorded one.
+        if 'current_phase_and_page' in j:
+            user_state.current_phase_and_page = to_phase_and_page(
+                j['current_phase_and_page'])
+        if 'completed_phase_and_pages' in j:
+            user_state.completed_phase_and_pages = [
+                to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
+            ]
 
         # Restore training state if present
         if 'training_state' in j:
@@ -2932,6 +3676,12 @@ class InMemoryUserState(UserState):
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+        if 'instance_id_to_presentation_order' in j:
+            user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
+        if 'instance_id_to_room_provenance' in j:
+            user_state.instance_id_to_room_provenance = j['instance_id_to_room_provenance']
+        if 'instance_id_to_collab_provenance' in j:
+            user_state.instance_id_to_collab_provenance = j['instance_id_to_collab_provenance']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:
@@ -2949,11 +3699,31 @@ class InMemoryUserState(UserState):
                     for event_id, event_data in events_dict.items()
                 }
 
+        # Restore crowdsourcing platform metadata if present
+        user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
+        # Absent in states written before experiment flow existed.
+        user_state.flow_record = upgrade_flow_record(j.get('flow_record', {}) or {})
+        user_state.instance_id_to_trial = j.get('instance_id_to_trial', {}) or {}
+        user_state.prestudy_passed = j.get('prestudy_passed')
+        user_state.prelabels_resolved_ids = set(j.get('prelabels_resolved_ids') or ())
+
+        # Restore the rater's origin if present. An absent key is a person.
+        user_state.origin = j.get('origin', {}) or {}
+
         try:
             user_state.prune_missing_assigned_instances()
         except Exception:
             pass
 
+        user_state.icl_verification_tasks = dict(j.get('icl_verification_tasks', {}) or {})
+
         return user_state
+
+    def _after_history_loaded(self) -> None:
+        # performance_metrics is derived from the history and was never
+        # saved, so it read 0 actions after every restart.
+        if self.annotation_history:
+            self._update_performance_metrics()
 
 

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Simple Span Linking Example
 # This example demonstrates how to annotate relationships between named entities
 
@@ -5,7 +6,7 @@ port: 9001
 annotation_task_name: Span Linking Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-span-linking/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 data_files:

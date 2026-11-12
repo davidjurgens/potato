@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Cultural domain analysis (Weller & Romney 1988) on fruit and vegetables.
+#
+#   freelist   -> free list: "List all the kinds of fruit you can think of"
+#   annotation -> two items (fruit, vegetables), each with a triad test
+#                 ("which is most different?") and an open pile sort
+#   consensus  -> eight true/false statements for a cultural consensus analysis
+#
+# The nine fruits get a Steiner triple system (12 triads, every pair once);
+# the seven vegetables get one too (7 triads).
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/cultural-domain/config.yaml -p 8000
+#
+# Export salience, the similarity matrices and the consensus analysis:
+#   python -m potato.export --config examples/advanced/cultural-domain/config.yaml \
+#       --format cultural_domain --output out/cultural-domain \
+#       --option consensus_schemes=cc_tomato,cc_lemon_sweet,cc_banana_tree,cc_grape_raisin,cc_apple_float,cc_lime_green,cc_mango_stone,cc_pear_ripen \
+#       --option synonyms=data/synonyms.csv
+
+annotation_task_name: Cultural domain analysis (fruit)
+task_dir: .
+output_annotation_dir: annotation_output/cultural-domain/
+# The free list and the consensus statements are on survey pages. Without
+# this key, auto-export and the CSV/TSV exports leave their answers out.
+export_include_phase_data: true
+data_files:
+  - data/cultural-domain.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+
+phases:
+  order: [freelist, annotation, consensus]
+  freelist:
+    type: prestudy
+    file: surveys/freelist.yaml
+  annotation:
+    type: annotation
+  consensus:
+    type: poststudy
+    file: surveys/consensus.yaml
+
+annotation_schemes:
+  - annotation_type: triad_test
+    name: triads
+    description: Triads
+    question: Which is most different?
+    instructions: >-
+      Each triad shows three items. Choose the one that is most different
+      from the other two. There are no right answers.
+    items_field: items
+    label_requirement:
+      required: true
+  - annotation_type: card_sort
+    name: piles
+    description: Pile sort
+    mode: open
+    items_field: items

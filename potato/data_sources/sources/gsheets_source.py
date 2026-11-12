@@ -1,7 +1,7 @@
 """
 Google Sheets data source.
 
-This module provides data loading from Google Sheets spreadsheets,
+Data loading from Google Sheets spreadsheets,
 supporting service account authentication.
 """
 

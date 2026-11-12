@@ -1,0 +1,2 @@
+{"annotation_type":"pure_display","name":"consent_text","allow_html":true,"description":"<h3>Consent</h3><p>Draft. Replace with the approved wording.</p>"}
+{"annotation_type":"radio","name":"consent_agree","description":"Do you agree to take part?","labels":["I agree","I do not agree"],"humanize_labels":false,"label_requirement":{"required":true}}

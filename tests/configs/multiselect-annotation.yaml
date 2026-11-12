@@ -1,7 +1,6 @@
 annotation_task_name: "Multiselect Annotation Test"
 task_dir: "output/multiselect-annotation"
 output_annotation_dir: "output/multiselect-annotation"
-output_annotation_format: "jsonl"
 max_annotations_per_user: 10
 assignment_strategy: "fixed_order"
 data_files:

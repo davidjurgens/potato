@@ -1,0 +1,70 @@
+{% extends "scheduling/base.html" %}
+{% block main_id %}schedule-status{% endblock %}
+{% block content %}
+{% if finished %}
+<div class="sched-banner sched-banner-ok" id="schedule-saved" role="status">
+    <i class="fas fa-check" aria-hidden="true"></i>
+    <span>Thank you. Your answers to {{ finished.title or finished.name }} are saved.</span>
+</div>
+{% if completion %}
+<p class="sched-code" id="schedule-completion">Completion code: <strong>{{ completion }}</strong></p>
+{% endif %}
+{% elif enrolled %}
+<div class="sched-banner sched-banner-ok" id="schedule-enrolled" role="status">
+    <i class="fas fa-check" aria-hidden="true"></i><span>You are enrolled.</span>
+</div>
+{% endif %}
+
+{% if live %}
+<h1 class="potato-page-title" id="schedule-heading">{{ live.title }} is open</h1>
+<p class="potato-page-subtitle">It closes on <time datetime="{{ live.closes.iso }}" data-epoch="{{ live.closes.epoch }}">{{ live.closes.local }}</time>.</p>
+<a class="shadcn-button sched-primary" id="schedule-open-session" href="{{ url_for('schedule_session', session_id=live.id) }}">Start</a>
+{% elif next %}
+<h1 class="potato-page-title" id="schedule-heading">Your next session is not open yet</h1>
+{% if next.window_text %}
+<p class="potato-page-subtitle" id="schedule-next">The next short survey arrives at a random time {{ next.window_text }} ({{ tz }}).</p>
+{% else %}
+<p class="potato-page-subtitle" id="schedule-next"><strong>{{ next.title }}</strong> opens on
+    <time datetime="{{ next.opens.iso }}" data-epoch="{{ next.opens.epoch }}" id="schedule-next-opens">{{ next.opens.local }}</time>
+    and stays open until <time datetime="{{ next.closes.iso }}" data-epoch="{{ next.closes.epoch }}">{{ next.closes.local }}</time>.</p>
+{% endif %}
+<p class="sched-hint">Times are in your time zone, {{ tz }}.{% if consent and channels and not withdrawn %} We will send you a message when it opens.{% else %} Come back with your study link then.{% endif %}</p>
+{% else %}
+<h1 class="potato-page-title" id="schedule-heading">No more sessions</h1>
+<p class="potato-page-subtitle" id="schedule-next">{% if delphi_stop %}The panel has finished ({{ delphi_stop }}). {% endif %}There is nothing left to do. Thank you for taking part.</p>
+{% endif %}
+
+{% if has_prompts %}
+<p class="sched-hint" id="schedule-prompt-counts">Short surveys so far: {{ prompt_counts.answered }} answered, {{ prompt_counts.expired + prompt_counts.missed }} not answered in time, {{ prompt_counts.upcoming }} still to come.</p>
+{% endif %}
+
+{% if sessions %}
+<div class="sched-table-wrap">
+<table class="sched-table" id="schedule-sessions">
+    <caption class="visually-hidden">Your sessions</caption>
+    <thead><tr><th scope="col">Session</th><th scope="col">Opens</th><th scope="col">Closes</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+    <tr data-session="{{ s.id }}">
+        <th scope="row">{{ s.title }}{% if s.kind == 'prompt' %} ({{ s.name }}){% endif %}</th>
+        <td><time datetime="{{ s.opens.iso }}">{{ s.opens.local }}</time></td>
+        <td><time datetime="{{ s.closes.iso }}">{{ s.closes.local }}</time></td>
+        <td><span class="sched-status sched-status-{{ s.status }}">{{ {'answered': 'Done', 'upcoming': 'Not open yet', 'open': 'Open now', 'started': 'Started', 'expired': 'Closed (unfinished)', 'missed': 'Missed'}[s.status] }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+<div class="sched-footer">
+    {% if consent and not withdrawn and (contact.email or contact.phone or channels) %}
+    <form method="post" action="{{ url_for('schedule_contact_delete') }}" id="schedule-stop-form">
+        <button type="submit" class="shadcn-button shadcn-button-outline sched-secondary" id="schedule-stop-messages">Stop messages and delete my contact details</button>
+    </form>
+    {% elif withdrawn %}
+    <p class="sched-hint" id="schedule-withdrawn">You stopped messages. Your contact details are deleted.</p>
+    {% endif %}
+    <a class="sched-link" id="schedule-finish" href="{{ url_for('done') }}">Finish for now</a>
+</div>
+{% endblock %}

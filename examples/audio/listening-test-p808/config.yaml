@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Crowdsourced speech quality (ITU-T P.808 style ACR)
+#
+# A headphone check first (Huggins pitch; failing ends the study), then one
+# clip per item rated on the five-point absolute category rating scale. The
+# rating buttons unlock once the clip has played to the end. Each clip names
+# its condition in the data, so the export reports a MOS per condition.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/audio/listening-test-p808/config.yaml -p 8000
+#
+# A P.808 study also needs qualification, training with gold clips and
+# trapping clips; see docs/annotation-types/multimedia/listening_tests.md.
+
+annotation_task_name: "Speech quality (ACR)"
+
+data_files:
+  - data/clips.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+phases:
+  order: [headphones, annotation]
+  headphones:
+    type: headphone_check
+    test: huggins
+    trials: 6
+    pass_threshold: 5
+  annotation:
+    type: annotation
+
+annotation_schemes:
+  - annotation_type: listening_test
+    name: quality
+    method: acr
+    description: "How would you rate the quality of this speech sample?"
+    stimuli_field: audio
+    condition_field: condition
+    label_requirement:
+      required: true

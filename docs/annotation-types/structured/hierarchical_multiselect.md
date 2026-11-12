@@ -1,6 +1,6 @@
 # Hierarchical Multi-Label Selection
 
-The hierarchical multiselect schema allows annotators to select labels from a tree-structured taxonomy. Parent nodes can be expanded or collapsed, and selecting a parent optionally auto-selects or auto-deselects its children. An optional search box enables rapid navigation of large taxonomies.
+The hierarchical multiselect schema lets annotators pick labels out of a tree-structured taxonomy. Parent nodes can be expanded or collapsed, and selecting a parent optionally auto-selects or auto-deselects its children. An optional search box enables rapid navigation of large taxonomies.
 
 ## Overview
 
@@ -9,7 +9,7 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 - Renders the taxonomy as an expandable/collapsible tree
 - Supports arbitrary nesting depth
 - Optionally propagates selections up or down the hierarchy
-- Provides a search/filter box for large taxonomies
+- Has a search/filter box for large taxonomies
 - Enforces an optional maximum selection limit
 
 ## Research Basis
@@ -31,8 +31,15 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 | `auto_select_parent` | `false` | Selecting all children auto-selects the parent |
 | `show_search` | `false` | Show a search/filter input above the tree |
 | `max_selections` | `null` | Maximum number of labels that can be selected (null = unlimited) |
-| `expand_depth` | `1` | Number of tree levels expanded by default (0 = all collapsed) |
 | `label_requirement.required` | `false` | Require at least one selection |
+
+Only the boxes an annotator actually ticked are stored. Before v2.8.3 checking
+one leaf silently ticked its whole ancestor chain regardless of
+`auto_select_parent`, so a click on `Adjudication` stored `Annotation`,
+`Process` and `Adjudication`. An analyst counting how often `Annotation` was
+chosen could not tell a deliberate category-level choice from a leaf click three
+levels below it. If you have data from an earlier build, ancestor entries
+in it may not be choices anyone made.
 
 ### Taxonomy Format
 
@@ -74,7 +81,6 @@ annotation_schemes:
     auto_select_parent: false
     show_search: true
     max_selections: null
-    expand_depth: 1
     taxonomy:
       Science:
         Physics:
@@ -106,7 +112,6 @@ annotation_schemes:
     auto_select_parent: false
     show_search: true
     max_selections: 5
-    expand_depth: 0
     taxonomy:
       "Chapter I: Infectious Diseases":
         - "A00-A09 Intestinal infectious diseases"
@@ -117,6 +122,30 @@ annotation_schemes:
         - "C15-C26 Digestive organs"
         - "C30-C39 Respiratory and intrathoracic organs"
 ```
+
+### Taxonomy from a file
+
+`taxonomy_file` loads the hierarchy from a CSV of codes, for a codebook
+too long to write in the config:
+
+```yaml
+- annotation_type: hierarchical_multiselect
+  name: topic
+  description: Which topics does the text cover?
+  taxonomy_file: codebooks/topics.csv
+  show_codes: true
+```
+
+The CSV has the columns `code`, `label`, `parent` (the parent's code, empty
+at the top level) and an optional `description`, used as the tooltip. A
+JSON or YAML file holding the taxonomy mapping also works; its top level is
+a mapping, as in the config. A file whose top level is a list stops the
+config from loading, with an error that names the file. `show_codes:
+true` shows each entry as `<code> <label>`. The answer stores each entry's
+text, so two entries with the same text, such as an "Other" under two
+topics, would be one answer. Such a file is refused unless `show_codes:
+true` makes the entries distinct. Give `taxonomy` or `taxonomy_file`, not
+both. See [Content analysis](../../guides/content-analysis.md).
 
 ## Output Format
 
@@ -143,15 +172,15 @@ Labels appear in the order they were selected. Both parent and child labels can 
 
 ## Troubleshooting
 
-**Tree is too deep to navigate easily:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators use search to find specific nodes.
+**Tree is too deep to navigate:** The tree starts collapsed. Set `show_search: true` so annotators can search for the node they want instead of expanding branches.
 
 **Auto-selection creates unexpected behavior:** When `auto_select_children: true`, deselecting a parent does not automatically deselect its children. Annotators must deselect children manually. Make this behavior explicit in the task instructions.
 
-**Large taxonomies cause slow rendering:** For taxonomies with more than 500 nodes, enable `show_search: true` and `expand_depth: 0` to avoid rendering all nodes at once.
+**Large taxonomies cause slow rendering:** For taxonomies with more than 500 nodes, enable `show_search: true` so annotators find nodes by search rather than by expanding the tree.
 
 ## Related Documentation
 
-- [Multiselect / Checkbox](../schemas_and_templates.md#multiselect) — flat multi-label checkbox schema
+- [Multiselect / Checkbox](../schemas_and_templates.md#3-multiple-choice-multiselect) — flat multi-label checkbox schema
 - [Conditional Logic](../../configuration/conditional_logic.md) — show/hide questions based on prior selections
 - [Schema Gallery](../schemas_and_templates.md) — all annotation types with examples
 - [Configuration Reference](../../configuration/configuration.md) — complete config options

@@ -10,6 +10,13 @@ your account\".
 After creating an account, you can log in with the email and password
 used in the account creation step. Passwords are stored with per-user salted PBKDF2 hashing for security.
 
+Each account's work is stored in a folder named after its username, so some
+names are refused, at registration and at every other sign-in route: names with
+`/` or `\`, names starting with a dot, names with control characters, and names
+over 200 characters. A name that differs from an existing account only by
+letter case or Unicode normalisation (`Alice` beside `alice`) is also refused,
+because macOS and Windows treat the two as one folder.
+
 If a user forgets their password, administrators can reset it via the CLI or API. See [Password Management](password_management.md) for details on password reset, shared credential files, and database-backed authentication.
 
 ### Set up authorized users

@@ -1,0 +1,12 @@
+- annotation_type: free_list
+  name: fruit_freelist
+  description: List all the kinds of fruit you can think of.
+  instructions: >-
+    Type one kind of fruit, then press Enter. Keep going until you cannot
+    think of any more. The order you list them in is part of the answer, so
+    write them down as they come to mind.
+  min_items: 3
+  max_items: 60
+  normalize: true
+  label_requirement:
+    required: true

@@ -7,6 +7,7 @@ import os
 import pytest
 import tempfile
 
+from potato.sandbox import SandboxSettings, create_backend as create_sandbox
 from potato.coding_agent_backend import (
     BACKEND_REGISTRY,
     CodingAgentEvent,
@@ -24,6 +25,13 @@ class TestToolExecution:
 
     @pytest.fixture
     def workspace(self):
+        """A sandbox over a populated temp directory.
+
+        `execute_tool` takes a sandbox backend rather than a path: the boundary
+        the tools run inside is the security control, and accepting a bare path
+        was how "no isolation" used to be spellable. These tests exercise tool
+        semantics, so they use the `trusted` rung explicitly.
+        """
         with tempfile.TemporaryDirectory() as td:
             # Create some files
             with open(os.path.join(td, "main.py"), "w") as f:
@@ -33,7 +41,17 @@ class TestToolExecution:
             os.makedirs(os.path.join(td, "src"), exist_ok=True)
             with open(os.path.join(td, "src", "utils.py"), "w") as f:
                 f.write("def add(a, b):\n    return a + b\n")
-            yield td
+
+            settings = SandboxSettings.from_config({
+                "sandbox_mode": "trusted",
+                "acknowledge_untrusted_code_execution": True,
+            })
+            sandbox = create_sandbox(td, settings)
+            sandbox.create("test-session")
+            try:
+                yield sandbox
+            finally:
+                sandbox.cleanup()
 
     def test_read_file(self, workspace):
         result = execute_tool("Read", {"file_path": "main.py"}, workspace)
@@ -53,7 +71,7 @@ class TestToolExecution:
         assert "successfully" in result.lower() or "applied" in result.lower()
 
         # Verify the edit
-        with open(os.path.join(workspace, "main.py")) as f:
+        with open(os.path.join(workspace.workspace, "main.py")) as f:
             assert "return 99" in f.read()
 
     def test_edit_missing_string(self, workspace):
@@ -71,7 +89,7 @@ class TestToolExecution:
         }, workspace)
         assert "new_file.py" in result
 
-        with open(os.path.join(workspace, "new_file.py")) as f:
+        with open(os.path.join(workspace.workspace, "new_file.py")) as f:
             assert f.read() == "print('hello')\n"
 
     def test_write_creates_directories(self, workspace):
@@ -79,7 +97,7 @@ class TestToolExecution:
             "file_path": "deep/nested/file.py",
             "content": "x = 1",
         }, workspace)
-        assert os.path.exists(os.path.join(workspace, "deep", "nested", "file.py"))
+        assert os.path.exists(os.path.join(workspace.workspace, "deep", "nested", "file.py"))
 
     def test_bash_command(self, workspace):
         result = execute_tool("Bash", {"command": "echo hello"}, workspace)
@@ -91,7 +109,8 @@ class TestToolExecution:
 
     def test_bash_cwd(self, workspace):
         result = execute_tool("Bash", {"command": "pwd"}, workspace)
-        assert workspace in result or os.path.basename(workspace) in result
+        root = workspace.workspace
+        assert root in result or os.path.basename(root) in result
 
     def test_grep(self, workspace):
         result = execute_tool("Grep", {"pattern": "def", "path": "."}, workspace)

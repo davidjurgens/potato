@@ -1,6 +1,6 @@
 # Administrator Guide
 
-This guide covers managing annotation campaigns: setting up authentication, monitoring progress, ensuring quality, and exporting results.
+Running an annotation campaign: authentication, progress monitoring, quality control, and getting the results out.
 
 ## Setting Up Authentication
 

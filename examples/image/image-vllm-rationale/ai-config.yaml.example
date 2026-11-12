@@ -11,12 +11,20 @@ model: qwen3-vl:2b
 # model: llava:latest       # Good quality, widely tested
 # model: moondream:latest   # Smallest, fastest, good for testing
 
-# --- Option B: OpenAI Vision ---
+# --- Option B: a self-hosted vLLM or SGLang server ---
+# Anything with an OpenAI-compatible /v1 endpoint. No API key: the endpoint
+# supplies a placeholder, because self-hosted servers do not have one.
+# endpoint_type: openai_vision
+# model: google/gemma-3-12b-it
+# base_url: http://localhost:8000/v1
+# max_tokens: 800
+
+# --- Option C: OpenAI Vision ---
 # endpoint_type: openai_vision
 # model: gpt-4o
 # api_key: ${OPENAI_API_KEY}
 
-# --- Option C: Anthropic Vision ---
+# --- Option D: Anthropic Vision ---
 # endpoint_type: anthropic_vision
 # model: claude-sonnet-4-20250514
 # api_key: ${ANTHROPIC_API_KEY}

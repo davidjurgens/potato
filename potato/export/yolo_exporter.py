@@ -14,11 +14,14 @@ from typing import Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     build_category_mapping,
-    polygon_to_bbox,
+    clip_bbox,
+    label_file_paths,
     normalize_bbox,
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
+    normalize_annotation_object,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,7 +47,8 @@ class YOLOExporter(BaseExporter):
             item = context.items.get(instance_id, {})
             img_anns = extract_image_annotations(ann)
             if img_anns:
-                w, h = get_image_dimensions(item)
+                w, h = get_image_dimensions(
+                    item, config=context.config, annotation=ann)
                 if w <= 0 or h <= 0:
                     missing_dims.append(instance_id)
 
@@ -67,8 +71,18 @@ class YOLOExporter(BaseExporter):
         labels_dir = os.path.join(output_path, "labels")
         os.makedirs(labels_dir, exist_ok=True)
 
-        # Track which images have been written (handle multiple annotators)
-        image_labels = {}  # filename_stem -> list of label lines
+        # One label set per (annotator, image). Merging every annotator's boxes
+        # into one file trained on duplicates; when the study has several
+        # annotators each gets their own labels/<annotator>/ directory.
+        image_labels = {}  # (user_id, instance_id) -> list of label lines
+        annotators = sorted({str(a.get("user_id", "")) for a in context.annotations
+                             if extract_image_annotations(a)})
+        per_annotator = len(annotators) > 1
+        label_paths = label_file_paths({
+            a.get("instance_id", ""): (get_image_filename(
+                context.items.get(a.get("instance_id", ""), {}), context.config)
+                or a.get("instance_id", ""))
+            for a in context.annotations if extract_image_annotations(a)})
 
         for ann in context.annotations:
             instance_id = ann.get("instance_id", "")
@@ -77,15 +91,13 @@ class YOLOExporter(BaseExporter):
             if not img_anns:
                 continue
 
-            img_w, img_h = get_image_dimensions(item)
+            img_w, img_h = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             if img_w <= 0 or img_h <= 0:
                 warnings.append(f"Skipping {instance_id}: no image dimensions")
                 continue
 
-            file_name = get_image_filename(item) or instance_id
-            raw_stem = os.path.splitext(os.path.basename(file_name))[0]
-            stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
-
+            stem = (str(ann.get("user_id", "")), instance_id)
             if stem not in image_labels:
                 image_labels[stem] = []
 
@@ -100,42 +112,60 @@ class YOLOExporter(BaseExporter):
 
                     class_id = category_map[label]
 
-                    if obj_type == "bbox":
-                        x = obj.get("x", 0)
-                        y = obj.get("y", 0)
-                        w = obj.get("width", 0)
-                        h = obj.get("height", 0)
-                        cx, cy, nw, nh = normalize_bbox(x, y, w, h, img_w, img_h)
-                        image_labels[stem].append(
-                            f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
-                        )
-
-                    elif obj_type in ("polygon", "freeform"):
-                        points = obj.get("points", [])
-                        if not points:
-                            continue
-                        bx, by, bw, bh = polygon_to_bbox(points)
-                        cx, cy, nw, nh = normalize_bbox(bx, by, bw, bh, img_w, img_h)
-                        warnings.append(
-                            f"{obj_type} in {instance_id} converted to enclosing bbox"
-                        )
-                        image_labels[stem].append(
-                            f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
-                        )
-
-                    elif obj_type == "landmark":
+                    if obj_type == "landmark":
                         warnings.append(
                             f"Landmark in {instance_id} skipped (not supported in YOLO)"
                         )
+                        continue
 
-                    else:
+                    if obj_type not in ("bbox", "polygon", "freeform", "mask"):
                         warnings.append(
                             f"Unknown type '{obj_type}' in {instance_id}"
                         )
+                        continue
+
+                    # Reads the client's normalized `coordinates` shape and
+                    # returns absolute pixels; normalize_bbox re-normalizes to
+                    # YOLO's center-based convention below.
+                    canon = normalize_annotation_object(obj, img_w, img_h)
+                    if canon is None:
+                        warnings.append(
+                            f"Unusable {obj_type} in {instance_id}, skipping"
+                        )
+                        continue
+                    warnings.extend(
+                        f"{w} ({instance_id})" for w in canon["warnings"]
+                    )
+
+                    if obj_type != "bbox":
+                        warnings.append(
+                            f"{obj_type} in {instance_id} converted to enclosing bbox"
+                        )
+
+                    bx, by, bw, bh = canon["bbox"]
+                    if clip_bbox(bx, by, bw, bh, img_w, img_h) is None:
+                        warnings.append(
+                            f"{obj_type} in {instance_id} lies outside the image, skipping")
+                        continue
+                    cx, cy, nw, nh = normalize_bbox(bx, by, bw, bh, img_w, img_h)
+                    image_labels[stem].append(
+                        f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
+                    )
+
+        if per_annotator:
+            warnings.append(
+                f"{len(annotators)} annotators drew boxes: wrote one label set per "
+                f"annotator under labels/<annotator>/. Choose or merge them "
+                f"before training.")
 
         # Write label files
-        for stem, lines in image_labels.items():
-            label_file = os.path.join(labels_dir, f"{stem}.txt")
+        for (user_id, instance_id), lines in image_labels.items():
+            rel = label_paths.get(instance_id, instance_id)
+            if per_annotator:
+                safe_user = "".join(c if c.isalnum() or c in "-_." else "_" for c in user_id)
+                rel = f"{safe_user or '_'}/{rel}"
+            label_file = os.path.join(labels_dir, *f"{rel}.txt".split("/"))
+            os.makedirs(os.path.dirname(label_file), exist_ok=True)
             with open(label_file, "w") as f:
                 f.write("\n".join(lines))
                 if lines:
@@ -160,13 +190,20 @@ class YOLOExporter(BaseExporter):
             f.write(f"names: [{', '.join(repr(n) for n, _ in sorted_labels)}]\n")
         files_written.append(data_yaml)
 
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the YOLO export')
+        if _blank:
+            warnings.append(_blank)
+
         return ExportResult(
             success=True,
             format_name=self.format_name,
             files_written=files_written,
             warnings=warnings,
             stats={
-                "num_images": len(image_labels),
+                "num_images": len({iid for _u, iid in image_labels}),
+                "num_annotators": len(annotators),
                 "num_annotations": sum(len(v) for v in image_labels.values()),
                 "num_classes": len(sorted_labels),
             },

@@ -1,6 +1,22 @@
 # Amazon Mechanical Turk Integration Guide
 
-This guide provides comprehensive instructions for deploying Potato annotation tasks on Amazon Mechanical Turk (MTurk).
+!!! warning "MTurk closed permanently on September 30, 2026"
+    Amazon Mechanical Turk **closed on September 30, 2026**. HITs can no longer be
+    created or completed, and the requester sites return HTTP 410. No worker can
+    reach a Potato study through MTurk.
+
+    Potato still loads an MTurk config, so an archived study's server starts and
+    its annotations export. To run the study again, replace the `workerId` login
+    with another provider's `crowdsourcing` block; the annotation config,
+    training, attention checks and gold standards stay as they are. See the
+    [crowdsourcing platform guide](crowdsourcing-platforms.md), including
+    [Prolific](prolific_integration.md) and
+    [CloudResearch Connect](crowdsourcing-platforms.md#cloudresearch-connect).
+
+    The rest of this page describes how the integration worked, for reading
+    archived studies.
+
+Deploying a Potato annotation task on Amazon Mechanical Turk (MTurk), end to end.
 
 ## Table of Contents
 
@@ -20,14 +36,14 @@ This guide provides comprehensive instructions for deploying Potato annotation t
 
 ## Overview
 
-Potato integrates with Amazon Mechanical Turk through the External Question HIT type. This allows you to:
+Potato integrates with Amazon Mechanical Turk through the External Question HIT type, so you can:
 
 - Host your annotation interface on your own server
 - Automatically authenticate workers using their MTurk worker ID
 - Handle HIT preview mode gracefully
-- Submit completed work back to MTurk seamlessly
+- Submit completed work back to MTurk
 
-### How It Works
+### The External Question flow
 
 1. You create an External Question HIT on MTurk pointing to your Potato server
 2. Workers click on your HIT and are redirected to your Potato server with URL parameters
@@ -337,10 +353,11 @@ http://localhost:8000/?workerId=test123&assignmentId=assign123&hitId=hit123&turk
 ### Server Recommendations
 
 1. **Use HTTPS**: Many browsers require HTTPS for forms
-2. **Handle Concurrent Users**: Use gunicorn or similar:
+2. **Handle Concurrent Users**: Use gunicorn with one worker and several threads:
    ```bash
-   gunicorn -w 4 -b 0.0.0.0:8080 "potato.flask_server:create_app('config.yaml')"
+   gunicorn -w 1 --threads 8 -b 0.0.0.0:8080 "potato.flask_server:create_app('config.yaml')"
    ```
+   Keep `-w 1`. Potato holds its item pool and user state in memory per process, so a second worker hands out items the first already assigned and can overwrite its annotations. Raise `--threads` for more concurrency. See [Docker](docker.md#one-worker).
 3. **Set Up Logging**: Monitor for errors
 4. **Database Backups**: Regular backups of annotation data
 

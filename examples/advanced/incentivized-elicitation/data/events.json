@@ -1,0 +1,6 @@
+[
+  {"id": "ev_1", "text": "After the session, the researcher rolls one six-sided die. It shows a 6.", "outcome": 0},
+  {"id": "ev_2", "text": "After the session, the researcher flips a coin three times. At least one flip is heads.", "outcome": 1},
+  {"id": "ev_3", "text": "After the session, the researcher draws one card from a shuffled 52-card deck. It is a heart or a diamond.", "outcome": 1},
+  {"id": "ev_4", "text": "After the session, the researcher rolls two six-sided dice. They add up to 12.", "outcome": 0}
+]

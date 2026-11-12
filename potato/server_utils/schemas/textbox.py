@@ -123,16 +123,26 @@ def _generate_textbox_layout_internal(annotation_scheme):
         is_textarea = False
         textarea_attrs = ""
 
-        # Check for multiline flag (new format) or textarea.on (old format)
-        if annotation_scheme.get("multiline") or annotation_scheme.get("textarea", {}).get("on"):
+        # Check for multiline flag (new format) or textarea.on (old format).
+        #
+        # A `textarea:` block that names rows or cols but omits `on: true`
+        # rendered a single-line <input> -- the author asked for three rows and
+        # got one line, with no warning. Anything under `textarea:` means the
+        # author wants a textarea; `on: false` still turns it off explicitly.
+        textarea_block = annotation_scheme.get("textarea") or {}
+        wants_textarea = (
+            bool(textarea_block)
+            and textarea_block.get("on", True) is not False
+        )
+        if annotation_scheme.get("multiline") or wants_textarea:
             is_textarea = True
             # Use multiline config or fall back to textarea config
             if annotation_scheme.get("multiline"):
                 rows = annotation_scheme.get("rows", "3")
                 cols = annotation_scheme.get("cols", "40")
             else:
-                rows = annotation_scheme["textarea"].get("rows", "3")
-                cols = annotation_scheme["textarea"].get("cols", "40")
+                rows = textarea_block.get("rows", "3")
+                cols = textarea_block.get("cols", "40")
             textarea_attrs = f"rows='{rows}' cols='{cols}'"
 
         # Show label if not the default text_box label
@@ -140,6 +150,13 @@ def _generate_textbox_layout_internal(annotation_scheme):
 
         # Placeholder attribute
         placeholder_attr = f'placeholder="{placeholder}"' if placeholder else ''
+
+        # With the default label there is no <label>, and a legend names the
+        # fieldset, not the field: screen readers announced a bare "edit
+        # text". Name the field after the question instead.
+        name_attr = "" if label_text else (
+            f'aria-label="{escape_html_content(annotation_scheme.get("description", ""))}"'
+        )
 
         schematic += f"""
             <div class="shadcn-textbox-item">
@@ -157,6 +174,7 @@ def _generate_textbox_layout_internal(annotation_scheme):
                           label_name="{identifiers['label_name']}"
                           {textarea_attrs}
                           {placeholder_attr}
+                          {name_attr}
                           style="{custom_css}"
                           {paste_setting}></textarea>
             """
@@ -171,6 +189,7 @@ def _generate_textbox_layout_internal(annotation_scheme):
                        schema="{identifiers['schema']}"
                        label_name="{identifiers['label_name']}"
                        {placeholder_attr}
+                       {name_attr}
                        style="{custom_css}"
                        {paste_setting}>
             """

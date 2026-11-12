@@ -1,0 +1,59 @@
+{
+	admin off
+{% if acme_email %}
+	email {{ acme_email }}
+{% endif %}
+}
+
+{% if domain %}
+# A real domain: Caddy's defaults are already right. Certificates come from
+# Let's Encrypt over HTTP-01 and renew with 30 days of slack.
+{{ domain }} {
+{% else %}
+# No domain, so the certificate is issued for the bare IP address. Let's Encrypt
+# began issuing these on 2026-01-15.
+#
+# Two things have to be stated explicitly and neither is the default.
+#
+# Caddy issues a *self-signed* certificate for an IP host unless an issuer is
+# named, which produces a browser warning that looks exactly like a
+# misconfiguration and sends annotators away.
+#
+# And IP certificates use the `shortlived` profile: six days of validity rather
+# than ninety. Renewal has roughly two days of slack instead of thirty, so the
+# certificate store lives on the persistent volume ({{ cert_dir }}) and a
+# renewal failure has to be visible in `potato deploy status` rather than
+# discovered by an annotator meeting a security warning.
+#
+# sslip.io was the alternative and is rejected. It is deliberately absent from
+# the Public Suffix List, so a browser treats every *.sslip.io host as one site
+# for cookie purposes: anyone else's box on that domain could set a cookie this
+# Flask session would accept.
+{{ public_host }} {
+	tls {
+		issuer acme {
+			dir {{ acme_directory }}
+			profile shortlived
+		}
+	}
+{% endif %}
+
+	encode zstd gzip
+
+	# Potato streams uploads (audio, video, document ingestion) and holds long
+	# poll connections; the defaults time these out mid-annotation.
+	reverse_proxy 127.0.0.1:{{ app_port }} {
+		flush_interval -1
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -1,7 +1,7 @@
 """
 Competence profiles for simulated users.
 
-This module defines different competence levels that determine how
+Different competence levels that determine how
 accurately a simulated user will annotate items.
 
 When gold standards are available, competence determines the probability

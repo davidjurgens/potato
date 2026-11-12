@@ -5,8 +5,8 @@
  * Supports text layer for span annotation.
  */
 
-// PDF.js library is loaded from CDN
-const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
+// PDF.js comes from the shared loader in pdfjs-loader.js, which prefers the
+// vendored copy so this works offline. Do not load it directly here.
 
 // Track initialized viewers
 const pdfViewers = new Map();
@@ -15,7 +15,10 @@ const pdfViewers = new Map();
  * Initialize all PDF viewers on the page.
  */
 function initPDFViewers() {
-    const containers = document.querySelectorAll('.pdf-display[data-pdf-source]');
+    // Plain viewer only. Bounding-box and link containers carry data-pdf-source
+    // too, but pdf-bbox.js and pdf-link-mode.js own those and would fight us
+    // over the same canvas.
+    const containers = document.querySelectorAll('.pdf-display.pdf-plain-mode[data-pdf-source]');
     containers.forEach(container => {
         if (!pdfViewers.has(container)) {
             const viewer = new PDFViewer(container);
@@ -76,19 +79,10 @@ class PDFViewer {
         if (window.pdfjsLib) {
             return;
         }
-
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = `${PDFJS_CDN}/pdf.min.js`;
-            script.onload = () => {
-                // Set worker source
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-                    `${PDFJS_CDN}/pdf.worker.min.js`;
-                resolve();
-            };
-            script.onerror = () => reject(new Error('Failed to load PDF.js'));
-            document.head.appendChild(script);
-        });
+        if (!window.PotatoPDFJS) {
+            throw new Error('pdfjs-loader.js must be loaded before pdf-viewer.js');
+        }
+        return window.PotatoPDFJS.load();
     }
 
     /**

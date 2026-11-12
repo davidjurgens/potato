@@ -1,13 +1,14 @@
 """
 Solo Mode Manager
 
-This module provides the central SoloModeManager class that orchestrates
+The central SoloModeManager class that orchestrates
 all Solo Mode operations including prompt management, LLM labeling,
 instance selection, and validation tracking.
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 import json
 import logging
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 # Singleton instance
 _SOLO_MODE_MANAGER: Optional['SoloModeManager'] = None
 _SOLO_MODE_LOCK = threading.Lock()
+
+
+# Phases in which the background labelling loop runs.
+_LABELING_PHASES = (
+    SoloPhase.EDGE_CASE_LABELING, SoloPhase.PROMPT_VALIDATION,
+    SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION,
+    SoloPhase.AUTONOMOUS_LABELING,
+)
 
 
 @dataclass
@@ -218,6 +227,8 @@ class SoloModeManager:
         self._labeled_by_user: Dict[str, Set[str]] = {}
         self.llm_labeled_ids: Set[str] = set()
         self.disagreement_ids: Set[str] = set()
+        #: _revisit_key()s of disagreements already shown again for re-review.
+        self._reviewed_disagreements: Set[str] = set()
         self.validation_sample_ids: Set[str] = set()
         # Subset of validation_sample_ids actually confirmed through the
         # /solo/validation screen (record_validation) — deliberately not
@@ -321,10 +332,34 @@ class SoloModeManager:
         # Reannotation tracking (persisted across restarts)
         self._reannotation_counts: Dict[str, int] = {}
 
+        # Background-labeling error tracking (surfaced on the dashboard so a
+        # misconfigured/unreachable endpoint is visible instead of looking like
+        # "Running / 0 errors" forever).
+        self._labeling_error_count: int = 0
+        self._last_labeling_error: Optional[str] = None
+
         # Per-prompt-version agreement tracking
         # Tracks agreement separately for each prompt version so we can
         # measure whether a refinement actually improved accuracy
         self._per_version_agreement: Dict[int, Dict[str, int]] = {}  # version -> {compared, agreements}
+
+        #: Lowest confidence any routing tier gave an item. An escalated item
+        #: was hard for the tier below even when the tier that accepted it
+        #: reports full confidence, and the curriculum ranks by this.
+        self._routing_min_confidence: Dict[str, float] = {}
+
+        # Why background labeling last refused to run (ai_budget.cap_usd)
+        self._spend_refusal: Optional[str] = None
+
+        # Gold-set scores per prompt version, and background evaluation jobs
+        from .evaluation import JobRegistry
+        self._gold_results: Dict[int, Dict[str, Any]] = {}
+        self._jobs = JobRegistry()
+
+        # Blind-versus-shown agreement (see anchoring.py)
+        from .anchoring import AnchoringTracker
+        self.anchoring = AnchoringTracker(
+            config.suggestions, salt=str(app_config.get('annotation_task_name', '')))
 
         # Validated refinement framework state
         self._refinement_consecutive_failures: int = 0
@@ -338,6 +373,20 @@ class SoloModeManager:
 
         # State persistence
         self._state_file = 'solo_mode_state.json'
+
+        # Solo mode operates on a single annotation scheme throughout (labeling,
+        # recording, agreement, prediction all key off schemes[0]). Warn loudly
+        # if the config defines more than one so the admin knows the extras are
+        # ignored rather than silently getting mislabeled data.
+        _schemes = app_config.get('annotation_schemes', []) if app_config else []
+        if len(_schemes) > 1:
+            _first = _schemes[0].get('name', '?')
+            _ignored = [s.get('name', '?') for s in _schemes[1:]]
+            logger.warning(
+                "Solo Mode supports a single annotation scheme; using '%s' and "
+                "ignoring %s. Annotations for the ignored scheme(s) will not be "
+                "collected.", _first, _ignored
+            )
 
         # Codebook output-change review. When a codebook edit changes
         # what the model is told, we re-label the instances it touched
@@ -408,7 +457,7 @@ class SoloModeManager:
             # code (and thus can move its instances' labels). recolor /
             # move / create don't alter prompt content for existing
             # instances, so they don't warrant a re-label sweep.
-            prompt_ops = {"rename", "delete", "merge"}
+            prompt_ops = {"rename", "delete", "merge", "split"}
             from potato.codebook.codebook import Codebook
             cb = Codebook.load(task_dir, project)
             affected: Dict[str, str] = {}  # code NAME -> latest change_id
@@ -926,6 +975,8 @@ class SoloModeManager:
                 llm_predicted=self.config.instance_selection.llm_predicted_weight,
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
+            self._instance_selector.configure_curriculum(
+                self.config.instance_selection.curriculum)
         return self._instance_selector
 
     @property
@@ -949,6 +1000,9 @@ class SoloModeManager:
                 prompt_version_getter=lambda: self.current_prompt_version,
                 examples_getter=self.get_icl_examples,
             )
+            if self.config.cache.enabled:
+                from .label_cache import LabelCache
+                self._llm_labeling_thread.label_cache = LabelCache(self.config.state_dir)
         return self._llm_labeling_thread
 
     @property
@@ -1432,6 +1486,9 @@ class SoloModeManager:
             reasoning=result.reasoning,
         )
         self.set_llm_prediction(result.instance_id, result.schema_name, prediction)
+        # Advance the periodic-review counter so a review becomes due after
+        # `periodic_review_interval` fresh LLM labels.
+        self.validation_tracker.record_llm_label(result.instance_id)
         llm_count = len(self.llm_labeled_ids)
         if llm_count % 10 == 0:
             logger.info(
@@ -1772,11 +1829,18 @@ class SoloModeManager:
 
         # Get current state
         metrics = self.get_agreement_metrics()
-        agreement_rate = metrics.agreement_rate if hasattr(metrics, 'agreement_rate') else 0.0
         prompt_version = self.current_prompt_version
+        # The current prompt version's own rate: it is both the "after" of
+        # the previous cycle and the "before" of this one. The cumulative rate
+        # diluted a real gain with every comparison made before it (a +0.10
+        # read as +0.014) and the loop stopped as plateaued.
+        version_rate = self._version_rate(prompt_version)
+        agreement_rate = (version_rate if version_rate is not None else
+                          getattr(metrics, 'agreement_rate', 0.0))
 
         # Check for post-cycle metrics from previous cycle
-        loop.record_post_cycle_metrics(agreement_rate)
+        if version_rate is not None:
+            loop.record_post_cycle_metrics(version_rate)
 
         # Get confusion patterns
         analysis = self.get_confusion_analysis_full()
@@ -1967,10 +2031,11 @@ class SoloModeManager:
         if loop.is_stopped:
             return {'success': False, 'error': f'Refinement loop stopped: {loop.stop_reason}'}
 
-        # Record post-cycle metrics from the previous cycle
-        metrics = self.get_agreement_metrics()
-        agreement_rate = getattr(metrics, 'agreement_rate', 0.0)
-        loop.record_post_cycle_metrics(agreement_rate)
+        # Record post-cycle metrics from the previous cycle, on the current
+        # prompt version's comparisons only (see run_refinement_cycle).
+        version_rate = self._version_rate(self.current_prompt_version)
+        if version_rate is not None:
+            loop.record_post_cycle_metrics(version_rate)
 
         # Instantiate strategy
         try:
@@ -2263,8 +2328,15 @@ class SoloModeManager:
                 label: str = ""
 
             response = endpoint.query(full_prompt, LabelOnly)
+            if isinstance(response, str):
+                # OpenAI, Anthropic and vLLM return the reply text; it used to
+                # fall through to None, so every candidate scored 0.
+                from potato.ai.ai_endpoint import parse_llm_json
+                parsed = parse_llm_json(response)
+                response = parsed if 'label' in parsed else {
+                    'label': str(parsed.get('response', ''))}
             if isinstance(response, dict):
-                return response.get('label', '').strip() or None
+                return str(response.get('label', '')).strip() or None
             elif hasattr(response, 'label'):
                 return response.label
             return None
@@ -2559,6 +2631,15 @@ class SoloModeManager:
             )
             if phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
                 self.start_background_labeling()
+            elif phase in (SoloPhase.EDGE_CASE_LABELING, SoloPhase.PROMPT_VALIDATION):
+                # Warm up predictions early: the annotator spends 30-60s on edge
+                # cases, so pre-labeling the real dataset now means the first
+                # instances they see in PARALLEL_ANNOTATION already have LLM
+                # suggestions instead of a cold-start wait. The prompt is stable
+                # by this point; any later prompt change triggers re-annotation.
+                # start_background_labeling() is idempotent, so the subsequent
+                # PARALLEL_ANNOTATION call is a harmless no-op.
+                self.start_background_labeling()
         else:
             logger.warning(
                 f"[Phase Transition] FAILED: {old_phase.name} -> {phase.name}"
@@ -2672,7 +2753,24 @@ class SoloModeManager:
             user_set -= newly_flagged
         for instance_id in newly_flagged:
             self.llm_labeled_ids.discard(instance_id)
-            self.predictions.pop(instance_id, None)
+            dropped = self.predictions.pop(instance_id, None) or {}
+            # The comparison made under the old prompt leaves the overall
+            # totals with its prediction. Left in, the relabel under the new
+            # prompt counted as a second comparison of the same item, and a
+            # relabel that now agreed stayed in disagreement_ids.
+            # _per_version_agreement keeps the old version's history.
+            for schema_name, pred in dropped.items():
+                if pred.human_label is None:
+                    continue
+                self.agreement_metrics.total_compared -= 1
+                if pred.agrees_with_human:
+                    self.agreement_metrics.agreements -= 1
+                else:
+                    self.agreement_metrics.disagreements -= 1
+                self.validation_tracker.retract_comparison(instance_id, schema_name)
+            if dropped:
+                self.agreement_metrics.update_rate()
+            self.disagreement_ids.discard(instance_id)
 
         logger.info(
             f"[Relabel] Prompt changed — flagged {len(newly_flagged)} "
@@ -2787,8 +2885,11 @@ class SoloModeManager:
         with self._lock:
             if instance_id not in self.predictions:
                 self.predictions[instance_id] = {}
+            previous = self.predictions[instance_id].get(schema_name)
             self.predictions[instance_id][schema_name] = prediction
             self.llm_labeled_ids.add(instance_id)
+            if previous is not None and previous is not prediction:
+                self._retract_comparison(instance_id, schema_name, previous)
 
             # Track confidence history for cartography
             if instance_id not in self.confidence_history:
@@ -2796,6 +2897,35 @@ class SoloModeManager:
             self.confidence_history[instance_id].append(
                 (prediction.prompt_version, prediction.confidence_score)
             )
+        from potato.labeling_engine.integration.mirror import mirror
+        mirror("solo_mode", prediction.model_name, prediction.prompt_version, instance_id,
+               schema_name, prediction.predicted_label, prediction.confidence_score)
+
+    def _retract_comparison(self, instance_id: str, schema_name: str,
+                            previous: LLMPrediction) -> None:
+        """Take a replaced prediction's comparison out of every count.
+
+        One (instance, schema) is one comparison. A re-annotated prediction
+        arrives without the human label, so it was compared again (here or on
+        the human's next save) and the item counted twice towards the gate's
+        minimum sample, with both its old and new verdicts in the rate.
+        """
+        if previous.human_label is None or previous.agrees_with_human is None:
+            return
+        metrics = self.agreement_metrics
+        metrics.total_compared = max(0, metrics.total_compared - 1)
+        if previous.agrees_with_human:
+            metrics.agreements = max(0, metrics.agreements - 1)
+        else:
+            metrics.disagreements = max(0, metrics.disagreements - 1)
+        metrics.update_rate()
+        stats = self._per_version_agreement.get(previous.prompt_version)
+        if stats:
+            stats['compared'] = max(0, stats['compared'] - 1)
+            if previous.agrees_with_human:
+                stats['agreements'] = max(0, stats['agreements'] - 1)
+        self.validation_tracker.retract_comparison(instance_id, schema_name)
+        self._refresh_disagreement(instance_id)
 
     def get_llm_prediction(
         self,
@@ -2847,7 +2977,9 @@ class SoloModeManager:
         instance_id: str,
         schema_name: str,
         label: Any,
-        user_id: str
+        user_id: str,
+        suggestion_visible: Optional[bool] = None,
+        accepted_suggestion: bool = False,
     ) -> Optional[bool]:
         """
         Record a human label and compare with LLM prediction.
@@ -2857,6 +2989,10 @@ class SoloModeManager:
             schema_name: The annotation schema
             label: The human's label
             user_id: The annotator ID
+            suggestion_visible: Whether the LLM's suggestion was on screen
+                when the human answered. None (a caller that does not know)
+                leaves the comparison out of the blind/shown split.
+            accepted_suggestion: The label came from the Accept button.
 
         Returns:
             True if agrees with LLM, False if disagrees, None if no LLM prediction
@@ -2865,23 +3001,19 @@ class SoloModeManager:
             self.human_labeled_ids.add(instance_id)
             self._labeled_by_user.setdefault(user_id, set()).add(instance_id)
             self.pending_relabel_ids.discard(instance_id)
+            if suggestion_visible:
+                self.anchoring.mark_shown(instance_id)
 
             prediction = self.get_llm_prediction(instance_id, schema_name)
             if prediction is None:
                 return None
 
-            # If this instance/schema was already compared once (e.g. the
-            # human is re-confirming or correcting a label after
-            # revisiting it via the Codebook tray's stale-review
-            # worklist), replace that old comparison in the totals
-            # instead of adding a second one on top of it — otherwise
-            # every re-review permanently inflates total_compared and the
-            # displayed Agreement %, and can even push
-            # should_end_human_annotation()'s threshold check over the
-            # line using fabricated repeat-comparisons rather than
-            # actually-new ones.
-            already_compared = prediction.human_label is not None
-            previous_agreement = prediction.agrees_with_human
+            # Detect a re-submission of the same (instance, schema): the
+            # prediction already carries a human_label. Double-submits (double
+            # click, Accept+Enter, back-button resubmit) must NOT double-count
+            # agreement metrics or the confusion matrix.
+            already_counted = prediction.human_label is not None
+            previous_agrees = prediction.agrees_with_human
 
             prediction.human_label = label
             agrees = self._check_agreement(
@@ -2918,42 +3050,59 @@ class SoloModeManager:
             if not reconfirms_same_resolution:
                 prediction.disagreement_resolved = False
 
-            if already_compared:
-                if previous_agreement:
-                    self.agreement_metrics.agreements -= 1
-                else:
-                    self.agreement_metrics.disagreements -= 1
-            else:
-                self.agreement_metrics.total_compared += 1
-
-            if agrees:
-                self.agreement_metrics.agreements += 1
-                self.disagreement_ids.discard(instance_id)
-            else:
-                self.agreement_metrics.disagreements += 1
-                self.disagreement_ids.add(instance_id)
-            self.agreement_metrics.update_rate()
-
-            # Track per-prompt-version agreement (same replace-not-add rule)
             pv = prediction.prompt_version
-            if pv not in self._per_version_agreement:
-                self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
-            if already_compared:
-                if previous_agreement:
-                    self._per_version_agreement[pv]['agreements'] -= 1
-            else:
-                self._per_version_agreement[pv]['compared'] += 1
-            if agrees:
-                self._per_version_agreement[pv]['agreements'] += 1
 
-            # Feed the validation tracker for confusion matrix / pattern analysis
-            self.validation_tracker.record_comparison(
-                instance_id=instance_id,
-                human_label=label,
-                llm_label=prediction.predicted_label,
-                schema_name=schema_name,
-                agrees=agrees,
-            )
+            if not already_counted:
+                # Update agreement metrics (once per instance/schema)
+                self.agreement_metrics.total_compared += 1
+                if agrees:
+                    self.agreement_metrics.agreements += 1
+                else:
+                    self.agreement_metrics.disagreements += 1
+                    self.disagreement_ids.add(instance_id)
+                self.agreement_metrics.update_rate()
+
+                # Track per-prompt-version agreement
+                if pv not in self._per_version_agreement:
+                    self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
+                self._per_version_agreement[pv]['compared'] += 1
+                if agrees:
+                    self._per_version_agreement[pv]['agreements'] += 1
+
+                # Feed the validation tracker for confusion matrix / pattern analysis
+                self.validation_tracker.record_comparison(
+                    instance_id=instance_id,
+                    human_label=label,
+                    llm_label=prediction.predicted_label,
+                    schema_name=schema_name,
+                    agrees=agrees,
+                )
+                if suggestion_visible is not None:
+                    self.anchoring.record(
+                        f"{instance_id}:{schema_name}", agrees,
+                        shown=suggestion_visible,
+                        accepted=accepted_suggestion)
+            else:
+                # Re-label of an already-counted instance: the newest label
+                # replaces the old one in every count. Only the disagreement
+                # set used to follow it, so a corrected label left the rate
+                # (and the gate that ends human annotation) at the old value.
+                self._refresh_disagreement(instance_id)
+                if previous_agrees is not None and previous_agrees != agrees:
+                    step = 1 if agrees else -1
+                    self.agreement_metrics.agreements += step
+                    self.agreement_metrics.disagreements -= step
+                    self.agreement_metrics.update_rate()
+                    if pv in self._per_version_agreement:
+                        self._per_version_agreement[pv]['agreements'] += step
+                self.validation_tracker.retract_comparison(instance_id, schema_name)
+                self.validation_tracker.record_comparison(
+                    instance_id=instance_id,
+                    human_label=label,
+                    llm_label=prediction.predicted_label,
+                    schema_name=schema_name,
+                    agrees=agrees,
+                )
 
             human_count = len(self.human_labeled_ids)
             pv_stats = self._per_version_agreement.get(pv, {})
@@ -2999,10 +3148,13 @@ class SoloModeManager:
                 return str(llm_label) == str(human_label)
 
         elif annotation_type == 'multiselect':
-            # Jaccard similarity for multiselect
+            # Jaccard similarity for multiselect. Labels can arrive as a JSON
+            # array string (from the solo UI), a comma string, a list, or a
+            # single value; normalize to a set so we never treat a string as a
+            # set of characters.
             threshold = self.config.thresholds.multiselect_jaccard_threshold
-            llm_set = set(llm_label) if isinstance(llm_label, (list, set)) else {llm_label}
-            human_set = set(human_label) if isinstance(human_label, (list, set)) else {human_label}
+            llm_set = self._to_label_set(llm_label)
+            human_set = self._to_label_set(human_label)
 
             if not llm_set and not human_set:
                 return True
@@ -3012,20 +3164,106 @@ class SoloModeManager:
             jaccard = intersection / union if union > 0 else 0
             return jaccard >= threshold
 
-        elif annotation_type == 'textbox':
-            # For now, exact match; could use embedding similarity
+        elif annotation_type in ('text', 'textbox'):
+            # Free-text: normalized exact match. (The registry type is 'text';
+            # 'textbox' kept as an alias.)
             return str(llm_label).strip().lower() == str(human_label).strip().lower()
 
         elif annotation_type == 'span':
-            # Token overlap for spans
+            # Character-overlap agreement for spans (same label). Labels are JSON
+            # arrays of {start, end, label}. Agree if the same-label overlap
+            # covers at least span_overlap_threshold of the human span length.
             threshold = self.config.thresholds.span_overlap_threshold
-            # Simplified: check if spans overlap sufficiently
-            # Full implementation would compare token ranges
-            return str(llm_label) == str(human_label)
+            return self._spans_agree(human_label, llm_label, threshold)
 
         else:
             # Default to exact match
             return str(llm_label) == str(human_label)
+
+    @staticmethod
+    def _to_label_set(label: Any) -> set:
+        """Normalize a multiselect label into a set of label strings.
+
+        Accepts a list/set, a JSON array string (``["a","b"]``), a
+        comma-separated string, or a single value. Never iterates a plain
+        string into a set of characters.
+        """
+        if label is None:
+            return set()
+        if isinstance(label, (list, set, tuple)):
+            return {str(x) for x in label}
+        if isinstance(label, str):
+            s = label.strip()
+            if not s:
+                return set()
+            if s.startswith('[') and s.endswith(']'):
+                try:
+                    import json as _json
+                    parsed = _json.loads(s)
+                    if isinstance(parsed, list):
+                        return {str(x) for x in parsed}
+                except (ValueError, TypeError):
+                    pass
+            if ',' in s:
+                return {p.strip() for p in s.split(',') if p.strip()}
+            return {s}
+        return {str(label)}
+
+    @staticmethod
+    def _parse_spans(label: Any) -> List[Dict[str, Any]]:
+        """Parse a span annotation (JSON array string or list) into a list of
+        {start, end, label} dicts. Invalid input -> []."""
+        if isinstance(label, list):
+            raw = label
+        elif isinstance(label, str):
+            s = label.strip()
+            if not s:
+                return []
+            try:
+                raw = json.loads(s)
+            except (ValueError, TypeError):
+                return []
+        else:
+            return []
+        out = []
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict) and 'start' in item and 'end' in item:
+                    try:
+                        out.append({
+                            'start': int(item['start']),
+                            'end': int(item['end']),
+                            'label': str(item.get('label', '')),
+                        })
+                    except (ValueError, TypeError):
+                        continue
+        return out
+
+    def _spans_agree(self, human_label: Any, llm_label: Any,
+                     threshold: float) -> bool:
+        """Char-overlap agreement between two span sets (matched by label)."""
+        hs = self._parse_spans(human_label)
+        ls = self._parse_spans(llm_label)
+        if not hs and not ls:
+            return True
+        if not hs or not ls:
+            return False
+        # Covered characters per label, as sets: summing span-by-span
+        # overlaps counted a character twice when two LLM spans covered it,
+        # so a human span half covered by a duplicated LLM span read as fully
+        # covered.
+        def chars(spans):
+            out: Dict[str, set] = defaultdict(set)
+            for sp in spans:
+                out[sp['label']].update(range(int(sp['start']), int(sp['end'])))
+            return out
+
+        human, llm = chars(hs), chars(ls)
+        total_human = sum(len(c) for c in human.values())
+        if total_human == 0:
+            return False
+        overlap = sum(len(c & llm.get(label, set())) for label, c in human.items())
+        return (overlap / total_human) >= threshold
 
     def _get_annotation_type(self, schema_name: str) -> str:
         """Get the annotation type for a schema."""
@@ -3084,11 +3322,25 @@ class SoloModeManager:
                 agrees=agrees,
             )
 
+            # The LLM labelled this after the human did, so the human answered
+            # without this suggestion. They may still have seen an earlier
+            # prompt version's suggestion for the same item.
+            self.anchoring.record(
+                f"{instance_id}:{schema_name}", agrees,
+                shown=self.anchoring.was_shown(instance_id))
+
             logger.debug(
                 f"Retroactive comparison for {instance_id}: "
                 f"llm={prediction.predicted_label}, human={human_label}, "
                 f"agrees={agrees}, prompt_v{pv}"
             )
+
+    def _version_rate(self, prompt_version) -> Optional[float]:
+        """Agreement on comparisons made under one prompt version, or None
+        before there are any."""
+        stats = self._per_version_agreement.get(prompt_version) or {}
+        compared = stats.get('compared', 0)
+        return stats.get('agreements', 0) / compared if compared else None
 
     def _get_stored_human_label(
         self, instance_id: str, schema_name: str
@@ -3098,7 +3350,11 @@ class SoloModeManager:
         Returns:
             The human label if found, None otherwise.
         """
+        # get_all_user_ids() and get_annotations_for_instance() do not exist;
+        # the AttributeError was swallowed, so this always returned None and a
+        # human who labelled before the LLM was never compared.
         try:
+            from potato.server_utils import annotation_values
             from potato.user_state_management import get_user_state_manager
             usm = get_user_state_manager()
             # Check all users' annotations for this instance
@@ -3106,12 +3362,53 @@ class SoloModeManager:
                 user_state = usm.get_user_state(user_id)
                 if user_state is None:
                     continue
-                annotations = user_state.get_annotations_for_instance(instance_id)
-                if annotations and schema_name in annotations:
-                    return annotations[schema_name]
+                stored = user_state.get_label_annotations(instance_id)
+                if not stored:
+                    continue
+                values = annotation_values.group_by_schema(stored).get(schema_name)
+                if not values:
+                    continue
+                chosen = annotation_values.selected_labels(values)
+                if len(chosen) == 1:
+                    return chosen[0]
+                if chosen:
+                    return sorted(chosen)
         except Exception as e:
             logger.debug(f"Could not look up human label for {instance_id}: {e}")
         return None
+
+    def _refresh_disagreement(self, instance_id: str) -> None:
+        """An instance is a disagreement while ANY of its schemas disagrees.
+
+        The set is per instance but answers are per (instance, schema): a
+        re-saved schema that agreed used to discard the instance even when
+        another schema on it still disagreed, while the tracker kept counting
+        that disagreement.
+        """
+        if any(p.agrees_with_human is False
+               for p in (self.predictions.get(instance_id) or {}).values()):
+            self.disagreement_ids.add(instance_id)
+        else:
+            self.disagreement_ids.discard(instance_id)
+
+    def _revisit_key(self, instance_id: str) -> str:
+        """A disagreement under the LLM's current answer, for re-review once."""
+        versions = sorted(str(p.prompt_version)
+                          for p in (self.predictions.get(instance_id) or {}).values())
+        return f"{instance_id}@{','.join(versions)}"
+
+    def _disagreements_to_revisit(self, all_ids: Set[str]) -> Set[str]:
+        """Disagreements the human has not re-reviewed under the current prompt.
+
+        These are human-labelled by definition, and the pool used to be built
+        from the unlabelled items only, so it was always empty and its weight
+        went to the other pools. Each is offered once per prompt version: after
+        the human has looked again, it comes back only when a new prompt has
+        produced a new answer.
+        """
+        reviewed = getattr(self, '_reviewed_disagreements', set())
+        return {iid for iid in self.disagreement_ids
+                if iid in all_ids and self._revisit_key(iid) not in reviewed}
 
     # === Disagreement Resolution ===
 
@@ -3313,6 +3610,10 @@ class SoloModeManager:
                 pred_dicts[iid] = {
                     s: p.to_dict() for s, p in schemas.items()
                 }
+                routed = self._routing_min_confidence.get(iid)
+                if routed is not None:
+                    for d in pred_dicts[iid].values():
+                        d['routing_min_confidence'] = routed
 
             # Get edge case rule IDs if available
             edge_case_rule_ids = None
@@ -3332,21 +3633,34 @@ class SoloModeManager:
                         for iid, s in cartography.items()
                     }
 
+            revisit = self._disagreements_to_revisit(all_ids)
+
             # Refresh pools with current data
             self.instance_selector.refresh_pools(
                 available_ids=available,
                 llm_predictions=pred_dicts,
-                disagreement_ids=self.disagreement_ids,
+                disagreement_ids=revisit,
+                revisit_ids=revisit,
                 confidence_threshold=self.config.thresholds.confidence_low,
                 edge_case_rule_ids=edge_case_rule_ids,
                 cartography_scores=cartography_variability,
+                human_labeled_count=len(self.human_labeled_ids),
             )
 
             # Select next instance
-            return self.instance_selector.select_next(
-                available_ids=available,
-                exclude_ids=self.human_labeled_ids,
+            chosen = self.instance_selector.select_next(
+                available_ids=available | revisit,
+                exclude_ids=self.human_labeled_ids - revisit,
             )
+            if chosen in revisit:
+                self._reviewed_disagreements.add(self._revisit_key(chosen))
+            return chosen
+
+    def get_curriculum_status(self) -> Dict[str, Any]:
+        """Curriculum stage, counted against the human labels saved so far."""
+        with self._lock:
+            return self.instance_selector.get_curriculum_status(
+                len(self.human_labeled_ids))
 
     def get_cartography_scores(self) -> Dict[str, Dict[str, float]]:
         """Compute cartography signals for each instance.
@@ -3394,14 +3708,51 @@ class SoloModeManager:
         minimum validation sample size is met.
         """
         with self._lock:
-            metrics = self.agreement_metrics
-            threshold = self.config.thresholds.end_human_annotation_agreement
-            min_sample = self.config.thresholds.minimum_validation_sample
+            return self._handoff_agreement_reached()
 
-            if metrics.total_compared < min_sample:
-                return False
+    def _handoff_agreement_reached(self) -> bool:
+        """Whether agreement is high enough, on enough items, to hand over.
 
-            return metrics.agreement_rate >= threshold
+        Reads blind agreement once there is enough of it (see
+        AnchoringTracker.handoff_basis). The minimum sample still applies to
+        every comparison, blind or not.
+        """
+        metrics = self.agreement_metrics
+        threshold = self.config.thresholds.end_human_annotation_agreement
+        min_sample = self.config.thresholds.minimum_validation_sample
+        if metrics.total_compared < min_sample:
+            return False
+        basis = self.anchoring.handoff_basis(self._blind_items_left())
+        if basis == 'waiting':
+            return False
+        if basis == 'blind':
+            return self.anchoring.blind_agreement_rate() >= threshold
+        if basis == 'blind_short' and self.anchoring.blind_count() > 0:
+            # Fewer blind items exist than the minimum: read the ones there are
+            # rather than wait for comparisons that cannot arrive.
+            return self.anchoring.blind_agreement_rate() >= threshold
+        return metrics.agreement_rate >= threshold
+
+    def _blind_items_left(self) -> Optional[int]:
+        """Blind items the human has not labelled yet, i.e. blind comparisons
+        still to come from the annotate page. None when the corpus cannot be
+        read, which keeps the handoff waiting rather than guessing "none"."""
+        try:
+            from potato.item_state_management import get_item_state_manager
+            ids = get_item_state_manager().instance_id_ordering
+        except Exception:
+            return None
+        return sum(1 for i in ids
+                   if i not in self.human_labeled_ids and self.anchoring.is_blind(i))
+
+    def get_anchoring_stats(self) -> Dict[str, Any]:
+        """Blind-versus-shown agreement, for the dashboard and the API."""
+        with self._lock:
+            return self.anchoring.stats(self._blind_items_left())
+
+    def suggestion_visible_before_label(self, instance_id: str) -> bool:
+        """Whether the annotate page may show this item's suggestion up front."""
+        return not self.anchoring.is_blind(instance_id)
 
     def check_and_advance_to_autonomous(self) -> bool:
         """
@@ -3414,14 +3765,7 @@ class SoloModeManager:
             True if phase was advanced to AUTONOMOUS_LABELING
         """
         with self._lock:
-            metrics = self.agreement_metrics
-            threshold = self.config.thresholds.end_human_annotation_agreement
-            min_sample = self.config.thresholds.minimum_validation_sample
-
-            if metrics.total_compared < min_sample:
-                return False
-
-            if metrics.agreement_rate < threshold:
+            if not self._handoff_agreement_reached():
                 return False
 
             # Don't hand the rest of the dataset to the LLM while a
@@ -3437,16 +3781,34 @@ class SoloModeManager:
             if self.get_pending_disagreements():
                 return False
 
-            # Already in or past autonomous labeling phase
+            # Only the human-annotation phases hand over. From a review or
+            # disagreement page the human finishes that first, and past
+            # autonomous labelling there is nothing to hand over.
             current_phase = self.phase_controller.get_current_phase()
-            if current_phase.value >= SoloPhase.AUTONOMOUS_LABELING.value:
+            if current_phase not in (SoloPhase.PARALLEL_ANNOTATION,
+                                     SoloPhase.ACTIVE_ANNOTATION):
                 return False
 
-            # Advance phase atomically
-            return self.phase_controller.transition_to(
-                SoloPhase.AUTONOMOUS_LABELING,
-                reason="Agreement threshold reached"
-            )
+            # Advance atomically. The phase graph forbids a direct
+            # PARALLEL_ANNOTATION -> AUTONOMOUS_LABELING jump; it must pass
+            # through ACTIVE_ANNOTATION first. Walk the valid path, and never let
+            # a phase-graph error bubble up as a 500 on the annotate page.
+            try:
+                if current_phase == SoloPhase.PARALLEL_ANNOTATION:
+                    if not self.phase_controller.transition_to(
+                        SoloPhase.ACTIVE_ANNOTATION,
+                        reason="Agreement threshold reached"
+                    ):
+                        return False
+                return self.phase_controller.transition_to(
+                    SoloPhase.AUTONOMOUS_LABELING,
+                    reason="Agreement threshold reached"
+                )
+            except ValueError as e:
+                logger.warning(
+                    f"Could not advance to autonomous labeling: {e}"
+                )
+                return False
 
     def check_autonomous_readiness(self) -> Dict[str, Any]:
         """Diagnostic sibling of check_and_advance_to_autonomous(): same
@@ -3486,7 +3848,8 @@ class SoloModeManager:
                     'message': f'{metrics.total_compared} of {min_sample} '
                                f'comparisons made so far',
                 })
-            if metrics.agreement_rate < threshold:
+            if (metrics.total_compared >= min_sample
+                    and not self._handoff_agreement_reached()):
                 blockers.append({
                     'type': 'agreement',
                     'message': f'{metrics.agreement_rate * 100:.0f}% '
@@ -3538,18 +3901,17 @@ class SoloModeManager:
             if self._codebook_relabel_running:
                 return
 
-            metrics = self.agreement_metrics
-            threshold = self.config.thresholds.end_human_annotation_agreement
-            min_sample = self.config.thresholds.minimum_validation_sample
-            if (metrics.total_compared >= min_sample
-                    and metrics.agreement_rate >= threshold):
+            if self._handoff_agreement_reached():
                 self.needs_final_override_choice = False
                 return
 
-            stats = self.get_annotation_stats()
-            if stats['remaining'] > 0:
-                # Still instances left for a normal human pass — not "the
-                # end" yet, so don't gate.
+            # Still instances left for a normal human pass -- not "the end"
+            # yet, so don't gate. Counted the way get_next_instance_for_human
+            # serves them (everything the human has not labelled): the
+            # stats' `remaining` also drops what the LLM has labelled, so
+            # once the background thread had labelled the dataset the gate
+            # fired while the human still had items.
+            if self._get_total_instance_count() - len(self.human_labeled_ids) > 0:
                 return
 
             self.needs_final_override_choice = True
@@ -3772,6 +4134,75 @@ class SoloModeManager:
             interval = self.config.thresholds.periodic_review_interval
             return len(self.llm_labeled_ids) % interval == 0
 
+    def _enter_review_phase(self, target_phase: SoloPhase, reason: str) -> bool:
+        """Transition into a review phase, stepping through ACTIVE_ANNOTATION
+        first if we're still in PARALLEL_ANNOTATION (the phase graph only allows
+        PERIODIC_REVIEW / RULE_REVIEW from ACTIVE_ANNOTATION). Never lets a
+        phase-graph error bubble up to the annotate route. Returns True on
+        success."""
+        phase = self.phase_controller.get_current_phase()
+        try:
+            if phase == SoloPhase.PARALLEL_ANNOTATION:
+                if not self.phase_controller.transition_to(
+                    SoloPhase.ACTIVE_ANNOTATION,
+                    reason="Begin active annotation",
+                ):
+                    return False
+            return self.phase_controller.transition_to(target_phase, reason=reason)
+        except ValueError as e:
+            logger.warning(f"Could not enter {target_phase.to_str()}: {e}")
+            return False
+
+    def check_and_enter_periodic_review(self) -> bool:
+        """If a periodic review is due and there are low-confidence LLM labels to
+        review, enter PERIODIC_REVIEW. Returns True if the phase changed (the
+        caller should then redirect to the review page).
+
+        Only fires from the annotation phases; the review page resets the counter
+        and returns to ACTIVE_ANNOTATION when done.
+        """
+        phase = self.phase_controller.get_current_phase()
+        if phase not in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            return False
+        if not self.validation_tracker.should_trigger_periodic_review():
+            return False
+        if not self.get_instances_for_review():
+            # Due, but nothing low-confidence to review right now — skip this
+            # cycle so the counter doesn't stay stuck above the interval.
+            self.validation_tracker.reset_periodic_review_counter()
+            return False
+        entered = self._enter_review_phase(
+            SoloPhase.PERIODIC_REVIEW, "Periodic review due"
+        )
+        if entered:
+            logger.info("[Phase] Entering PERIODIC_REVIEW")
+        return entered
+
+    def check_and_enter_rule_review(self) -> bool:
+        """If edge-case rules have been clustered into pending categories, enter
+        RULE_REVIEW so the human can approve/reject them. Returns True if the
+        phase changed (the caller should redirect to the rule-review page)."""
+        phase = self.phase_controller.get_current_phase()
+        if phase not in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            return False
+        if not self.config.edge_case_rules.enabled:
+            return False
+        try:
+            pending = self.edge_case_rule_manager.get_pending_categories()
+        except Exception:
+            return False
+        if not pending:
+            return False
+        entered = self._enter_review_phase(
+            SoloPhase.RULE_REVIEW, "Edge-case rules ready for review"
+        )
+        if entered:
+            logger.info(
+                "[Phase] Entering RULE_REVIEW (%d pending categories)",
+                len(pending),
+            )
+        return entered
+
     # === Background Labeling ===
 
     def start_background_labeling(self) -> bool:
@@ -3786,6 +4217,13 @@ class SoloModeManager:
                 logger.warning("Background labeling already running")
                 return False
 
+            # Refuse up front rather than halfway: a run stopped by the cap
+            # leaves a part-labelled corpus and a bill for it. Without a cap
+            # there is nothing to check, and the estimate reads every text.
+            if (self._spend_cap() is not None
+                    and not self._spend_allows(self.estimate_remaining_labeling_cost())):
+                return False
+
             self._stop_labeling.clear()
             self._pause_labeling.clear()
             self._labeling_thread = threading.Thread(
@@ -3796,6 +4234,341 @@ class SoloModeManager:
             self._labeling_thread.start()
             logger.info("Started background LLM labeling")
             return True
+
+    # === AI spend (ai_budget.cap_usd) ===
+
+    def _spend_cap(self) -> Optional[float]:
+        from potato.ai.cost import cap_for
+        return cap_for(self.app_config)
+
+    def _spend_model(self):
+        """The model a labeling call goes to first: tier 0, or the primary."""
+        routing = self.config.confidence_routing
+        if routing.enabled and routing.tiers:
+            return routing.tiers[0].model
+        if self.config.jury.enabled and self.config.jury.models:
+            return self.config.jury.models[0]
+        return self.config.labeling_models[0] if self.config.labeling_models else None
+
+    def _current_prompt_chars(self) -> int:
+        prompt = self.get_current_prompt()
+        return len(prompt.prompt_text) if prompt else 0
+
+    def estimate_remaining_labeling_cost(self, texts: Optional[List[str]] = None,
+                                         model_config=None):
+        """CostEstimate for the items the LLM has still to label, or None."""
+        from . import spend
+        model_config = model_config or self._spend_model()
+        if model_config is None:
+            return None
+        if texts is None:
+            texts = [inst['text'] for inst in self._get_instances_for_labeling(
+                self._get_total_instance_count() or 0)]
+        calls = None  # spend.estimate picks the per-item count for the model
+        if self.config.jury.enabled and self.config.jury.models:
+            # Every juror may be asked. Priced at the first juror's rate; an
+            # early stop makes the real figure lower.
+            calls = spend.calls_per_item(self.config) * len(self.config.jury.models)
+        return spend.estimate(texts, model_config, self._current_prompt_chars(),
+                              self.config, self.app_config, calls=calls)
+
+    def _spend_allows(self, projected) -> bool:
+        """Check ``projected`` against the cap; remember and log a refusal."""
+        from potato.ai.cost import SpendCapExceeded
+        from . import spend
+        if projected is None:
+            return True
+        try:
+            spend.check(self.app_config, projected)
+        except SpendCapExceeded as e:
+            self._spend_refusal = str(e)
+            logger.error("[Spend] Background labeling refused: %s", e)
+            return False
+        self._spend_refusal = None
+        return True
+
+    def get_spend_refusal(self) -> Optional[str]:
+        """Why background labeling last refused to run, or None."""
+        return self._spend_refusal
+
+    def get_spend_summary(self) -> Dict[str, Any]:
+        """Spent so far, the cap, the estimate for what is left, any refusal.
+
+        The estimate reads the text of every unlabelled item, and the
+        dashboard asks on every refresh, so it is reused until the number of
+        LLM-labelled items or the prompt version changes.
+        """
+        from . import spend
+        key = (len(self.llm_labeled_ids), self.current_prompt_version)
+        cached = getattr(self, '_remaining_estimate_cache', None)
+        if cached is None or cached[0] != key:
+            cached = (key, self.estimate_remaining_labeling_cost())
+            self._remaining_estimate_cache = cached
+        return spend.summary(self.app_config, remaining=cached[1],
+                             refusal=self._spend_refusal)
+
+    def _record_batch_spend(self, instances, routing_results=None) -> None:
+        """Charge the project for one batch's LLM calls.
+
+        With confidence routing each tier an item reached was called, so each
+        tier is charged for its own attempts at its own price. A tier whose
+        endpoint could not be built made no call and is not charged.
+        """
+        from . import spend
+        if not instances:
+            return
+        texts = [inst['text'] for inst in instances]
+        prompt_chars = self._current_prompt_chars()
+        try:
+            if routing_results is None:
+                model_config = self._spend_model()
+                if model_config is not None:
+                    projected = spend.estimate(texts, model_config, prompt_chars,
+                                               self.config, self.app_config)
+                    spend.record(self.app_config, projected, len(instances))
+                return
+            attempts_per_tier: Dict[int, int] = {}
+            for result in routing_results:
+                for attempt in result.attempts:
+                    if attempt.get('error') == 'Failed to create endpoint':
+                        continue
+                    i = attempt.get('tier_index', 0)
+                    attempts_per_tier[i] = attempts_per_tier.get(i, 0) + 1
+            tiers = self.config.confidence_routing.tiers
+            for i, n in attempts_per_tier.items():
+                if i < len(tiers):
+                    projected = spend.estimate(texts, tiers[i].model, prompt_chars,
+                                               self.config, self.app_config)
+                    spend.record(self.app_config, projected, n)
+        except Exception:
+            logger.exception("[Spend] Could not record batch spend")
+
+    # === Prompt evaluation: gold set and trials (evaluation.py) ===
+
+    def _primary_schema(self) -> Dict[str, Any]:
+        schemes = self.app_config.get('annotation_schemes', [])
+        return schemes[0] if schemes else {}
+
+    def _label_items_with_prompt(self, items, prompt_text: str, job,
+                                 action_check: bool = True) -> Dict[str, Any]:
+        """Label ``items`` ({instance_id, text}) with ``prompt_text``.
+
+        Goes through the labeling thread's endpoint and response cache, and
+        through the spend cap like background labeling. Returns
+        instance_id -> LabelingResult.
+        """
+        schema_name = self._primary_schema().get('name', 'default')
+        instances = [{'instance_id': i['instance_id'], 'text': i['text'],
+                      'schema_name': schema_name} for i in items]
+        if action_check and self._spend_cap() is not None:
+            model = self._spend_model()
+            if model is not None:
+                from . import spend
+                projected = spend.estimate([i['text'] for i in instances], model,
+                                           len(prompt_text), self.config, self.app_config)
+                if not self._spend_allows(projected):
+                    raise RuntimeError(self._spend_refusal)
+        results, attempted = {}, []
+        try:
+            for inst in instances:
+                attempted.append(inst)
+                results[inst['instance_id']] = self.llm_labeling_thread._label_instance(
+                    inst['instance_id'], inst['text'], schema_name,
+                    prompt_override=prompt_text)
+                job.done += 1
+        finally:
+            self._record_batch_spend(attempted)
+        return results
+
+    def _prompt_text_for(self, prompt_version: Optional[int]) -> tuple:
+        if prompt_version is None:
+            prompt_version = self.current_prompt_version
+        pv = self.get_prompt_version(prompt_version)
+        if pv is None:
+            raise ValueError(f"No prompt version {prompt_version}")
+        return prompt_version, pv.prompt_text
+
+    def gold_items(self):
+        """The configured gold set as GoldItems, or [] when there is none."""
+        from .evaluation import load_gold
+        gold = self.config.gold
+        if not gold.file:
+            return []
+        return load_gold(gold.file, self.app_config.get('task_dir', '.'),
+                         gold.id_key, gold.label_key, gold.text_key)
+
+    def start_gold_evaluation(self, prompt_version: Optional[int] = None):
+        """Score a prompt version against the gold set in the background."""
+        from .evaluation import score
+        version, prompt_text = self._prompt_text_for(prompt_version)
+        gold = self.gold_items()
+        if not gold:
+            raise ValueError("No gold set: set solo_mode.gold.file")
+        items = [{'instance_id': g.instance_id,
+                  'text': g.text if g.text is not None
+                  else self._get_instance_text(g.instance_id)} for g in gold]
+        missing = [i['instance_id'] for i in items if not i['text']]
+        items = [i for i in items if i['text']]
+        atype = self._primary_schema().get('annotation_type', 'radio')
+
+        def work(job):
+            results = self._label_items_with_prompt(items, prompt_text, job)
+            predictions = {iid: (r.label if r is not None and not r.error else None)
+                           for iid, r in results.items()}
+            report = score(predictions, {g.instance_id: g.label for g in gold
+                                         if g.instance_id not in missing}, atype)
+            report.update({
+                'prompt_version': version,
+                'model': getattr(self._spend_model(), 'model', ''),
+                'missing_text': missing[:50], 'n_missing_text': len(missing),
+                'finished_at': datetime.now().isoformat(),
+            })
+            with self._lock:
+                self._gold_results[version] = report
+            self._save_state()
+            return report
+
+        return self._jobs.start('gold', len(items), work)
+
+    def start_prompt_trial(self, n: int = 10, prompt_text: Optional[str] = None):
+        """Label ``n`` unlabelled items with a prompt and return what came back."""
+        import random
+        if prompt_text is None:
+            _, prompt_text = self._prompt_text_for(None)
+        n = max(1, min(int(n), 50))
+        try:
+            from potato.item_state_management import get_item_state_manager
+            ids = list(get_item_state_manager().instance_id_ordering)
+        except Exception:
+            ids = []
+        pool = [i for i in ids if i not in self.human_labeled_ids] or ids
+        chosen = random.Random(len(pool)).sample(pool, min(n, len(pool)))
+        items = [{'instance_id': i, 'text': self._get_instance_text(i)} for i in chosen]
+        items = [i for i in items if i['text']]
+
+        def work(job):
+            results = self._label_items_with_prompt(items, prompt_text, job)
+            rows, labels = [], Counter()
+            for item in items:
+                r = results.get(item['instance_id'])
+                ok = r is not None and not r.error
+                if ok:
+                    labels[str(r.label)] += 1
+                rows.append({
+                    'instance_id': item['instance_id'],
+                    'text': item['text'][:300],
+                    'label': r.label if ok else None,
+                    'confidence': r.confidence if ok else None,
+                    'reasoning': (r.reasoning or '')[:300] if ok else '',
+                    'error': None if ok else (r.error if r is not None else 'no result'),
+                })
+            confs = [row['confidence'] for row in rows if row['confidence'] is not None]
+            remaining = self.estimate_remaining_labeling_cost()
+            return {
+                'rows': rows,
+                'label_distribution': dict(labels),
+                'n_errors': sum(1 for row in rows if row['error']),
+                'mean_confidence': sum(confs) / len(confs) if confs else None,
+                'full_run_estimate': remaining.summary() if remaining else None,
+            }
+
+        return self._jobs.start('trial', len(items), work)
+
+    def start_sensitivity_check(self, n_variants: int = 4, n_items: int = 20):
+        """How much the labels move when the prompt is reworded.
+
+        A revision model writes ``n_variants`` paraphrases of the current
+        prompt that keep its labels and criteria; the labeling model labels
+        the same items under each (Baumann et al. 2025, "Large Language Model
+        Hacking"). Items come from the gold set when there is one, else from
+        what the human has labelled, else from anywhere in the corpus.
+        """
+        import random
+        from .prompt_sensitivity import generate_paraphrases, run_sensitivity
+
+        version, base_prompt = self._prompt_text_for(None)
+        n_variants = max(1, min(int(n_variants), 8))
+        n_items = max(2, min(int(n_items), 100))
+        ids = [g.instance_id for g in self.gold_items()] or sorted(self.human_labeled_ids)
+        if not ids:
+            try:
+                from potato.item_state_management import get_item_state_manager
+                ids = list(get_item_state_manager().instance_id_ordering)
+            except Exception:
+                ids = []
+        chosen = random.Random(len(ids)).sample(ids, min(n_items, len(ids)))
+        items = [(i, self._get_instance_text(i)) for i in chosen]
+        items = [(i, t) for i, t in items if t]
+        reviser = self.prompt_manager._get_revision_endpoint()
+        if reviser is None:
+            raise ValueError("No revision model to write paraphrases")
+        schema = self._primary_schema()
+        schema_name = schema.get('name', 'default')
+        label_names = self.llm_labeling_thread._get_valid_labels(schema)
+
+        def work(job):
+            def generate(request_text):
+                reply = reviser.query(request_text)
+                return reply if isinstance(reply, str) else json.dumps(reply)
+
+            variants = generate_paraphrases(base_prompt, n_variants, generate,
+                                            preserve_terms=label_names)
+            job.total = (len(variants) + 1) * len(items)
+            if self._spend_cap() is not None and self._spend_model() is not None:
+                from . import spend
+                projected = spend.estimate(
+                    [t for _, t in items] * (len(variants) + 1), self._spend_model(),
+                    len(base_prompt), self.config, self.app_config)
+                if not self._spend_allows(projected):
+                    raise RuntimeError(self._spend_refusal)
+
+            attempted = []
+
+            def label(prompt, instance_id, text):
+                attempted.append({'instance_id': instance_id, 'text': text})
+                result = self.llm_labeling_thread._label_instance(
+                    instance_id, text, schema_name, prompt_override=prompt)
+                job.done += 1
+                return None if result is None or result.error else result.label
+
+            try:
+                report = run_sensitivity(base_prompt, variants, items, label)
+            finally:
+                self._record_batch_spend(attempted)
+            out = report.to_dict()
+            out['prompt_version'] = version
+            out['variants'] = variants
+            return out
+
+        return self._jobs.start('sensitivity', (n_variants + 1) * len(items), work)
+
+    def get_latest_job(self, kind: str) -> Optional[Dict[str, Any]]:
+        """The most recent job of ``kind`` (gold, trial, sensitivity), or None."""
+        job = self._jobs.latest(kind)
+        return job.to_dict() if job is not None else None
+
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        job = self._jobs.get(job_id)
+        return job.to_dict() if job is not None else None
+
+    def get_gold_status(self) -> Dict[str, Any]:
+        """Whether a gold set is configured, and each prompt version's score."""
+        latest = self._jobs.latest('gold')
+        try:
+            n_items = len(self.gold_items())
+            load_error = None
+        except Exception as e:
+            n_items, load_error = 0, str(e)
+        with self._lock:
+            by_version = {str(v): r for v, r in sorted(self._gold_results.items())}
+        return {
+            'configured': bool(self.config.gold.file),
+            'n_items': n_items,
+            'load_error': load_error,
+            'results_by_version': by_version,
+            'current_prompt_version': self.current_prompt_version,
+            'latest_job': latest.to_dict() if latest is not None else None,
+        }
 
     def stop_background_labeling(self) -> None:
         """Stop background LLM labeling thread."""
@@ -4013,35 +4786,30 @@ class SoloModeManager:
                     self._stop_labeling.wait(2)
                     continue
 
-                # Check if we've hit the max parallel labels. This cap
-                # exists to keep the LLM from running too far ahead of a
-                # human who's still comparing every label (parallel
-                # annotation); it doesn't apply once we're autonomously
-                # labeling everything with no human review in the loop —
-                # enforcing it there would just stall the background
-                # thread forever once unreviewed count crosses the cap.
-                in_autonomous_phase = (
-                    self.phase_controller.get_current_phase()
-                    == SoloPhase.AUTONOMOUS_LABELING
-                )
-                if not in_autonomous_phase:
-                    with self._lock:
-                        current_count = len(self.llm_labeled_ids - self.human_labeled_ids)
-                        if current_count >= max_labels:
-                            logger.debug(f"Max parallel labels reached ({current_count})")
-                            time.sleep(10)
-                            continue
+                # Check if we've hit the max parallel labels. The cap keeps
+                # the LLM from running ahead of the human; once the LLM has
+                # taken over there is no human to stay level with, and the
+                # cap stalled autonomous labelling short of the dataset.
+                autonomous = (self.phase_controller.get_current_phase()
+                              == SoloPhase.AUTONOMOUS_LABELING)
+                with self._lock:
+                    current_count = len(self.llm_labeled_ids - self.human_labeled_ids)
+                    if not autonomous and current_count >= max_labels:
+                        logger.debug(f"Max parallel labels reached ({current_count})")
+                        time.sleep(10)
+                        continue
 
                 # Label a batch of instances
                 labeled_count = self._label_batch(batch_size)
 
                 if labeled_count == 0:
-                    # No more instances to label. If we got here during
-                    # autonomous labeling, that phase's job is done —
-                    # hand off to final validation instead of idling
-                    # forever with nothing left to do.
-                    if in_autonomous_phase:
-                        self._finish_autonomous_labeling()
+                    # No more instances to label. In autonomous labeling that
+                    # means the LLM has finished the dataset: hand off to final
+                    # validation (or straight to COMPLETED when nothing is
+                    # LLM-only) and stop the thread, which has nothing left.
+                    self._maybe_advance_autonomous_to_validation()
+                    if (autonomous and self.phase_controller.get_current_phase()
+                            != SoloPhase.AUTONOMOUS_LABELING):
                         return
                     time.sleep(30)
                 else:
@@ -4054,6 +4822,25 @@ class SoloModeManager:
 
             # Wait before next batch
             self._stop_labeling.wait(5)
+
+    def _maybe_advance_autonomous_to_validation(self) -> None:
+        """Advance AUTONOMOUS_LABELING -> FINAL_VALIDATION once the LLM has
+        labeled everything it can.
+
+        Nothing else in the workflow performs this transition, so without it a
+        run that reaches autonomous labeling can never reach final validation or
+        COMPLETED. Called from the background loop when a labeling pass finds no
+        remaining work.
+        """
+        with self._lock:
+            if self.phase_controller.get_current_phase() != SoloPhase.AUTONOMOUS_LABELING:
+                return
+            # Only advance when the whole dataset is accounted for.
+            total = self._get_total_instance_count()
+            covered = len(self.llm_labeled_ids | self.human_labeled_ids)
+            if total > 0 and covered < total:
+                return
+        self._finish_autonomous_labeling()
 
     def _label_batch(self, batch_size: int) -> int:
         """Label a batch of instances. Returns number labeled.
@@ -4073,12 +4860,16 @@ class SoloModeManager:
             lf_results, remaining = self.labeling_function_manager.apply_batch(
                 instances
             )
+            schema_of = {inst['instance_id']: inst.get('schema_name')
+                         for inst in instances}
+            schemas = self.app_config.get('annotation_schemes', [])
+            default_schema = (
+                schemas[0].get('name', 'default') if schemas else 'default'
+            )
             for result in lf_results:
-                # Record as LLM prediction with labeling_function source
-                schemas = self.app_config.get('annotation_schemes', [])
-                schema_name = (
-                    schemas[0].get('name', 'default') if schemas else 'default'
-                )
+                # Record as LLM prediction with labeling_function source, under
+                # the schema the instance was queued for.
+                schema_name = schema_of.get(result.instance_id) or default_schema
                 prediction = LLMPrediction(
                     instance_id=result.instance_id,
                     schema_name=schema_name,
@@ -4092,26 +4883,136 @@ class SoloModeManager:
                 self.set_llm_prediction(
                     result.instance_id, schema_name, prediction
                 )
+                # Same as an LLM label: compare against a human label the
+                # item already has, or the agreement metrics never see it.
+                self._retroactive_compare(result.instance_id, schema_name)
                 labeled += 1
+
+        if not remaining:
+            return labeled
+
+        # The cap is checked per batch as well as at start: the start-up
+        # estimate assumed no labeling-function hits and one tier per item.
+        if self._spend_cap() is not None and not self._spend_allows(
+                self.estimate_remaining_labeling_cost(
+                    texts=[inst['text'] for inst in remaining])):
+            self.pause_background_labeling()
+            return labeled
+
+        if self.config.jury.enabled:
+            return labeled + self._label_with_jury(remaining)
 
         # Label remaining with LLM
         router = self.confidence_router
-        if router is not None:
-            for inst in remaining:
-                result = router.route_instance(
-                    inst['instance_id'], inst['text'], inst['schema_name']
-                )
-                if result.accepted and result.labeling_result:
-                    self._handle_labeling_result(result.labeling_result)
-                    labeled += 1
-        else:
-            for inst in remaining:
-                result = self.llm_labeling_thread._label_instance(
-                    inst['instance_id'], inst['text'], inst['schema_name']
-                )
-                if result and not result.error:
-                    self._handle_labeling_result(result)
-                    labeled += 1
+        attempted = []
+        routing_results = [] if router is not None else None
+        try:
+            if router is not None:
+                for inst in remaining:
+                    attempted.append(inst)
+                    result = router.route_instance(
+                        inst['instance_id'], inst['text'], inst['schema_name']
+                    )
+                    routing_results.append(result)
+                    tier_confidences = [a['confidence'] for a in result.attempts
+                                        if 'confidence' in a]
+                    if tier_confidences:
+                        self._routing_min_confidence[inst['instance_id']] = min(
+                            tier_confidences)
+                    if result.accepted and result.labeling_result:
+                        self._handle_labeling_result(result.labeling_result)
+                        labeled += 1
+                    elif result.labeling_result and result.labeling_result.error:
+                        self._labeling_error_count += 1
+                        self._last_labeling_error = result.labeling_result.error
+            else:
+                for inst in remaining:
+                    attempted.append(inst)
+                    result = self.llm_labeling_thread._label_instance(
+                        inst['instance_id'], inst['text'], inst['schema_name']
+                    )
+                    if result and not result.error:
+                        self._handle_labeling_result(result)
+                        labeled += 1
+                    elif result and result.error:
+                        self._labeling_error_count += 1
+                        self._last_labeling_error = result.error
+        finally:
+            # A batch that dies partway still paid for every call before it.
+            self._record_batch_spend(attempted, routing_results)
+        return labeled
+
+    def _jury_endpoints(self) -> List[Any]:
+        """One endpoint per jury model, built once. A model whose endpoint
+        cannot be built is left out and logged."""
+        if getattr(self, '_jury_endpoint_cache', None) is None:
+            from .llm_labeler import LLMLabelingThread
+            built = []
+            for model_config in self.config.jury.models:
+                try:
+                    ep = LLMLabelingThread.create_endpoint_from_model_config(model_config)
+                except Exception as e:
+                    logger.error("[Jury] Could not build %s: %s", model_config.model, e)
+                    ep = None
+                if ep is not None:
+                    built.append((model_config, ep))
+            self._jury_endpoint_cache = built
+        return self._jury_endpoint_cache
+
+    def _label_with_jury(self, instances: List[Dict[str, Any]]) -> int:
+        """Label ``instances`` by jury vote (jury.py). Returns the number labelled."""
+        from . import spend
+        from .jury import run_jury
+        from .llm_labeler import LabelingResult
+
+        jurors = self._jury_endpoints()
+        if len(jurors) < 2:
+            self._labeling_error_count += 1
+            self._last_labeling_error = (
+                f"Jury needs two working models; {len(jurors)} could be built")
+            return 0
+        atype = self.get_annotation_type()
+        labeled = 0
+        calls_per_juror = Counter()
+        texts = {}
+        try:
+            for inst in instances:
+                texts[inst['instance_id']] = inst['text']
+                verdict = run_jury(
+                    [ep for _, ep in jurors],
+                    lambda ep: self.llm_labeling_thread._label_instance(
+                        inst['instance_id'], inst['text'], inst['schema_name'],
+                        endpoint=ep),
+                    atype, early_stop=self.config.jury.early_stop)
+                calls_per_juror.update(verdict['calls'].keys())
+                if verdict['label'] is None:
+                    self._labeling_error_count += 1
+                    self._last_labeling_error = 'No juror returned a valid label'
+                    continue
+                vote_text = '; '.join(
+                    f"{v['model']}: {v['label']}" for v in verdict['votes'])
+                self._handle_labeling_result(LabelingResult(
+                    instance_id=inst['instance_id'],
+                    schema_name=inst['schema_name'],
+                    label=verdict['label'],
+                    confidence=verdict['confidence'],
+                    uncertainty=1.0 - verdict['confidence'],
+                    reasoning=f"Jury of {len(verdict['votes'])}: {vote_text}",
+                    prompt_version=self.current_prompt_version,
+                    model_name='jury:' + ','.join(m.model for m, _ in jurors),
+                ))
+                labeled += 1
+        finally:
+            prompt_chars = self._current_prompt_chars()
+            for i, n in calls_per_juror.items():
+                model_config = jurors[i][0]
+                try:
+                    projected = spend.estimate(
+                        list(texts.values()), model_config, prompt_chars,
+                        self.config, self.app_config)
+                    spend.record(self.app_config, projected, n)
+                except Exception:
+                    logger.exception("[Spend] Could not record jury spend")
         return labeled
 
     def _get_instances_for_labeling(self, batch_size: int) -> List[Dict[str, Any]]:
@@ -4212,6 +5113,7 @@ class SoloModeManager:
                     },
                     'llm_labeled_ids': list(self.llm_labeled_ids),
                     'disagreement_ids': list(self.disagreement_ids),
+                    'reviewed_disagreements': sorted(self._reviewed_disagreements),
                     'validation_sample_ids': list(self.validation_sample_ids),
                     'validated_instance_ids': list(self.validated_instance_ids),
                     'pending_relabel_ids': list(self.pending_relabel_ids),
@@ -4236,6 +5138,9 @@ class SoloModeManager:
                     },
                     'reannotation_counts': self._reannotation_counts,
                     'per_version_agreement': self._per_version_agreement,
+                    'anchoring': self.anchoring.to_dict(),
+                    'routing_min_confidence': self._routing_min_confidence,
+                    'gold_results': {str(k): v for k, v in self._gold_results.items()},
                     'refinement_consecutive_failures': self._refinement_consecutive_failures,
                     'pending_refinements': self._pending_refinements,
                     'refinement_log': self._refinement_log[-50:],  # Keep last 50
@@ -4323,6 +5228,7 @@ class SoloModeManager:
                 }
                 self.llm_labeled_ids = set(state.get('llm_labeled_ids', []))
                 self.disagreement_ids = set(state.get('disagreement_ids', []))
+                self._reviewed_disagreements = set(state.get('reviewed_disagreements', []))
                 self.validation_sample_ids = set(state.get('validation_sample_ids', []))
                 self.validated_instance_ids = set(state.get('validated_instance_ids', []))
                 self.pending_relabel_ids = set(state.get('pending_relabel_ids', []))
@@ -4384,6 +5290,11 @@ class SoloModeManager:
                 self._per_version_agreement = {
                     int(k): v for k, v in raw_pva.items()
                 }
+                self.anchoring.load(state.get('anchoring'))
+                self._routing_min_confidence = dict(
+                    state.get('routing_min_confidence') or {})
+                self._gold_results = {
+                    int(k): v for k, v in (state.get('gold_results') or {}).items()}
 
                 # Restore validated refinement state
                 self._refinement_consecutive_failures = state.get(
@@ -4423,19 +5334,12 @@ class SoloModeManager:
 
             logger.info("Loaded Solo Mode state")
 
-            # Auto-start background labeling if already in an annotation
-            # phase — AUTONOMOUS_LABELING included, since that phase's only
-            # exit (_finish_autonomous_labeling) is triggered from inside
-            # this same thread. Without resuming it here, a server restart
-            # (e.g. the debug reloader picking up a code change) while
-            # autonomous labeling is in progress permanently strands the
-            # workflow: nothing else ever notices the phase should advance.
+            # Auto-start background labeling in every phase whose entry
+            # starts it (see advance_to_phase), plus AUTONOMOUS_LABELING: the
+            # move on to FINAL_VALIDATION happens inside the loop, so a restart
+            # there without the loop left the run stalled.
             current_phase = self.phase_controller.get_current_phase()
-            if current_phase in (
-                SoloPhase.PARALLEL_ANNOTATION,
-                SoloPhase.ACTIVE_ANNOTATION,
-                SoloPhase.AUTONOMOUS_LABELING,
-            ):
+            if current_phase in _LABELING_PHASES:
                 self.start_background_labeling()
 
             return True
@@ -4592,17 +5496,38 @@ class SoloModeManager:
         except Exception:
             return 0
 
+    def get_annotation_type(self) -> str:
+        """Annotation type of the (single) scheme solo mode operates on."""
+        schemes = self.app_config.get('annotation_schemes', [])
+        return schemes[0].get('annotation_type', 'radio') if schemes else 'radio'
+
     def get_available_labels(self) -> List[str]:
-        """Get available labels from annotation schemes."""
+        """Get available labels from the (first) annotation scheme.
+
+        Solo mode keys off schemes[0] everywhere (labeling, recording, agreement,
+        prediction). Flattening labels from every scheme let the annotate UI show
+        options that are never actually recorded/predicted, so a pick from a
+        second scheme was stored as a first-scheme annotation. Return only the
+        first scheme's labels so the UI matches what is processed.
+        """
         labels = []
         schemes = self.app_config.get('annotation_schemes', [])
-        for scheme in schemes:
-            scheme_labels = scheme.get('labels', [])
-            for label in scheme_labels:
+        if not schemes:
+            return labels
+        scheme = schemes[0]
+        raw_labels = scheme.get('labels', [])
+        if raw_labels:
+            for label in raw_labels:
                 if isinstance(label, str):
                     labels.append(label)
                 elif isinstance(label, dict):
                     labels.append(label.get('name', str(label)))
+        elif scheme.get('annotation_type') == 'likert' and scheme.get('size'):
+            # Likert scales are defined by size + min_label/max_label, not an
+            # explicit label list. Derive numeric scale points (1..size) so the
+            # annotate UI renders buttons and the likert_tolerance agreement
+            # check gets int-parseable values.
+            labels = [str(i) for i in range(1, int(scheme['size']) + 1)]
         return labels
 
     def check_for_disagreement(self, instance_id: str, human_label: Any) -> bool:
@@ -4650,13 +5575,18 @@ class SoloModeManager:
         self,
         instance_id: str,
         annotation: Any,
-        user_id: str
+        user_id: str,
+        suggestion_visible: Optional[bool] = None,
+        accepted_suggestion: bool = False,
     ) -> None:
         """Record a human annotation (simplified interface for routes)."""
         # Get first schema name
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
-        self.record_human_label(instance_id, schema_name, annotation, user_id)
+        self.record_human_label(
+            instance_id, schema_name, annotation, user_id,
+            suggestion_visible=suggestion_visible,
+            accepted_suggestion=accepted_suggestion)
 
         # Check if refinement loop should trigger
         self._maybe_trigger_refinement()
@@ -4676,10 +5606,15 @@ class SoloModeManager:
     def get_llm_labeling_stats(self) -> Dict[str, Any]:
         """Get LLM labeling statistics."""
         with self._lock:
+            total = self._get_total_instance_count()
+            # Instances the LLM still has to label = total minus those it has
+            # already labeled (a meaningful "queue", not a hardcoded 0).
+            queue_size = max(0, total - len(self.llm_labeled_ids))
             stats = {
                 'labeled_count': len(self.llm_labeled_ids),
-                'queue_size': 0,  # Placeholder
-                'error_count': 0,  # Placeholder
+                'queue_size': queue_size,
+                'error_count': self._labeling_error_count,
+                'last_error': self._last_labeling_error,
                 'is_paused': self.is_background_labeling_paused(),
                 'is_running': (
                     self.is_background_labeling_running()
@@ -4687,10 +5622,16 @@ class SoloModeManager:
                 ),
             }
             stats['confidence_routing'] = (
-                self._confidence_router.get_stats()
-                if self._confidence_router is not None
+                # The property builds the router when routing is configured, so
+                # a restart with nothing left to label still reports it.
+                self.confidence_router.get_stats()
+                if self.confidence_router is not None
                 else {'enabled': False}
             )
+            cache = (self._llm_labeling_thread.label_cache
+                     if self._llm_labeling_thread is not None else None)
+            stats['cache'] = cache.stats() if cache is not None else {
+                'enabled': self.config.cache.enabled}
             return stats
 
     def get_validation_progress(self) -> Dict[str, Any]:
@@ -4911,14 +5852,16 @@ class SoloModeManager:
                 'edge_cases': {
                     'count': len(self.edge_case_ids),
                 },
+                'curriculum': self.get_curriculum_status(),
+                'anchoring': self.get_anchoring_stats(),
                 'edge_case_rules': (
                     self.edge_case_rule_manager.get_stats()
                     if self._edge_case_rule_manager is not None
                     else {'total_rules': 0, 'total_categories': 0}
                 ),
                 'confidence_routing': (
-                    self._confidence_router.get_stats()
-                    if self._confidence_router is not None
+                    self.confidence_router.get_stats()
+                    if self.confidence_router is not None
                     else {'enabled': False}
                 ),
                 'thresholds': {
@@ -4958,7 +5901,7 @@ def init_solo_mode_manager(config_data: Dict[str, Any]) -> Optional[SoloModeMana
                 return None
 
             # Validate config
-            errors = solo_config.validate()
+            errors = solo_config.validate(config_data.get('annotation_schemes'))
             if errors:
                 for error in errors:
                     logger.error(f"Solo Mode config error: {error}")

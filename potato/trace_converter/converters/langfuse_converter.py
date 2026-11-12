@@ -115,8 +115,7 @@ class LangfuseConverter(BaseTraceConverter):
                     models.add(obs["model"])
                 usage = obs.get("usage") or {}
                 if isinstance(usage, dict):
-                    token_count = usage.get("totalTokens", usage.get("total_tokens", 0))
-                    total_tokens += token_count or 0
+                    total_tokens += _usage_total(usage)
             if models:
                 metadata_table.append({"Property": "Models", "Value": ", ".join(models)})
             if total_tokens:
@@ -181,3 +180,16 @@ class LangfuseConverter(BaseTraceConverter):
         if not isinstance(obs, list) or not obs:
             return False
         return isinstance(obs[0], dict) and "type" in obs[0]
+
+
+def _usage_total(usage: dict) -> int:
+    """An observation's token count. Langfuse's public API names it
+    ``usage.total`` (with ``input`` and ``output`` beside it); older exports
+    and SDKs say ``totalTokens`` or ``total_tokens``. Reading only those, no
+    trace from the API showed a token count."""
+    for key in ("total", "totalTokens", "total_tokens"):
+        value = usage.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+    parts = [usage.get(k) for k in ("input", "output", "promptTokens", "completionTokens")]
+    return int(sum(v for v in parts if isinstance(v, (int, float)) and not isinstance(v, bool)))

@@ -253,13 +253,21 @@ class TestUserAuthenticatorAuthorization:
         result = authenticator.add_user("vip_user", "pw")
         assert result == "Success"
 
-    def test_passwordless_mode_bypasses_authorization_check(self, authenticator):
-        """In passwordless mode, add_user skips the authorized_users gate."""
+    def test_passwordless_mode_still_enforces_authorization(self, authenticator):
+        """Passwordless must not imply open enrolment.
+
+        This previously asserted the opposite. `require_password: false` means
+        "no password is needed to prove you are alice", not "anyone may become
+        alice" — but the check was an `elif` on the passwordless branch, so
+        turning passwords off silently disabled closed enrolment. Any config
+        using url_direct or prolific login (which force require_password off)
+        had an unenforceable roster.
+        """
         authenticator.allow_all_users = False
         authenticator.require_password = False
-        authenticator.authorized_users = []
-        result = authenticator.add_user("anyone", None)
-        assert result == "Success"
+        authenticator.authorized_users = ["vip_user"]
+        assert authenticator.add_user("anyone", None) == "Unauthorized user"
+        assert authenticator.add_user("vip_user", None) == "Success"
 
 
 # =====================================================================

@@ -1,7 +1,7 @@
 """
 OpenAI AI endpoint implementation.
 
-This module provides integration with OpenAI's API for LLM inference.
+Integration with OpenAI's API for LLM inference.
 """
 
 import os
@@ -33,7 +33,10 @@ class OpenAIEndpoint(BaseAIEndpoint):
         api_key = self.ai_config.get("api_key") or os.environ.get(
             "OPENAI_API_KEY", ""
         )
-        base_url = self.ai_config.get("base_url")
+        # api_base is the documented alias (config validation accepts it, and
+        # openai_vision reads it); without it here a config that set only
+        # api_base passed validation and then failed for a missing key.
+        base_url = self.ai_config.get("base_url") or self.ai_config.get("api_base")
         if not api_key:
             if base_url:
                 api_key = "EMPTY"  # non-empty placeholder for local servers
@@ -54,7 +57,7 @@ class OpenAIEndpoint(BaseAIEndpoint):
         """Get the default OpenAI model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: dict) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to OpenAI and return the response.
 
@@ -68,20 +71,28 @@ class OpenAIEndpoint(BaseAIEndpoint):
             AIEndpointRequestError: If the request fails
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={
+            kwargs = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+            # Free-text when no schema is requested (e.g. the model arena);
+            # structured JSON output only when an output_format is supplied.
+            if output_format is not None and hasattr(output_format, "model_json_schema"):
+                kwargs["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
-                        "name": "output_format",
+                        "name": getattr(output_format, "__name__", "output"),
                         "schema": output_format.model_json_schema(),
-                        "strict": True,
                     },
-                },
-            )
+                }
+            response = self.client.chat.completions.create(**kwargs)
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._note_usage(getattr(usage, "prompt_tokens", None),
+                                 getattr(usage, "completion_tokens", None))
+            self._warn_if_truncated(response.choices[0].finish_reason)
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI request failed: {e}")
@@ -95,6 +106,8 @@ class OpenAIEndpoint(BaseAIEndpoint):
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
             )
+            self._warn_if_truncated(response.choices[0].finish_reason,
+                                    where="chat reply")
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI chat request failed: {e}")

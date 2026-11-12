@@ -1,6 +1,6 @@
 # Text Input / Rationale Annotation
 
-The `text` schema provides free-text input for open-ended responses. With the enhanced rationale features, it can also serve as a justification companion to any other annotation schema.
+The `text` schema is a free-text box for open-ended responses. Attached to another schema, it becomes the place an annotator justifies the answer they just gave.
 
 ## Basic Usage
 

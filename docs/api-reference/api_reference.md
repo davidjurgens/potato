@@ -1,6 +1,6 @@
 # Potato API Reference
 
-This document describes the HTTP API endpoints provided by Potato, enabling integration with custom frontends, automation scripts, or external systems.
+Potato's HTTP API. Use it to drive Potato from a custom frontend, an automation script, or another system.
 
 ---
 
@@ -126,15 +126,23 @@ Returns all annotations (labels and spans) for a specific instance.
 ```json
 {
   "label_annotations": {
-    "sentiment": {
-      "positive": "1"
-    }
+    "sentiment": ["positive"],
+    "rating": ["slider"]
+  },
+  "label_values": {
+    "sentiment": {"positive": "positive"},
+    "rating": {"slider": 0}
   },
   "span_annotations": {
     "entities:ANIMAL:16:19": "true"
   }
 }
 ```
+
+`label_annotations` lists the stored label names per schema. `label_values`
+gives the value stored under each one, which is the answer itself for text,
+number and slider schemas. A value of `0` is an answer and is included; empty
+and unticked entries are not.
 
 ### Submit Annotation
 ```http
@@ -165,6 +173,30 @@ Submit or update annotations for an instance.
   "client_timestamp": "2024-01-15T10:30:00Z"
 }
 ```
+
+Each key in `annotations` names a schema and a label in one flat string:
+`schema:::label`, or `schema:label`. Both are read. When a key starts with a
+configured schema name, that name decides where the label begins, so a schema
+called `q1:topic` or a label containing `:::` is read correctly.
+
+An empty string as a value clears that label: an emptied text box or number
+field is not an answer. A multiselect with every box unticked sends no key for
+its schema, so name it in `cleared_schemas` to clear it:
+
+```json
+{"instance_id": "item_001", "annotations": {}, "cleared_schemas": ["topics"]}
+```
+
+The value is the answer for that label, not a container. This nests the label
+under the schema and so names no label at all:
+
+```json
+{"annotations": {"sentiment": {"positive": "1"}}}
+```
+
+Nothing is stored for it. That is the shape annotations are *stored* in, which
+makes it the natural first guess. A request where no key can be read is
+refused with `400` listing the keys it could not read.
 
 **Request Body (Backend Format):**
 ```json
@@ -245,22 +277,35 @@ Clears all span annotations for an instance.
 ### Navigate to Instance
 ```http
 POST /go_to
+Content-Type: application/x-www-form-urlencoded
+```
+
+Moves the annotator to an item by its position in their queue. `go_to` is a
+form field holding a 0-based integer index, not an instance id. Any value that
+does not parse as an integer gets a 400 with
+`{"status": "error", "message": "go_to must be an item number"}`. An index
+outside the queue leaves the position unchanged. The response is the rendered
+annotation page.
+
+**Request Body:**
+```
+go_to=4
+```
+
+To move by action, post to `/annotate` instead. It takes `action` as a form
+field or in a JSON body: `next_instance`, `prev_instance`, or `go_to` together
+with a `go_to` index. Moving forward is refused while the current item is
+missing a required answer.
+
+```http
+POST /annotate
 Content-Type: application/json
 ```
 
-Navigate to a specific instance by ID or index.
-
-**Request Body:**
 ```json
 {
-  "go_to": "item_005"
-}
-```
-
-Or by action:
-```json
-{
-  "action": "next_instance"
+  "action": "go_to",
+  "go_to": 4
 }
 ```
 
@@ -371,7 +416,10 @@ Returns admin-defined keyword matches found in the instance text. Keywords are c
 
 ## Admin API Endpoints
 
-Admin endpoints require admin privileges or API key authentication.
+Admin endpoints require admin privileges or the admin API key, sent as an
+`X-API-Key` header. The key is `admin_api_key` in the config, or the one
+Potato generates into `admin_api_key.txt` in the task directory (see
+[the admin dashboard](../administration/admin_dashboard.md)).
 
 ### Health Check
 ```http
@@ -395,18 +443,35 @@ GET /admin/api/overview
 **Response:**
 ```json
 {
-  "total_items": 1000,
-  "total_annotations": 5000,
-  "total_users": 25,
-  "active_users": 10,
-  "completion_rate": 0.45,
-  "items_by_status": {
-    "completed": 450,
-    "in_progress": 150,
-    "unassigned": 400
+  "overview": {
+    "over_collected_items": 0,
+    "over_collected_item_ids": [],
+    "total_users": 25,
+    "active_users": 10,
+    "completed_users": 4,
+    "total_annotations": 5000,
+    "total_items": 1000,
+    "items_with_annotations": 450,
+    "completion_percentage": 45.0,
+    "total_assignments": 5200,
+    "total_working_time": "12h 30m",
+    "total_working_seconds": 45000,
+    "average_annotations_per_item": 5.0
+  },
+  "config": {
+    "annotation_task_name": "Sentiment",
+    "max_annotations_per_user": "Unlimited",
+    "max_annotations_per_item": 3,
+    "assignment_strategy": "random",
+    "debug_mode": false
   }
 }
 ```
+
+`completion_percentage` is `items_with_annotations / total_items * 100`,
+rounded to one decimal. `over_collected_items` counts items holding more
+annotations than `max_annotations_per_item` allows; `over_collected_item_ids`
+lists the first 20.
 
 ### Get Annotators
 ```http
@@ -647,6 +712,10 @@ GET /admin/api/quality_control
 GET /admin/api/agreement
 ```
 
+Agreement over human annotators only. Declared machine annotators are left out
+and listed in `machine_annotators_excluded`, with a warning; `/admin/iaa` has
+the machine-machine and pooled figures.
+
 **Response:**
 ```json
 {
@@ -654,7 +723,9 @@ GET /admin/api/agreement
   "overall": {
     "average_krippendorff_alpha": 0.78,
     "schemas_evaluated": 2,
-    "interpretation": "Tentative agreement"
+    "interpretation": "Tentative agreement",
+    "average_cohen_kappa": 0.8,
+    "average_fleiss_kappa": 0.79
   },
   "by_schema": {
     "sentiment": {
@@ -662,7 +733,22 @@ GET /admin/api/agreement
       "metric_type": "nominal",
       "items_evaluated": 100,
       "total_annotations": 300,
-      "interpretation": "Good agreement"
+      "interpretation": "Good agreement",
+      "cohen_kappa": {
+        "mean_kappa": 0.8,
+        "pairs": [
+          {"annotator_a": "ann1", "annotator_b": "ann2", "kappa": 0.8, "n_items": 100}
+        ],
+        "n_pairs_evaluated": 1,
+        "n_pairs_skipped": 0
+      },
+      "fleiss_kappa": {
+        "kappa": 0.79,
+        "n_items_evaluated": 100,
+        "n_raters": 3,
+        "n_categories": 3,
+        "interpretation": "Substantial"
+      }
     },
     "intensity": {
       "krippendorff_alpha": 0.74,
@@ -670,11 +756,50 @@ GET /admin/api/agreement
       "items_evaluated": 100,
       "total_annotations": 300,
       "interpretation": "Tentative agreement"
+    },
+    "is_sarcastic": {
+      "krippendorff_alpha": null,
+      "percent_agreement": 1.0,
+      "metric_type": "nominal",
+      "items_evaluated": 40,
+      "total_annotations": 80,
+      "interpretation": "Undefined",
+      "note": "every annotator gave the same label on every item, so chance agreement is 1 and kappa and alpha are undefined. ..."
+    },
+    "regions": {
+      "error": "Structured answers (steps, segments, regions, glosses, links, chains or events) are scored in the agreement report at /admin/iaa, not here.",
+      "see": "/admin/iaa"
     }
   },
-  "warnings": []
+  "machine_annotators_excluded": [
+    {"user_id": "gpt-labeler", "origin": "gpt-4o (llm)"}
+  ],
+  "warnings": ["1 declared machine rater(s) are excluded from these figures: gpt-labeler. ..."]
 }
 ```
+
+- `cohen_kappa` (mean of pairwise kappas) and `fleiss_kappa` are computed for
+  nominal schemas only. Interval schemas (`likert`, `slider`, `number` with
+  numeric answers) report Krippendorff's alpha alone.
+- Multi-label schemas (`multiselect`, `hierarchical_multiselect` and
+  `card_sort`) have `"metric_type": "masi"`; one capped at a single choice
+  (`max_selections: 1`) is scored as nominal instead. Each annotator's
+  answer is a set of labels: `krippendorff_alpha` uses MASI distance, so a
+  partial overlap counts as partial agreement, and `mean_jaccard` is the mean
+  pairwise overlap. They have no kappas, which would treat each set as one
+  category. `/admin/iaa` reports the same two figures.
+- When every annotator gave the same answer on every item, alpha and both kappas
+  are undefined: `krippendorff_alpha` is `null`, `percent_agreement` is `1.0`,
+  `interpretation` is `"Undefined"`, and `note` explains it. That schema is left
+  out of the `overall` averages.
+- `overall.average_cohen_kappa` and `overall.average_fleiss_kappa` average the
+  schemas that have a kappa value, and appear only when at least one does.
+- Structured schemes (segments, regions, steps, spatial, grounding, episode,
+  caption and gloss answers, span links, coreference chains and events) are not
+  scored here. Their entry has an `error` and
+  `"see": "/admin/iaa"`.
+- A schema with no item reaching `agreement_metrics.min_overlap` annotators
+  (default 2) has an `error` and `items_count` instead.
 
 ---
 
@@ -1065,7 +1190,7 @@ Sends a message to the agent and returns a response.
 POST /agent_chat/finish
 ```
 
-Finishes the chat and writes conversation data to the item.
+Finishes the chat and stores the conversation for the current annotator and item. Other annotators of the same item are not affected.
 
 ### Get Agent Chat Status
 ```http
@@ -1407,7 +1532,7 @@ result = response.json()
 print(f"Status: {result['status']}")
 
 # 5. Navigate to next instance
-session.post(f"{BASE_URL}/go_to", json={
+session.post(f"{BASE_URL}/annotate", json={
     "action": "next_instance"
 })
 
@@ -1422,22 +1547,23 @@ session.post(f"{BASE_URL}/go_to", json={
 import requests
 
 BASE_URL = "http://localhost:8000"
+HEADERS = {"X-API-Key": "your_admin_api_key"}
 
 # Get overview
-overview = requests.get(f"{BASE_URL}/admin/api/overview").json()
-print(f"Progress: {overview['completion_rate']*100:.1f}%")
+overview = requests.get(f"{BASE_URL}/admin/api/overview", headers=HEADERS).json()
+print(f"Progress: {overview['overview']['completion_percentage']:.1f}%")
 
 # Get annotator stats
-annotators = requests.get(f"{BASE_URL}/admin/api/annotators").json()
+annotators = requests.get(f"{BASE_URL}/admin/api/annotators", headers=HEADERS).json()
 for a in annotators["annotators"]:
     print(f"{a['user_id']}: {a['completed_items']}/{a['assigned_items']}")
 
 # Get agreement metrics
-agreement = requests.get(f"{BASE_URL}/admin/api/agreement").json()
+agreement = requests.get(f"{BASE_URL}/admin/api/agreement", headers=HEADERS).json()
 print(f"Agreement: α = {agreement['overall']['average_krippendorff_alpha']:.3f}")
 
 # Get quality control metrics
-qc = requests.get(f"{BASE_URL}/admin/api/quality_control").json()
+qc = requests.get(f"{BASE_URL}/admin/api/quality_control", headers=HEADERS).json()
 if qc["attention_checks"]["enabled"]:
     pass_rate = qc["attention_checks"]["total_passed"] / qc["attention_checks"]["total_checks"]
     print(f"Attention check pass rate: {pass_rate*100:.1f}%")

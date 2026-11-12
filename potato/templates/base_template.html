@@ -4,6 +4,8 @@
 
   {{ HEADER }}
 
+    <script type="text/javascript">{% include '_url_prefix.js' %}</script>
+
   <!--- HEADER GOES ABOVE HERE--->
 
   <style>
@@ -1280,7 +1282,7 @@
           <!-- 3. Jump to item form -->
           <div style="margin-left: 40px">
             <form
-              action="/go_to"
+              action="{{ url_prefix }}/go_to"
               method="post"
               class="d-flex align-items-center"
             >
@@ -1316,8 +1318,6 @@
                   border-radius: var(--radius);
                 "
                 value=""
-                onfocusin="user_input()"
-                onfocusout="user_input_leave()"
                 max="{{total_count}}"
                 min="0"
                 required
@@ -1364,7 +1364,7 @@
             "
           >
             <a
-              href="/logout"
+              href="{{ url_prefix }}/logout"
               class="shadcn-button"
               style="
                 background-color: var(--light-color);

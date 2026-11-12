@@ -34,6 +34,128 @@ class ExportContext:
     output_dir: str
     phase_responses: List[dict] = field(default_factory=list)
 
+    def covered_text(self, instance_id: str, span: dict) -> str:
+        """The words a span covers, sliced out of the item it was drawn on.
+
+        Spans are stored as offsets and a label, with no content: the span
+        manager records `{"schema", "name", "start", "end", "target_field"}`
+        and nothing else. (`extractSpanAnnotationsFromDOM` in annotation.js
+        does build a `value` from the overlay text, but it reads
+        `.span-overlay` elements, and a page using `instance_display` has
+        none.) So every tabular export carried offsets that the reader had to
+        join back to the data file to interpret, while `conll` -- which
+        re-tokenises the source itself -- was the one format that showed the
+        marked words.
+
+        Deriving it here rather than storing it at write time keeps it honest:
+        the text can never disagree with the offsets it came from, and spans
+        recorded before this existed export the same as new ones.
+
+        Returns "" when the offsets or the field cannot be resolved, which is
+        the same thing the column held before.
+        """
+        item = self.items.get(instance_id)
+        if not isinstance(item, dict):
+            return ""
+
+        start, end = span.get("start"), span.get("end")
+        try:
+            start, end = int(start), int(end)
+        except (TypeError, ValueError):
+            return ""
+        if start < 0 or end <= start:
+            return ""
+
+        # A multi-span page marks up several fields, and the span says which.
+        field_name = span.get("target_field")
+        if not field_name:
+            field_name = (self.config.get("item_properties", {})
+                          or {}).get("text_key", "text")
+
+        source = self._span_anchor_text(item, field_name)
+        if source is None:
+            # Fall back to the configured text field: an older span may carry a
+            # target_field the item no longer has.
+            fallback = (self.config.get("item_properties", {})
+                        or {}).get("text_key", "text")
+            source = self._span_anchor_text(item, fallback)
+        if source is None:
+            return ""
+
+        return source[start:end]
+
+    def _display_field_config(self, field_name: str) -> dict:
+        """The `instance_display` entry for a field, or {}."""
+        fields = (self.config.get("instance_display", {}) or {}).get("fields", [])
+        for entry in fields or []:
+            if isinstance(entry, dict) and entry.get("key") == field_name:
+                return entry
+        return {}
+
+    def _span_anchor_text(self, item: dict, field_name: str):
+        """The exact string a span's offsets index, or None.
+
+        A `dialogue` field holds a list of turns, and its offsets are measured
+        in the browser against the *rendered* container -- speaker labels,
+        separators and all. The exporter only handled `str` sources, so every
+        span on a conversational field exported with `text: ""`: not wrong, but
+        unresolvable without rediscovering the join convention, and that is the
+        whole coreference-over-dialogue and transcript-error-span family.
+
+        `reconstruct_dialogue_dom_text()` is the server half of that contract
+        and `/api/spans` already uses it; this is the third caller.
+        """
+        value = item.get(field_name)
+        from potato.server_utils.displays.base import (
+            concatenate_dialogue_text,
+            document_dom_text,
+            reconstruct_dialogue_dom_text,
+            resolve_display_options,
+        )
+
+        field_config = self._display_field_config(field_name)
+        if field_config.get("type") == "document":
+            # A `document` field carries the same contract as `dialogue`: its
+            # offsets index what the browser holds, which is the body with tags
+            # stripped and entities decoded, and whitespace collapsed only when
+            # the display does not apply the pre-wrap class. Returning the raw
+            # string was right only for a document that happens to be plain
+            # text with no markup and no entities.
+            payload = (value.get("rendered_html", "")
+                       if isinstance(value, dict) else value)
+            if payload is None:
+                return None
+            return document_dom_text(payload, resolve_display_options(field_config))
+        if isinstance(value, str):
+            if field_config:
+                # An instance_display field renders through its own display.
+                return value
+            # The default display: offsets index the text the browser holds
+            # after normalizing and sanitizing it, not the data-file string.
+            # Slicing the raw string shifted every span that followed a
+            # doubled space, an entity or a tag.
+            from potato.server_utils.span_text import (
+                instance_dom_text, normalize_display_text)
+            return instance_dom_text(normalize_display_text(
+                value, bool(self.config.get("highlight_linebreaks", False))))
+        if not isinstance(value, list):
+            return None
+
+        # Resolve the options the way the DISPLAY resolves them -- flat on the
+        # field or nested -- or the two anchor to different strings and every
+        # dialogue span exports shifted by the width of the turn numbering.
+        options = resolve_display_options(field_config)
+        if field_config.get("type") == "dialogue":
+            return reconstruct_dialogue_dom_text(
+                value,
+                speaker_key=options.get("speaker_key", "speaker"),
+                text_key=options.get("text_key", "text"),
+                show_turn_numbers=options.get("show_turn_numbers", False),
+            )
+        # A list field that is not a declared dialogue: join it the way the
+        # display does, which is what the offsets were measured against.
+        return concatenate_dialogue_text(value)
+
 
 @dataclass
 class ExportResult:

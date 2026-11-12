@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="{{ ui_lang.html_lang|default('en') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schedule</title>
+{% include '_theme_head.html' %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='scheduling.css') }}">
+</head>
+<body class="sched-admin">
+{% include 'admin/_page_header.html' %}
+<main class="dashboard" role="main" id="schedule-admin">
+  <h1>Schedule</h1>
+  <p class="sched-meta">Times are UTC unless marked local. Server time now: <span class="sched-mono" id="schedule-now">{{ utc(summary.now) }}</span>.
+    {% if dry_run %}<strong>Dry run:</strong> messages are rendered and logged, not delivered.{% endif %}
+    Channels: {{ channel_types|join(', ') if channel_types else 'none (no messages)' }}.
+    Contact details are never shown here.</p>
+
+  <section class="dashboard-card sched-section" aria-labelledby="sched-totals">
+    <h2 id="sched-totals">Totals</h2>
+    <div class="sched-metrics">
+      <div class="sched-metric"><span class="label">Enrolled</span><span class="value" id="schedule-enrolled-count">{{ summary.participants|length }}</span></div>
+      {% for k in ('answered', 'expired', 'missed', 'open', 'upcoming') %}
+      <div class="sched-metric"><span class="label">Sessions {{ k }}</span><span class="value">{{ summary.sessions|selectattr('status', 'equalto', k)|list|length }}</span></div>
+      {% endfor %}
+      {% for k in ('pending', 'sent', 'dry_run', 'failed', 'skipped') %}
+      <div class="sched-metric"><span class="label">Messages {{ k|replace('_', ' ') }}</span><span class="value" data-count="{{ k }}">{{ summary.counts.get(k, 0) }}</span></div>
+      {% endfor %}
+    </div>
+    <form method="post" action="{{ url_for('admin_api_schedule_tick') }}" class="sched-inline">
+      <input type="hidden" name="redirect" value="page">
+      <button type="submit" class="shadcn-button shadcn-button-outline" id="schedule-run-now">Send due messages now</button>
+    </form>
+  </section>
+
+  <section class="dashboard-card sched-section" aria-labelledby="sched-people">
+    <h2 id="sched-people">Participants and compliance</h2>
+    {% if not summary.participants %}<p class="sched-empty">Nobody has enrolled yet. Participants enrol when they finish the regular study flow.</p>{% else %}
+    <div class="sched-table-wrap" tabindex="0" role="region" aria-label="Participants table, scrolls sideways">
+    <table class="sched-table" id="schedule-participants">
+      <thead><tr><th scope="col">Participant</th><th scope="col">Enrolled</th><th scope="col">Time zone</th><th scope="col">Contact</th>
+        <th scope="col">Answered</th><th scope="col">Expired</th><th scope="col">Missed</th><th scope="col">Compliance</th><th scope="col">Median latency</th><th scope="col">Next session (local)</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for p in summary.participants %}
+      <tr data-participant="{{ p.participant }}">
+        <th scope="row" class="sched-mono">{{ p.participant }}</th>
+        <td class="sched-mono">{{ utc(p.enrolled_at) }}</td>
+        <td>{{ p.timezone }}</td>
+        <td>{% if p.withdrawn %}stopped{% elif not p.consent %}no consent{% else %}{{ p.channels|join(', ') or 'none' }}{% if p.contact.email %} · email held{% endif %}{% if p.contact.phone %} · phone held{% endif %}{% endif %}</td>
+        <td class="sched-num">{{ p.counts.answered }}</td>
+        <td class="sched-num">{{ p.counts.expired }}</td>
+        <td class="sched-num">{{ p.counts.missed }}</td>
+        <td class="sched-num">{% if p.compliance is not none %}{{ (p.compliance * 100)|round|int }}% <span class="sched-muted">of {{ p.closed }}</span>{% else %}<span class="sched-muted">none closed yet</span>{% endif %}</td>
+        <td class="sched-num">{% if p.median_latency is not none %}{{ span(p.median_latency) }}{% else %}<span class="sched-muted">no answers yet</span>{% endif %}</td>
+        <td>{% if p.next %}{{ p.next.title or p.next.name }}: {{ local(p.next.opens_at, p.timezone) }}{% else %}<span class="sched-muted">none</span>{% endif %}</td>
+        <td>{% if p.contact.email or p.contact.phone %}
+          <form method="post" action="{{ url_for('admin_api_schedule_contact_delete', participant=p.participant) }}">
+            <input type="hidden" name="redirect" value="page">
+            <button type="submit" class="shadcn-button shadcn-button-outline sched-small">Delete contact details</button>
+          </form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  </section>
+
+  {% macro notes_table(rows, id, empty) %}
+    {% if not rows %}<p class="sched-empty">{{ empty }}</p>{% else %}
+    <div class="sched-table-wrap" tabindex="0" role="region" aria-label="{{ id|replace('-', ' ') }}, scrolls sideways">
+    <table class="sched-table" id="{{ id }}">
+      <thead><tr><th scope="col">Due</th><th scope="col">Sent</th><th scope="col">Participant</th><th scope="col">Session</th><th scope="col">Rule</th><th scope="col">Channel</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
+      <tbody>
+      {% for n in rows %}
+      <tr data-status="{{ n.status }}">
+        <td class="sched-mono">{{ utc(n.due_at) }}</td>
+        <td class="sched-mono">{{ utc(n.sent_at) if n.sent_at else '' }}</td>
+        <td class="sched-mono">{{ n.participant }}</td>
+        <td class="sched-mono">{{ n.session_id }}</td>
+        <td>{{ n.rule }}</td>
+        <td>{{ n.channel }}</td>
+        <td><span class="sched-status sched-status-{{ n.status }}">{{ n.status|replace('_', ' ') }}</span></td>
+        <td class="sched-detail">{{ n.detail or '' }}{% if n.preview %}<details><summary>Text</summary><pre class="sched-preview">{{ n.preview }}</pre></details>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  {% endmacro %}
+
+  <section class="dashboard-card sched-section" aria-labelledby="sched-failed">
+    <h2 id="sched-failed">Failed messages</h2>
+    {{ notes_table(summary.failed, 'schedule-failed', 'No failed messages.') }}
+  </section>
+  <section class="dashboard-card sched-section" aria-labelledby="sched-upcoming">
+    <h2 id="sched-upcoming">Upcoming messages</h2>
+    {{ notes_table(summary.upcoming, 'schedule-upcoming', 'No messages waiting.') }}
+  </section>
+  <section class="dashboard-card sched-section" aria-labelledby="sched-sent">
+    <h2 id="sched-sent">Sent messages (latest 200)</h2>
+    {{ notes_table(summary.sent, 'schedule-sent', 'Nothing sent yet.') }}
+  </section>
+  <section class="dashboard-card sched-section" aria-labelledby="sched-skipped">
+    <h2 id="sched-skipped">Skipped messages (latest 100)</h2>
+    {{ notes_table(summary.skipped, 'schedule-skipped', 'Nothing skipped.') }}
+  </section>
+
+  {% if has_delphi %}
+  <section class="dashboard-card sched-section" aria-labelledby="sched-delphi">
+    <h2 id="sched-delphi">Delphi rounds</h2>
+    {% if summary.delphi_stop %}<p class="sched-meta" id="schedule-delphi-stop">Stopped: {{ summary.delphi_stop }}.</p>{% endif %}
+    <div class="sched-table-wrap" tabindex="0" role="region" aria-label="Delphi rounds, scrolls sideways">
+    <table class="sched-table" id="schedule-rounds">
+      <thead><tr><th scope="col">Round</th><th scope="col">Opens</th><th scope="col">Closes</th><th scope="col">Status</th><th scope="col">Answered</th></tr></thead>
+      <tbody>
+      {% for r in summary.rounds %}
+      <tr><th scope="row">{{ r.round }}</th><td class="sched-mono">{{ utc(r.opens_at) }}</td><td class="sched-mono">{{ utc(r.closed_at or r.closes_at) }}</td>
+        <td>{{ r.status }}{% if r.stop_reason %} ({{ r.stop_reason }}){% endif %}</td>
+        <td class="sched-num">{{ summary.sessions|selectattr('id', 'equalto', 'round:' ~ r.round)|selectattr('status', 'equalto', 'answered')|list|length }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <form method="post" action="{{ url_for('admin_api_schedule_close_round') }}" class="sched-inline">
+      <input type="hidden" name="redirect" value="page">
+      <button type="submit" class="shadcn-button shadcn-button-outline" id="schedule-close-round">Close the open round now</button>
+    </form>
+    {% if summary.stats %}
+    <h3>Item statistics</h3>
+    <div class="sched-table-wrap" tabindex="0" role="region" aria-label="Delphi item statistics, scrolls sideways">
+    <table class="sched-table" id="schedule-delphi-stats">
+      <thead><tr><th scope="col">Round</th><th scope="col">Item</th><th scope="col">n</th><th scope="col">Median</th><th scope="col">Q1</th><th scope="col">Q3</th><th scope="col">IQR</th><th scope="col">Median change</th><th scope="col">Changed share</th><th scope="col">Settled</th></tr></thead>
+      <tbody>
+      {% for st in summary.stats %}
+      <tr><td class="sched-num">{{ st.round }}</td><th scope="row" title="{{ items.get(st.item, '') }}">{{ st.item }}</th><td class="sched-num">{{ st.n }}</td>
+        {% for k in ('median', 'q1', 'q3', 'iqr', 'median_change') %}<td class="sched-num">{{ '%.2f'|format(st[k]) if st[k] is not none else '' }}</td>{% endfor %}
+        <td class="sched-num">{{ '%.0f%%'|format(st.changed_share * 100) if st.changed_share is not none else '' }}</td>
+        <td>{{ 'yes' if st.settled else 'no' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="dashboard-card sched-section" aria-labelledby="sched-sessions">
+    <h2 id="sched-sessions">All sessions</h2>
+    {% if not summary.sessions %}<p class="sched-empty">No sessions yet.</p>{% else %}
+    <div class="sched-table-wrap" tabindex="0" role="region" aria-label="Sessions table, scrolls sideways">
+    <table class="sched-table" id="schedule-all-sessions">
+      <thead><tr><th scope="col">Participant</th><th scope="col">Session</th><th scope="col">Kind</th><th scope="col">Opens (UTC)</th><th scope="col">Opens (local)</th><th scope="col">Closes (UTC)</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+      {% for s in summary.sessions[:500] %}
+      <tr><td class="sched-mono">{{ s.participant }}</td><td class="sched-mono">{{ s.id }}</td><td>{{ s.kind }}</td>
+        <td class="sched-mono">{{ utc(s.opens_at) }}</td><td>{{ local(s.opens_at, tzs.get(s.participant, 'UTC')) }}</td>
+        <td class="sched-mono">{{ utc(s.closes_at) }}</td><td><span class="sched-status sched-status-{{ s.status }}">{{ s.status }}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if summary.sessions|length > 500 %}<p class="sched-meta">Showing the first 500 of {{ summary.sessions|length }}; the <code>schedule</code> export has them all.</p>{% endif %}
+    {% endif %}
+  </section>
+</main>
+</body>
+</html>

@@ -132,20 +132,24 @@ class ConfusionAnalyzer:
                 # Get reasoning and confidence from predictions
                 reasoning = None
                 confidence = None
-                if iid in predictions:
-                    for schema_preds in predictions[iid].values():
-                        pred = schema_preds
-                        reasoning = (
-                            pred.reasoning
-                            if hasattr(pred, 'reasoning')
-                            else pred.get('reasoning')
-                        )
-                        confidence = (
-                            pred.confidence_score
-                            if hasattr(pred, 'confidence_score')
-                            else pred.get('confidence_score')
-                        )
-                        break
+                # The prediction for the schema this comparison was about.
+                # Taking the first schema's showed a sentiment confusion with
+                # the topic prediction's reasoning.
+                by_schema = predictions.get(iid) or {}
+                schema = record.get('schema_name')
+                pred = by_schema.get(schema) if schema in by_schema else (
+                    next(iter(by_schema.values())) if len(by_schema) == 1 else None)
+                if pred is not None:
+                    reasoning = (
+                        pred.reasoning
+                        if hasattr(pred, 'reasoning')
+                        else pred.get('reasoning')
+                    )
+                    confidence = (
+                        pred.confidence_score
+                        if hasattr(pred, 'confidence_score')
+                        else pred.get('confidence_score')
+                    )
 
                 examples.append(ConfusionExample(
                     instance_id=iid,

@@ -81,11 +81,18 @@ class IBWSManager:
         self.pool_items = list(pool_items)
         self.pool_item_map = {str(item[id_key]): item for item in pool_items}
 
-        # Partition state: list of buckets, each bucket is a list of item IDs
-        # Start with one bucket containing all items
+        # Partition state: every bucket, in rank order (best first), with a
+        # parallel flag for the ones that will not be split again. One ordered
+        # list rather than an active list and a terminal list: terminal
+        # buckets used to be appended as they stopped, so a small top bucket
+        # and a small bottom bucket both landed ahead of a middle bucket that
+        # split one round later, and the final ranking put the worst third
+        # fourth.
         self.current_round = 0  # 0 = not started, 1 = round 1 active, etc.
-        self.buckets: List[List[str]] = [[str(item[id_key]) for item in pool_items]]
-        self.terminal_buckets: List[List[str]] = []  # Buckets too small to partition further
+        self._order: List[List[str]] = [[str(item[id_key]) for item in pool_items]]
+        self._terminal: List[bool] = [False]
+        # Latest score per item, for ordering items inside a bucket.
+        self.item_scores: Dict[str, float] = {}
 
         # Track tuples for each round: round_num -> list of tuple IDs
         self.round_tuples: Dict[int, List[str]] = {}
@@ -95,6 +102,21 @@ class IBWSManager:
 
         # Completed flag
         self.completed = False
+
+    @property
+    def buckets(self) -> List[List[str]]:
+        """Buckets still being split, in rank order."""
+        return [b for b, done in zip(self._order, self._terminal) if not done]
+
+    @property
+    def terminal_buckets(self) -> List[List[str]]:
+        """Buckets that will not be split again, in rank order."""
+        return [b for b, done in zip(self._order, self._terminal) if done]
+
+    def _mark_small_buckets_terminal(self) -> None:
+        for index, bucket in enumerate(self._order):
+            if len(bucket) < self.tuple_size:
+                self._terminal[index] = True
 
     def generate_round_tuples(self) -> List[Dict[str, Any]]:
         """Generate tuples for the next round from current active buckets.
@@ -108,25 +130,20 @@ class IBWSManager:
             all_tuples = []
             tuple_ids = []
 
-            new_buckets = []
-            for bucket_idx, bucket_item_ids in enumerate(self.buckets):
-                if len(bucket_item_ids) < self.tuple_size:
-                    # Terminal bucket — too few items to form a tuple
-                    self.terminal_buckets.append(bucket_item_ids)
-                    continue
-
-                new_buckets.append(bucket_item_ids)
+            self._mark_small_buckets_terminal()
+            active = [i for i, done in enumerate(self._terminal) if not done]
+            for bucket_idx, position in enumerate(active):
+                bucket_item_ids = self._order[position]
 
                 # Build pool items for this bucket
                 bucket_pool = [self.pool_item_map[iid] for iid in bucket_item_ids
                                if iid in self.pool_item_map]
 
                 if len(bucket_pool) < self.tuple_size:
-                    self.terminal_buckets.append(bucket_item_ids)
+                    self._terminal[position] = True
                     continue
 
                 # Calculate tuples needed for this bucket
-                min_appearances = self.tuples_per_item_per_round * self.tuple_size
                 num_tuples = max(1, math.ceil(
                     len(bucket_pool) * self.tuples_per_item_per_round / self.tuple_size
                 ))
@@ -139,7 +156,7 @@ class IBWSManager:
                     tuple_size=self.tuple_size,
                     num_tuples=num_tuples,
                     seed=self.seed + round_num * 1000 + bucket_idx,
-                    min_item_appearances=min_appearances,
+                    min_item_appearances=self.tuples_per_item_per_round,
                 )
 
                 tuples = generator.generate()
@@ -155,8 +172,6 @@ class IBWSManager:
 
                 all_tuples.extend(tuples)
 
-            # Update active buckets (excluding those that became terminal)
-            self.buckets = new_buckets
             self.round_tuples[round_num] = tuple_ids
 
             if not all_tuples:
@@ -215,51 +230,57 @@ class IBWSManager:
             if self.completed:
                 return []
 
+            # Score the round that just finished and split its buckets in
+            # place, so every bucket keeps its rank position. This runs
+            # before the max_rounds check: stopping first threw the last
+            # round's annotations away, and with max_rounds 1 the "ranking"
+            # was the input order.
+            new_order: List[List[str]] = []
+            new_terminal: List[bool] = []
+            for bucket_item_ids, done in zip(self._order, self._terminal):
+                if done or len(bucket_item_ids) < self.tuple_size:
+                    new_order.append(bucket_item_ids)
+                    new_terminal.append(True)
+                    continue
+
+                annotations = self._collect_bucket_annotations(
+                    bucket_item_ids, ism, usm, bws_schema_name
+                )
+                if not annotations:
+                    # No annotations — can't partition, keep bucket as-is
+                    new_order.append(bucket_item_ids)
+                    new_terminal.append(False)
+                    continue
+
+                bucket_pool = [self.pool_item_map[iid] for iid in bucket_item_ids
+                               if iid in self.pool_item_map]
+                scorer = BwsScorer(annotations, bucket_pool, self.id_key, self.text_key)
+                scores = scorer.score(self.scoring_method)
+                for iid in bucket_item_ids:
+                    if iid in scores:
+                        self.item_scores[iid] = scores[iid].get("score", 0.0)
+
+                upper, middle, lower = self._partition_bucket(bucket_item_ids, scores)
+                parts = [b for b in (upper, middle, lower) if b]
+                if len(parts) == 1:
+                    # Too small to split into thirds (e.g. two items with
+                    # tuple_size 2): ordered by score and finished, or it
+                    # would come back unchanged every round forever.
+                    new_order.append(parts[0])
+                    new_terminal.append(True)
+                    continue
+                for part in parts:
+                    new_order.append(part)
+                    new_terminal.append(len(part) < self.tuple_size)
+
+            self._order, self._terminal = new_order, new_terminal
+
             if self.max_rounds and self.current_round >= self.max_rounds:
                 self.completed = True
                 logger.info(f"IBWS: Reached max_rounds ({self.max_rounds}), stopping")
                 return []
 
-            # Score current round and partition each active bucket
-            new_buckets = []
-            for bucket_idx, bucket_item_ids in enumerate(self.buckets):
-                if len(bucket_item_ids) < self.tuple_size:
-                    self.terminal_buckets.append(bucket_item_ids)
-                    continue
-
-                # Collect annotations for tuples that contain items from this bucket
-                annotations = self._collect_bucket_annotations(
-                    bucket_item_ids, ism, usm, bws_schema_name
-                )
-
-                if not annotations:
-                    # No annotations — can't partition, keep bucket as-is
-                    new_buckets.append(bucket_item_ids)
-                    continue
-
-                # Score items in this bucket
-                bucket_pool = [self.pool_item_map[iid] for iid in bucket_item_ids
-                               if iid in self.pool_item_map]
-                scorer = BwsScorer(annotations, bucket_pool, self.id_key, self.text_key)
-                scores = scorer.score(self.scoring_method)
-
-                # Partition into upper/middle/lower thirds
-                upper, middle, lower = self._partition_bucket(bucket_item_ids, scores)
-
-                for sub_bucket in [upper, middle, lower]:
-                    if sub_bucket:
-                        new_buckets.append(sub_bucket)
-
-            self.buckets = new_buckets
-
-            # Check if all remaining buckets are terminal
-            active_count = sum(1 for b in self.buckets if len(b) >= self.tuple_size)
-            if active_count == 0:
-                # Move remaining small buckets to terminal
-                for b in self.buckets:
-                    if len(b) < self.tuple_size:
-                        self.terminal_buckets.append(b)
-                self.buckets = []
+            if all(self._terminal):
                 self.completed = True
                 logger.info("IBWS: All buckets terminal, annotation complete")
                 return []
@@ -368,14 +389,12 @@ class IBWSManager:
             [{"item_id": str, "rank": int, "bucket_position": int, "text": str}, ...]
         """
         with self._lock:
-            # Combine terminal buckets (ordered by when they became terminal = higher quality)
-            # and any remaining active buckets
-            all_buckets = list(self.terminal_buckets) + list(self.buckets)
-
             ranking = []
             rank = 1
-            for bucket_position, bucket in enumerate(all_buckets):
-                for item_id in bucket:
+            for bucket_position, bucket in enumerate(self._order):
+                # Within a bucket, by the latest score (stable for unscored).
+                ordered = sorted(bucket, key=lambda iid: -self.item_scores.get(iid, 0.0))
+                for item_id in ordered:
                     item = self.pool_item_map.get(item_id, {})
                     ranking.append({
                         "item_id": item_id,

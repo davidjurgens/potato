@@ -14,7 +14,7 @@
       "emotional_informational": {"items": [1, 2, 3, 4, 5, 6, 7, 8]},
       "tangible": {"items": [9, 10, 11, 12]},
       "affectionate": {"items": [13, 14, 15]},
-      "positive_interaction": {"items": [16, 17, 18]}
+      "positive_interaction": {"items": [16, 17, 18, 19]}
     }
   },
   "instructions": "People sometimes look to others for companionship, assistance, or other types of support. How often is each of the following kinds of support available to you if you need it?",

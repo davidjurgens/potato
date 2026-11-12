@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Quality Control Example Configuration
 # This example demonstrates attention checks, gold standards, and pre-annotation support
 
@@ -8,7 +9,7 @@ task_dir: .
 
 # Output settings
 output_annotation_dir: annotation_output/quality-control-example
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files (relative to task_dir)
 data_files:

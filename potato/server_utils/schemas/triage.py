@@ -47,9 +47,9 @@ def generate_triage_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List
             - skip_label: Custom label for skip button (default: "Skip")
             - auto_advance: Whether to auto-advance after selection (default: true)
             - show_progress: Whether to show progress indicator (default: true)
-            - accept_key: Custom keyboard shortcut for accept (default: "a")
-            - reject_key: Custom keyboard shortcut for reject (default: "r")
-            - skip_key: Custom keyboard shortcut for skip (default: "s")
+            - accept_key: Custom keyboard shortcut for accept (default: "1")
+            - reject_key: Custom keyboard shortcut for reject (default: "2")
+            - skip_key: Custom keyboard shortcut for skip (default: "3")
 
     Returns:
         tuple: (html_string, key_bindings)
@@ -74,9 +74,10 @@ def _generate_triage_layout_internal(annotation_scheme: Dict[str, Any]) -> Tuple
     skip_label = annotation_scheme.get("skip_label", DEFAULT_SKIP_LABEL)
 
     # Get keyboard shortcuts
-    accept_key = annotation_scheme.get("accept_key", DEFAULT_KEYBINDINGS["accept"])
-    reject_key = annotation_scheme.get("reject_key", DEFAULT_KEYBINDINGS["reject"])
-    skip_key = annotation_scheme.get("skip_key", DEFAULT_KEYBINDINGS["skip"])
+    # str(): `accept_key: 4` in YAML is a number, and .upper() below needs text.
+    accept_key = str(annotation_scheme.get("accept_key", DEFAULT_KEYBINDINGS["accept"]))
+    reject_key = str(annotation_scheme.get("reject_key", DEFAULT_KEYBINDINGS["reject"]))
+    skip_key = str(annotation_scheme.get("skip_key", DEFAULT_KEYBINDINGS["skip"]))
 
     # Get options
     auto_advance = annotation_scheme.get("auto_advance", True)

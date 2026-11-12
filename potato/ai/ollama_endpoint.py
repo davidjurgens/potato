@@ -1,7 +1,7 @@
 """
 Ollama AI endpoint implementation.
 
-This module provides integration with Ollama for local LLM inference.
+Integration with Ollama for local LLM inference.
 """
 
 import json
@@ -48,7 +48,7 @@ class OllamaEndpoint(BaseAIEndpoint):
         """Get the default Ollama model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> str:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> str:
         """
         Send a query to Ollama and return the response.
 
@@ -81,13 +81,21 @@ class OllamaEndpoint(BaseAIEndpoint):
                 model=self.model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
-                format=output_format.model_json_schema(),
+                format=(output_format.model_json_schema()
+                        if hasattr(output_format, "model_json_schema") else None),
                 think=think,
             )
 
             # Log full response structure for debugging
             logger.debug(f"[Ollama] Response type: {type(response)}")
             logger.debug(f"[Ollama] Full response: {response}")
+
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'))
+            def _field(name):
+                return (response.get(name) if hasattr(response, 'get')
+                        else getattr(response, name, None))
+            if _field('prompt_eval_count') is not None or _field('eval_count') is not None:
+                self._note_usage(_field('prompt_eval_count'), _field('eval_count'))
 
             # Get the message object - handle both dict and object access
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
@@ -146,6 +154,9 @@ class OllamaEndpoint(BaseAIEndpoint):
                 options=options,
                 think=think,
             )
+
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'),
+                                    where="chat reply")
 
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:

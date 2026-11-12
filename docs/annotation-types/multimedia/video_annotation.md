@@ -1,12 +1,12 @@
 # Video Annotation
 
-This guide covers the video annotation schema in Potato, which allows annotators to mark temporal segments, classify frames, and annotate keyframes in video content.
+The `video_annotation` schema lets annotators mark temporal segments, classify individual frames, and attach notes to keyframes.
 
 > **New in v2.0**: Video annotation with frame-level precision, timeline visualization, and keyboard-driven workflow.
 
 ## Overview
 
-The `video_annotation` schema provides comprehensive video annotation capabilities:
+The schema covers:
 
 - **Temporal Segment Marking**: Mark start and end points to create labeled segments
 - **Frame-by-Frame Navigation**: Step through video frame by frame for precise annotations
@@ -82,8 +82,9 @@ Then open http://localhost:8000 in your browser.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | `"segment"` | Annotation mode (see Annotation Modes) |
-| `min_segments` | integer | `0` | Minimum required segments |
+| `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments (null = unlimited) |
+| `segment_schemes` | list | `[]` | Per-segment annotation schemes (see [Per-segment questions](#per-segment-questions)). Read only when `mode: combined`. |
 | `timeline_height` | integer | `70` | Height of timeline in pixels |
 | `overview_height` | integer | `40` | Height of overview bar in pixels |
 | `zoom_enabled` | boolean | `true` | Enable timeline zoom controls |
@@ -144,29 +145,102 @@ For marking important moments in the video.
 For object tracking across video frames with keyframe-based bounding box annotation.
 
 **Features:**
-- Canvas overlay for drawing bounding boxes directly on the video
+- Canvas overlay for drawing directly on the video
 - Track multiple objects across frames with color-coded labels
-- Automatic interpolation between keyframes
-- Keyframe-based workflow: annotate key positions and let the system interpolate
+- **Boxes and polygons** both interpolate between keyframes; masks are held
+- Keyframe-based workflow: annotate key positions and let the system fill in
 
 **Tracking-Specific Options:**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
-| `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
+| `tracking_options.interpolation` | string | `"linear"` | How a new track fills frames between keyframes: `linear`, `cubic` (Catmull-Rom) or `constant` (hold the last keyframe) |
+| `tracking_options.auto_advance_frames` | integer | `0` | Frames to step forward after you draw a box, so the next keyframe is one drag away. `0` stays on the frame |
+| `attributes` | list | none | Typed fields for each track (occlusion, ...), edited in a panel under the track list; `per_keyframe: true` lets one change along the track. See [Per-Object Attributes](object_attributes.md) |
+
+**Model-assisted tracking**
+
+Draw the object once, press **Track forward**, and SAM 2 follows it through the
+frames that follow. Each result arrives as a keyframe you can scrub through and
+correct.
+
+```bash
+potato download-models sam2_video_tiny   # 181 MB, once per install
+```
+
+The model keeps a memory of what the object looked like on earlier frames and
+conditions each new frame on it, so it can lose an object behind an occluder and
+pick it up again on the other side. It also decides for itself when the object
+is hidden, and hands back an empty frame when it is. That is the answer you want
+while correcting: a guessed mask on an occluded frame is work to undo.
+
+Measured on a moving object against known ground truth: per-frame IoU of 0.974
+to 0.979 across the sequence, with no decay from the first frame to the last.
+Roughly 1.3 seconds per frame on a CPU; considerably faster on a GPU.
+
+Segmentation and text prompting run in the browser; this one runs on the
+server. You pay the cost once per frame instead of once per prompt, the model is
+five graphs, and the video file is already sitting on the server. A hundred
+frames in the browser would be minutes of a frozen tab. A run is capped at 120
+frames by default, and says so when it stops early.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `propagation.max_frames` | integer | `120` | Upper bound on one request |
 
 **Interpolation Methods:**
 - `linear` - Linear interpolation between keyframes (smooth movement)
 - `cubic` - Cubic/smooth interpolation (natural motion curves)
 - `constant` - Constant/hold interpolation (box stays in place until next keyframe)
 
+**Shape kinds**
+
+A track is not always a box.
+
+| Kind | Between keyframes |
+|---|---|
+| Box | Interpolated, by the method above |
+| Polygon | Interpolated by **arc-length resampling** (see below) |
+| Mask | **Held** from the nearest keyframe, and marked as held |
+
+Polygon tracks cannot simply interpolate vertex-to-vertex. Two outlines of the
+same object rarely have the same vertex count, and even when they do, an
+annotator who starts tracing at the nose on one frame and the tail on the next
+produces two correct outlines whose vertices correspond to nothing —
+interpolating them pairwise turns the shape inside out halfway between
+keyframes. Potato resamples both outlines to equal fractions of their perimeter
+and rotates the second to the offset that best matches the first, so differing
+vertex counts and start points both work.
+
+Masks are **not** blended. Averaging two rasters produces a shape that is
+neither — ghost regions where the object was and where it will be, with holes
+between. Potato holds the nearest keyframe and draws a hollow circle marker on
+held frames, so an annotator can always tell a frame somebody drew from a frame
+nobody did.
+
 **Tracking Workflow:**
-1. Click **+ Track** to create a new object track
-2. Draw a bounding box on the video at the current frame
-3. Advance to another frame using frame stepping (`,` and `.` keys)
-4. Draw another bounding box for the same object
-5. The system interpolates the box position between keyframes
+1. Press `t` (or click **+ Track**) to create a new object track
+2. Draw a shape on the video at the current frame
+3. Advance to another frame using frame stepping (`,` and `.`)
+4. Draw the same object again
+5. The system interpolates between the keyframes
+6. Scrub with `<` and `>` to jump between this track's keyframes
+7. Press `Ctrl/Cmd+K` on any interpolated frame to pin it as a real keyframe
+
+**Tracking keyboard shortcuts**
+
+| Key | Action |
+|---|---|
+| `t` | New track |
+| `,` / `.` | Step one frame back / forward |
+| `<` / `>` (Shift+`,` / Shift+`.`) | Previous / next **keyframe** of the active track |
+| `Ctrl/Cmd+K` | Pin the current interpolated shape as a keyframe |
+| `Delete` / `Backspace` | Delete the selected keyframe |
+| `Escape` | Deselect |
+
+`,` and `.` step frames; the shifted pair jumps keyframes. This mirrors video
+editors, where `,`/`.` are frames and `<`/`>` are markers — and it keeps the two
+handlers from firing on the same press.
 
 **Example Configuration:**
 
@@ -213,16 +287,19 @@ annotation_schemes:
             "interpolation": "linear",
             "startFrame": 0,
             "endFrame": 150,
+            "attributes": {"occluded": "partial"},
             "keyframes": {
                 "0": {
                     "frame": 0,
                     "time": 0.0,
-                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160}
+                    "bbox": {"x": 100, "y": 50, "width": 80, "height": 160},
+                    "bboxNorm": {"x": 0.15, "y": 0.12, "width": 0.13, "height": 0.4}
                 },
                 "30": {
                     "frame": 30,
                     "time": 1.0,
-                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165}
+                    "bbox": {"x": 150, "y": 60, "width": 85, "height": 165},
+                    "bboxNorm": {"x": 0.23, "y": 0.15, "width": 0.13, "height": 0.41}
                 }
             }
         }
@@ -230,12 +307,134 @@ annotation_schemes:
 }
 ```
 
+`bbox` is in the overlay's pixels, which depend on the annotator's window size.
+`bboxNorm` is the same box as fractions of the video picture (0 to 1), which is
+what agreement compares and what an export should read. Tracks are saved as
+they change, with the rest of the scheme's answer.
+
+**Agreement on tracks.** With two or more annotators on a video, the
+agreement report gives tracks an `identity` group: `mota`, `idf1` and
+`id_switches`, computed between each pair of annotators with boxes matched at
+IoU 0.5 on every frame of each track. They catch what box overlap cannot: two
+annotators who box the same cars but swap two of them halfway through. The
+measures are explained under
+[point-cloud sequences](../spatial/point_cloud.md#sequences), which get the
+same group.
+
+Only one video scheme per page can use `tracking` or `combined` mode. The
+tracker's keyboard shortcuts act on the whole page, so a second tracker would
+receive every track you create; the config is refused at startup. Put a second
+tracking task in its own phase, or use one scheme with several labels.
+
+**Getting tracks out.** The `mot` export writes each video as a
+MOTChallenge sequence named after its item: a `gt/gt.txt` row on every frame
+from a track's first keyframe to its last (frames numbered from 1), with the
+boxes between keyframes interpolated, and a `seqinfo.ini`. MOT boxes are in
+pixels, so the export needs the video's size: pass
+`--option width=1920 --option height=1080`, give the items `width` and
+`height` fields, or install ffprobe so the export can read it from a local
+file. A video whose size is unknown is skipped and named in a warning. A track
+with `constant` interpolation holds each box until the next keyframe; `cubic`
+tracks are written with linear interpolation, with a warning.
+
+Rows are numbered in the video file's own frames. The annotation page counts
+frames at the scheme's `video_fps` (30 when unset), which may not be the file's
+rate, so each row is placed from the keyframe's stored `time` at the file's rate,
+and that rate is written to `seqinfo.ini`. The rate comes from
+`--option fps=25`, an `fps` field on the item, or ffprobe. Without any of those
+the scheme's `video_fps` is used, and if that is unset too the export warns that
+it assumed 30 fps. The `cvat`
+export reads `image_annotation` schemes only and does not write video tracks.
+
+```bash
+python -m potato.export --config config.yaml --format mot --output ./mot \
+    --option width=1280 --option height=720
+```
+
+MOT has no attribute columns except `visibility` and the `ignore` flag (`conf`
+0), which are read from attributes of those names. All attributes reach the
+`jsonl`, `csv` and `parquet` exports, and each annotator's `user_state.json`,
+as part of the scheme's answer: a JSON string under `_data` with the structure
+shown above. In `jsonl` that is
+`labels.<scheme>._data`; in `csv` and `parquet` it is the column
+`<scheme>._data`. Parse the string and read `tracks.<id>.attributes` and
+`tracks.<id>.keyframes.<frame>.bboxNorm`:
+
+```python
+import json
+for line in open("export/annotations.jsonl"):
+    row = json.loads(line)
+    answer = json.loads(row["labels"]["object_tracking"]["_data"])
+    for track in answer["tracks"].values():
+        print(row["instance_id"], track["label"], track["attributes"],
+              [kf["bboxNorm"] for kf in track["keyframes"].values()])
+```
+
 ### Combined Mode (`combined`)
 
 Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
-- Useful for comprehensive video analysis tasks
+- Useful when a video needs both segment and frame-level labels
+
+#### Per-segment questions
+
+In `combined` mode, `segment_schemes` asks the annotator a set of questions
+about each segment. The annotator marks a segment, selects it, and answers the
+questions in the panel that opens for it:
+
+```yaml
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: scene_review
+    description: "Mark each scene and describe it"
+    mode: combined
+    labels:
+      - name: scene
+    segment_schemes:
+      - annotation_type: radio
+        name: setting
+        description: "Where does this scene take place?"
+        labels: ["indoor", "outdoor", "unclear"]
+      - annotation_type: multiselect
+        name: content
+        description: "What appears in this scene?"
+        labels: ["people", "text on screen", "animals"]
+```
+
+`segment_schemes` is read only when `mode` is `combined`. In the other modes
+the validator still accepts it, but no questions appear.
+
+Each entry is an ordinary annotation scheme, rendered by the same generator as
+a top-level one, so any annotation type works inside a segment. Media types
+(`audio_annotation`, `video_annotation`, `tiered_annotation`) are refused,
+since a segment cannot hold its own timeline. Answers are stored on the
+segment, keyed by the sub-scheme's `name`:
+
+```json
+{"segments": [
+  {"id": "segment_1", "start_time": 0.0, "end_time": 10.5, "label": "scene",
+   "annotations": {"setting": "indoor", "content": ["people"]}}
+]}
+```
+
+As with [audio segment questions](audio_annotation.md), keybindings are not
+bound to segment fields, and `label_requirement` is not enforced on a
+sub-scheme. Use `min_segments` to require segments.
+
+## Showing and Hiding Classes
+
+A timeline of stacked segments becomes unreadable in the same way a densely
+boxed image does, so video shares the per-class show/hide used by
+[image annotation](image_annotation.md#showing-and-hiding-classes). Each label
+in the toolbar carries an eye toggle; hiding a class removes its segments from
+the timeline and the annotation list.
+
+- Hiding is **presentation only** — hidden segments are still saved and exported.
+- The state persists per project and schema, so a class stays hidden as the
+  annotator moves between items.
+
+Nothing needs to be configured; the toggles appear automatically.
 
 ## Keyboard Shortcuts
 
@@ -338,6 +537,26 @@ The timeline uses Peaks.js to display:
 - Current playback position
 - Selection markers for segment start/end
 
+Below the zoomed timeline is an **overview** bar showing the whole clip.
+
+### Creating Segments by Dragging
+
+In addition to the `[` / `]` / `+ Segment` buttons and keyboard shortcuts, you can
+draw segments directly on the timeline:
+
+- **Timeline (zoomed view)** — **right-click and drag** to draw a segment. If the
+  drag reaches an edge, the view **auto-scrolls** so the segment can extend past the
+  visible window in one gesture.
+- **Overview** — **right-click and drag** to draw a coarse segment anywhere across
+  the whole video, even outside the current zoom window.
+
+**Left-click** still seeks the playhead, and Peaks' native drag/resize still edits
+existing segment markers.
+
+> **Note:** The timeline requires the video to have a decodable audio track for the
+> waveform. If Peaks.js can't initialize, the player still works and segments can be
+> created with the buttons/keyboard.
+
 ### Annotation List
 
 A scrollable list showing all annotations:
@@ -359,7 +578,7 @@ A scrollable list showing all annotations:
 ## Dependencies
 
 The video annotation feature uses:
-- **Peaks.js**: For timeline visualization (loaded from CDN)
+- **Peaks.js**: For timeline visualization (bundled with Potato)
 - **HTML5 Video**: Standard browser video element
 
 No additional server-side dependencies are required. The waveform for the timeline is generated from the video's audio track using the existing WaveformService (if audiowaveform is installed).
@@ -384,7 +603,10 @@ No additional server-side dependencies are required. The waveform for the timeli
 
 ### Segments Not Saving
 
-1. Ensure you have at least `min_segments` segments created
+1. Ensure you have at least `min_segments` segments created. With
+   `label_requirement.required: true` the widget says how many are still
+   missing ("1 of 2 segments marked") and blocks Next; without it, neither
+   `min_segments` nor an unlabelled segment stops anyone.
 2. Check browser console for any JavaScript errors
 3. Verify the annotation scheme name matches expectations
 
@@ -550,8 +772,34 @@ For maximum compatibility, use:
 - **Video codec**: H.264
 - **Audio codec**: AAC
 
+## Annotating video with a transcript
+
+Video temporal annotation works on the timeline. If your video also has subtitles
+or a transcript — downloaded captions, or ASR run over the audio track — you can
+annotate the speech alongside it.
+
+Potato reads WebVTT, SubRip, SubStation Alpha, TTML, and YouTube's `json3` /
+`srv1`-`srv3` caption formats, plus ASR output from Whisper and the major cloud
+providers. Subtitles pulled with `yt-dlp` work directly:
+
+```bash
+yt-dlp --write-auto-subs --sub-langs en --sub-format vtt --skip-download <URL>
+potato transcripts ./captions --media-url-prefix https://cdn.example.org/video \
+  -o data/clips.json
+```
+
+A caveat worth knowing before you design a scheme: auto-generated captions have
+no punctuation and no speaker labels, and their cue boundaries fall wherever the
+caption window filled up rather than at sentence ends. Sentence-level annotation
+over auto-captions is guesswork.
+
+See [Working with Transcripts](../../guides/working_with_transcripts.md) and
+[Transcript Format Support](transcript_formats.md).
+
 ## See Also
 
 - [Audio Annotation](audio_annotation.md) - Similar annotation for audio files
+- [Working with Transcripts](../../guides/working_with_transcripts.md) - Subtitles and ASR output
+- [Transcript Format Support](transcript_formats.md) - Every supported transcript format
 - [Schemas and Templates](../schemas_and_templates.md) - All annotation types
 - [Keyboard Shortcuts](../../administration/productivity.md#keyboard-shortcuts) - Productivity features

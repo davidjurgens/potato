@@ -269,9 +269,9 @@
     font-size: 0.68rem;
     font-weight: 600;
     letter-spacing: 0.02em;
-    color: #246b3c;
-    background: #e2f1e7;
-    border: 1px solid #bcdec8;
+    color: light-dark(#246b3c, #b5ddc2);
+    background: light-dark(#e2f1e7, #1f2e24);
+    border: 1px solid light-dark(#bcdec8, #425749);
     border-radius: 999px;
     padding: 2px 10px;
 }
@@ -280,9 +280,9 @@
     margin-left: auto;
     font-size: 0.72rem;
     font-weight: 600;
-    color: #b23b3b;
-    background: #fbeeee;
-    border: 1px solid #f0d2d2;
+    color: light-dark(#b23b3b, #d9abab);
+    background: light-dark(#fbeeee, #2b1515);
+    border: 1px solid light-dark(#f0d2d2, #5c3d3d);
     border-radius: 5px;
     padding: 4px 10px;
 }

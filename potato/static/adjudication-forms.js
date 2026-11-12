@@ -9,15 +9,24 @@
 window.AdjudicationForms = (function () {
     'use strict';
 
-    // Color classes for annotator chips
+    //: Identity classes, used ONLY where annotators' work is drawn on top of
+    //: each other -- span outlines on the text, shapes on the image, dots on a
+    //: shared likert track -- and a chip needs a swatch to say whose is whose.
+    //: Each class sets --who to one of the --adj-annotator-N tokens in
+    //: adjudication.css. Label chips stay neutral: colour there used to give
+    //: user_1 the amber of the warning badges beside it.
     const CHIP_COLORS = [
-        'adj-color-0', 'adj-color-1', 'adj-color-2', 'adj-color-3',
-        'adj-color-4', 'adj-color-5', 'adj-color-6', 'adj-color-7'
+        'adj-who-0', 'adj-who-1', 'adj-who-2', 'adj-who-3',
+        'adj-who-4', 'adj-who-5', 'adj-who-6', 'adj-who-7'
     ];
 
     // Map annotator names to consistent colors
     let annotatorColorMap = {};
     let colorIndex = 0;
+
+    //: schema name -> the annotator answers renderAdoptForm offered, in the
+    //: order its radios index into. Reset per item by resetColors().
+    var adoptValues = {};
 
     function getAnnotatorColor(annotatorId) {
         if (!(annotatorId in annotatorColorMap)) {
@@ -30,6 +39,9 @@ window.AdjudicationForms = (function () {
     function resetColors() {
         annotatorColorMap = {};
         colorIndex = 0;
+        // Same lifetime: both are per-item state, and a stale adopt list would
+        // resolve a radio index against the previous item's answers.
+        adoptValues = {};
     }
 
     /**
@@ -47,23 +59,42 @@ window.AdjudicationForms = (function () {
     /**
      * Create annotator chip HTML
      */
-    function createChip(annotatorId, timing, showName, fastWarningMs) {
-        var colorClass = getAnnotatorColor(annotatorId);
-        var name = showName ? annotatorId : 'Annotator';
+    function createChip(annotatorId, timing, fastWarningMs) {
+        // The id the server sent. Under `show_annotator_names: false` the
+        // server already substituted a per-item alias ("Annotator 1"), so
+        // there is nothing left to hide here -- and collapsing every
+        // annotator to the same literal removed the one thing the panes
+        // need, which is telling two answers by the same person apart.
+        var name = annotatorId;
         var timeStr = formatTime(timing);
         var isWarning = fastWarningMs > 0 && timing > 0 && timing < fastWarningMs;
 
+        // Timing only. The fast-decision warning is shown once, on the
+        // annotator's overview row; repeated on every chip it appeared once
+        // per option per schema for the same fact.
         var timingHtml = '';
         if (timeStr) {
-            var cls = isWarning ? 'adj-chip-timing adj-timing-warning' : 'adj-chip-timing';
-            timingHtml = '<span class="' + cls + '">' +
-                (isWarning ? '<i class="fas fa-exclamation-triangle"></i> ' : '') +
+            timingHtml = '<span class="adj-chip-timing' + (isWarning ? ' adj-chip-timing-fast' : '') + '">' +
                 timeStr + '</span>';
         }
 
-        return '<span class="adj-annotator-chip ' + colorClass + '" ' +
-            'data-annotator="' + annotatorId + '" title="' + annotatorId + '">' +
-            name + timingHtml + '</span>';
+        return '<span class="adj-annotator-chip" ' +
+            'data-annotator="' + escapeHtml(annotatorId) + '" title="' + escapeHtml(annotatorId) + '">' +
+            escapeHtml(name) + timingHtml + '</span>';
+    }
+
+    /**
+     * A chip that also carries the annotator's identity swatch, for the forms
+     * whose overlays are drawn in that colour (spans, shapes, segments).
+     */
+    function createIdentityChip(annotatorId, timing) {
+        var timeStr = formatTime(timing);
+        return '<span class="adj-annotator-chip ' + getAnnotatorColor(annotatorId) + '" ' +
+            'data-annotator="' + escapeHtml(annotatorId) + '" title="' + escapeHtml(annotatorId) + '">' +
+            '<span class="adj-swatch" aria-hidden="true"></span>' +
+            escapeHtml(annotatorId) +
+            (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
+            '</span>';
     }
 
     /**
@@ -117,7 +148,7 @@ window.AdjudicationForms = (function () {
             var chipsHtml = '';
             annotators.forEach(function(uid) {
                 var timing = getTimingMs(behavioralData, uid);
-                chipsHtml += createChip(uid, timing, config.show_annotator_names, config.fast_decision_warning_ms);
+                chipsHtml += createChip(uid, timing, config.fast_decision_warning_ms);
             });
 
             html += '<label class="adj-radio-option" data-value="' + labelName + '">' +
@@ -168,7 +199,7 @@ window.AdjudicationForms = (function () {
             var chipsHtml = '';
             annotators.forEach(function(uid) {
                 var timing = getTimingMs(behavioralData, uid);
-                chipsHtml += createChip(uid, timing, config.show_annotator_names, config.fast_decision_warning_ms);
+                chipsHtml += createChip(uid, timing, config.fast_decision_warning_ms);
             });
 
             html += '<label class="adj-checkbox-option" data-value="' + labelName + '">' +
@@ -219,23 +250,19 @@ window.AdjudicationForms = (function () {
             var val = annotatorValues[uid];
             var pct = range > 0 ? ((val - minVal) / range * 100) : 50;
             var colorClass = getAnnotatorColor(uid);
-            var bgStyle = '';
-            // Extract background color from class
-            var tempDiv = document.createElement('div');
-            tempDiv.className = colorClass;
 
-            html += '<div class="adj-likert-dot" style="left:' + pct + '%; background: #6366f1;" ' +
-                'data-annotator="' + uid + '" data-value="' + val + '" ' +
-                'title="' + uid + ': ' + val + '">' +
+            html += '<div class="adj-likert-dot ' + colorClass + '" style="left:' + pct + '%;" ' +
+                'data-annotator="' + escapeHtml(uid) + '" data-value="' + escapeHtml(val) + '" ' +
+                'title="' + escapeHtml(uid) + ': ' + escapeHtml(val) + '">' +
                 '</div>';
-            html += '<div class="adj-likert-dot-label" style="left:' + pct + '%">' + uid + ': ' + val + '</div>';
+            html += '<div class="adj-likert-dot-label" style="left:' + pct + '%">' + escapeHtml(uid) + ': ' + escapeHtml(val) + '</div>';
         });
 
         html += '</div>';
-        html += '<div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">';
-        html += '<label style="font-size: 0.85rem; font-weight: 500;">Your rating:</label>';
+        html += '<div class="adj-likert-decision">';
+        html += '<label for="adj-likert-' + schemaName + '">Your rating:</label>';
         html += '<input type="range" class="adj-likert-input form-range" ' +
-            'name="adj-likert-' + schemaName + '" ' +
+            'id="adj-likert-' + schemaName + '" name="adj-likert-' + schemaName + '" ' +
             'min="' + minVal + '" max="' + maxVal + '" step="1" ' +
             'data-schema="' + schemaName + '">';
         html += '<span class="adj-likert-value" id="adj-likert-val-' + schemaName + '">-</span>';
@@ -267,13 +294,13 @@ window.AdjudicationForms = (function () {
             var timing = getTimingMs(behavioralData, userId);
             var timeStr = formatTime(timing);
 
-            html += '<div class="adj-text-response" data-annotator="' + userId + '">';
+            html += '<div class="adj-text-response" data-annotator="' + escapeHtml(userId) + '">';
             html += '<div class="adj-text-response-header">';
             html += '<label class="adj-text-select-label">' +
-                '<input type="checkbox" class="adj-text-select-cb" data-annotator="' + userId + '" data-schema="' + schemaName + '">' +
+                '<input type="checkbox" class="adj-text-select-cb" data-annotator="' + escapeHtml(userId) + '" data-schema="' + schemaName + '">' +
                 '</label>';
             html += '<span class="adj-annotator-name">' +
-                (config.show_annotator_names ? userId : 'Annotator') + '</span>';
+                escapeHtml(userId) + '</span>';
             if (timeStr) {
                 html += '<span class="adj-annotator-timing"><i class="fas fa-clock"></i> ' + timeStr + '</span>';
             }
@@ -305,10 +332,13 @@ window.AdjudicationForms = (function () {
         return renderLikertForm(schema, annotations, behavioralData, config);
     }
 
+    // Escapes quotes too: callers put the result in attribute values
+    // (data-annotator, title, src) as well as element bodies, and the
+    // usernames and item fields it receives are not the researcher's.
     function escapeHtml(text) {
-        var div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text === null || text === undefined ? '' : text)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     /**
@@ -342,23 +372,20 @@ window.AdjudicationForms = (function () {
 
             html += '<div class="adj-span-annotator-group">';
             html += '<div class="adj-span-annotator-header">';
-            html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? userId : 'Annotator') +
-                (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
-                '</span>';
-            html += '<button type="button" class="adj-span-adopt-all-btn" data-annotator="' + userId +
+            html += createIdentityChip(userId, timing);
+            html += '<button type="button" class="adj-span-adopt-all-btn" data-annotator="' + escapeHtml(userId) +
                 '" data-schema="' + schemaName + '"><i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
 
             schemaSpans.forEach(function(span, idx) {
                 var spanTitle = span.title || span.name || '';
                 var spanText = spanTitle || ('chars ' + span.start + '-' + span.end);
-                html += '<div class="adj-span-item" data-span-idx="' + idx + '" data-annotator="' + userId + '">';
+                html += '<div class="adj-span-item" data-span-idx="' + idx + '" data-annotator="' + escapeHtml(userId) + '">';
                 html += '<span class="adj-span-label-badge ' + colorClass + '">' +
                     escapeHtml(span.name || 'span') + '</span>';
                 html += '<span class="adj-span-text">' + escapeHtml(spanText) + '</span>';
                 html += '<button type="button" class="adj-span-adopt-btn" ' +
-                    'data-annotator="' + userId + '" data-span-idx="' + idx +
+                    'data-annotator="' + escapeHtml(userId) + '" data-span-idx="' + idx +
                     '" data-schema="' + schemaName + '">' +
                     '<i class="fas fa-check"></i> Adopt</button>';
                 html += '</div>';
@@ -370,7 +397,7 @@ window.AdjudicationForms = (function () {
         html += '<div class="adj-adopted-spans" data-schema="' + schemaName + '">';
         html += '<div class="adj-adopted-header"><strong>Your Decision Spans:</strong></div>';
         html += '<div class="adj-adopted-list" id="adj-adopted-list-' + schemaName + '">';
-        html += '<span class="text-muted" style="font-size:0.8rem;">No spans adopted yet</span>';
+        html += '<span class="adj-adopted-empty">No spans adopted yet</span>';
         html += '</div>';
         html += '</div>';
         html += '</div>';
@@ -382,57 +409,134 @@ window.AdjudicationForms = (function () {
      * Render an image annotation adjudication form.
      * Shows side-by-side comparison of each annotator's bounding boxes.
      */
-    function renderImageForm(schema, annotations, behavioralData, config) {
+    /**
+     * Describe one annotation object in a way an adjudicator can act on.
+     *
+     * The old version printed `x:10% y:20% w:30% h:40%` and produced an EMPTY
+     * string for every non-box type, because it read `coordinates.x` — which
+     * polygons (an array) and masks (no coordinates at all, only RLE) do not
+     * have. Masks and polygons therefore appeared as an unlabelled checkbox
+     * with no information whatsoever.
+     */
+    function describeShape(obj) {
+        var coords = obj.coordinates;
+        var type = obj.type || 'shape';
+
+        if (type === 'mask') {
+            var counts = (obj.rle && obj.rle.counts) || [];
+            var pixels = 0;
+            for (var i = 1; i < counts.length; i += 2) pixels += counts[i];
+            var size = (obj.rle && obj.rle.size) || [];
+            var pct = (size[0] && size[1])
+                ? ' (' + (100 * pixels / (size[0] * size[1])).toFixed(1) + '% of image)' : '';
+            return 'mask — ' + pixels.toLocaleString() + ' px' + pct;
+        }
+        if (Array.isArray(coords)) {
+            return type + ' — ' + coords.length + ' points';
+        }
+        if (coords && coords.width !== undefined) {
+            return 'box — x:' + Math.round(coords.x * 100) + '% y:' + Math.round(coords.y * 100) +
+                '% w:' + Math.round((coords.width || 0) * 100) +
+                '% h:' + Math.round((coords.height || 0) * 100) + '%';
+        }
+        if (coords && coords.x !== undefined) {
+            return 'point — x:' + Math.round(coords.x * 100) + '% y:' + Math.round(coords.y * 100) + '%';
+        }
+        return type;
+    }
+
+    /** Parse a stored image-annotation value into its object list. */
+    function parseImageObjects(val) {
+        try {
+            if (typeof val === 'string') return JSON.parse(val) || [];
+            if (Array.isArray(val)) return val;
+            if (val && typeof val === 'object') {
+                if (val._data !== undefined) return parseImageObjects(val._data);
+                return [val];
+            }
+        } catch (e) { /* fall through */ }
+        return [];
+    }
+
+    /**
+     * An SVG overlay of one annotator's shapes on the image.
+     *
+     * Coordinates in a viewBox of 0..1 map straight onto the stored normalized
+     * form, so no scaling maths is needed and the overlay cannot drift from
+     * what was saved. Masks are drawn as their extent with a hatched fill —
+     * honest about being an approximation, since SVG cannot render RLE, and far
+     * more use than the nothing that was shown before.
+     */
+    function renderShapeOverlay(objects, imageUrl) {
+        if (!imageUrl) return '';
+
+        // Stroke and fill come from --who (adjudication.css), which the
+        // enclosing annotator group sets; presentation attributes cannot read
+        // a custom property, so colour is left to the stylesheet.
+        var shapes = '';
+        objects.forEach(function(obj, idx) {
+            var c = obj.coordinates;
+            // Annotator-submitted JSON: only numbers may reach the markup.
+            var n = function (v) { var x = Number(v); return isFinite(x) ? x : 0; };
+            var common = 'stroke-width="0.006" vector-effect="non-scaling-stroke" ' +
+                'data-idx="' + idx + '"';
+            if (obj.type === 'mask') {
+                shapes += '<rect class="adj-shape adj-shape-mask" x="0.02" y="0.02" ' +
+                    'width="0.96" height="0.96" stroke-dasharray="0.02 0.02" ' + common + '></rect>';
+            } else if (Array.isArray(c)) {
+                var pts = c.map(function(p) { return n(p && p.x) + ',' + n(p && p.y); }).join(' ');
+                shapes += '<polygon class="adj-shape" points="' + pts + '" ' + common + '></polygon>';
+            } else if (c && c.width !== undefined) {
+                shapes += '<rect class="adj-shape" x="' + n(c.x) + '" y="' + n(c.y) + '" width="' + n(c.width) +
+                    '" height="' + n(c.height) + '" ' + common + '></rect>';
+            } else if (c && c.x !== undefined) {
+                shapes += '<circle class="adj-shape adj-shape-point" cx="' + n(c.x) + '" cy="' + n(c.y) +
+                    '" r="0.015" ' + common + '></circle>';
+            }
+        });
+
+        return '<div class="adj-image-preview">' +
+            '<img src="' + escapeHtml(imageUrl) + '" alt="Annotated image" loading="lazy">' +
+            '<svg class="adj-image-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" ' +
+            'aria-hidden="true">' + shapes + '</svg></div>';
+    }
+
+    function renderImageForm(schema, annotations, behavioralData, config, imageUrl) {
         var schemaName = schema.name || '';
 
         var html = '<div class="adj-image-form" data-schema="' + schemaName + '">';
         html += '<div class="adj-complex-instructions">' +
             '<i class="fas fa-info-circle"></i> ' +
-            'Each annotator\'s bounding boxes are listed below. Select annotations to include in your decision.' +
+            'Each annotator\'s shapes are shown below. Select the ones to keep — ' +
+            'your selection becomes the adjudicated annotation.' +
             '</div>';
 
         Object.keys(annotations).forEach(function(userId) {
             var userAnn = annotations[userId];
-            if (!userAnn[schemaName]) return;
+            if (userAnn[schemaName] === undefined) return;
 
-            var val = userAnn[schemaName];
-            var boxes = [];
-            try {
-                if (typeof val === 'string') boxes = JSON.parse(val);
-                else if (Array.isArray(val)) boxes = val;
-                else if (typeof val === 'object') boxes = [val];
-            } catch(e) { /* ignore */ }
-
-            if (boxes.length === 0) return;
+            var objects = parseImageObjects(userAnn[schemaName]);
+            if (objects.length === 0) return;
 
             var colorClass = getAnnotatorColor(userId);
-            var timing = getTimingMs(behavioralData, userId);
-            var timeStr = formatTime(timing);
 
-            html += '<div class="adj-complex-annotator-group">';
+            html += '<div class="adj-complex-annotator-group ' + colorClass + '">';
             html += '<div class="adj-complex-annotator-header">';
-            html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? userId : 'Annotator') +
-                (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
-                '</span>';
-            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
+            html += createIdentityChip(userId, getTimingMs(behavioralData, userId));
+            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + escapeHtml(userId) +
                 '" data-schema="' + schemaName + '" data-type="image">' +
                 '<i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
 
-            boxes.forEach(function(box, idx) {
-                var label = box.label || box.type || 'annotation';
-                var coords = box.coordinates || {};
-                var detail = '';
-                if (coords.x !== undefined) {
-                    detail = 'x:' + Math.round(coords.x * 100) + '% y:' + Math.round(coords.y * 100) +
-                        '% w:' + Math.round((coords.width || 0) * 100) + '% h:' + Math.round((coords.height || 0) * 100) + '%';
-                }
+            html += renderShapeOverlay(objects, imageUrl);
+
+            objects.forEach(function(obj, idx) {
+                var label = obj.label || obj.type || 'annotation';
                 html += '<div class="adj-complex-item">';
-                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
+                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + escapeHtml(userId) +
                     '" data-idx="' + idx + '" data-schema="' + schemaName + '" data-type="image">';
                 html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(label) + '</span>';
-                if (detail) html += ' <span class="adj-complex-detail">' + detail + '</span>';
+                html += ' <span class="adj-complex-detail">' + escapeHtml(describeShape(obj)) + '</span>';
                 html += '</label></div>';
             });
             html += '</div>';
@@ -470,16 +574,11 @@ window.AdjudicationForms = (function () {
             if (segments.length === 0 && !data.id) return;
 
             var colorClass = getAnnotatorColor(userId);
-            var timing = getTimingMs(behavioralData, userId);
-            var timeStr = formatTime(timing);
 
-            html += '<div class="adj-complex-annotator-group">';
+            html += '<div class="adj-complex-annotator-group ' + colorClass + '">';
             html += '<div class="adj-complex-annotator-header">';
-            html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? userId : 'Annotator') +
-                (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
-                '</span>';
-            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
+            html += createIdentityChip(userId, getTimingMs(behavioralData, userId));
+            html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + escapeHtml(userId) +
                 '" data-schema="' + schemaName + '" data-type="' + mediaType + '">' +
                 '<i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
@@ -489,7 +588,7 @@ window.AdjudicationForms = (function () {
                 var startT = formatMediaTime(seg.start_time || seg.startTime || 0);
                 var endT = formatMediaTime(seg.end_time || seg.endTime || 0);
                 html += '<div class="adj-complex-item">';
-                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
+                html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + escapeHtml(userId) +
                     '" data-idx="' + idx + '" data-schema="' + schemaName + '" data-type="' + mediaType + '">';
                 html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(label) + '</span>';
                 html += ' <span class="adj-complex-detail">' + startT + ' - ' + endT + '</span>';
@@ -505,7 +604,7 @@ window.AdjudicationForms = (function () {
                         var kfLabel = kf.label || 'keyframe';
                         var kfTime = formatMediaTime(kf.time || 0);
                         html += '<div class="adj-complex-item">';
-                        html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
+                        html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + escapeHtml(userId) +
                             '" data-idx="kf-' + idx + '" data-schema="' + schemaName + '" data-type="keyframe">';
                         html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(kfLabel) + '</span>';
                         html += ' <span class="adj-complex-detail">@ ' + kfTime + '</span>';
@@ -533,7 +632,7 @@ window.AdjudicationForms = (function () {
     /**
      * Render the appropriate form for a schema type
      */
-    function renderForm(schema, annotations, behavioralData, config, spanAnnotations) {
+    function renderForm(schema, annotations, behavioralData, config, spanAnnotations, imageUrl) {
         var type = schema.annotation_type || '';
 
         switch (type) {
@@ -543,6 +642,15 @@ window.AdjudicationForms = (function () {
             case 'multiselect':
                 return renderMultiselectForm(schema, annotations, behavioralData, config);
             case 'likert':
+                // A likert that declares `labels:` renders for the annotator as
+                // a radio group over those words and stores one of them, so the
+                // slider below would put the adjudicator's decision in a
+                // different value space from the answers it adjudicates -- 3
+                // against "Good", with the mapping written down nowhere. Mirror
+                // generate_likert_layout's own condition instead.
+                if (Array.isArray(schema.labels) && schema.labels.length) {
+                    return renderRadioForm(schema, annotations, behavioralData, config);
+                }
                 return renderLikertForm(schema, annotations, behavioralData, config);
             case 'slider':
                 return renderSliderForm(schema, annotations, behavioralData, config);
@@ -553,14 +661,102 @@ window.AdjudicationForms = (function () {
             case 'span':
                 return renderSpanForm(schema, spanAnnotations || {}, behavioralData, config);
             case 'image_annotation':
-                return renderImageForm(schema, annotations, behavioralData, config);
+                return renderImageForm(schema, annotations, behavioralData, config, imageUrl);
             case 'audio_annotation':
                 return renderMediaForm(schema, annotations, behavioralData, config, 'audio');
             case 'video_annotation':
                 return renderMediaForm(schema, annotations, behavioralData, config, 'video');
             default:
-                return '<p class="text-muted">Form not available for type: ' + type + '</p>';
+                return renderAdoptForm(schema, annotations, behavioralData, config);
         }
+    }
+
+    /**
+     * Fallback decision form: adopt one annotator's answer verbatim.
+     *
+     * Every type without a bespoke widget above used to render "Form not
+     * available for type: X" and offer no control at all, so a task with
+     * composite schemes produced a partial final record -- adjudication exists
+     * to yield one final label per item, and on those schemes it yielded none.
+     *
+     * Adopting is the honest general control: the answers a constant_sum or a
+     * taxonomy widget stores cannot be re-elicited from a generic input, but
+     * choosing between the ones annotators gave is a real decision and it keeps
+     * the adjudicated value in the same shape and value space as what it
+     * resolves.
+     */
+    function renderAdoptForm(schema, annotations, behavioralData, config) {
+        var schemaName = schema.name || '';
+        var type = schema.annotation_type || '';
+
+        var options = [];
+        Object.keys(annotations).forEach(function (userId) {
+            var userAnn = annotations[userId];
+            if (!userAnn || !(schemaName in userAnn)) return;
+            var val = userAnn[schemaName];
+            if (val === null || val === undefined || val === '') return;
+            options.push({ userId: userId, value: val });
+        });
+
+        if (options.length === 0) {
+            return '<p class="adj-adopt-empty">No annotator answered ' +
+                escapeHtml(schemaName) + ' on this item.</p>';
+        }
+
+        var html = '<div class="adj-adopt-options" data-schema="' +
+            escapeHtml(schemaName) + '" data-type="' +
+            escapeHtml(type) + '">';
+        html += '<p class="adj-adopt-hint">Adopt one annotator’s answer as the decision:</p>';
+
+        options.forEach(function (opt, idx) {
+            var timing = getTimingMs(behavioralData, opt.userId);
+            var chip = createChip(opt.userId, timing,
+                config.fast_decision_warning_ms);
+            html += '<label class="adj-adopt-option">' +
+                '<input type="radio" name="adj-adopt-' + schemaName + '" ' +
+                'value="' + idx + '" data-schema="' + schemaName + '" ' +
+                'data-annotator="' + escapeHtml(opt.userId) + '">' +
+                chip +
+                '<span class="adj-adopt-value">' +
+                escapeHtml(formatAnswer(opt.value)) +
+                '</span></label>';
+        });
+
+        html += '</div>';
+        // The raw values, so collectDecisions can store the answer itself
+        // rather than an index into a list the server never saw.
+        adoptValues[schemaName] = options.map(function (o) { return o.value; });
+        return html;
+    }
+
+    //: Single fixed keys that name the widget's storage slot rather than a
+    //: sub-question -- the value beside them IS the whole answer. Printing the
+    //: key would show the adjudicator "selected_labels: Annotation,People"
+    //: where the annotator only ever chose "Annotation, People".
+    var PACKED_KEYS = ['selected_labels', 'rank_order', 'selection',
+                       'scale_value', '_data'];
+
+    /**
+     * One-line rendering of any stored answer, for the adopt list.
+     */
+    function formatAnswer(val) {
+        if (typeof val === 'string') return val;
+        if (val === null || val === undefined) return '';
+        if (Array.isArray(val)) return val.join(', ');
+        if (typeof val === 'object') {
+            var keys = Object.keys(val);
+            if (keys.length === 1 && PACKED_KEYS.indexOf(keys[0]) !== -1) {
+                return formatAnswer(val[keys[0]]);
+            }
+            return keys.map(function (k) {
+                var v = val[k];
+                // {label: label} and {label: true} both mean "the key is the
+                // answer", so printing "Include: Include" would be noise.
+                if (v === true || String(v) === String(k)) return k;
+                return k + ': ' + v;
+            }).join(', ');
+        }
+        return String(val);
     }
 
     /**
@@ -613,6 +809,20 @@ window.AdjudicationForms = (function () {
             }
         });
 
+        // Adopt-an-answer forms (every type without a bespoke widget)
+        document.querySelectorAll('.adj-adopt-options').forEach(function(container) {
+            var schema = container.dataset.schema;
+            var checked = container.querySelector('input[type="radio"]:checked');
+            if (!checked) return;
+            var values = adoptValues[schema] || [];
+            var idx = parseInt(checked.value, 10);
+            if (idx >= 0 && idx < values.length) {
+                decisions[schema] = values[idx];
+                // Not 'adjudicator': the value is an annotator's, unchanged.
+                sources[schema] = checked.dataset.annotator || 'adjudicator';
+            }
+        });
+
         // Span decisions (collected from adopted spans store)
         if (window._adjAdoptedSpans) {
             Object.keys(window._adjAdoptedSpans).forEach(function(schema) {
@@ -649,40 +859,28 @@ window.AdjudicationForms = (function () {
      * Bind interactive behaviors to forms
      */
     function bindFormEvents() {
-        // Radio option styling
-        document.querySelectorAll('.adj-radio-option').forEach(function(option) {
-            option.addEventListener('click', function() {
-                var container = this.closest('.adj-radio-options');
+        // Every option row is a <label> around its input, so the browser
+        // already toggles the input on a click anywhere in the row. These
+        // handlers used to toggle it again on click; the label's own
+        // activation then toggled it back, so clicking a multiselect option's
+        // text (or an error-type tag) changed nothing. Listen for the result
+        // instead of re-doing the gesture.
+        document.querySelectorAll('.adj-radio-options, .adj-adopt-options').forEach(function(container) {
+            container.addEventListener('change', function() {
                 container.querySelectorAll('.adj-radio-option').forEach(function(o) {
-                    o.classList.remove('selected');
+                    var input = o.querySelector('input[type="radio"]');
+                    o.classList.toggle('selected', !!(input && input.checked));
                 });
-                this.classList.add('selected');
-                this.querySelector('input[type="radio"]').checked = true;
             });
         });
 
-        // Checkbox option styling
-        document.querySelectorAll('.adj-checkbox-option').forEach(function(option) {
-            option.addEventListener('click', function(e) {
-                if (e.target.type === 'checkbox') return;
-                var cb = this.querySelector('input[type="checkbox"]');
-                cb.checked = !cb.checked;
-                this.classList.toggle('selected', cb.checked);
-            });
-
-            option.querySelector('input[type="checkbox"]').addEventListener('change', function() {
+        document.querySelectorAll('.adj-checkbox-option, .adj-error-tag').forEach(function(option) {
+            var cb = option.querySelector('input[type="checkbox"]');
+            // Error tags live in the template and survive every item; bind once.
+            if (!cb || cb.dataset.adjBound) return;
+            cb.dataset.adjBound = '1';
+            cb.addEventListener('change', function() {
                 option.classList.toggle('selected', this.checked);
-            });
-        });
-
-        // Annotator chip clicks (auto-select that option)
-        document.querySelectorAll('.adj-annotator-chip').forEach(function(chip) {
-            chip.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var option = this.closest('.adj-radio-option, .adj-checkbox-option');
-                if (option) {
-                    option.click();
-                }
             });
         });
 
@@ -756,19 +954,6 @@ window.AdjudicationForms = (function () {
             });
         });
 
-        // Error taxonomy toggles
-        document.querySelectorAll('.adj-error-tag').forEach(function(tag) {
-            tag.addEventListener('click', function(e) {
-                if (e.target.type === 'checkbox') {
-                    this.classList.toggle('selected', e.target.checked);
-                    return;
-                }
-                var cb = this.querySelector('input[type="checkbox"]');
-                cb.checked = !cb.checked;
-                this.classList.toggle('selected', cb.checked);
-            });
-        });
-
         // Span adopt buttons
         document.querySelectorAll('.adj-span-adopt-btn').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
@@ -806,7 +991,8 @@ window.AdjudicationForms = (function () {
 
         // Guideline flag toggle
         var guidelineFlag = document.getElementById('adj-guideline-flag');
-        if (guidelineFlag) {
+        if (guidelineFlag && !guidelineFlag.dataset.adjBound) {
+            guidelineFlag.dataset.adjBound = '1';
             guidelineFlag.addEventListener('change', function() {
                 var notes = document.getElementById('adj-guideline-notes');
                 if (notes) {
@@ -874,7 +1060,7 @@ window.AdjudicationForms = (function () {
 
         var spans = (window._adjAdoptedSpans && window._adjAdoptedSpans[schema]) || [];
         if (spans.length === 0) {
-            listEl.innerHTML = '<span class="text-muted" style="font-size:0.8rem;">No spans adopted yet</span>';
+            listEl.innerHTML = '<span class="adj-adopted-empty">No spans adopted yet</span>';
             return;
         }
 
@@ -882,10 +1068,10 @@ window.AdjudicationForms = (function () {
         spans.forEach(function(span, idx) {
             var source = span._source || 'unknown';
             html += '<div class="adj-adopted-span-item">';
-            html += '<span class="adj-span-label-badge" style="background:#dbeafe;color:#1d4ed8;">' +
+            html += '<span class="adj-span-label-badge adj-span-label-badge-decided">' +
                 escapeHtml(span.name || 'span') + '</span>';
             html += '<span class="adj-span-text">' + escapeHtml(span.title || ('chars ' + span.start + '-' + span.end)) + '</span>';
-            html += '<span class="text-muted" style="font-size:0.7rem;">from ' + escapeHtml(source) + '</span>';
+            html += '<span class="adj-adopted-source">from ' + escapeHtml(source) + '</span>';
             html += '<button type="button" class="adj-span-remove-btn" onclick="AdjudicationForms.removeAdoptedSpan(\'' +
                 schema + '\', ' + idx + ')"><i class="fas fa-times"></i></button>';
             html += '</div>';
@@ -900,8 +1086,10 @@ window.AdjudicationForms = (function () {
         bindFormEvents: bindFormEvents,
         resetColors: resetColors,
         getAnnotatorColor: getAnnotatorColor,
+        createIdentityChip: createIdentityChip,
         formatTime: formatTime,
         escapeHtml: escapeHtml,
+        formatAnswer: formatAnswer,
         adoptSpan: adoptSpan,
         adoptAllSpans: adoptAllSpans,
         removeAdoptedSpan: removeAdoptedSpan,

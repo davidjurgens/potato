@@ -1,0 +1,34 @@
+# True/false statements for a cultural consensus analysis. Each question is
+# one scheme; the export reads them as one informant-by-question table.
+- annotation_type: radio
+  name: cc_tomato
+  description: A tomato is a fruit.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_lemon_sweet
+  description: Lemons are sweet.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_banana_tree
+  description: Bananas grow on trees.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_grape_raisin
+  description: Raisins are dried grapes.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_apple_float
+  description: Apples float in water.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_lime_green
+  description: Limes are usually sold green.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_mango_stone
+  description: A mango has one large stone.
+  labels: ["True", "False"]
+- annotation_type: radio
+  name: cc_pear_ripen
+  description: Pears ripen after they are picked.
+  labels: ["True", "False"]

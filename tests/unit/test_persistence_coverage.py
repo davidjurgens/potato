@@ -39,6 +39,14 @@ PERSISTENCE_TEST_MAP = {
     "multirate": "tests/selenium/test_annotation_persistence.py",
     "span": "tests/selenium/test_format_span_ui.py",
     "image_annotation": "tests/selenium/test_annotation_persistence.py",
+    "spatial_annotation": "tests/jest/pc-viewer-state.test.js",
+    "volume_annotation": "tests/playwright/test_volume_annotation.py",
+    # Navigate-away-and-back, never a refresh: browsers cache form state
+    # across reload and produce false positives (invariant 2).
+    "episode_annotation": "tests/playwright/test_episode_annotation.py",
+    "rollout_evaluation": "tests/playwright/test_rollout_evaluation.py",
+    "grounding_eval": "tests/playwright/test_grounding_eval.py",
+    "region_caption": "tests/playwright/test_region_caption.py",
     "audio_annotation": "tests/selenium/test_audio_annotation_ui.py",
     "video_annotation": "tests/selenium/test_annotation_persistence.py",
     "pairwise": "tests/selenium/test_pairwise_ui.py",
@@ -58,13 +66,53 @@ PERSISTENCE_TEST_MAP = {
     "extractive_qa": "tests/selenium/test_extractive_qa_ui.py",
     "rubric_eval": "tests/selenium/test_rubric_eval_ui.py",
     "text_edit": "tests/selenium/test_text_edit_ui.py",
+    "cloze": "tests/selenium/test_cloze_ui.py",
+    # Navigate-away-and-back with the visual state (rated sliders, heard marks).
+    "listening_test": "tests/playwright/test_listening_test_ui.py",
+    "list_experiment": "tests/playwright/test_survey_experiments_ui.py",
+    "randomized_response": "tests/playwright/test_survey_experiments_ui.py",
+    "interlinear_gloss": "tests/playwright/test_interlinear_gloss_ui.py",
+    "ego_network": "tests/playwright/test_ego_network_ui.py",
+    "free_list": "tests/playwright/test_cultural_domain_ui.py",
+    "triad_test": "tests/playwright/test_cultural_domain_ui.py",
+    "price_list": "tests/playwright/test_incentive_elicitation_ui.py",
+    "bdm": "tests/playwright/test_incentive_elicitation_ui.py",
+    "belief_elicitation": "tests/playwright/test_incentive_elicitation_ui.py",
+    "spectrogram_annotation": "tests/playwright/test_spectrogram_annotation_ui.py",
+    "geo_annotation": "tests/playwright/test_geo_annotation_ui.py",
+    "viewer_selection": "tests/playwright/test_protein_structure_ui.py",
+    "peak_picking": "tests/playwright/test_spectrum_peak_picking_ui.py",
+    "chemical_structure": "tests/playwright/test_chemical_structure_ui.py",
+    "interval_label": "tests/playwright/test_time_series_ui.py",
+    "microscopy": "tests/playwright/test_microscopy_ui.py",
     "error_span": "tests/selenium/test_error_span_ui.py",
     "card_sort": "tests/selenium/test_card_sort_ui.py",
     "conjoint": "tests/selenium/test_conjoint_ui.py",
     "trajectory_eval": "tests/playwright/test_trajectory_eval.py",
+    "trajectory_edit": "tests/selenium/test_trajectory_edit_ui.py",
     # Agent-evaluation schemas — Selenium persistence tests to be created
     "process_reward": "tests/selenium/test_process_reward_ui.py",
     "code_review": "tests/selenium/test_code_review_ui.py",
+    # M-series multi-agent + multimodal schemas (each has a dedicated UI test)
+    "agent_interaction_graph": "tests/selenium/test_agent_interaction_graph_ui.py",
+    "agent_scorecard": "tests/selenium/test_agent_scorecard_ui.py",
+    "emergent_behavior": "tests/selenium/test_emergent_behavior_ui.py",
+    "failure_attribution": "tests/selenium/test_failure_attribution_ui.py",
+    "gui_trajectory": "tests/selenium/test_gui_trajectory_ui.py",
+    "handoff_review": "tests/selenium/test_handoff_review_ui.py",
+    "multimodal_reasoning": "tests/selenium/test_multimodal_reasoning_ui.py",
+    "speech_transcript": "tests/selenium/test_speech_transcript_ui.py",
+    "table_grid": "tests/selenium/test_table_grid_ui.py",
+    "temporal_grounding": "tests/selenium/test_temporal_grounding_ui.py",
+    "tool_call_review": "tests/selenium/test_tool_call_review_ui.py",
+    "tool_contention": "tests/selenium/test_tool_contention_ui.py",
+    "voice_interaction": "tests/selenium/test_voice_interaction_ui.py",
+    # Multi-document event schema (hidden-input JSON persistence)
+    "multi_document_event": "tests/selenium/test_multi_document_event_ui.py",
+    # Agent-eval turn/session schemas (hidden-input JSON persistence; each
+    # reads the server-restored hidden value before wiring events)
+    "consensus_tracking": "tests/selenium/test_consensus_tracking_ui.py",
+    "context_attribution": "tests/selenium/test_context_attribution_ui.py",
 }
 
 # Types that are exempt from the file-existence check because their
@@ -76,8 +124,16 @@ EXEMPT_FROM_FILE_CHECK = {
     "soft_label", "confidence", "constant_sum", "semantic_differential",
     "ranking", "range_slider", "hierarchical_multiselect",
     "vas", "extractive_qa", "rubric_eval", "text_edit", "error_span",
-    "card_sort", "conjoint", "trajectory_eval",
+    "card_sort", "conjoint", "trajectory_eval", "trajectory_edit",
     "process_reward", "code_review",
+    # Selenium persistence tests still to be written (hidden-input JSON
+    # persistence contract is unit-covered in the meantime):
+    "multi_document_event", "consensus_tracking", "context_attribution",
+    # 3D needs a WebGL context, which neither jsdom nor a headless Selenium
+    # run reliably provides, so its save/restore contract is covered by a Jest
+    # test that drives the manager against a stub scene. The rendering itself
+    # is verified in a real browser instead -- see the Wave 8 plan.
+    "spatial_annotation",
 }
 
 

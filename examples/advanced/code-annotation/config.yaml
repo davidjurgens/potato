@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Code Review Annotation Example
 # Demonstrates annotating source code for quality review
 
 annotation_task_name: "Code Quality Review"
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:
@@ -70,7 +71,7 @@ annotation_schemes:
   - annotation_type: text
     name: feedback
     description: "Detailed feedback for the code author"
-    text_box_single_line: false
+    multiline: true
 
 # User configuration
 user_config:

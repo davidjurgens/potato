@@ -1,0 +1,8 @@
+[
+  {"id": "x1", "text": "<script>window.__xss_fired=true;document.title='PWNED'</script>Normal looking review here."},
+  {"id": "x2", "text": "<img src=x onerror=\"window.__xss_img=true\">Great product!"},
+  {"id": "x3", "text": "Emoji test 😀🎉🔥 and RTL עברית and accents café naïve résumé."},
+  {"id": "x4", "text": "Whitespace only next:    "},
+  {"id": "x5", "text": "Click <a href=\"javascript:window.__xss_link=true\">here</a> for details"},
+  {"id": "x6", "text": "Very long text. This is a stress test. Lorem ipsum dolor sit amet consectetur. This sentence repeats to build length and probe truncation and layout handling in the annotation display area which should wrap and remain readable without breaking the surrounding UI or overflowing horizontally in a way that harms usability for the annotator working through the task."}
+]

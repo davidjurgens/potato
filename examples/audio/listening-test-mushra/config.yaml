@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# MUSHRA listening test (ITU-R BS.1534-3)
+#
+# Each item has an open reference and two processed versions. The page adds
+# the hidden reference and two low-pass anchors (3.5 kHz and 7 kHz, made from
+# the reference), shuffles them per listener, and plays them all from one
+# position so the listener can switch between samples mid-passage.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/audio/listening-test-mushra/config.yaml -p 8000
+#
+# Export the ratings by condition, with means, 95% intervals and the
+# BS.1534-3 post-screening:
+#   python -m potato.export --config examples/audio/listening-test-mushra/config.yaml --format listening_test --output out/
+
+annotation_task_name: "MUSHRA listening test"
+
+data_files:
+  - data/excerpts.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: listening_test
+    name: quality
+    method: mushra
+    description: "Rate the audio quality of each sample against the reference"
+    instructions: >-
+      Listen to the reference, then to every sample. One of the samples is the
+      reference itself; rate it 100. Use the loop to compare a short passage.
+    reference_field: reference
+    stimuli_field: stimuli
+    anchors: [3500, 7000]
+    label_requirement:
+      required: true

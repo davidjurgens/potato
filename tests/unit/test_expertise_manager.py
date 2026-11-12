@@ -345,7 +345,11 @@ class TestExpertiseManager:
         # Second evaluation of same instance should be skipped
         result = em.update_user_expertise("user1", "inst1", "cat1", "val", "val")
 
-        assert result is False  # Skipped, returns False
+        # None, not False: False is what a real DISAGREEMENT returns, and the
+        # caller counted the skip as work done because it could not tell them
+        # apart -- "Background worker: 36 expertise updates" was logged on
+        # every tick forever after 36 real updates happened once.
+        assert result is None
         assert profile.get_expertise_score("cat1") == initial_score
 
     def test_get_category_probabilities_empty(self):

@@ -1,0 +1,144 @@
+{
+ "guidelines": "Rate whether the response answers the prompt.",
+ "fields": [
+  {
+   "name": "prompt",
+   "title": "Prompt",
+   "required": true,
+   "settings": {
+    "type": "text",
+    "use_markdown": false
+   }
+  },
+  {
+   "name": "response",
+   "title": "Response",
+   "required": true,
+   "settings": {
+    "type": "text",
+    "use_markdown": false
+   }
+  }
+ ],
+ "questions": [
+  {
+   "name": "helpful",
+   "title": "Is the response helpful?",
+   "description": null,
+   "required": true,
+   "settings": {
+    "type": "label_selection",
+    "options": [
+     {
+      "value": "yes",
+      "text": "Yes"
+     },
+     {
+      "value": "no",
+      "text": "No"
+     }
+    ]
+   }
+  },
+  {
+   "name": "issues",
+   "title": "Issues",
+   "required": false,
+   "settings": {
+    "type": "multi_label_selection",
+    "options": [
+     {
+      "value": "toxic",
+      "text": "toxic"
+     },
+     {
+      "value": "wrong",
+      "text": "wrong"
+     },
+     {
+      "value": "vague",
+      "text": "vague"
+     }
+    ]
+   }
+  },
+  {
+   "name": "score",
+   "title": "Score 1-5",
+   "required": false,
+   "settings": {
+    "type": "rating",
+    "options": [
+     {
+      "value": 1
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 4
+     },
+     {
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "name": "fix",
+   "title": "Corrected response",
+   "required": false,
+   "settings": {
+    "type": "text",
+    "use_markdown": false
+   }
+  },
+  {
+   "name": "entities",
+   "title": "Entities",
+   "required": false,
+   "settings": {
+    "type": "span",
+    "field": "response",
+    "allow_overlapping": false,
+    "options": [
+     {
+      "value": "PER",
+      "text": "PER"
+     },
+     {
+      "value": "ORG",
+      "text": "ORG"
+     }
+    ]
+   }
+  },
+  {
+   "name": "rank",
+   "title": "Rank",
+   "required": false,
+   "settings": {
+    "type": "ranking",
+    "options": [
+     {
+      "value": "a"
+     },
+     {
+      "value": "b"
+     }
+    ]
+   }
+  }
+ ],
+ "vectors": [],
+ "metadata": [],
+ "allow_extra_metadata": true,
+ "distribution": {
+  "strategy": "overlap",
+  "min_submitted": 1
+ },
+ "mapping": null
+}

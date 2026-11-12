@@ -63,7 +63,7 @@ def _generate_number_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form number shadcn-number-container" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" {layout_attrs}>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form number shadcn-number-container" data-annotation-type="number" data-schema-name="{escape_html_content(annotation_scheme['name'])}" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-number-title">{escape_html_content(annotation_scheme['description'])}</legend>
@@ -155,20 +155,61 @@ def _generate_input_attributes(annotation_scheme):
     """
     Generate additional input attributes for number constraints.
 
+    Both spellings of each bound are honored. ``min_value``/``max_value`` match
+    the slider and vas schemas; ``min``/``max``/``step`` are what the registry
+    has always advertised and what the shipped examples and configuration docs
+    use (examples/advanced/all-annotation-types/config.yaml). Reading only the
+    first pair meant every documented `min:`/`max:`/`step:` on a number scheme
+    rendered an unconstrained input. The ``*_value`` form wins when both appear.
+
     Args:
-        annotation_scheme (dict): Configuration containing min/max values
+        annotation_scheme (dict): Configuration containing min/max/step values
 
     Returns:
         str: Space-separated attribute string
     """
     attrs = []
+    bounds = {}
 
-    if "min_value" in annotation_scheme:
-        attrs.append(f'min="{annotation_scheme["min_value"]}"')
-        logger.debug(f"Setting minimum value: {annotation_scheme['min_value']}")
+    for attr, keys in (("min", ("min_value", "min")),
+                       ("max", ("max_value", "max")),
+                       ("step", ("step",))):
+        for key in keys:
+            if key in annotation_scheme:
+                attrs.append(f'{attr}="{escape_html_content(str(annotation_scheme[key]))}"')
+                logger.debug("Setting %s from '%s': %s", attr, key, annotation_scheme[key])
+                bounds[attr] = annotation_scheme[key]
+                break
 
-    if "max_value" in annotation_scheme:
-        attrs.append(f'max="{annotation_scheme["max_value"]}"')
-        logger.debug(f"Setting maximum value: {annotation_scheme['max_value']}")
-
+    _refuse_inverted_range(annotation_scheme, bounds)
     return " ".join(attrs)
+
+
+def _refuse_inverted_range(annotation_scheme, bounds):
+    """Raise when min > max, which `slider` and `range_slider` already do.
+
+    `<input type="number" min="10" max="1">` cannot be filled: Chrome reports
+    every value invalid, with its own message -- "Minimum value (10) must be
+    less than the maximum value (1)" -- which is the check Potato skipped. One
+    such field makes `form.checkValidity()` false for the whole page, so a
+    scheme nobody could answer blocks every other scheme beside it.
+
+    Refused rather than warned, unlike the slider's out-of-range
+    `starting_value`: there is no usable widget to keep running here, and both
+    spellings of the bounds are checked so `min:`/`max:` is not a way around
+    the check that `min_value:`/`max_value:` gets.
+    """
+    if "min" not in bounds or "max" not in bounds:
+        return
+    try:
+        low, high = float(bounds["min"]), float(bounds["max"])
+    except (TypeError, ValueError):
+        # A non-numeric bound is a different complaint and the browser will
+        # ignore the attribute; do not turn it into this error.
+        return
+    if low > high:
+        raise Exception(
+            f'Number scheme "{annotation_scheme.get("name", "?")}" has a '
+            f'minimum above its maximum ({bounds["min"]} > {bounds["max"]}), '
+            f"so no value can be entered and the whole page fails validation."
+        )

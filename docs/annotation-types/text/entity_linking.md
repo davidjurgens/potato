@@ -1,6 +1,6 @@
 # Entity Linking
 
-Entity linking enables annotators to connect span annotations to external knowledge bases (KBs) like Wikidata or UMLS. This creates semantic links between text mentions and canonical entities, which is valuable for tasks like named entity recognition, concept normalization, and knowledge graph construction.
+Entity linking connects span annotations to external knowledge bases (KBs) such as Wikidata or UMLS. This creates semantic links between text mentions and canonical entities, which is valuable for tasks like named entity recognition, concept normalization, and knowledge graph construction.
 
 ## Table of Contents
 
@@ -123,7 +123,7 @@ entity_linking:
 
 ### UMLS
 
-The [Unified Medical Language System](https://www.nlm.nih.gov/research/umls/) provides comprehensive medical and biomedical terminology. **Requires a free API key.**
+The [Unified Medical Language System](https://www.nlm.nih.gov/research/umls/) is a medical and biomedical terminology. **Requires a free API key.**
 
 ```yaml
 entity_linking:
@@ -805,6 +805,6 @@ Then open http://localhost:8000 in your browser.
 
 ## See Also
 
-- [Span Annotation](../schemas_and_templates.md#span-labeling) - Basic span annotation setup
+- [Span Annotation](../schemas_and_templates.md#4-text-span-selection-span) - Basic span annotation setup
 - [Configuration Reference](../../configuration/configuration.md) - Full configuration options
 - [Admin Dashboard](../../administration/admin_dashboard.md) - Monitoring annotation progress

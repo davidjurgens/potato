@@ -56,7 +56,6 @@ annotation_schemes:
       - negative
 
 output_annotation_dir: {test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(test_dir, "config.yaml")
         with open(config_file, 'w') as f:
@@ -152,7 +151,6 @@ annotation_schemes:
       - negative
 
 output_annotation_dir: {test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(test_dir, "config.yaml")
         with open(config_file, 'w') as f:
@@ -300,7 +298,6 @@ annotation_schemes:
       - b
 
 output_annotation_dir: {test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(test_dir, "config.yaml")
         with open(config_file, 'w') as f:

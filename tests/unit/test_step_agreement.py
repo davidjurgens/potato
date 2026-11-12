@@ -11,7 +11,6 @@ from unittest.mock import patch, MagicMock
 from potato.step_agreement import (
     compute_step_agreement,
     _extract_step_annotations,
-    _kappa_from_annotator_dict,
     _kappa_from_step_dict,
     _alpha_from_pairs,
     _alpha_from_step_dict,
@@ -352,28 +351,6 @@ class TestComputeStepAgreementKrippendorff:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-class TestKappaFromAnnotatorDict:
-    """Tests for _kappa_from_annotator_dict() – single-item kappa."""
-
-    def test_agreement_returns_1(self):
-        assert _kappa_from_annotator_dict({"a1": "yes", "a2": "yes"}) == 1.0
-
-    def test_disagreement_returns_0(self):
-        assert _kappa_from_annotator_dict({"a1": "yes", "a2": "no"}) == 0.0
-
-    def test_single_annotator_returns_none(self):
-        assert _kappa_from_annotator_dict({"a1": "yes"}) is None
-
-    def test_empty_returns_none(self):
-        assert _kappa_from_annotator_dict({}) is None
-
-    def test_only_first_two_annotators_used(self):
-        """With three annotators, only first two (sorted) are compared."""
-        result = _kappa_from_annotator_dict({"a1": "X", "a2": "X", "a3": "Y"})
-        # a1 and a2 agree, so result is 1.0
-        assert result == 1.0
-
-
 class TestKappaFromStepDict:
     """Tests for _kappa_from_step_dict() – multi-item kappa."""
 
@@ -415,37 +392,96 @@ class TestKappaFromStepDict:
         step_dict = {
             "0": {"ann1": "A", "ann2": "A"},
             "1": {"ann1": "B"},  # ann2 missing
-            "2": {"ann1": "A", "ann2": "A"},
+            "2": {"ann1": "B", "ann2": "B"},
         }
-        result = _kappa_from_step_dict(step_dict)
-        # Only steps 0 and 2 have both annotators
-        assert result is not None
+        # Only steps 0 and 2 have both annotators, and they agree on both.
+        assert _kappa_from_step_dict(step_dict) == pytest.approx(1.0)
+
+    def test_one_label_throughout_is_none_not_nan(self):
+        """Chance agreement is 1, so kappa is undefined; None keeps the
+        response valid JSON."""
+        step_dict = {"0": {"a1": "A", "a2": "A"}, "1": {"a1": "A", "a2": "A"}}
+        assert _kappa_from_step_dict(step_dict) is None
+
+    def test_every_annotator_pair_counts(self):
+        """Three annotators: the mean over all three pairs, not the first two."""
+        step_dict = {
+            "0": {"a1": "A", "a2": "A", "a3": "B"},
+            "1": {"a1": "B", "a2": "B", "a3": "A"},
+        }
+        # a1-a2 agree (1.0); a1-a3 and a2-a3 disagree everywhere (-1.0 each).
+        assert _kappa_from_step_dict(step_dict) == pytest.approx(-1 / 3)
+
+
+class TestStepKappaUnits:
+    """Labels were keyed by step only, so each instance overwrote the last."""
+
+    def test_every_instance_counts(self):
+        from sklearn.metrics import cohen_kappa_score
+
+        a1 = [("x", "y"), ("y", "x"), ("x", "x")]
+        a2 = [("x", "y"), ("x", "x"), ("x", "x")]
+        annotations = {
+            f"t{n}": {"a1": {"s": [{"0": a1[n][0], "1": a1[n][1]}]},
+                      "a2": {"s": [{"0": a2[n][0], "1": a2[n][1]}]}}
+            for n in range(3)
+        }
+        result = compute_step_agreement(annotations, "s", metric="cohens_kappa")
+        flat1 = [v for pair in a1 for v in pair]
+        flat2 = [v for pair in a2 for v in pair]
+        assert result["overall"] == pytest.approx(cohen_kappa_score(flat1, flat2))
+        assert result["per_step"][0] == pytest.approx(
+            cohen_kappa_score([p[0] for p in a1], [p[0] for p in a2]))
 
 
 class TestAlphaFromPairs:
-    """Tests for _alpha_from_pairs() – Krippendorff's alpha computation."""
+    """Tests for _alpha_from_pairs() – alpha from (annotator, unit, label) rows."""
 
-    def test_returns_none_when_simpledorff_unavailable(self):
-        """Returns None gracefully when simpledorff is not installed."""
-        with patch.dict("sys.modules", {"simpledorff": None, "pandas": None}):
-            with patch("potato.step_agreement.logger"):
-                # When import fails inside, should return None
-                result = _alpha_from_pairs(
-                    [("a1", "A"), ("a2", "A")], level="nominal"
-                )
-                # May succeed if simpledorff IS installed; just check type
-                assert result is None or isinstance(result, float)
-
-    def test_returns_none_with_single_pair(self):
-        """Fewer than 2 pairs returns None (insufficient data)."""
-        result = _alpha_from_pairs([("a1", "A")], level="nominal")
+    def test_returns_none_with_single_row(self):
+        """Fewer than 2 rows returns None (insufficient data)."""
+        result = _alpha_from_pairs([("a1", "u1", "A")], level="nominal")
         assert result is None
 
-    def test_returns_float_or_none_for_valid_input(self):
-        """Valid input returns float or None (depending on simpledorff availability)."""
-        pairs = [("a1", "A"), ("a2", "A"), ("a1", "B"), ("a2", "B")]
-        result = _alpha_from_pairs(pairs, level="nominal")
-        assert result is None or isinstance(result, float)
+    def test_perfect_agreement_is_one(self):
+        rows = [("a1", "u1", "A"), ("a2", "u1", "A"),
+                ("a1", "u2", "B"), ("a2", "u2", "B")]
+        assert _alpha_from_pairs(rows, level="nominal") == pytest.approx(1.0)
+
+    def test_level_is_used(self):
+        """A one-step miss on a 1-5 scale costs less under ordinal than nominal."""
+        rows = [("a1", "u1", 1), ("a2", "u1", 1), ("a1", "u2", 3), ("a2", "u2", 4),
+                ("a1", "u3", 5), ("a2", "u3", 5), ("a1", "u4", 2), ("a2", "u4", 2)]
+        nominal = _alpha_from_pairs(rows, level="nominal")
+        ordinal = _alpha_from_pairs(rows, level="ordinal")
+        assert ordinal > nominal
+
+
+class TestStepAlphaUnits:
+    """Each instance is a unit for per-step alpha. Every rating used to be
+    its own unit, so nothing was pairable and alpha was None everywhere."""
+
+    @staticmethod
+    def _annotations(second_annotator_steps):
+        return {
+            f"i{n}": {
+                "a1": {"s": [{"0": "good", "1": "bad"}]},
+                "a2": {"s": [second_annotator_steps[n]]},
+            }
+            for n in range(4)
+        }
+
+    def test_perfect_agreement_overall_is_one(self):
+        result = compute_step_agreement(
+            self._annotations([{"0": "good", "1": "bad"}] * 4), "s")
+        assert result["overall"] == pytest.approx(1.0)
+        assert result["per_instance"]["i0"] == pytest.approx(1.0)
+
+    def test_disagreement_lowers_overall(self):
+        steps = [{"0": "bad", "1": "bad"}, {"0": "good", "1": "good"},
+                 {"0": "good", "1": "bad"}, {"0": "good", "1": "bad"}]
+        result = compute_step_agreement(self._annotations(steps), "s")
+        assert result["overall"] == pytest.approx(0.53125)
+        assert result["per_step"][0] == pytest.approx(0.0)
 
 
 class TestAlphaFromStepDict:

@@ -1,6 +1,6 @@
 # Tiered Annotation (ELAN-style Hierarchical Annotation)
 
-Tiered annotation provides a hierarchical multi-tier annotation interface for audio and video content. This schema is inspired by [ELAN](https://archive.mpi.nl/tla/elan), a widely-used tool for linguistic annotation, and supports parent-child relationships between annotation tiers.
+Tiered annotation is a stack of time-aligned annotation tiers over audio or video, with parent-child relationships between them. The model follows [ELAN](https://archive.mpi.nl/tla/elan), the standard tool for this in linguistics.
 
 ## Overview
 
@@ -75,6 +75,8 @@ Each tier in the `tiers` list can have:
 | `tier_type` | string | No | `"independent"` (default) or `"dependent"` |
 | `parent_tier` | string | For dependent | Name of parent tier |
 | `constraint_type` | string | No | Constraint relationship (see below) |
+| `point` | boolean | No | `true` for a tier of instants instead of intervals, such as ToBI tones or break indices. Click the tier to place a point with the active label; drag it to move it. A point tier is independent, and no tier can depend on it. It exports to TextGrid as a point tier (`TextTier`) |
+| `participant` | string | No | Speaker code written as the tier's `PARTICIPANT` in EAF exports. Set by `potato import` from an EAF file |
 | `description` | string | No | Tier description/tooltip |
 | `labels` | list | No | Available annotation labels |
 | `linguistic_type` | string | No | ELAN linguistic type (for export) |
@@ -89,6 +91,22 @@ Each label can have:
 | `color` | string | Hex color code (e.g., `"#4ECDC4"`) |
 | `tooltip` | string | Hover tooltip text |
 | `description` | string | Extended description |
+
+## Point Tiers
+
+```yaml
+tiers:
+  - name: words
+    labels: [word]
+  - name: tones
+    point: true
+    labels: ["H*", "L*", "L-L%", "H-H%"]
+```
+
+A point's `start_time` and `end_time` are the same. `potato import` turns a
+TextGrid point tier into a `point: true` tier, and the `textgrid` export writes
+it back as one. EAF has no point tiers, so the `eaf` export writes each point as
+an annotation that starts and ends on one time slot and says so in its warnings.
 
 ## Constraint Types
 
@@ -227,7 +245,13 @@ The annotation interface displays:
 
 1. Select the target tier from the dropdown
 2. Select a label from the label buttons
-3. Click and drag on the tier's timeline to create the annotation
+3. Click and drag to create the annotation — on either the full-duration tier rows
+   (coarse) or the zoomed detail canvas (precise)
+
+On the zoomed detail canvas, if a create or resize drag reaches the left/right edge,
+the zoom window **auto-scrolls** so the annotation can extend past the visible window
+in a single gesture. The zoom window also adapts to short clips instead of staying
+fixed at 10 seconds.
 
 For dependent tiers:
 - You must first create a parent annotation
@@ -258,7 +282,7 @@ For dependent tiers:
 Export to ELAN Annotation Format for use in ELAN:
 
 ```bash
-python -m potato.export --format eaf --input annotations.json --output ./eaf_output/
+python -m potato.export -c config.yaml -f eaf -o ./eaf_output/
 ```
 
 The EAF export:
@@ -272,13 +296,17 @@ The EAF export:
 Export to Praat TextGrid format:
 
 ```bash
-python -m potato.export --format textgrid --input annotations.json --output ./textgrid_output/
+python -m potato.export -c config.yaml -f textgrid -o ./textgrid_output/
 ```
 
 The TextGrid export:
-- Creates interval tiers for each annotation tier
+- Creates an interval tier for each tier, or a point tier (TextTier) for a
+  `point: true` tier
 - Fills gaps with empty intervals
 - Supports both long and short TextGrid formats
+- Writes one file per item and schema, `<id>_<schema>.TextGrid`. When several
+  annotators answered the item, each gets their own file,
+  `<id>_<user>_<schema>.TextGrid`
 
 **Note:** TextGrid doesn't support hierarchical relationships, so the export flattens the structure while preserving all annotations.
 
@@ -378,7 +406,10 @@ For EAF export, ensure:
 - Parent-child relationships are consistent
 
 For TextGrid export:
-- Overlapping annotations on the same tier will be merged or may cause issues
+- Overlapping intervals on one tier are written as they are, and the export
+  adds a warning naming the item, annotator and tier. Praat refuses to open an
+  interval tier whose intervals overlap, so move one of them or put it on its
+  own tier
 - Very small gaps between annotations may be filled
 
 ## Related Documentation

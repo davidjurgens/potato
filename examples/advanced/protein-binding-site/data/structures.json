@@ -1,0 +1,14 @@
+[
+  {
+    "id": "zinc_site_complex",
+    "note": "Synthetic two-chain model with a zinc ion. Mark the residues that coordinate the zinc, and any residue at the interface with chain B.",
+    "structure": "structures/zinc_site_complex.cif",
+    "pae": ""
+  },
+  {
+    "id": "predicted_tail_model",
+    "note": "Synthetic predicted model. The N-terminal tail has low confidence. Mark any residue you would treat as part of a binding site.",
+    "structure": "structures/predicted_tail_model.cif",
+    "pae": "structures/predicted_tail_model_pae.png"
+  }
+]

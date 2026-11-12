@@ -1,0 +1,1241 @@
+"""
+Annotation Importer CLI
+
+Turns an existing annotation file into a runnable Potato project: a data file,
+a config, and a README.
+
+Usage:
+    potato import --input instances_val2017.json --image-dir /data/val2017 \\
+        --output-dir my-project/ --schema-name object_detection
+    python -m potato.importers --list-formats
+
+The generated project is runnable as-is:
+    potato start my-project/config.yaml -p 8000
+"""
+
+import argparse
+import json
+import logging
+import os
+import sys
+from typing import List, Optional
+
+import yaml
+
+from .registry import import_registry
+from .text.registry import text_import_registry
+
+logger = logging.getLogger(__name__)
+
+# Same line `scripts/generate_config_schema.py --stamp-examples` writes into
+# every shipped example, kept in one place so they cannot disagree.
+from potato.server_utils.config_schema import SCHEMA_URL
+
+SCHEMA_MODELINE = f"# yaml-language-server: $schema={SCHEMA_URL}"
+
+
+def parse_args(args=None):
+    parser = argparse.ArgumentParser(
+        prog="potato import",
+        description=(
+            "Import existing annotations into a runnable Potato project. "
+            "COCO files are read as-is: polygons, uncompressed RLE, compressed "
+            "RLE strings and crowd regions all work without preprocessing."
+        ),
+    )
+
+    parser.add_argument("--input", "-i", help="Input annotation file (JSON)")
+    parser.add_argument(
+        "--input-format", "-f",
+        help="Input format name. Auto-detected when omitted.")
+    parser.add_argument(
+        "--output-dir", "-o",
+        help="Directory to write the generated project into")
+    parser.add_argument(
+        "--schema-name", default="image_annotation",
+        help=("Name of the generated annotation scheme (default: image_annotation; "
+              "spans for text, objects for point clouds)"))
+    parser.add_argument(
+        "--image-dir",
+        help=("Directory holding the images. Used to read width/height when "
+              "the file's images[] entries lack them (needs Pillow)."))
+    parser.add_argument(
+        "--image-url-prefix", default="",
+        help=("Prefix joined to each file_name to form the served image URL. "
+              "For images served by Potato itself, put them in <task_dir>/media "
+              "and pass /media -- otherwise use the absolute URL they are "
+              "hosted at."))
+    parser.add_argument(
+        "--config-only", action="store_true",
+        help="Write config.yaml only, leaving any existing data file alone")
+    parser.add_argument(
+        "--rle-as-polygon", action="store_true",
+        help=("Trace RLE masks into polygons for editability. LOSSY: holes are "
+              "dropped and the contour will not re-rasterize to the source mask."))
+    parser.add_argument(
+        "--keypoints", action="store_true",
+        help="Import COCO keypoints as landmark annotations")
+    parser.add_argument(
+        "--no-merge-crowd", action="store_true",
+        help=("Keep each iscrowd=1 region separate instead of merging them per "
+              "label. COCO allows only one crowd annotation per category per "
+              "image, so merging is normally correct."))
+    parser.add_argument(
+        "--via-label-key", metavar="ATTR",
+        help=("Which VIA region attribute holds the class. Inferred from the "
+              "project's own _via_attributes when omitted."))
+    parser.add_argument(
+        "--extract-media", metavar="DIR",
+        help=("Write images out of a WebDataset shard into DIR. Without it the "
+              "images stay inside the .tar, which no web server can read, and "
+              "the canvas is blank."))
+    parser.add_argument(
+        "--hf-dataset", metavar="ID",
+        help="HuggingFace Hub dataset id to import, e.g. cppe-5")
+    parser.add_argument(
+        "--hf-split", default="train",
+        help="Split to read from a HuggingFace dataset (default: train)")
+    parser.add_argument(
+        "--seed-user", metavar="NAME",
+        help=("Also write the imported annotations as NAME's saved work. This "
+              "FABRICATES AN ANNOTATOR and exists so import->export can be "
+              "verified without a human opening each item. Without it, imported "
+              "annotations are pre-annotations: they show as a starting point "
+              "and are only stored once a real annotator saves. Pass "
+              "--as-machine-annotator to record NAME as a declared machine "
+              "rater instead of an undeclared person."))
+    parser.add_argument(
+        "--as-machine-annotator", metavar="KIND", nargs="?", const="tool",
+        choices=["tool", "llm"],
+        help=("Record the --seed-user as a declared machine rater of this kind "
+              "(tool or llm; default tool). The seeded state then carries an "
+              "origin, so agreement, adjudication and the IRT engine can tell "
+              "it apart from a person instead of counting it as one. Declare "
+              "the same id under machine_annotators in the project config so "
+              "the server keeps the declaration on later loads."))
+    parser.add_argument(
+        "--conll-document-unit", choices=["auto", "sentence", "file"],
+        default="auto",
+        help=("What counts as one annotation item in a CoNLL file. 'auto' "
+              "follows -DOCSTART-/# newdoc markers and falls back to one item "
+              "per sentence, which is how most NER corpora are distributed."))
+    parser.add_argument(
+        "--qdpx-end-position", choices=["inclusive", "exclusive"],
+        help=("Override how a .qdpx file's endPosition is read. REFI-QDA 1.5 "
+              "makes it inclusive; exporters disagree, so the reading is "
+              "inferred from the file and this only forces it."))
+    parser.add_argument(
+        "--prodigy-keep-rejected", action="store_true",
+        help=("Import Prodigy tasks answered reject/ignore. They are dropped "
+              "by default: a rejection is a human saying the annotations are "
+              "wrong, so importing them turns that into positive signal."))
+    parser.add_argument(
+        "--ls-config", metavar="XML",
+        help=("Label Studio only: the project's labeling config XML (Settings "
+              "-> Labeling Interface -> Code). Without it the questions are "
+              "inferred from the answers, and options nobody chose are lost."))
+    parser.add_argument(
+        "--keep-annotators", action="store_true",
+        help=("Label Studio, Argilla, Zooniverse and W3C Web Annotation: write "
+              "each source annotator's answers "
+              "as that person's saved work, so agreement can be computed at "
+              "once. Unlike --seed-user this fabricates nobody: the answers "
+              "are real people's. Without it they are left out and only model "
+              "suggestions come across, as pre-annotations."))
+    parser.add_argument(
+        "--list-formats", action="store_true",
+        help="List supported import formats and exit")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Verbose logging")
+
+    eco = parser.add_argument_group("camera traps and bioacoustics")
+    eco.add_argument(
+        "--md-threshold", type=float, default=None, metavar="CONF",
+        help=("MegaDetector: leave out detections below this confidence "
+              "(default 0.2)"))
+    eco.add_argument(
+        "--sequences", action="store_true",
+        help=("MegaDetector / COCO Camera Traps: one item per seq_id, shown as "
+              "a gallery, instead of one item per image"))
+    eco.add_argument(
+        "--min-confidence", type=float, default=None, metavar="CONF",
+        help=("BirdNET / Raven: leave out rows whose Confidence is below this "
+              "(BirdNET default 0.1)"))
+    eco.add_argument(
+        "--label-column", metavar="COLUMN",
+        help=("Raven / BirdNET: the column the box label comes from (default: "
+              "Annotation, Species, ... for Raven; Scientific Name for BirdNET)"))
+    rttm = parser.add_argument_group("speaker diarization (RTTM)")
+    rttm.add_argument(
+        "--rttm-scheme", choices=["audio", "tiered"], default="audio",
+        help=("RTTM: correct the turns on an audio timeline whose labels are the "
+              "speakers (default; the segments exporter writes RTTM back) or on a "
+              "tiered scheme's speaker tier"))
+    rttm.add_argument(
+        "--speaker-map", metavar="MAP",
+        help="RTTM: rename speakers, e.g. SPEAKER_00=Interviewer,SPEAKER_01=Guest")
+    rttm.add_argument(
+        "--media-dir", metavar="DIR",
+        help=("RTTM: a folder of the recordings, named after each RTTM file id "
+              "(default: beside the RTTM files)"))
+    dh = parser.add_argument_group("digital humanities (IIIF, Web Annotation, PAGE XML, TEI)")
+    dh.add_argument(
+        "--texts", metavar="PATH",
+        help=("Web Annotation: the annotated documents, as a folder of text files "
+              "named after each target's last path segment or a JSONL file of "
+              "{\"source\": ..., \"text\": ...} rows. Text-selector annotations need it."))
+    dh.add_argument(
+        "--page-xml-mode", choices=["lines", "regions"], default="lines",
+        help=("PAGE XML: 'lines' (one item per text line, correct the transcription; "
+              "default) or 'regions' (one item per page, correct the layout polygons)"))
+    dh.add_argument(
+        "--iiif-size", metavar="SIZE",
+        help=("IIIF: request every image through its Image API service at this size "
+              "(e.g. max, !2000,2000, 1500,). Default: the painting body's own URL."))
+    dh.add_argument(
+        "--tei-unit", choices=["p", "div", "s", "l"], default="p",
+        help="TEI: what one item is: a paragraph-level block (default), a div, a sentence or a verse line")
+    zoo = parser.add_argument_group("Zooniverse")
+    zoo.add_argument("--zooniverse-workflow",
+                     help="Workflow export (CSV or API JSON) for a classification export")
+    zoo.add_argument("--zooniverse-subjects",
+                     help="Subject export CSV, which carries the media URLs")
+    zoo.add_argument("--workflow-id", help="Workflow id to import (default: the most used)")
+    zoo.add_argument("--workflow-version",
+                     help="Workflow version, e.g. 16 or 16.55 (default: the latest used)")
+    survey = parser.add_argument_group(
+        "surveys (Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, ...)")
+    survey.add_argument(
+        "--into", metavar="CONFIG",
+        help=("Add the survey's pages to this existing config. The config is not "
+              "changed; a merged copy is written beside it as "
+              "<config>.with-<survey>.yaml."))
+    survey.add_argument(
+        "--survey-slot", choices=("prestudy", "poststudy"), default="prestudy",
+        help="Run the survey before (prestudy, default) or after the annotation task")
+    survey.add_argument(
+        "--survey-language",
+        help="Language to import from a multilingual survey (LimeSurvey, XLSForm), e.g. en or de")
+    survey.add_argument(
+        "--prefix", default="",
+        help="Prefix every imported question and page name (avoids clashes with --into)")
+    return parser.parse_args(args)
+
+
+def _probe_dimensions(data: dict, image_dir: str) -> int:
+    """Fill missing images[].width/height by reading the files. Returns count."""
+    try:
+        from PIL import Image
+    except ImportError:
+        raise SystemExit(
+            "--image-dir needs Pillow to read image sizes. Install it with "
+            "`pip install Pillow`, or add width/height to the images[] entries."
+        )
+
+    filled = 0
+    for img in data.get("images", []):
+        if not isinstance(img, dict):
+            continue
+        if img.get("width") and img.get("height"):
+            continue
+        path = os.path.join(image_dir, str(img.get("file_name") or ""))
+        if not os.path.isfile(path):
+            continue
+        try:
+            with Image.open(path) as handle:
+                img["width"], img["height"] = handle.size
+            filled += 1
+        except Exception as exc:
+            logger.warning("Could not read size of %s: %s", path, exc)
+    return filled
+
+
+def _build_config(schema_name: str, result, data_file: str,
+                  output_dir: Optional[str] = None) -> dict:
+    """Generate a runnable config for the imported project."""
+    if result.project.get("annotation_type") == "spatial_annotation":
+        return _build_spatial_config(schema_name, result, data_file, output_dir)
+    return {
+        "port": 8000,
+        "annotation_task_name": f"{schema_name} (imported)",
+        "task_dir": ".",
+        "output_annotation_dir": "annotation_output/",
+        "data_files": [data_file],
+        "item_properties": {
+            "id_key": "id",
+            "text_key": "image_url",
+        },
+        "user_config": {
+            "allow_all_users": True,
+            "users": [],
+        },
+        "site_dir": "default",
+        # Imported annotations arrive as pre-annotations: every annotator sees
+        # them as a starting point, and their corrections replace them on save.
+        # They are deliberately NOT written into anyone's user_state, which
+        # would make machine output indistinguishable from human work and
+        # fabricate agreement between annotators who never touched the item.
+        "pre_annotation": {
+            "enabled": True,
+            "field": "predictions",
+            "allow_modification": True,
+        },
+        "annotation_schemes": [{
+            "annotation_type": "image_annotation",
+            "name": schema_name,
+            "description": "Correct the imported annotations",
+            "source_field": "image_url",
+            "tools": list(result.tools),
+            # Correcting an imported boundary means working at the pixel level,
+            # so both are on by default.
+            "zoom_enabled": True,
+            "pan_enabled": True,
+            "labels": [dict(label) for label in result.labels],
+        }],
+    }
+
+
+def _build_spatial_config(schema_name: str, result, data_file: str,
+                          output_dir: Optional[str]) -> dict:
+    """A point-cloud project (KITTI tracking): one sequence per item.
+
+    ``media_directory`` points back at the dataset, relative to the project
+    when it can be, so the scans are served where they are rather than
+    copied. A media directory outside the project is allowed (it is not a
+    path the config security check covers); the media route still refuses
+    anything outside it.
+    """
+    project = result.project
+    media_root = project["media_root"]
+    if output_dir:
+        try:
+            media_root = os.path.relpath(media_root, os.path.abspath(output_dir))
+        except ValueError:  # another drive on Windows
+            pass
+    source_field = project.get("source_field", "point_cloud")
+    scheme = {
+        "annotation_type": "spatial_annotation",
+        "name": schema_name,
+        "description": "Correct the imported tracks",
+        "source_field": source_field,
+        "tools": list(result.tools),
+        "labels": [dict(label) for label in result.labels],
+    }
+    scheme.update(project.get("scheme") or {})
+    return {
+        "port": 8000,
+        "annotation_task_name": f"{schema_name} (imported)",
+        "task_dir": ".",
+        "output_annotation_dir": "annotation_output/",
+        "media_directory": media_root,
+        "data_files": [data_file],
+        "item_properties": {"id_key": "id", "text_key": project.get("text_key", "id")},
+        "user_config": {"allow_all_users": True, "users": []},
+        "site_dir": "default",
+        # As for images: imported tracks are a starting point for every
+        # annotator, never anyone's saved work.
+        "pre_annotation": {"enabled": True, "field": "predictions",
+                           "allow_modification": True},
+        "annotation_schemes": [scheme],
+    }
+
+
+def _write_readme(path: str, config_name: str, result, source: str) -> None:
+    if result.project.get("annotation_type") == "spatial_annotation":
+        _write_spatial_readme(path, config_name, result, source)
+        return
+    tools = ", ".join(result.tools)
+    with open(path, "w") as f:
+        f.write(f"""# Imported annotation project
+
+Generated by `potato import` from `{os.path.basename(source)}`.
+
+- **Images:** {result.stats.get('num_images', 0)}
+- **Annotations:** {result.stats.get('num_annotations', 0)}
+- **Categories:** {result.stats.get('num_categories', 0)}
+- **Tools enabled:** {tools}
+
+## Run it
+
+```bash
+potato start {config_name} -p 8000
+```
+
+The imported annotations appear pre-populated on each image. Edit them as
+normal; your corrections replace the imported ones as soon as you save.
+
+## Export back out
+
+```bash
+python -m potato.export -c {config_name} -f coco -o ./export/
+```
+
+Category IDs are preserved via `label_id` on each label, so the exported file
+keeps the original (often sparse) COCO category numbering.
+
+## Notes
+
+- Imported annotations are *pre-annotations*. They are shown to every annotator
+  as a starting point and are only stored once someone saves, so an untouched
+  item exports as empty rather than as fabricated agreement.
+- Brush strokes edit the label-level mask. Imported per-instance masks are kept
+  separate (keyed `label#instance`) and are preserved, but cannot yet be
+  painted into individually.
+""")
+
+
+def _write_spatial_readme(path: str, config_name: str, result, source: str) -> None:
+    stats = result.stats
+    with open(path, "w") as f:
+        f.write(f"""# Imported lidar tracking project
+
+Generated by `potato import` from `{os.path.basename(os.path.normpath(source))}`.
+
+- **Sequences:** {stats.get('num_images', 0)}
+- **Tracks:** {stats.get('num_tracks', 0)}
+- **Keyframes:** {stats.get('num_annotations', 0)} (every labelled frame)
+- **Categories:** {stats.get('num_categories', 0)}
+
+## Run it
+
+```bash
+potato start {config_name} -p 8000
+```
+
+Each item is one sequence. The imported tracks appear as pre-annotations on
+every annotator's page; corrections replace them when the annotator saves.
+The scans are served from the dataset folder named in `media_directory`, so
+keep the project and the dataset where they are, or edit that path.
+
+## Export back out
+
+```bash
+python -m potato.export -c {config_name} -f kitti_3d -o ./export/
+```
+
+writes KITTI tracking labels through each sequence's calibration file.
+""")
+
+
+def _detect_directory_format(root: str):
+    """
+    Guess a directory dataset's format from its signature files.
+
+    Deliberately conservative: an ambiguous tree returns None so the user is
+    asked, rather than being handed a silently wrong import.
+
+    Order matters. The checks run from most specific marker to least: a KITTI
+    tree also contains ``*.txt`` files that a naive YOLO check would claim, and
+    a Cityscapes tree is full of ``*.json`` that LabelMe would happily accept
+    and misread. Each format is therefore identified by something only it has.
+    """
+    import csv as _csv
+    import json as _json
+    import tarfile as _tarfile
+    import xml.etree.ElementTree as _ET
+    from pathlib import Path
+
+    base = Path(root)
+
+    # --- Marker files unique to one format -------------------------------
+    # MOT: a sequence directory, or a folder of them.
+    if ((base / "gt" / "gt.txt").exists() or (base / "seqinfo.ini").exists()
+            or any((d / "seqinfo.ini").exists() or (d / "gt" / "gt.txt").exists()
+                   for d in base.iterdir() if d.is_dir())):
+        return "mot"
+
+    # KITTI: label_2/ is the devkit's own name and nothing else uses it. The
+    # tracking benchmark's is label_02/.
+    if any((base / n).is_dir() for n in ("label_2", "training/label_2")):
+        return "kitti"
+    if any((base / n).is_dir() for n in ("label_02", "training/label_02",
+                                         "testing/label_02")):
+        return "kitti_tracking"
+
+    # DAVIS: indexed PNG masks under Annotations/.
+    if (base / "Annotations").is_dir() and list(
+            (base / "Annotations").rglob("*.png")):
+        return "davis"
+
+    # Cityscapes: the suffix is part of the format's own convention.
+    if next(base.rglob("*_gtFine_polygons.json"), None) is not None:
+        return "cityscapes"
+    if next(base.rglob("*_gtCoarse_polygons.json"), None) is not None:
+        return "cityscapes"
+
+    # A HuggingFace save_to_disk directory.
+    if (base / "dataset_info.json").exists() and (
+            (base / "state.json").exists() or list(base.glob("*.arrow"))):
+        return "huggingface"
+
+    # WebDataset: tar shards.
+    if any(_tarfile.is_tarfile(p) for p in list(base.glob("*.tar"))[:3]):
+        return "webdataset"
+
+    if any((base / n).exists() for n in ("data.yaml", "data.yml", "dataset.yaml")):
+        return "yolo"
+    if (base / "labels").is_dir() or list(base.glob("*/labels")):
+        return "yolo"
+
+    # Open Images: a CSV whose header carries the boxable columns.
+    for path in list(base.glob("*.csv"))[:5]:
+        try:
+            with open(path, newline="", encoding="utf-8") as fh:
+                header = set(next(_csv.reader(fh), []) or [])
+        except (OSError, StopIteration, UnicodeDecodeError):
+            continue
+        if {"ImageID", "LabelName", "XMin", "XMax"} <= header:
+            return "openimages"
+
+    # CVAT and Pascal VOC are BOTH XML, so the extension decides nothing --
+    # peek at the root element instead. Guessing from the suffix sent every
+    # CVAT export to the VOC importer, which rejected it with a confusing
+    # "Not a Pascal VOC <annotation> document".
+    xml_files = list(base.glob("*.xml"))
+    if not xml_files and (base / "Annotations").is_dir():
+        xml_files = list((base / "Annotations").glob("*.xml"))
+    for path in xml_files[:5]:
+        try:
+            tag = _ET.parse(path).getroot().tag
+        except _ET.ParseError:
+            continue
+        if tag == "annotations":
+            return "cvat"
+        if tag == "annotation":
+            return "pascal_voc"
+    if xml_files:
+        return "pascal_voc"
+
+    # Darwin, VIA and LabelMe are all JSON, and again the suffix decides
+    # nothing: Darwin has `item` + `annotations`, VIA has `_via_img_metadata`,
+    # LabelMe has `shapes` + image fields.
+    json_files = sorted(base.rglob("*.json"))
+    for path in json_files[:5]:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                doc = _json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        if isinstance(doc.get("annotations"), list) and isinstance(
+                doc.get("item"), dict):
+            return "darwin"
+        if "_via_img_metadata" in doc or "_via_settings" in doc:
+            return "via"
+        if isinstance(doc.get("shapes"), list):
+            return "labelme"
+    if json_files:
+        return "labelme"
+    return None
+
+
+def _load_document(path: str):
+    """
+    Read a single annotation file into the structure its importer expects.
+
+    Not every format is a JSON object. Labelbox exports are newline-delimited
+    JSON, where ``json.load`` fails on line 2 with a message about extra data
+    that reads as file corruption rather than a different container — so a
+    failed parse falls back to a line-by-line read before giving up.
+
+    Returns ``(data, error_message)``; exactly one is set.
+    """
+    # utf-8-sig drops a byte-order mark, which json.loads otherwise rejects
+    # as "Unexpected UTF-8 BOM" on a file that is otherwise fine.
+    try:
+        with open(path, "r", encoding="utf-8-sig") as fh:
+            text = fh.read()
+    except UnicodeDecodeError as exc:
+        return None, (f"{path} is not UTF-8 text (byte offset {exc.start}); if it is a "
+                      f"project export, pass -f with its format")
+
+    # CVAT and Pascal VOC export one XML file. Their importers parse the text
+    # themselves, and detection tells them apart by root element. Running it
+    # through json.loads first rejected every single-file CVAT export with
+    # "neither JSON nor newline-delimited JSON". Leading whitespace is dropped
+    # too: ElementTree refuses an <?xml?> declaration that is not at offset 0.
+    stripped = text.lstrip()
+    if stripped.startswith("<"):
+        return stripped, None
+
+    try:
+        return json.loads(text), None
+    except json.JSONDecodeError as exc:
+        first_error = exc
+
+    # NDJSON / JSONL: one complete record per line.
+    records = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            records = []
+            break
+    if records:
+        logger.info("Read %s as newline-delimited JSON (%d records)",
+                    os.path.basename(path), len(records))
+        return records, None
+
+    return None, (f"{path} is neither JSON nor newline-delimited JSON: "
+                  f"{first_error}")
+
+
+def _container_format(path: str, explicit: Optional[str]):
+    """
+    Formats whose single-file input is not a JSON document.
+
+    A ``.tar`` shard and an Open Images ``.csv`` both arrive as ``--input``
+    pointing at one file, but neither can be read by ``json.load``. They go
+    through the importer's own directory entry point, which knows how to open
+    them, rather than failing with "not valid JSON" on a perfectly good file.
+    """
+    import csv as _csv
+    import tarfile as _tarfile
+
+    if explicit in ("webdataset", "openimages"):
+        return explicit
+
+    try:
+        if _tarfile.is_tarfile(path):
+            return "webdataset"
+    except (OSError, ValueError):
+        pass
+
+    if path.lower().endswith(".csv"):
+        try:
+            with open(path, newline="", encoding="utf-8") as fh:
+                header = set(next(_csv.reader(fh), []) or [])
+        except (OSError, StopIteration, UnicodeDecodeError):
+            return None
+        if {"ImageID", "LabelName"} <= header:
+            return "openimages"
+    return None
+
+
+def _survey_format(parsed) -> Optional[str]:
+    """Which survey importer (Qualtrics, SurveyJS, ...), if any, applies."""
+    from . import surveys
+    if parsed.input_format:
+        return surveys.resolve(parsed.input_format)
+    if parsed.input and not parsed.hf_dataset:
+        return surveys.detect(parsed.input)
+    return None
+
+
+def _run_survey_import(parsed, fmt: str) -> int:
+    """A questionnaire from another tool as Potato survey pages."""
+    from pathlib import Path as _Path
+
+    from . import surveys
+    from .surveys.writer import apply_prefix, write_into, write_new_project
+
+    if not parsed.output_dir and not parsed.into:
+        print("error: pass --output-dir for a new project, or --into CONFIG to add the "
+              "survey to an existing one", file=sys.stderr)
+        return 2
+    try:
+        result = surveys.IMPORTERS[fmt].parse_path(
+            _Path(parsed.input), {"language": parsed.survey_language})
+        apply_prefix(result, parsed.prefix)
+        if parsed.into:
+            written = write_into(result, parsed.into, parsed.input, slot=parsed.survey_slot,
+                                 prefix=parsed.prefix)
+        else:
+            written = write_new_project(result, parsed.output_dir, parsed.input,
+                                        slot=parsed.survey_slot)
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Imported {len(result.pages)} page(s) and {result.num_questions()} question(s) "
+          f"from {result.source_format}.")
+    if result.untranslated:
+        report = next((_Path(w).name for w in written if _Path(w).name.startswith("IMPORT_REPORT")),
+                      "IMPORT_REPORT.md")
+        print(f"  {len(result.untranslated)} construct(s) did not carry over; "
+              f"see {report}:")
+        for u in result.untranslated[:10]:
+            print(f"    - {u.line()}")
+        if len(result.untranslated) > 10:
+            print(f"    ... and {len(result.untranslated) - 10} more")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+    for path in written:
+        print(f"  wrote {path}")
+    config_path = next((w for w in written if w.endswith((".yaml", ".yml"))), None)
+    if config_path:
+        print(f"\nRun it:\n  potato start {config_path} -p 8000")
+    return 0
+
+
+def _project_format(parsed) -> Optional[str]:
+    """Which whole-project importer (Label Studio, Argilla), if any, applies."""
+    from . import projects
+    if parsed.input_format:
+        return projects.resolve(parsed.input_format)
+    if parsed.input and not parsed.hf_dataset:
+        return projects.detect(parsed.input)
+    return None
+
+
+def _run_project_import(parsed, fmt: str) -> int:
+    """Import a Label Studio or Argilla project into a runnable Potato project."""
+    import tempfile
+    from pathlib import Path as _Path
+
+    from . import projects
+    from .projects.writer import write_project
+
+    importer = projects.IMPORTERS[fmt]
+    source = parsed.input
+    try:
+        if parsed.hf_dataset:
+            if fmt != "argilla":
+                print(f"error: --hf-dataset works with -f argilla, not {fmt}",
+                      file=sys.stderr)
+                return 2
+            from .projects.argilla import download_hub_dataset
+            source = str(download_hub_dataset(
+                parsed.hf_dataset, _Path(tempfile.mkdtemp(prefix="potato-argilla-"))))
+        if not source:
+            print("error: --input is required", file=sys.stderr)
+            return 2
+        result = importer.parse_path(_Path(source), {
+            "ls_config": parsed.ls_config,
+            "workflow": parsed.zooniverse_workflow,
+            "subjects": parsed.zooniverse_subjects,
+            "workflow_id": parsed.workflow_id,
+            "workflow_version": parsed.workflow_version,
+            # Digital humanities: the raw input (a IIIF manifest URL loses
+            # its "//" inside a Path), the texts Web Annotations point at,
+            # the PAGE XML mode and the IIIF image size.
+            "source": source,
+            "texts": parsed.texts,
+            "page_xml_mode": parsed.page_xml_mode,
+            "iiif_size": parsed.iiif_size,
+            "image_dir": parsed.image_dir,
+            "image_url_prefix": parsed.image_url_prefix,
+            "md_threshold": parsed.md_threshold,
+            "sequences": parsed.sequences,
+            "min_confidence": parsed.min_confidence,
+            "label_column": parsed.label_column,
+            "rttm_scheme": parsed.rttm_scheme,
+            "speaker_map": parsed.speaker_map,
+            "media_dir": parsed.media_dir})
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if hasattr(importer, "write_project"):
+        # An importer with its own project layout (Ibex: one data file per
+        # Latin-square list).
+        written = importer.write_project(result, parsed.output_dir, source=source)
+        print(f"Imported {len(result.items)} item(s) from {result.source_format} as a "
+              f"{result.kind} task" + (f" in {result.lists} lists." if result.lists > 1 else "."))
+        for line in result.report:
+            print(f"  not carried over: {line}")
+        for warning in result.warnings:
+            print(f"  warning: {warning}")
+        for path in written:
+            print(f"  wrote {path}")
+        return 0
+
+    written = write_project(result, parsed.output_dir,
+                            source=parsed.hf_dataset or source,
+                            keep_annotators=parsed.keep_annotators,
+                            config_only=parsed.config_only,
+                            extra_config=getattr(result, "extra_config", None))
+    summary = result.summarize()
+    print(f"Imported {summary['num_items']} item(s), {summary['num_schemes']} "
+          f"question(s), {summary['num_responses']} answer(s) from "
+          f"{summary['num_annotators']} annotator(s), and "
+          f"{summary['num_predictions']} model suggestion(s) on "
+          f"{summary['num_predicted_items']} item(s) from {result.source_format}.")
+    if parsed.keep_annotators and summary["num_annotators"]:
+        print("  The project is passwordless so the imported annotators can log in "
+              "by name. Set require_password: true and add passwords to "
+              "annotation_output/user_config.json before deploying it.")
+    if summary["num_responses"] and not parsed.keep_annotators:
+        print("  People's answers were NOT written; add --keep-annotators to bring "
+              "them across as each annotator's saved work.")
+    for what, count in sorted(result.skipped.items()):
+        print(f"  left out: {count} {what}")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+    for path in written:
+        print(f"  wrote {path}")
+    print(f"\nRun it:\n  potato start "
+          f"{os.path.join(parsed.output_dir, 'config.yaml')} -p 8000")
+    return 0
+
+
+def _text_format(parsed) -> Optional[str]:
+    """
+    Which text-annotation importer, if any, should handle this input.
+
+    Returns None when the input belongs to the CV path, including when
+    ``--input-format`` explicitly names a CV format -- an explicit choice is
+    never overridden by detection.
+    """
+    from pathlib import Path as _Path
+
+    if parsed.input_format:
+        return (parsed.input_format
+                if text_import_registry.is_registered(parsed.input_format)
+                else None)
+    if not parsed.input:
+        return None
+    return text_import_registry.detect_path(_Path(parsed.input))
+
+
+def _run_text_import(parsed, fmt: str, options: dict) -> int:
+    """Import a text-annotation source into a runnable project."""
+    from pathlib import Path as _Path
+
+    from .text.project import write_project
+
+    schema_name = parsed.schema_name
+    if schema_name == "image_annotation":
+        # The default is the CV one. Silently generating a scheme called
+        # "image_annotation" over text would be confusing in the config and
+        # wrong in every export that keys on the scheme name.
+        schema_name = "spans"
+
+    try:
+        result = text_import_registry.parse_path(fmt, _Path(parsed.input), options)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    written = write_project(result, parsed.output_dir, schema_name,
+                            source=parsed.input,
+                            config_only=parsed.config_only)
+
+    for warning in result.warnings[:20]:
+        logger.warning(warning)
+    if len(result.warnings) > 20:
+        logger.warning("... and %d more warnings", len(result.warnings) - 20)
+
+    if parsed.seed_user:
+        _write_text_seed_user(parsed.output_dir, parsed.seed_user,
+                              schema_name, result)
+
+    stats = result.stats
+    print(f"Imported {stats.get('num_documents', 0)} document(s), "
+          f"{stats.get('num_spans', 0)} span(s), "
+          f"{stats.get('num_codes', 0)} code(s) into {parsed.output_dir}")
+    config_path = os.path.join(parsed.output_dir, "config.yaml")
+    print(f"\nRun it:\n  potato start {config_path} -p 8000")
+    logger.debug("wrote %s", ", ".join(written))
+    return 0
+
+
+def _write_text_seed_user(output_dir: str, username: str, schema_name: str,
+                          result) -> None:
+    """
+    Write the imported spans as a user's saved work.
+
+    Fabricates an annotator, exactly as the CV path's ``--seed-user`` does, and
+    exists for the same reason: it is the only way to verify import -> export
+    end to end without a human opening every item.
+    """
+    user_dir = os.path.join(output_dir, "annotation_output", username)
+    os.makedirs(user_dir, exist_ok=True)
+
+    # An entity-free sentence gets an EMPTY record, not no record. Skipping it
+    # left the item in the corpus with no evidence anyone had reviewed it,
+    # while `[]` is what "reviewed, no entities" looks like -- and the CoNLL
+    # exporter already writes that correctly, so the round trip lost the
+    # sentence on the way in rather than on the way out.
+    #
+    # This is not fabricating a claim. A CoNLL file asserts something about
+    # every sentence, including "this one has no entities", which is what an
+    # O-only sentence means. Recording it preserves a claim the source made.
+    span_to_value = {}
+    for document in result.documents:
+        span_to_value[document.instance_id] = [
+            [span.as_client_span(schema_name), "1"] for span in document.spans
+        ]
+
+    state = {
+        "user_id": username,
+        "instance_id_ordering": [d.instance_id for d in result.documents],
+        "current_instance_index": 0,
+        "max_assignments": len(result.documents),
+        "instance_id_to_label_to_value": {},
+        "instance_id_to_span_to_value": span_to_value,
+    }
+    with open(os.path.join(user_dir, "user_state.json"), "w") as f:
+        json.dump(state, f, indent=2)
+
+    with_spans = sum(1 for spans in span_to_value.values() if spans)
+    logger.warning(
+        "--seed-user wrote %d item(s) as '%s', %d of them carrying spans and "
+        "%d recorded as reviewed with none. This is fabricated annotator "
+        "work; do not include it in agreement or adjudication analysis.",
+        len(span_to_value), username, with_spans,
+        len(span_to_value) - with_spans)
+
+
+def _run_hub_import(parsed, options) -> int:
+    """Import straight from the HuggingFace Hub, which has no local path."""
+    from .hf_importer import HuggingFaceImporter
+
+    try:
+        result = HuggingFaceImporter().load(
+            parsed.hf_dataset, parsed.hf_split, options)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return _write_project(parsed, result, source=parsed.hf_dataset,
+                          stem=parsed.hf_dataset.replace("/", "_"),
+                          import_format="huggingface")
+
+
+def main(args=None) -> int:
+    parsed = parse_args(args)
+    logging.basicConfig(
+        level=logging.DEBUG if parsed.verbose else logging.INFO,
+        format="%(levelname)s: %(message)s",
+    )
+
+    if parsed.list_formats:
+        from . import projects, surveys
+        for heading, infos in (
+                ("Image / video annotation formats", import_registry.list_importers()),
+                ("Text annotation formats", text_import_registry.list_importers()),
+                ("Whole projects (questions, annotators and suggestions)",
+                 projects.list_importers()),
+                ("Surveys (as Potato survey pages)", surveys.list_importers())):
+            print(f"{heading}:\n")
+            for info in infos:
+                exts = ", ".join(info["file_extensions"]) or "-"
+                print(f"  {info['name']:<10} {info['description']}")
+                print(f"  {'':<10} extensions: {exts}\n")
+        return 0
+
+    if not parsed.input and not parsed.hf_dataset:
+        print("error: --input is required (or --hf-dataset, or --list-formats)",
+              file=sys.stderr)
+        return 2
+    # Surveys first: their detectors are strict (a QSF's SurveyEntry, a
+    # SurveyJS model's pages/elements), and --into replaces --output-dir.
+    survey_format = _survey_format(parsed)
+    if survey_format:
+        return _run_survey_import(parsed, survey_format)
+
+    if not parsed.output_dir:
+        print("error: --output-dir is required", file=sys.stderr)
+        return 2
+
+    options = {
+        "rle_as_polygon": parsed.rle_as_polygon,
+        "merge_crowd": not parsed.no_merge_crowd,
+        "keypoints": parsed.keypoints,
+        "image_url_prefix": parsed.image_url_prefix,
+        "via_label_key": parsed.via_label_key,
+        "extract_media": parsed.extract_media,
+        "hf_split": parsed.hf_split,
+        "image_dir": parsed.image_dir,
+        "conll_document_unit": parsed.conll_document_unit,
+        "qdpx_end_position": parsed.qdpx_end_position,
+        "prodigy_keep_rejected": parsed.prodigy_keep_rejected,
+        "tei_unit": parsed.tei_unit,
+    }
+
+    # Whole-project formats first: a Label Studio export is a JSON list, which
+    # looser per-item detectors further down would otherwise try to claim.
+    project_format = _project_format(parsed)
+    if project_format:
+        return _run_project_import(parsed, project_format)
+
+    # A Hub dataset has no path at all, so it bypasses the file/directory
+    # branching entirely.
+    if parsed.hf_dataset:
+        return _run_hub_import(parsed, options)
+
+    # Text formats are checked before the CV ones. Every text detector is
+    # gated on both extension and content and none of them accepts a CV
+    # format's file, so the order costs nothing -- but the reverse order does:
+    # a .qdpx is a ZIP, and the CV path reads its input with json.load, which
+    # fails on the binary with a message about invalid JSON rather than
+    # reaching an importer that knows what it is.
+    text_format = _text_format(parsed)
+    if text_format:
+        return _run_text_import(parsed, text_format, options)
+
+    # Most CV formats are DIRECTORY formats -- a dataset is a tree of per-image
+    # files, not one document -- so the input may be either.
+    is_directory = os.path.isdir(parsed.input)
+    if not is_directory and not os.path.isfile(parsed.input):
+        print(f"error: no such file or directory: {parsed.input}",
+              file=sys.stderr)
+        return 2
+
+    data = None
+    if is_directory:
+        fmt = parsed.input_format or _detect_directory_format(parsed.input)
+        if not fmt:
+            print(f"error: could not tell what kind of dataset {parsed.input} "
+                  f"is. Looked for data.yaml (yolo), label_2/ (kitti), "
+                  f"label_02/ (kitti_tracking), "
+                  f"seqinfo.ini (mot), Annotations/*.png (davis), "
+                  f"*_gtFine_polygons.json (cityscapes), *.xml (cvat/voc), "
+                  f"*.csv (openimages), *.tar (webdataset), *.json "
+                  f"(darwin/via/labelme). Pass --input-format.",
+                  file=sys.stderr)
+            return 2
+    else:
+        # Container formats are read by the importer itself: a .tar is not text
+        # and an Open Images .csv is not JSON, so neither survives a document
+        # load. Route them through the directory entry point instead.
+        container_fmt = _container_format(parsed.input, parsed.input_format)
+        if container_fmt:
+            fmt, is_directory = container_fmt, True
+        else:
+            data, error = _load_document(parsed.input)
+            if error:
+                print(f"error: {error}", file=sys.stderr)
+                return 2
+
+            fmt = parsed.input_format or import_registry.detect_format(data)
+            if not fmt:
+                supported = ", ".join(import_registry.get_supported_formats())
+                print(f"error: could not detect the format of {parsed.input}. "
+                      f"Pass --input-format (one of: {supported}).",
+                      file=sys.stderr)
+                return 2
+
+    if parsed.image_dir and isinstance(data, dict):
+        filled = _probe_dimensions(data, parsed.image_dir)
+        if filled:
+            logger.info("Read dimensions for %d image(s) from %s",
+                        filled, parsed.image_dir)
+
+    try:
+        if is_directory:
+            importer = import_registry.get(fmt)
+            if importer is None or not hasattr(importer, "parse_directory"):
+                print(f"error: the {fmt} importer reads a single file, not a "
+                      f"directory.", file=sys.stderr)
+                return 2
+            result = importer.parse_directory(parsed.input, options)
+        else:
+            result = import_registry.parse(fmt, data, options)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    return _write_project(parsed, result, source=parsed.input,
+                          import_format=fmt)
+
+
+def _write_project(parsed, result, source: str,
+                   stem: Optional[str] = None,
+                   import_format: str = "") -> int:
+    """
+    Turn an ImportResult into a runnable project on disk.
+
+    Split out of ``main`` so the Hub path (``--hf-dataset``), which has no local
+    input file at all, produces a byte-identical project rather than a second
+    copy of this logic that drifts.
+    """
+    # Both writes below -- the data file's `predictions` and --seed-user's
+    # saved work -- read `image.objects`, so the stamp goes on once, here,
+    # ahead of both. An imported box that says nothing about where it came from
+    # exports as though a person drew it.
+    stamped = result.stamp_import_provenance(import_format)
+    if stamped:
+        logger.info("Marked %d imported annotation(s) as source='import'%s",
+                    stamped,
+                    f" ({import_format})" if import_format else "")
+
+    # Structural, not a convention. Before this the invariant read "anything
+    # that builds an ImportResult and writes it must remember to stamp", and a
+    # future writer that forgot would produce shapes with no origin and nothing
+    # would fail. Checked after stamping, so it can only fire on an object the
+    # stamper could not reach.
+    unstamped = [obj for image in result.images for obj in image.objects
+                 if isinstance(obj, dict) and not obj.get("source")]
+    if unstamped:
+        raise AssertionError(
+            f"{len(unstamped)} imported annotation(s) have no `source` after "
+            f"stamping, so they would export as though a person drew them. "
+            f"First: {unstamped[0]}")
+
+    if (result.project.get("annotation_type") == "spatial_annotation"
+            and parsed.schema_name == "image_annotation"):
+        # The default is the image one, and a point-cloud project named its
+        # scheme and task "image_annotation".
+        parsed.schema_name = "objects"
+
+    os.makedirs(parsed.output_dir, exist_ok=True)
+    data_dir = os.path.join(parsed.output_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+
+    stem = stem or os.path.splitext(os.path.basename(source))[0]
+    data_rel = os.path.join("data", f"{stem}.json")
+    data_path = os.path.join(parsed.output_dir, data_rel)
+
+    if not parsed.config_only:
+        from potato.importers._common import assert_unique_ids
+        assert_unique_ids(image.instance_id for image in result.images)
+        spatial = result.project.get("annotation_type") == "spatial_annotation"
+        with open(data_path, "w") as f:
+            for image in result.images:
+                if spatial:
+                    row = {"id": image.instance_id}
+                    row.update(image.extra)
+                    if image.objects:
+                        row["predictions"] = {parsed.schema_name: image.objects}
+                    f.write(json.dumps(row) + "\n")
+                    continue
+                row = {
+                    "id": image.instance_id,
+                    # image_width/image_height are exactly the keys
+                    # cv_utils.get_image_dimensions() looks for, so COCO exports
+                    # carry real sizes and YOLO's can_export() stops failing.
+                    "image_width": image.width,
+                    "image_height": image.height,
+                    "file_name": image.file_name,
+                }
+                row.update(image.extra)
+                if image.objects:
+                    row["predictions"] = {
+                        parsed.schema_name: image.objects,
+                    }
+                f.write(json.dumps(row) + "\n")
+
+    config_path = os.path.join(parsed.output_dir, "config.yaml")
+    config = _build_config(parsed.schema_name, result, data_rel, parsed.output_dir)
+    with open(config_path, "w") as f:
+        # The modeline first: it is what switches on live validation in an
+        # editor and tells a coding agent where the contract is. safe_dump
+        # alone produced a config with neither.
+        f.write(SCHEMA_MODELINE + "\n")
+        yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
+
+    # Never clobber a README someone has written by hand -- re-running the
+    # importer to refresh a data file should not destroy project notes.
+    readme_path = os.path.join(parsed.output_dir, "README.md")
+    if os.path.exists(readme_path):
+        logger.info("README.md already exists; leaving it alone")
+    else:
+        _write_readme(readme_path, "config.yaml", result, source)
+
+    if parsed.seed_user:
+        _write_seed_user(parsed.output_dir, parsed.seed_user,
+                         parsed.schema_name, result,
+                         machine_kind=getattr(parsed, "as_machine_annotator", None),
+                         source_format=getattr(parsed, "input_format", None))
+
+    for warning in result.warnings[:20]:
+        logger.warning(warning)
+    if len(result.warnings) > 20:
+        logger.warning("... and %d more warnings",
+                       len(result.warnings) - 20)
+
+    stats = result.stats
+    if result.project.get("noun") == "sequence":
+        print(f"Imported {stats.get('num_images', 0)} sequence(s), "
+              f"{stats.get('num_tracks', 0)} track(s), "
+              f"{stats.get('num_annotations', 0)} keyframe(s), "
+              f"{stats.get('num_categories', 0)} categor(ies) into {parsed.output_dir}")
+        print(f"\nRun it:\n  potato start {config_path} -p 8000")
+        return 0
+    print(f"Imported {stats.get('num_images', 0)} image(s), "
+          f"{stats.get('num_annotations', 0)} annotation(s), "
+          f"{stats.get('num_categories', 0)} categor(ies) "
+          f"into {parsed.output_dir}")
+    print(f"\nRun it:\n  potato start {config_path} -p 8000")
+    return 0
+
+
+def _write_seed_user(output_dir: str, username: str, schema_name: str,
+                     result, machine_kind: str = None,
+                     source_format: str = None) -> None:
+    """
+    Write the imported annotations as a user's saved work.
+
+    Without ``machine_kind`` this fabricates an annotator: the rows are
+    indistinguishable from a person's, which is why the flag is off by default
+    and why the warning below says not to use them in agreement analysis.
+
+    With ``machine_kind`` the seeded state carries an origin, so the rows are a
+    declared machine rater's rather than an anonymous human's. That is the
+    difference the importer's own guard was written about -- machines may be
+    raters, but not raters in disguise -- and it is what lets imported
+    predictions reach agreement, adjudication and the IRT engine at all.
+    """
+    user_dir = os.path.join(output_dir, "annotation_output", username)
+    os.makedirs(user_dir, exist_ok=True)
+
+    # An image with no objects gets an EMPTY record, not no record. Skipping it
+    # left the item in the project with no evidence anyone had reviewed it, so
+    # a negative example that arrived in the source file could not survive the
+    # round trip -- the exporter writes a confirmed negative, and there was
+    # nothing to tell it one had been confirmed.
+    label_to_value = {}
+    for image in result.images:
+        label_to_value[image.instance_id] = [
+            [{"schema": schema_name, "name": "_data"},
+             json.dumps(image.objects)]
+        ]
+
+    # The keys a real user_state.json carries, not only the two this function
+    # cares about. The loader now defaults what is missing, but a seeded
+    # annotator that owns no assignments is not the annotator this flag claims
+    # to have fabricated: the items would be recorded as answered by someone
+    # they were never given to, and progress and assignment would both read
+    # zero for a project that is fully annotated.
+    ordering = list(label_to_value)
+    state = {
+        "user_id": username,
+        "max_assignments": -1,
+        "instance_id_ordering": ordering,
+        "current_instance_index": 0,
+        "instance_id_to_label_to_value": label_to_value,
+        "instance_id_to_span_to_value": {},
+        "phase_to_page_to_label_to_value": {},
+        "phase_to_page_to_span_to_value": {},
+    }
+    if machine_kind:
+        from datetime import datetime, timezone
+
+        state["origin"] = {
+            "kind": machine_kind,
+            "id": username,
+            "declared_in": "import",
+            "recorded_at": datetime.now(timezone.utc)
+                           .replace(microsecond=0).isoformat(),
+        }
+        if source_format:
+            state["origin"]["tool"] = source_format
+
+    with open(os.path.join(user_dir, "user_state.json"), "w") as f:
+        json.dump(state, f, indent=2)
+
+    with_objects = sum(1 for record in label_to_value.values()
+                       if json.loads(record[0][1]))
+    if machine_kind:
+        logger.info(
+            "--seed-user wrote %d item(s) as '%s', %d of them carrying objects "
+            "and %d recorded as reviewed with none. Recorded as a declared "
+            "machine rater (%s), so it is excluded from human-human agreement "
+            "rather than counted as a person. Declare '%s' under "
+            "machine_annotators in the project config so the server keeps the "
+            "declaration when it reloads this state.",
+            len(label_to_value), username, with_objects,
+            len(label_to_value) - with_objects, machine_kind, username)
+    else:
+        logger.warning(
+            "--seed-user wrote %d item(s) as '%s', %d of them carrying objects "
+            "and %d recorded as reviewed with none. This is fabricated "
+            "annotator work; do not include it in agreement or adjudication "
+            "analysis. Pass --as-machine-annotator to record it as a declared "
+            "machine rater instead.",
+            len(label_to_value), username, with_objects,
+            len(label_to_value) - with_objects)

@@ -235,16 +235,16 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #f0f0f0;
-    border-top: 1px solid #ddd;
+    background: light-dark(#f0f0f0, #232323);
+    border-top: 1px solid light-dark(#ddd, #4c4c4c);
     font-size: 13px;
 }
 .playback-btn {
     width: 32px;
     height: 32px;
-    border: 1px solid #ccc;
+    border: 1px solid light-dark(#ccc, #4c4c4c);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
     cursor: pointer;
     font-size: 14px;
     display: flex;
@@ -266,9 +266,9 @@
 }
 .playback-speed-btn {
     padding: 2px 8px;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 3px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
     cursor: pointer;
     font-size: 11px;
 }
@@ -279,7 +279,7 @@
     border-color: #1976D2;
 }
 .playback-time {
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
     min-width: 60px;
     text-align: right;
     font-variant-numeric: tabular-nums;

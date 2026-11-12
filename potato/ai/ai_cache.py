@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 import requests
 from tqdm import tqdm
 import time
@@ -22,9 +22,7 @@ from potato.ai.ai_endpoint import (
     VisualAnnotationInput,
     ModelCapabilities,
 )
-from potato.ai.ollama_endpoint import OllamaEndpoint
-from potato.ai.openrouter_endpoint import OpenRouterEndpoint
-from potato.ai.ai_prompt import ModelManager, get_ai_prompt 
+from potato.ai.ai_prompt import ModelManager, get_ai_prompt
 
 
 AICACHEMANAGER = None
@@ -51,9 +49,51 @@ def _get_scheme_field(annotation_id: int, field: str, default=None):
     return scheme[field]
 
 
-def _get_instance_text(instance_id: int) -> str:
+def _resolve_item(instance_id):
+    """The item an AI request is about, from its id.
+
+    Callers pass the **instance id**. They used to pass a position, and the
+    position they had was the annotator's place in their own ordering while
+    this indexed the corpus in file order -- the same number only under
+    `fixed_order`. Under `random`, `active_learning` or any other reordering
+    strategy the two diverge from the first item on, so the hint an annotator
+    read was about a different review than the one on their screen, and the
+    model's answer was stamped onto the visible item as a suggestion. Nothing
+    said so.
+
+    An int is still accepted and resolved positionally, because
+    `start_prefetch` walks corpus positions and `special_include` is keyed by
+    page number.
+    """
+    ism = get_item_state_manager()
+    if isinstance(instance_id, str):
+        item = ism.find_item(instance_id)
+        if item is None:
+            raise KeyError(instance_id)
+        return item
+    return ism.items()[instance_id]
+
+
+def _is_error_result(result) -> bool:
+    """True for a failed generation, which must never be cached.
+
+    A cached failure is served after the provider recovers, for good: the
+    warm-up and prefetch paths used to cache whatever came back.
+    """
+    if result is None:
+        return True
+    if isinstance(result, dict):
+        return "error" in result
+    if isinstance(result, str):
+        return (result.startswith("Unable to generate")
+                or result.startswith("Error:")
+                or "error" in result.lower()[:50])
+    return False
+
+
+def _get_instance_text(instance_id) -> str:
     """Get the text content from an instance using the configured text_key."""
-    item = get_item_state_manager().items()[instance_id]
+    item = _resolve_item(instance_id)
     item_data = item.get_data()
 
     # Get the configured text_key
@@ -75,6 +115,95 @@ def _get_instance_text(instance_id: int) -> str:
 
     return str(item_data)
 
+def _get_instance_image(instance_id) -> Optional[str]:
+    """The item's image, when the config names a field that holds one.
+
+    `_get_instance_text` returns exactly one field -- `item_properties.text_key`
+    -- and `_is_image_url` then sniffs that one string to decide whether the
+    item is a picture. So a multimodal item could send its review or its
+    photograph, never both: pointing `text_key` at the body meant the
+    photograph never left the server, and pointing it at the photo meant the
+    review did not. An `openai_vision` endpoint on an item whose text_key is
+    text is a vision endpoint that never sees an image, and nothing said so.
+
+    Reading a second key closes that. Resolution order:
+      1. `ai_support.image_key`, when the author names one
+      2. `item_properties.image_key`
+      3. the first `instance_display` field whose value looks like an image
+    Returns None when the item has no image, which restores the old
+    single-field behaviour exactly.
+    """
+    try:
+        item = _resolve_item(instance_id)
+        item_data = item.get_data()
+    except Exception:
+        return None
+    if not isinstance(item_data, dict):
+        return None
+
+    for key in (
+        (config.get("ai_support", {}) or {}).get("image_key"),
+        (config.get("item_properties", {}) or {}).get("image_key"),
+    ):
+        if key and isinstance(item_data.get(key), str):
+            return item_data[key]
+
+    # No key named: fall back to any displayed field that looks like an image,
+    # so a config that already declares the photo through instance_display does
+    # not have to name it twice.
+    # `instance_display.fields[]` entries are keyed `key` -- the validator
+    # rejects an entry without one. This read `field`, which no entry has and
+    # nothing writes, so `name` was always None and the branch could never
+    # fire: a config that declared its photo through instance_display and
+    # trusted the documented fallback sent the model text, every time.
+    #
+    # A field the author typed as an image is taken at its word; otherwise the
+    # value is sniffed, as before.
+    fields = (config.get("instance_display", {}) or {}).get("fields", []) or []
+    sniffed = None
+    for field in fields:
+        if isinstance(field, dict):
+            name = field.get("key") or field.get("field")
+            declared_image = str(field.get("type") or "").lower() == "image"
+        else:
+            name = field
+            declared_image = False
+        value = item_data.get(name) if isinstance(name, str) else None
+        if not isinstance(value, str) or not value:
+            continue
+        if declared_image:
+            return value
+        if sniffed is None and _is_image_url(value):
+            sniffed = value
+    return sniffed
+
+
+def _item_text_block(text: Any, vision_image: Optional[str]) -> str:
+    """The item's text, as a block to drop into a vision prompt, or "".
+
+    Every vision prompt was built from the scheme description, the labels and
+    the picture, and never from the item -- `text` was in scope at all nine of
+    them and unused. With `image_key` naming the photograph and `text_key` the
+    body, the model was handed the photograph *instead of* the ticket rather
+    than as well as it, and said so: asked to triage "The export button spins
+    forever and the CSV never downloads" it replied that there was "no text,
+    error message, or specific context provided" and suggested Other. The
+    annotator sees that written with confidence, and the label it names
+    highlighted in their form.
+
+    Returns "" when the text is absent or is itself the image being sent, so a
+    single-field image task keeps the prompt it had.
+    """
+    if not isinstance(text, str):
+        return ""
+    stripped = text.strip()
+    if not stripped or stripped == (vision_image or "").strip():
+        return ""
+    if _is_image_url(stripped):
+        return ""
+    return f"\nThe item's text:\n{stripped}\n"
+
+
 def _is_image_url(text: str) -> bool:
     """Check if text appears to be an image URL."""
     if not isinstance(text, str):
@@ -93,21 +222,73 @@ def _is_image_url(text: str) -> bool:
         return True
     return False
 
-def _get_image_data_from_url(url: str) -> ImageData:
-    """Download image from URL and return as ImageData.
+def _image_data_from_local_media(reference: str) -> Optional[ImageData]:
+    """Read an image the project ships itself, or None if it does not.
 
-    Includes SSRF protection to prevent fetching from private/internal IPs.
+    `image_key` names a data field, and a project that ships its images the
+    ordinary way puts a bare filename there and sets `media_directory` -- which
+    the display resolves and the AI path did not. The value went straight to
+    the URL fetcher, which refused it as a non-HTTP URL and returned None, and
+    the model then answered from the caption alone. The annotator got a fluent
+    hint about a picture the model was never given, with nothing on the page to
+    say so.
+
+    Reading it off disk rather than fetching `/media/...` over HTTP keeps this
+    off the network entirely -- the server already has the bytes, and a
+    loopback fetch is exactly what the SSRF guard below exists to refuse.
+    """
+    import base64
+    import mimetypes
+
+    try:
+        from potato.media.paths import resolve_media_url
+        path = resolve_media_url(config, reference, context="ai image")
+    except Exception as e:  # noqa: BLE001 - never break a hint over this
+        logger.debug("Could not resolve %r as local media: %s", reference, e)
+        return None
+    if not path:
+        return None
+
+    try:
+        with open(path, "rb") as f:
+            payload = f.read()
+    except OSError as e:
+        logger.warning("Could not read local image %s: %s", path, e)
+        return None
+
+    mime_type = mimetypes.guess_type(path)[0] or "image/jpeg"
+    logger.debug("Sending local media %s to the model as %s", path, mime_type)
+    return ImageData(source='base64',
+                     data=base64.b64encode(payload).decode('utf-8'),
+                     mime_type=mime_type)
+
+
+def _get_image_data_from_url(url: str) -> ImageData:
+    """Resolve an image reference to bytes the model can be given.
+
+    A project's own media is read from disk; anything else is downloaded, with
+    SSRF protection to prevent fetching from private/internal IPs.
     """
     import base64
     import ipaddress
     import socket
     from urllib.parse import urlparse
 
+    # The project's own files first: a bare filename or a `/media/...` path
+    # under `media_directory` is not a URL and never will be.
+    local = _image_data_from_local_media(url)
+    if local is not None:
+        return local
+
     # SSRF protection: validate URL scheme and resolve hostname
     try:
         parsed = urlparse(url)
         if parsed.scheme not in ('http', 'https'):
-            logger.warning(f"Blocked non-HTTP image URL: {url[:100]}")
+            logger.warning(
+                "Cannot send %r to the model: it is neither an http(s) URL nor "
+                "a file under media_directory (%s). The model will answer "
+                "without seeing the image.",
+                url[:100], (config.get("media_directory") or "media"))
             return None
 
         hostname = parsed.hostname
@@ -156,6 +337,70 @@ def clear_ai_cache_manager():
     """Clear the AI cache manager singleton. Used for testing."""
     global AICACHEMANAGER
     AICACHEMANAGER = None
+
+#: Response keys that name a label the annotator is being pointed at.
+_SUGGESTION_KEYS = ("suggestive_choice", "suggestive_choices")
+
+
+def _label_names(labels) -> list:
+    """The scheme's label names, however the config spelled them."""
+    if not isinstance(labels, (list, tuple)):
+        return []
+    names = []
+    for label in labels:
+        if isinstance(label, dict):
+            name = label.get("name")
+        else:
+            name = label
+        if name is not None and str(name) != "":
+            names.append(str(name))
+    return names
+
+
+def validate_suggested_choice(result, labels):
+    """Drop a suggested choice that is not one of the scheme's labels.
+
+    `suggestive_choice` was passed to the client unchecked, and the client
+    highlighted any label whose name appeared anywhere inside it. So a model
+    declining to commit -- "The reviewer does not say anything about the food."
+    -- was rendered to the annotator as an endorsement of `No`, sparkle and
+    all, because "does not" contains "no". A model that answers with a whole
+    sentence of advice is not rare, and neither is a two-way scheme with short
+    labels.
+
+    Checked here rather than only in the client because the client fix depends
+    on the model returning a bare label, and this does not. A rejected value is
+    kept under `suggestive_choice_rejected` rather than deleted, so the record
+    still shows what the model said.
+    """
+    if not isinstance(result, dict):
+        return result
+    names = _label_names(labels)
+    if not names:
+        # Numeric scales and free-text schemes have nothing to check against.
+        return result
+    lowered = {name.lower(): name for name in names}
+
+    for key in _SUGGESTION_KEYS:
+        if key not in result:
+            continue
+        value = result[key]
+        values = value if isinstance(value, list) else [value]
+        kept, rejected = [], []
+        for candidate in values:
+            match = lowered.get(str(candidate).strip().lower())
+            (kept if match else rejected).append(match or candidate)
+        if rejected:
+            logger.warning(
+                "AI suggested %r, which is not one of this scheme's labels "
+                "(%s); not highlighting it.", rejected, ", ".join(names))
+            result[f"{key}_rejected"] = (
+                rejected if isinstance(value, list) else rejected[0])
+        result[key] = kept if isinstance(value, list) else (
+            kept[0] if kept else "")
+
+    return result
+
 
 class AiCacheManager:
     def __init__(self):
@@ -233,33 +478,8 @@ class AiCacheManager:
         self.lock = threading.RLock()
         self.executor = ThreadPoolExecutor(max_workers=20)
         
-        AIEndpointFactory.register_endpoint("ollama", OllamaEndpoint)
-        AIEndpointFactory.register_endpoint("open_router", OpenRouterEndpoint)
-
-        # Register visual AI endpoints
-        try:
-            from potato.ai.yolo_endpoint import YOLOEndpoint
-            AIEndpointFactory.register_endpoint("yolo", YOLOEndpoint)
-        except ImportError:
-            logger.debug("YOLO endpoint not available (ultralytics not installed)")
-
-        try:
-            from potato.ai.ollama_vision_endpoint import OllamaVisionEndpoint
-            AIEndpointFactory.register_endpoint("ollama_vision", OllamaVisionEndpoint)
-        except ImportError:
-            logger.debug("Ollama Vision endpoint not available")
-
-        try:
-            from potato.ai.openai_vision_endpoint import OpenAIVisionEndpoint
-            AIEndpointFactory.register_endpoint("openai_vision", OpenAIVisionEndpoint)
-        except ImportError:
-            logger.debug("OpenAI Vision endpoint not available")
-
-        try:
-            from potato.ai.anthropic_vision_endpoint import AnthropicVisionEndpoint
-            AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
-        except ImportError:
-            logger.debug("Anthropic Vision endpoint not available")
+        # Text and visual endpoint types are registered lazily by
+        # potato.ai.ai_endpoint at import time — no SDK imports happen here.
 
         # Degrade gracefully if the AI backend (e.g. a local Ollama/vLLM server)
         # is unreachable at boot: log a warning and serve the task with AI
@@ -298,9 +518,21 @@ class AiCacheManager:
         for scheme in annotation_scheme:
             self.annotations.append(scheme)
 
-        # Check if main endpoint supports vision
+        # Check if main endpoint supports vision.
+        #
+        # Reported as three states, not two. "supports vision: False" was
+        # printed both for a text-only endpoint that started fine and for an
+        # endpoint that never started at all, so the boot log could not tell
+        # an author which had happened.
         self.endpoint_supports_vision = hasattr(self.ai_endpoint, 'query_with_image')
-        logger.info(f"AI endpoint supports vision: {self.endpoint_supports_vision}")
+        if self.ai_endpoint is None:
+            logger.warning(
+                "No AI endpoint: assistants will not appear and AI support is "
+                "off for this run.")
+        else:
+            logger.info("AI endpoint ready (%s), vision: %s",
+                        type(self.ai_endpoint).__name__,
+                        self.endpoint_supports_vision)
 
         # Initialize cache
         if self.disk_cache_enabled:
@@ -308,7 +540,7 @@ class AiCacheManager:
             self.start_warmup()
 
     def _validate_assistant_compatibility(
-        self, instance_id: int, annotation_id: int, ai_assistant: str
+        self, instance_id, annotation_id: int, ai_assistant: str
     ) -> tuple:
         """
         Validate that the AI assistant is compatible with the input type and model capabilities.
@@ -388,14 +620,24 @@ class AiCacheManager:
             )
         return capabilities
 
-    def _get_ai_with_vision_support(self, text: str, prompt: str, output_format) -> str:
+    def _get_ai_with_vision_support(self, text: str, prompt: str, output_format,
+                                    instance_id: Optional[int] = None) -> str:
         """
-        Get AI response, using vision if text is an image URL and endpoint supports it.
+        Get AI response, using vision if the item has an image and the endpoint
+        supports it.
+
+        `instance_id` is optional so the old single-field behaviour still works
+        for a caller that only has the text: without it the image can only be
+        the text itself, which is what this did before.
         """
         # Check if we should use vision
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = (
+            _get_instance_image(instance_id) if instance_id is not None else None
+        ) or (text if _is_image_url(text) else None)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision query for image URL: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 try:
                     return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
@@ -484,11 +726,51 @@ class AiCacheManager:
         except Exception as e:
             logger.error(f"Error saving cache to disk: {e}")
 
+    def _fingerprint(self, key) -> str:
+        """Hash of everything besides the key that decides the answer.
+
+        The stored key was ``(instance_id, annotation_id, assistant)`` alone,
+        on disk across restarts. After a change of model, of prompt, of the
+        scheme's labels, or of the item's data, the old answer was still
+        served; and inserting a scheme ahead of another moved one scheme's
+        suggestions onto the other, because ``annotation_id`` is a position.
+        """
+        import hashlib
+
+        instance_id, annotation_id, assistant = key
+        parts = {"assistant": assistant}
+        for name, endpoint in (("text", getattr(self, "ai_endpoint", None)),
+                               ("visual", getattr(self, "visual_endpoint", None))):
+            if endpoint is not None:
+                parts[name] = [type(endpoint).__name__,
+                               getattr(endpoint, "model", None)]
+        try:
+            scheme = config["annotation_schemes"][annotation_id]
+            parts["scheme"] = scheme
+            prompts = get_ai_prompt() or {}
+            parts["prompt"] = (prompts.get(scheme.get("annotation_type"), {})
+                               .get(assistant))
+        except (IndexError, KeyError, TypeError, AttributeError):
+            parts["scheme"] = None
+        try:
+            parts["item"] = _resolve_item(instance_id).get_data()
+        except Exception:  # noqa: BLE001 -- an unknown item still gets a key
+            parts["item"] = None
+        blob = json.dumps(parts, sort_keys=True, default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+    def _storage_key(self, key) -> str:
+        """The on-disk key: the request plus its fingerprint."""
+        return f"{key}#{self._fingerprint(key)}"
+
     def add_to_cache(self, key, value):
-        """inserts a key-value into the disk cache."""
+        """inserts a key-value into the disk cache. Failures are not cached."""
+        if _is_error_result(value):
+            logger.warning("Not caching failed AI result for %s", key)
+            return
         with self.lock:
             if self.disk_cache_enabled:
-                self.save_cache_to_disk(key, value)
+                self.save_cache_to_disk(self._storage_key(key), value)
 
     def get_from_cache(self, key):
         """Tries to retrieve the item from disk cache."""
@@ -497,14 +779,14 @@ class AiCacheManager:
             if self.disk_cache_enabled and self.disk_persistence_path and os.path.exists(self.disk_persistence_path):
                 try:
                     disk_data = self.load_disk_cache_data(self.disk_persistence_path)
-                    key_str = str(key)
+                    key_str = self._storage_key(key)
                     if key_str in disk_data:
                         return disk_data[key_str]
                 except Exception as e:
                     logger.error(f"Error reading from disk: {e}")
             return None
     
-    def generate_likert(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_likert(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         from string import Template
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
@@ -517,16 +799,20 @@ class AiCacheManager:
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
 
         # Check if we should use vision endpoint for image-based content
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = _get_instance_image(instance_id) or (
+            text if _is_image_url(text) else None)
+        text_block = _item_text_block(text, vision_image)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for likert {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 # Build vision-specific prompts based on ai_assistant type
                 if ai_assistant == "hint":
                     prompt = f"""Look at this image and help with the following annotation task:
 
 Task: {description}
-Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+{text_block}Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
 
 Please analyze the image and suggest an appropriate rating with a brief explanation.
 Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<rating label>"}}"""
@@ -534,7 +820,7 @@ Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<rating
                     prompt = f"""Look at this image and explain the reasoning for different rating choices:
 
 Task: {description}
-Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+{text_block}Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
 
 For each possible rating, explain what visual evidence in the image would support that rating.
 Respond in JSON format: {{"rationales": [{{"label": "<rating>", "reasoning": "<explanation>"}}]}}"""
@@ -542,7 +828,7 @@ Respond in JSON format: {{"rationales": [{{"label": "<rating>", "reasoning": "<e
                     prompt = f"""Look at this image and identify visual features relevant to the rating task:
 
 Task: {description}
-Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+{text_block}Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
 
 Identify key visual elements that would influence the rating.
 Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>"]}}"""
@@ -567,7 +853,7 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_multiselect(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_multiselect(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         labels = _get_scheme_field(annotation_id, "labels")
@@ -577,9 +863,13 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
 
         # Check if we should use vision endpoint for image-based content
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = _get_instance_image(instance_id) or (
+            text if _is_image_url(text) else None)
+        text_block = _item_text_block(text, vision_image)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for multiselect {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 # Format labels for the prompt
                 label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
@@ -590,7 +880,7 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
                     prompt = f"""Look at this image and help with the following annotation task:
 
 Task: {description}
-Available options (select all that apply): {labels_str}
+{text_block}Available options (select all that apply): {labels_str}
 
 Please analyze the image and suggest which options apply.
 Respond in JSON format: {{"hint": "<explanation>", "suggestive_choices": ["<option1>", "<option2>"]}}"""
@@ -598,7 +888,7 @@ Respond in JSON format: {{"hint": "<explanation>", "suggestive_choices": ["<opti
                     prompt = f"""Look at this image and explain the reasoning for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, explain what visual evidence supports or contradicts it.
 Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<explanation>"}}]}}"""
@@ -606,7 +896,7 @@ Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<e
                     prompt = f"""Look at this image and identify visual features for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, identify visual cues that indicate its presence.
 Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": ["<feature1>", "<feature2>"]}}]}}"""
@@ -629,7 +919,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_radio(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_radio(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
@@ -639,9 +929,13 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
 
         # Check if we should use vision endpoint for image-based content
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = _get_instance_image(instance_id) or (
+            text if _is_image_url(text) else None)
+        text_block = _item_text_block(text, vision_image)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for radio {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 # Format labels for the prompt
                 label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
@@ -652,7 +946,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                     prompt = f"""Look at this image and help with the following annotation task:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 Please analyze the image and suggest the most appropriate option.
 Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<selected option>"}}"""
@@ -660,7 +954,7 @@ Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<select
                     prompt = f"""Look at this image and explain the reasoning for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, explain what visual evidence in the image supports or contradicts it.
 Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<explanation>"}}]}}"""
@@ -668,7 +962,7 @@ Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<e
                     prompt = f"""Look at this image and identify visual features for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, identify visual cues that would indicate its presence.
 Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": ["<feature1>", "<feature2>"]}}]}}"""
@@ -691,7 +985,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_number(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_number(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
@@ -707,7 +1001,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_select(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_select(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         labels = _get_scheme_field(annotation_id, "labels")
@@ -726,7 +1020,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_slider(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_slider(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         min_value = _get_scheme_field(annotation_id, "min_value")
@@ -749,7 +1043,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_span(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_span(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         labels = _get_scheme_field(annotation_id, "labels")
@@ -768,7 +1062,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_textbox(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_textbox(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         logger.debug(f"Generating textbox for annotation_id: {annotation_id}")
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
@@ -785,7 +1079,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
 
-    def generate_image_annotation(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+    def generate_image_annotation(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate AI assistance for image annotation tasks.
 
         Args:
@@ -807,7 +1101,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             labels = [l.get("name", str(l)) for l in labels]
 
         # Get image URL from item data
-        item_data = get_item_state_manager().items()[instance_id].get_data()
+        item_data = _resolve_item(instance_id).get_data()
         image_url = self._extract_image_url(item_data)
 
         if not image_url:
@@ -850,9 +1144,16 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         # Query the visual endpoint
         result = endpoint.get_visual_ai(data, output_format)
+        # Name the model on the way out. An accepted detection is stored beside
+        # hand-drawn shapes and is indistinguishable from one; recording that it
+        # came from a model is only half the fact, because which model it came
+        # from is what a later comparison needs and is not recoverable from the
+        # annotation afterwards.
+        if isinstance(result, dict) and not result.get("model"):
+            result["model"] = getattr(endpoint, "model", "") or ""
         return result
 
-    def generate_video_annotation(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+    def generate_video_annotation(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate AI assistance for video annotation tasks.
 
         Args:
@@ -874,7 +1175,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             labels = [l.get("name", str(l)) for l in labels]
 
         # Get video URL from item data
-        item_data = get_item_state_manager().items()[instance_id].get_data()
+        item_data = _resolve_item(instance_id).get_data()
         video_url = self._extract_video_url(item_data)
 
         if not video_url:
@@ -916,6 +1217,13 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         # Query the visual endpoint
         result = endpoint.get_visual_ai(data, output_format)
+        # Name the model on the way out. An accepted detection is stored beside
+        # hand-drawn shapes and is indistinguishable from one; recording that it
+        # came from a model is only half the fact, because which model it came
+        # from is what a later comparison needs and is not recoverable from the
+        # annotation afterwards.
+        if isinstance(result, dict) and not result.get("model"):
+            result["model"] = getattr(endpoint, "model", "") or ""
         return result
 
     def _get_visual_endpoint(self):
@@ -931,7 +1239,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         # Try to find a visual endpoint from registered types
         visual_types = ['yolo', 'ollama_vision', 'openai_vision', 'anthropic_vision']
         for vtype in visual_types:
-            if vtype in AIEndpointFactory._endpoints:
+            if AIEndpointFactory.has_endpoint(vtype):
                 try:
                     visual_config = {
                         "ai_support": {
@@ -1009,13 +1317,12 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             from potato.ai.visual_ai_endpoint import BaseVisualAIEndpoint
             return BaseVisualAIEndpoint.encode_image_to_base64(image_url)
 
-    def _generate_text_hint_for_visual(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+    def _generate_text_hint_for_visual(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate text-based hint when visual endpoint is not available."""
         description = config["annotation_schemes"][annotation_id].get("description", "")
-        labels = config["annotation_schemes"][annotation_id].get("labels", [])
-
-        if labels and isinstance(labels[0], dict):
-            labels = [l.get("name", str(l)) for l in labels]
+        # Every entry, not just a list whose first label is a dict.
+        from potato.server_utils.presentation_order import label_names
+        labels = label_names(config["annotation_schemes"][annotation_id])
 
         return {
             "hint": f"Review the {'image' if 'image' in config['annotation_schemes'][annotation_id]['annotation_type'] else 'video'} carefully. "
@@ -1056,7 +1363,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             "prefetch_count": self.option_highlighting_prefetch_count,
         }
 
-    def generate_option_highlights(self, instance_id: int, annotation_id: int) -> Dict:
+    def generate_option_highlights(self, instance_id, annotation_id: int) -> Dict:
         """Generate option highlighting suggestions for an annotation.
 
         Args:
@@ -1163,7 +1470,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             logger.error(f"Error generating option highlights: {e}")
             return {"error": str(e)}
 
-    def get_option_highlights(self, instance_id: int, annotation_id: int) -> Dict:
+    def get_option_highlights(self, instance_id, annotation_id: int) -> Dict:
         """Get option highlights from cache or generate them.
 
         Args:
@@ -1191,12 +1498,17 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         return result
 
-    def start_option_highlight_prefetch(self, page_id: int, prefetch_amount: int = None):
+    def start_option_highlight_prefetch(self, page_id: int, prefetch_amount: int = None,
+                                        instance_ids=None, skip=None):
         """Prefetch option highlights for upcoming items.
 
         Args:
-            page_id: Current page/instance index
+            page_id: Position in `instance_ids` to start from
             prefetch_amount: Number of items to prefetch (uses config default if None)
+            instance_ids: The annotator's ordering. Defaults to corpus order,
+                which is the same list only under `fixed_order`.
+            skip: Optional ``skip(instance_id) -> bool``: items this annotator
+                will get no assistance on, so no model call is made for them.
         """
         if not self.option_highlighting_enabled or not self.disk_cache_enabled:
             return
@@ -1205,20 +1517,23 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             prefetch_amount = self.option_highlighting_prefetch_count
 
         ism = get_item_state_manager()
+        ordering = list(instance_ids) if instance_ids else ism.get_instance_ids()
         with self.lock:
             # Calculate range
             if prefetch_amount >= 0:
                 start_idx = page_id
-                end_idx = min(start_idx + prefetch_amount, len(ism.items()))
+                end_idx = min(start_idx + prefetch_amount, len(ordering))
             else:
                 start_idx = max(page_id + prefetch_amount, 0)
                 end_idx = page_id
 
             keys = []
-            for i in range(start_idx, end_idx):
+            for i in range(max(0, start_idx), end_idx):
+                if skip is not None and skip(ordering[i]):
+                    continue
                 for annotation_id, scheme in enumerate(config["annotation_schemes"]):
                     if self.is_option_highlighting_enabled_for_scheme(annotation_id):
-                        key = (i, annotation_id, "option_highlight")
+                        key = (ordering[i], annotation_id, "option_highlight")
                         # Check if not already cached or in progress
                         if self.get_from_cache(key) is None and key not in self.in_progress:
                             keys.append(key)
@@ -1255,29 +1570,41 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             return None
         return self.special_includes.get(page_number_int).get(annotation_id_int)
 
-    def start_prefetch(self, page_id, prefetch_amount):
-        """Prefetches a fixed number of upcoming items to warm the cache."""
+    def start_prefetch(self, page_id, prefetch_amount, instance_ids=None):
+        """Warm the cache for the pages around `page_id`.
+
+        `page_id` is a position, and `instance_ids` says what that position
+        means. Callers in the annotation loop pass the annotator's own
+        ordering, so a reordering assignment strategy prefetches the items
+        that annotator will actually reach; without it the window is corpus
+        order, which is what `fixed_order` gives anyway.
+
+        Keys carry the resolved instance id, so a prefetched reply and the
+        on-demand request for the same item are the same cache entry.
+        """
         if not config.get("ai_support", {}).get("enabled") or not self.disk_cache_enabled:
             return
-        
+
         ism = get_item_state_manager()
+        ordering = list(instance_ids) if instance_ids else ism.get_instance_ids()
         with self.lock:
             # Calculate range bounds
             if prefetch_amount >= 0:
                 start_idx = page_id
-                end_idx = min(start_idx + prefetch_amount, len(ism.items()))
+                end_idx = min(start_idx + prefetch_amount, len(ordering))
             else:
                 start_idx = max(page_id - prefetch_amount, 0)
                 end_idx = page_id
 
             logger.debug(f"Prefetch range: start_idx={start_idx}, end_idx={end_idx}")
             keys = []
-            
-            for i in range(start_idx, end_idx):
+
+            for i in range(max(0, start_idx), end_idx):
                 # Check if this page should be included
                 if not self.should_include_page(i):
                     continue
-                
+                instance_id = ordering[i]
+
                 # Process each annotation scheme for this page
                 for annotation_id, scheme in enumerate(config["annotation_schemes"]):
                     if not self.should_include_scheme(i, annotation_id):
@@ -1291,7 +1618,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                         raise Exception(f"{annotation_type} is not defined in ai_prompt")
                     
                     # Generate keys for this page/scheme combination
-                    scheme_keys = self.get_keys_for_scheme(i, annotation_type, annotation_id, ai_prompt)
+                    scheme_keys = self.get_keys_for_scheme(
+                        i, annotation_type, annotation_id, ai_prompt,
+                        instance_id=instance_id)
                     keys.extend(scheme_keys)
             
             if keys:
@@ -1319,9 +1648,18 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         
         return False
 
-    def get_keys_for_scheme(self, page_index, annotation_type, annotation_id, ai_prompt):
-        """Get all keys for a specific page combination."""
+    def get_keys_for_scheme(self, page_index, annotation_type, annotation_id,
+                            ai_prompt, instance_id=None):
+        """Get all cache keys for one page/scheme combination.
+
+        `page_index` selects the `special_include` entry (which is keyed by
+        page number, as the config declares it); `instance_id` is what the key
+        is built from, so it matches the on-demand lookup. They are the same
+        number only when the annotator's ordering is the corpus order.
+        """
         keys = []
+        if instance_id is None:
+            instance_id = page_index
         
         # Check if this page/annotation has specific overrides in special_includes
         if (page_index in self.special_includes and 
@@ -1331,11 +1669,11 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             # Use special_includes (overrides include_all setting)
             specified_keys = self.special_includes[page_index][annotation_id]
             for key in specified_keys:
-                keys.append((page_index, annotation_id, key))
+                keys.append((instance_id, annotation_id, key))
         elif self.include_all:
             # No specific override, so include all available keys for this annotation type
             for key in ai_prompt[annotation_type]:
-                keys.append((page_index, annotation_id, key))
+                keys.append((instance_id, annotation_id, key))
         # If include_all is False and no special_include entry, return empty keys
         
         return keys
@@ -1361,7 +1699,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
                     future.add_done_callback(callback)
 
-    def get_ai_help(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def get_ai_help(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         """retrieves AI help either from cache, waits for in-progress, or computes on-demand."""
         key = (instance_id, annotation_id, ai_assistant)
 
@@ -1373,7 +1711,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         cached_value = self.get_from_cache(key)
         if cached_value is not None:
             logger.debug(f"Cache hit for key: {key}")
-            return cached_value
+            # Checked against the scheme as it is now, as a fresh answer is.
+            return validate_suggested_choice(
+                cached_value, _get_scheme_field(annotation_id, "labels", []))
 
         with self.lock:
             if key in self.in_progress:
@@ -1384,12 +1724,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         try:
             result = future.result(timeout=60)
             # Don't cache error responses
-            is_error_response = (
-                isinstance(result, str) and
-                (result.startswith("Unable to generate") or
-                 result.startswith("Error:") or
-                 "error" in result.lower()[:50])
-            )
+            is_error_response = _is_error_result(result)
             if self.disk_cache_enabled and not is_error_response:
                 self.add_to_cache(key, result)
             elif is_error_response:
@@ -1403,7 +1738,54 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                 self.in_progress.pop(key, None)
             return f"Error: {str(e)}"
 
-    def compute_help(self, instance_id: int, annotation_id: int, ai_assistant: str):
+    #: (instance_id, url) -> whether the bytes were obtained. Bounded because a
+    #: long-running server would otherwise keep one entry per item ever asked
+    #: about.
+    _VISION_VERDICT_LIMIT = 2048
+
+    def resolve_vision_image(self, instance_id, vision_image):
+        """Bytes for the model, and whether they were actually obtained.
+
+        A missing image, a moved media directory or a mistyped `image_key` all
+        produced a normal-shaped reply in the normal time with the same JSON
+        keys, because the code falls through to a text-only request. Nothing
+        said so anywhere: not the response, not the log.
+
+        On a vision study that is the difference between an answer about the
+        picture and an answer about the prompt. The model that was measured
+        happened to decline to guess and returned a generic hint, but that is a
+        property of one model at temperature 0 rather than of the system -- a
+        different model would invent a shape with the same confidence it
+        invents everything else, and nothing downstream could tell.
+        """
+        if not (self.endpoint_supports_vision and vision_image):
+            return None, False
+
+        image_data = _get_image_data_from_url(vision_image)
+        if not image_data:
+            logger.warning(
+                "Vision request for %s could not load %r, so the model is "
+                "being sent TEXT ONLY. Its answer will have the same shape as "
+                "a vision answer.", instance_id, vision_image)
+        self._remember_vision_verdict(instance_id, bool(image_data))
+        return image_data, bool(image_data)
+
+    def _remember_vision_verdict(self, instance_id, attached: bool) -> None:
+        verdicts = getattr(self, "_vision_verdicts", None)
+        if verdicts is None:
+            from collections import OrderedDict
+
+            verdicts = self._vision_verdicts = OrderedDict()
+        verdicts.pop(instance_id, None)
+        verdicts[instance_id] = attached
+        while len(verdicts) > self._VISION_VERDICT_LIMIT:
+            verdicts.popitem(last=False)
+
+    def vision_verdict(self, instance_id):
+        """Whether the last request for this item carried an image, or None."""
+        return getattr(self, "_vision_verdicts", {}).get(instance_id)
+
+    def compute_help(self, instance_id, annotation_id: int, ai_assistant: str):
         # Validate that the assistant type is compatible with the model and input
         is_valid, error_message = self._validate_assistant_compatibility(
             instance_id, annotation_id, ai_assistant
@@ -1415,27 +1797,42 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         annotation_type_str = config["annotation_schemes"][annotation_id]["annotation_type"]
         annotation_type = Annotation_Type(annotation_type_str)
         if annotation_type == Annotation_Type.LIKERT:
-            return self.generate_likert(instance_id, annotation_id, ai_assistant)
+            result = self.generate_likert(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.RADIO:
-            return self.generate_radio(instance_id, annotation_id, ai_assistant)
+            result = self.generate_radio(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.MULTISELECT:
-            return self.generate_multiselect(instance_id, annotation_id, ai_assistant)
+            result = self.generate_multiselect(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.NUMBER:
-            return self.generate_number(instance_id, annotation_id, ai_assistant)
+            result = self.generate_number(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.SELECT:
-            return self.generate_select(instance_id, annotation_id, ai_assistant)
+            result = self.generate_select(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.SLIDER:
-            return self.generate_slider(instance_id, annotation_id, ai_assistant)
+            result = self.generate_slider(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.SPAN:
-            return self.generate_span(instance_id, annotation_id, ai_assistant)
+            result = self.generate_span(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.TEXTBOX:
-            return self.generate_textbox(instance_id, annotation_id, ai_assistant)
+            result = self.generate_textbox(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.IMAGE_ANNOTATION:
-            return self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
+            result = self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.VIDEO_ANNOTATION:
-            return self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
+            result = self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
         else:
             raise ValueError(f"Unknown annotation type: {annotation_type}")
+
+        # Every generator funnels through here, so this is the one place a
+        # suggested choice can be checked against what the scheme actually
+        # offers.
+        result = validate_suggested_choice(
+            result, _get_scheme_field(annotation_id, "labels"))
+
+        # And the one place to say whether the model actually saw the picture.
+        # A text-only fallback is indistinguishable from a vision answer in
+        # both shape and timing, so the distinction has to be recorded rather
+        # than inferred.
+        attached = self.vision_verdict(instance_id)
+        if isinstance(result, dict) and attached is not None:
+            result["image_attached"] = attached
+        return result
 
     def get_cache_stats(self) -> Dict[str, int]:
         """returns statistics on disk cache and in-progress cache entries."""

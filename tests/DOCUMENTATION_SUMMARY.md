@@ -1,24 +1,23 @@
 # Testing Documentation Summary
 
-## Overview
+An index of the testing documentation, and the shortest path into it for
+someone who has not written a Potato test before.
 
-This document provides an overview of the comprehensive testing documentation created for the Potato annotation platform. The documentation is designed to help developers understand how to write, run, and maintain tests effectively.
+## Where the documentation is
 
-## Documentation Structure
-
-### 📚 Main Documentation
+### Main documentation
 
 1. **[Testing Strategy](TESTING_STRATEGY.md)** - Overall testing approach and principles
 2. **[Main README](README.md)** - Overview of all test types and how to run them
 3. **[Server Test Guide](server/README.md)** - Complete guide to server integration testing
 4. **[Selenium Test Guide](selenium/README.md)** - Complete guide to frontend testing
 
-### 📋 Quick References
+### Quick references
 
 1. **[Server Quick Reference](server/QUICK_REFERENCE.md)** - Common patterns and code snippets for server tests
 2. **[Server Test Template](server/test_template.py)** - Template for creating new server tests
 
-### 🏗️ Test Infrastructure
+### Test infrastructure
 
 1. **[FlaskTestServer](helpers/flask_test_setup.py)** - Core server testing infrastructure
 2. **[BaseSeleniumTest](selenium/test_base.py)** - Core Selenium testing infrastructure
@@ -116,25 +115,22 @@ class TestMyFeature(BaseSeleniumTest):
         # Verify results
 ```
 
-## Best Practices
+## Conventions
 
-### Test Organization
-- **Logical grouping**: Group related tests in the same file
-- **Descriptive names**: Use clear, descriptive test names
-- **Documentation**: Document test purpose and setup
-- **Consistent patterns**: Use consistent patterns across test files
+Group tests for one feature in one file and name them after the behavior they
+check, not the function they call, so a failure report reads as a sentence.
+Write down in the docstring what the test is setting up, because the setup is
+usually the part a later reader cannot reconstruct.
 
-### Test Quality
-- **Isolation**: Each test should be independent
-- **Cleanup**: Always clean up resources after tests
-- **Realistic data**: Use realistic but controlled test data
-- **Error handling**: Test both success and failure scenarios
+Every test has to pass when run alone and when run in any order, which in
+practice means clearing the singletons and cleaning up whatever the test
+created. Use data that looks like real data but is small enough to reason
+about, and cover the failure path as well as the success path.
 
-### Performance
-- **Fast unit tests**: Keep unit tests under 1 second
-- **Appropriate timeouts**: Use reasonable timeouts for integration tests
-- **Unique ports**: Use unique ports for server tests
-- **Headless mode**: Use headless mode for browser tests
+Keep unit tests under a second. Give integration tests a timeout long enough
+for a real server start but short enough that a hang fails rather than stalls
+the suite, give every server test class its own port, and run Chrome headless
+so the browser tests work in CI.
 
 ## Troubleshooting
 
@@ -159,7 +155,7 @@ print(f"Response status: {response.status_code}")
 ### Test Execution Strategy
 1. **Unit Tests**: Run first for quick feedback
 2. **Integration Tests**: Run after unit tests pass
-3. **E2E Tests**: Run last for comprehensive validation
+3. **E2E Tests**: Run last, since they are the slowest and the most brittle
 
 ### CI/CD Pipeline
 ```yaml
@@ -207,15 +203,3 @@ stages:
 ### Infrastructure Code
 - **FlaskTestServer**: `tests/helpers/flask_test_setup.py`
 - **BaseSeleniumTest**: `tests/selenium/test_base.py`
-
-## Conclusion
-
-The testing documentation provides comprehensive guidance for writing, running, and maintaining tests for the Potato annotation platform. By following the established patterns and using the provided infrastructure, developers can confidently add new features and make changes while maintaining high quality and reliability.
-
-The documentation is designed to be:
-- **Comprehensive**: Covers all aspects of testing
-- **Practical**: Provides real examples and code snippets
-- **Maintainable**: Easy to update and extend
-- **Accessible**: Clear structure and navigation
-
-Use this documentation as your primary reference for all testing-related activities in the Potato project.

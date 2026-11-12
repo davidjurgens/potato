@@ -17,11 +17,20 @@ Usage:
 from typing import Dict, Any, List, Optional
 import html
 import logging
+import re
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
+from potato.server_utils.html_sanitizer import strip_active_content
 
 logger = logging.getLogger(__name__)
 
+
+
+def _clean_language(value):
+    """A language name safe for an attribute and a CSS class, or None."""
+    if value is None:
+        return None
+    return re.sub(r"[^\w+#.-]", "", str(value)) or None
 
 class CodeDisplay(BaseDisplay):
     """
@@ -65,26 +74,35 @@ class CodeDisplay(BaseDisplay):
         if isinstance(data, dict):
             # Pre-extracted FormatOutput data
             if "rendered_html" in data:
-                return self._wrap_content(data["rendered_html"], options, field_key)
+                return self._wrap_content(strip_active_content(data["rendered_html"]), options, field_key)
 
             code = data.get("text", "")
-            language = data.get("metadata", {}).get("language", options.get("language"))
+            # The language lands in attributes and a class name, whether it
+            # comes from the item or from the config.
+            language = _clean_language(
+                data.get("metadata", {}).get("language", options.get("language")))
         elif isinstance(data, str):
             code = data
-            language = options.get("language")
+            language = _clean_language(options.get("language"))
         else:
             return f'<div class="code-error">Unsupported content type</div>'
 
         # Generate code HTML
         is_span_target = field_config.get("span_target", False)
         code_html = self._render_code(code, language, options, field_key, is_span_target)
-        return self._wrap_content(code_html, options, field_key)
+        # Pass the RESOLVED language through. _wrap_content used to recompute
+        # it from options alone, so an item carrying its own
+        # metadata.language highlighted correctly inside and still emitted
+        # data-language="text" on the wrapper -- which is the attribute a
+        # highlighter reads.
+        return self._wrap_content(code_html, options, field_key, language)
 
     def _wrap_content(
         self,
         content: str,
         options: Dict[str, Any],
-        field_key: str
+        field_key: str,
+        language: Optional[str] = None
     ) -> str:
         """
         Wrap code content in container with styles.
@@ -94,15 +112,15 @@ class CodeDisplay(BaseDisplay):
         max_width = options.get("max_width")
 
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {css_length(max_height)}")
             styles.append("overflow-y: auto")
         if max_width:
-            styles.append(f"max-width: {max_width}px")
+            styles.append(f"max-width: {css_length(max_width)}")
             styles.append("overflow-x: auto")
 
         style_str = "; ".join(styles) if styles else ""
-        language = options.get("language") or "text"
-        theme = options.get("theme", "default")
+        language = _clean_language(language or options.get("language")) or "text"
+        theme = _clean_language(options.get("theme", "default")) or "default"
 
         return f'''
             <div class="code-display code-theme-{theme}"
@@ -226,11 +244,11 @@ class CodeDisplay(BaseDisplay):
         if field_config.get("span_target"):
             classes.append("span-target-code")
 
-        language = options.get("language")
+        language = _clean_language(options.get("language"))
         if language:
             classes.append(f"language-{language}")
 
-        theme = options.get("theme", "default")
+        theme = _clean_language(options.get("theme", "default")) or "default"
         classes.append(f"code-theme-{theme}")
 
         return classes

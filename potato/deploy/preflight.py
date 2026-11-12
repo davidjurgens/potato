@@ -1,0 +1,683 @@
+"""Decide whether a config is safe to put on the public internet, and say why.
+
+Two jobs, kept separate on purpose:
+
+``run_preflight`` **reports**. It runs the config validator, resolves every
+referenced path, and checks the settings that decide what a stranger who finds
+the URL can do. It changes nothing.
+
+``harden_config`` **changes** only what is unambiguously a deployment concern:
+debug off, sessions persistent, paths relative, one worker. It deliberately does
+not touch ``user_config``, ``authentication``, ``login`` or ``require_password``.
+Silently locking down a task the researcher wrote as open — or opening one they
+wrote as closed — would make the deployed task differ from the config in the
+repo, and the difference would be invisible.
+
+So access control is reported, never rewritten. The exposure summary exists to
+make an open task a decision rather than an accident.
+"""
+
+from __future__ import annotations
+
+import logging
+import json
+import os
+import re
+import secrets
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional
+
+import yaml
+
+from potato.deploy.paths import collect_config_paths
+
+logger = logging.getLogger(__name__)
+
+Severity = str  # "error" | "warning" | "info"
+
+
+@dataclass
+class Finding:
+    code: str
+    severity: Severity
+    message: str
+    remedy: str = ""
+    key: Optional[str] = None
+
+    def __str__(self) -> str:
+        return f"[{self.code}] {self.message}"
+
+
+@dataclass
+class GeneratedSecrets:
+    """Secrets minted for this deployment. Injected as env vars, never bundled."""
+
+    secret_key: str
+    admin_api_key: str
+
+
+@dataclass
+class PreflightReport:
+    config_file: str
+    provider: str
+    public: bool
+    findings: List[Finding] = field(default_factory=list)
+    hardened_config: Dict[str, Any] = field(default_factory=dict)
+    generated: Optional[GeneratedSecrets] = None
+    exposure: List[str] = field(default_factory=list)
+
+    @property
+    def errors(self) -> List[Finding]:
+        return [f for f in self.findings if f.severity == "error"]
+
+    @property
+    def warnings(self) -> List[Finding]:
+        return [f for f in self.findings if f.severity == "warning"]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def to_dict(self) -> dict:
+        return {
+            "config_file": self.config_file,
+            "provider": self.provider,
+            "public": self.public,
+            "ok": self.ok,
+            "findings": [
+                {"code": f.code, "severity": f.severity, "message": f.message,
+                 "remedy": f.remedy, "key": f.key}
+                for f in self.findings
+            ],
+            "exposure": self.exposure,
+        }
+
+
+# --------------------------------------------------------------------------
+# Check registry
+# --------------------------------------------------------------------------
+
+_CHECKS: List[Callable] = []
+
+
+def check(func: Callable) -> Callable:
+    """Register a check so the set is inspectable and testable as data."""
+    _CHECKS.append(func)
+    return func
+
+
+@dataclass
+class CheckContext:
+    config: Dict[str, Any]
+    config_path: str
+    provider: str
+    public: bool
+    ephemeral_fs: bool = False
+    #: True when `deploy up` will write a backup block into the bundle.
+    backup_configured: bool = False
+    #: `deploy up --workers`. The container refuses anything but 1.
+    workers: int = 1
+    #: Names passed with `deploy up --secret` or `--env`; they reach the host.
+    provided_env: frozenset = frozenset()
+    #: `deploy up --hf-oauth`: the provider writes Sign in with Hugging Face
+    #: into the bundled config, so enrolment is not open on the host.
+    hf_oauth: bool = False
+
+
+# Values that look like a credential someone pasted into a config.
+_SECRET_KEY_NAMES = ("api_key", "secret_key", "client_secret", "password",
+                     "token", "access_token", "auth_token")
+_SECRET_VALUE_SHAPES = (
+    re.compile(r"^sk-[A-Za-z0-9_\-]{16,}$"),        # OpenAI-style
+    re.compile(r"^hf_[A-Za-z0-9]{16,}$"),           # HuggingFace
+    re.compile(r"^dop_v1_[a-f0-9]{32,}$"),          # DigitalOcean
+    re.compile(r"^ghp_[A-Za-z0-9]{20,}$"),          # GitHub
+    re.compile(r"^xox[baprs]-[A-Za-z0-9\-]{10,}$"), # Slack
+)
+
+#: The same shapes found anywhere in raw text (a key pasted into a layout's
+#: JavaScript or an .ini file), for files that are not parsed. Built from the
+#: list above so the two cannot drift.
+SECRET_VALUE_SEARCH = re.compile(
+    "|".join(r"(?<![A-Za-z0-9_\-])" + p.pattern.strip("^$") for p in _SECRET_VALUE_SHAPES)
+    .encode())
+
+
+#: Name endings that also mark a credential: admin_api_key, session_secret,
+#: hf_token. A key ending in _env holds the variable's name, not its value.
+_SECRET_KEY_SUFFIXES = ("_api_key", "_secret", "_token", "_password")
+
+
+def _secret_name(leaf: str) -> bool:
+    return leaf in _SECRET_KEY_NAMES or (not leaf.endswith("_env")
+                                         and leaf.endswith(_SECRET_KEY_SUFFIXES))
+
+
+def literal_secrets(config: Any) -> List[str]:
+    """Key paths holding what looks like a pasted credential.
+
+    A value counts when its key names a credential and it is at least 12
+    characters, or when it has the shape of a known provider's key, wherever
+    it sits. ``${VAR}`` references are resolved at load and never count.
+    Shared by the deploy preflight (D006) and ``potato snapshot deposit``.
+    """
+    found = []
+    for key_path, value in _walk(config):
+        if not isinstance(value, str) or not value or value.startswith("${"):
+            continue
+        leaf = key_path.split(".")[-1].split("[")[0]
+        if ((_secret_name(leaf) and len(value) >= 12)
+                or any(p.match(value) for p in _SECRET_VALUE_SHAPES)):
+            found.append(key_path)
+    return found
+
+
+def _walk(node: Any, path: str = ""):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield from _walk(value, f"{path}.{key}" if path else str(key))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _walk(value, f"{path}[{index}]")
+    else:
+        yield path, node
+
+
+@check
+def _check_debug_mode(ctx: CheckContext) -> List[Finding]:
+    if not ctx.config.get("debug"):
+        return []
+    return [Finding(
+        "D002", "error",
+        "debug is true. With debug_phase it signs every visitor in as one "
+        "shared debug_user and skips them to that phase, and it opens the "
+        "admin pages without a key to requests from the server's own machine. "
+        "It is for a server on a developer's machine.",
+        "Remove `debug: true` from the config before deploying.",
+        key="debug",
+    )]
+
+
+@check
+def _check_mcp_surface(ctx: CheckContext) -> List[Finding]:
+    """The MCP control surface is remote control, so deploying it needs care."""
+    mcp_config = ctx.config.get("mcp") or {}
+    if not mcp_config.get("enabled"):
+        return []
+
+    findings = []
+
+    if ctx.config.get("debug"):
+        findings.append(Finding(
+            "D017", "error",
+            "mcp.enabled is set on a server running in debug mode. Debug "
+            "opens admin pages without a key to requests from the server's own "
+            "machine, which on a deployed host includes its reverse proxy.",
+            "Remove `debug: true` before deploying.",
+            key="mcp.enabled",
+        ))
+
+    from potato.server_utils.agent_tokens import list_tokens
+
+    active = [t for t in list_tokens(ctx.config) if not t.get("revoked")]
+    if not active:
+        findings.append(Finding(
+            "D018", "error",
+            "mcp.enabled is set but no agent tokens have been issued, so every "
+            "call will be refused. The surface is inert rather than open, but "
+            "it is not doing what the config says it does.",
+            "Issue one: potato mcp issue-token --config config.yaml "
+            "--name <agent> --role <role>",
+            key="mcp.enabled",
+        ))
+
+    destructive = mcp_config.get("destructive") or []
+    if destructive:
+        findings.append(Finding(
+            "D019", "warning",
+            f"mcp.destructive grants {', '.join(destructive)} to agents. These "
+            f"tools discard annotation work and cannot be undone.",
+            "Confirm this is intended, and keep mcp.audit_log on so the calls "
+            "are recorded.",
+            key="mcp.destructive",
+        ))
+
+    admin_tokens = [t for t in active if t.get("role") == "admin"]
+    if admin_tokens and (mcp_config.get("scope") or {}).get("users") is None:
+        findings.append(Finding(
+            "D020", "warning",
+            f"{len(admin_tokens)} admin-role agent token(s) are active with no "
+            f"mcp.scope.users restriction, so they may act on any annotator.",
+            "Narrow with mcp.scope.users, or issue a lower role.",
+            key="mcp.scope",
+        ))
+
+    return findings
+
+
+@check
+def _check_inline_secrets(ctx: CheckContext) -> List[Finding]:
+    findings = []
+    for key_path in literal_secrets(ctx.config):
+        leaf = key_path.split(".")[-1].split("[")[0]
+        findings.append(Finding(
+            "D006", "error",
+            f"{key_path} looks like a literal credential; deploying would "
+            "upload it to the host and, for repo-backed providers, publish it.",
+            f"Replace it with ${{ENV_VAR}} and pass --secret {leaf.upper()}=<value>.",
+            key=key_path,
+        ))
+    return findings
+
+
+@check
+def _check_referenced_paths(ctx: CheckContext) -> List[Finding]:
+    paths = collect_config_paths(ctx.config, ctx.config_path)
+    findings = []
+    for missing in paths.missing_required:
+        findings.append(Finding(
+            "D004", "error",
+            f"{missing.config_key} references a path that does not exist: {missing.raw}",
+            "Fix the path, or remove the entry.",
+            key=missing.config_key,
+        ))
+    for missing in paths.missing:
+        if missing.required:
+            continue
+        if missing.config_key == "output_annotation_dir":
+            # The server creates it at boot; a new task has none yet.
+            continue
+        findings.append(Finding(
+            "D004b", "warning",
+            f"{missing.config_key} references a missing path: {missing.raw}",
+            "The deploy will proceed; the feature using it will not work.",
+            key=missing.config_key,
+        ))
+    for outside in paths.outside_task_dir:
+        findings.append(Finding(
+            "D005", "info",
+            f"{outside.config_key} points outside the task directory ({outside.raw}); "
+            "it will be copied into _bundled/ and the config rewritten.",
+            "",
+            key=outside.config_key,
+        ))
+    return findings
+
+
+@check
+def _check_authentication_key_typo(ctx: CheckContext) -> List[Finding]:
+    auth = ctx.config.get("authentication")
+    if isinstance(auth, dict) and "type" in auth and "method" not in auth:
+        return [Finding(
+            "D010", "error",
+            "authentication.type is not a recognized key — the setting is "
+            "authentication.method. As written, authentication silently falls "
+            "back to in_memory.",
+            "Rename `type:` to `method:`.",
+            key="authentication.type",
+        )]
+    return []
+
+
+@check
+def _check_open_registration(ctx: CheckContext) -> List[Finding]:
+    """Report open enrolment. Never change it — that is the researcher's call."""
+    if not ctx.public:
+        return []
+    user_config = ctx.config.get("user_config") or {}
+    allow_all = user_config.get("allow_all_users", True)
+    auth = ctx.config.get("authentication") or {}
+    method = auth.get("method", auth.get("type", "in_memory"))
+
+    if method == "oauth" or ctx.hf_oauth:
+        return []
+    if not allow_all:
+        return []
+
+    passwordless = (
+        ctx.config.get("require_no_password") is True
+        or ctx.config.get("require_password") is False
+        or (ctx.config.get("login") or {}).get("type") in ("url_direct", "prolific")
+    )
+    detail = (" No password is required, so a username is the only thing "
+              "standing between a passer-by and your data."
+              if passwordless else "")
+    return [Finding(
+        "D003", "warning",
+        "Anyone who finds the URL can register and annotate." + detail,
+        "Set user_config.allow_all_users: false and list your annotators under "
+        "user_config.users, or use authentication.method: oauth with at least "
+        "one entry under authentication.providers.",
+        key="user_config.allow_all_users",
+    )]
+
+
+def _passwordless(config: Dict[str, Any]) -> bool:
+    return (config.get("require_no_password") is True
+            or config.get("require_password") is False
+            or (config.get("login") or {}).get("type") in ("url_direct", "prolific"))
+
+
+@check
+def _check_signable_annotators(ctx: CheckContext) -> List[Finding]:
+    """Roster accounts with no password whose names already own annotations.
+
+    `potato import --keep-annotators` writes exactly this: the imported people
+    become accounts, with their work under annotation_output/, and no
+    passwords because the source tool's were not exported. On a public URL
+    anyone can then sign in under one of those names and change that person's
+    work, whether or not registration is open, and the names (`ls_user_7`, an
+    email) are often guessable.
+    """
+    if not ctx.public or not _passwordless(ctx.config):
+        return []
+    auth = ctx.config.get("authentication") or {}
+    if auth.get("method", "in_memory") == "oauth":
+        return []
+
+    base = os.path.dirname(os.path.abspath(ctx.config_path))
+    task_dir = ctx.config.get("task_dir") or "."
+    root = task_dir if os.path.isabs(task_dir) else os.path.join(base, task_dir)
+    output_rel = ctx.config.get("output_annotation_dir") or "annotation_output/"
+    output_dir = os.path.join(root, output_rel)
+    # The authenticator's own default: dirname(output_annotation_dir), so
+    # "annotation_output/" puts it inside that directory.
+    roster = auth.get("user_config_path") or os.path.join(
+        root, os.path.dirname(output_rel), "user_config.json")
+    if not os.path.isabs(roster):
+        roster = os.path.join(root, roster)
+    if not os.path.isfile(roster):
+        return []
+
+    exposed = []
+    try:
+        with open(roster, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                name = row.get("username") if isinstance(row, dict) else None
+                if name and not row.get("password") and os.path.isfile(
+                        os.path.join(output_dir, name, "user_state.json")):
+                    exposed.append(name)
+    except OSError:
+        return []
+    if not exposed:
+        return []
+    shown = ", ".join(sorted(exposed)[:5]) + (" ..." if len(exposed) > 5 else "")
+    return [Finding(
+        "D022", "error",
+        f"{len(exposed)} annotator account(s) with saved work have no password "
+        f"({shown}), and the study does not require one, so anyone who reaches "
+        f"the URL can sign in as them and change their annotations.",
+        "Set require_password: true and add a password to each row of the "
+        "roster file, or use authentication.method: oauth. Projects made with "
+        "`potato import --keep-annotators` start this way.",
+        key="require_password",
+    )]
+
+
+@check
+def _check_session_persistence(ctx: CheckContext) -> List[Finding]:
+    if ctx.config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY"):
+        return []
+    return [Finding(
+        "D012", "info",
+        "No secret_key is set, so one will be generated and injected as "
+        "POTATO_SECRET_KEY. Sessions survive restarts only because of it.",
+        "",
+    )]
+
+
+@check
+def _check_ephemeral_filesystem(ctx: CheckContext) -> List[Finding]:
+    if not ctx.ephemeral_fs:
+        return []
+    if ctx.backup_configured:
+        return []
+    from potato.server_utils.backup import resolve_settings
+    if resolve_settings(ctx.config).enabled:
+        return []
+    # `potato deploy check` has no --backup flag, so name the command that does.
+    hint = ("Pass `potato deploy up` --backup hf (with --hf-token) or --backup s3 "
+            "--s3-bucket <name> so the data is mirrored off the host and restored "
+            "after a restart, or add a backup: block to the config")
+    # Hosts that fetch the project from the backup's storage cannot use --demo.
+    if ctx.provider in _DEMO_ACCEPTED:
+        hint += "; or pass --demo to accept throwaway data"
+    return [Finding(
+        "D011", "warning",
+        f"The {ctx.provider} filesystem is ephemeral: annotations are lost when "
+        "the host restarts or redeploys.",
+        hint + ".",
+    )]
+
+
+#: Ephemeral hosts that can run without a backup. The others (aws-ecs, and the
+#: image-only hosts render, railway and fly) upload the project to the backup's
+#: storage, so it is required there whatever --demo says.
+_DEMO_ACCEPTED = ("heroku", "huggingface")
+
+
+@check
+def _check_multiworker(ctx: CheckContext) -> List[Finding]:
+    findings = []
+    # The flag is what reaches gunicorn, and the container exits at start for
+    # anything but 1. It used to pass preflight and the dry run regardless.
+    if ctx.workers not in (None, 1):
+        findings.append(Finding(
+            "D013", "error",
+            f"--workers is {ctx.workers}. Potato keeps its item pool and user "
+            "state in memory per process, so a second worker hands out duplicate "
+            "assignments and silently overwrites annotations; the container "
+            "refuses to start with more than one.",
+            "Leave --workers at 1 and raise --threads (default 8) for more "
+            "concurrent requests."))
+    config_workers = (ctx.config.get("server") or {}).get("workers")
+    if config_workers not in (None, 1):
+        findings.append(Finding(
+            "D013", "warning",
+            f"server.workers is {config_workers}, but the server never reads it.",
+            "Remove it. The worker count comes from `potato deploy up --workers`, "
+            "which must be 1; use --threads for concurrency.",
+            key="server.workers"))
+    return findings
+
+
+@check
+def _check_ai_keys_present(ctx: CheckContext) -> List[Finding]:
+    ai = ctx.config.get("ai_support") or {}
+    if not ai or not ai.get("enabled", True):
+        return []
+    endpoint = ai.get("endpoint_type") or ""
+    ai_config = ai.get("ai_config") or {}
+    # Local and self-hosted endpoints need no key; an OpenAI-compatible server
+    # behind base_url accepts a placeholder. The check used to fire for these.
+    if endpoint in _KEYLESS_ENDPOINTS or (
+            endpoint.startswith("openai") and ai_config.get("base_url")):
+        return []
+    api_key = ai_config.get("api_key")
+    match = re.fullmatch(r"\$\{(\w+)\}", api_key) if isinstance(api_key, str) else None
+    if api_key and not match:
+        return []                     # a literal key; D006 covers whether it should be
+    if match:
+        needed = match.group(1)
+    elif endpoint.startswith("openai"):
+        needed = "OPENAI_API_KEY"     # the OpenAI endpoint reads it from the environment
+    else:
+        return []                     # no key configured; config validation reports that
+    # --secret and --env reach the host, so following the hint below used to
+    # leave this warning in place.
+    if os.environ.get(needed) or needed in ctx.provided_env:
+        return []
+    return [Finding(
+        "D014", "warning",
+        f"ai_support uses the {endpoint or 'configured'} endpoint, which needs "
+        f"{needed}, but it is neither in this environment nor passed to the "
+        "host; AI features will fail there.",
+        f"Pass it with --secret {needed}=<value>.",
+        key="ai_support",
+    )]
+
+
+_KEYLESS_ENDPOINTS = ("ollama", "ollama_vision", "vllm", "yolo", "sam", "sam3")
+
+
+# --------------------------------------------------------------------------
+# Entry points
+# --------------------------------------------------------------------------
+
+
+def generate_secrets() -> GeneratedSecrets:
+    return GeneratedSecrets(
+        secret_key=secrets.token_hex(32),
+        admin_api_key=secrets.token_urlsafe(32),
+    )
+
+
+def harden_config(config: Dict[str, Any], *, provider: str = "",
+                  workers: int = 1) -> Dict[str, Any]:
+    """Return a copy with deployment-mechanical settings corrected.
+
+    Access control is untouched by design — see the module docstring.
+    """
+    import copy
+    hardened = copy.deepcopy(config)
+
+    hardened["debug"] = False
+    hardened.pop("debug_phase", None)
+    hardened["persist_sessions"] = True
+
+    # The bundle is the task directory, so paths must be relative to it.
+    hardened["task_dir"] = "."
+    output_dir = hardened.get("output_annotation_dir") or "annotation_output/"
+    if os.path.isabs(str(output_dir)):
+        output_dir = "annotation_output/"
+    hardened["output_annotation_dir"] = output_dir
+
+    # The worker count is GUNICORN_WORKERS, enforced by the image's entrypoint.
+    # The server never reads server.workers, so writing it here only made every
+    # deployed server log "Unrecognized config key 'server.workers'" at boot.
+    server = dict(hardened.get("server") or {})
+    server.pop("workers", None)
+    if server:
+        hardened["server"] = server
+    else:
+        hardened.pop("server", None)
+
+    return hardened
+
+
+def run_preflight(config_path: str, *, provider: str = "local",
+                  public: bool = True, ephemeral_fs: bool = False,
+                  workers: int = 1,
+                  backup_configured: bool = False,
+                  provided_env=(), hf_oauth: bool = False) -> PreflightReport:
+    """Validate and assess a config for deployment. Changes nothing on disk."""
+    from potato.validate_cli import validate_config_file
+
+    report = PreflightReport(config_file=config_path, provider=provider, public=public)
+
+    if not os.path.isfile(config_path):
+        report.findings.append(Finding(
+            "D000", "error", f"Config file not found: {config_path}",
+            "Check the path."))
+        return report
+
+    validation = validate_config_file(config_path)
+    for error in validation.errors:
+        report.findings.append(Finding(
+            "D001", "error", error, "Fix the config and re-run `potato deploy check`."))
+    for unknown in validation.unknown_keys:
+        report.findings.append(Finding(
+            "D015", "warning", f"Unrecognized config key: {unknown}",
+            "Unknown keys are ignored at runtime; check for a typo."))
+    for warning in validation.other_warnings:
+        report.findings.append(Finding("D016", "warning", warning, ""))
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as handle:
+            config = yaml.safe_load(handle) or {}
+    except Exception as exc:
+        report.findings.append(Finding(
+            "D001", "error", f"Could not parse config: {exc}", ""))
+        return report
+    if not isinstance(config, dict):
+        report.findings.append(Finding(
+            "D001", "error", "Config did not parse to a mapping.", ""))
+        return report
+
+    ctx = CheckContext(config=config, config_path=config_path, provider=provider,
+                       public=public, ephemeral_fs=ephemeral_fs,
+                       backup_configured=backup_configured, workers=workers,
+                       provided_env=frozenset(provided_env), hf_oauth=hf_oauth)
+    for check_func in _CHECKS:
+        try:
+            report.findings.extend(check_func(ctx) or [])
+        except Exception:
+            logger.exception("preflight check %s failed", getattr(check_func, "__name__", "?"))
+
+    report.hardened_config = harden_config(config, provider=provider, workers=workers)
+    report.generated = generate_secrets()
+    report.exposure = _describe_exposure(config, provider, public, report)
+    return report
+
+
+def _describe_exposure(config: Dict[str, Any], provider: str, public: bool,
+                       report: PreflightReport) -> List[str]:
+    """Plain statements about what the deployed task exposes."""
+    lines = []
+    lines.append(f"Reachable from the public internet: {'yes' if public else 'no'}")
+
+    user_config = config.get("user_config") or {}
+    auth = config.get("authentication") or {}
+    method = auth.get("method", auth.get("type", "in_memory"))
+    allow_all = user_config.get("allow_all_users", True)
+    roster = user_config.get("users") or []
+
+    if method == "oauth":
+        providers = ", ".join((auth.get("providers") or {}).keys()) or "unspecified"
+        lines.append(f"Sign-in: OAuth ({providers})")
+    elif allow_all:
+        lines.append("Sign-in: open — anyone with the URL can create an account")
+    else:
+        lines.append(f"Sign-in: restricted to {len(roster)} named user(s)")
+
+    passwordless = (config.get("require_no_password") is True
+                    or config.get("require_password") is False)
+    lines.append(f"Password required: {'no' if passwordless else 'yes'}")
+    lines.append("Admin access: via the generated admin API key "
+                 "(injected as POTATO_ADMIN_API_KEY, not written into the bundle)")
+
+    if config.get("ai_support"):
+        lines.append("AI features enabled: annotator input may be sent to an LLM provider")
+
+    error_count = len(report.errors)
+    warning_count = len(report.warnings)
+    lines.append(f"Preflight: {error_count} error(s), {warning_count} warning(s)")
+    return lines
+
+
+def render_report(report: PreflightReport) -> str:
+    """Human-readable preflight output."""
+    out = [f"Preflight for {report.config_file}  (provider: {report.provider})", ""]
+
+    order = {"error": 0, "warning": 1, "info": 2}
+    for finding in sorted(report.findings, key=lambda f: order.get(f.severity, 3)):
+        label = {"error": "ERROR  ", "warning": "WARNING", "info": "note   "}.get(
+            finding.severity, finding.severity)
+        out.append(f"{label} [{finding.code}] {finding.message}")
+        if finding.remedy:
+            out.append(f"        -> {finding.remedy}")
+
+    if not report.findings:
+        out.append("No findings.")
+
+    out.append("")
+    out.append("Exposure:")
+    out.extend(f"  {line}" for line in report.exposure)
+    out.append("")
+    out.append("PASS — safe to deploy" if report.ok
+               else f"BLOCKED — {len(report.errors)} error(s) must be fixed")
+    return "\n".join(out)

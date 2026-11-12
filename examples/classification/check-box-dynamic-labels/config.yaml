@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 9001
 annotation_task_name: Simple Check Box Dynamic Labels Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-checkbox-dynamic-labels/
-output_annotation_format: tsv
+export_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:
 - data/dynamic-labels.json
@@ -17,7 +18,6 @@ annotation_schemes:
 - annotation_type: multiselect
   name: appropriateness
   description: Which of the following reply is appropriate?
-  dynamic_labels: true
   labels:
   - name: '{{instance_obj.labels[0]}}'
   - name: '{{instance_obj.labels[1]}}'

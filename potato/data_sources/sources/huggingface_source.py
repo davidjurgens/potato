@@ -1,7 +1,7 @@
 """
 Hugging Face Datasets data source.
 
-This module provides data loading from Hugging Face Hub datasets,
+Data loading from Hugging Face Hub datasets,
 supporting both public and private datasets.
 """
 

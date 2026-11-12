@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Math proof grading: step-level verdicts on worked solutions, with math
+# rendered by KaTeX.
+#
+# Each item is a problem and a model's worked solution split into steps. The
+# grader marks the first wrong step (process_reward, first_error mode), gives
+# an overall verdict, and types the correct final answer, which the export
+# scores against a key the browser never receives (cloze, numeric scoring).
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/text/math-proof-grading/config.yaml -p 8000
+#
+# Math is opt-in: without the `math` block below, `$x^2$` shows as typed.
+# `\$` in the data is a literal dollar sign (see the pens-and-notebooks item).
+
+annotation_task_name: "Math Proof Grading"
+
+data_files:
+  - data/math-proof-grading-example.json
+
+item_properties:
+  id_key: id
+  text_key: problem
+
+task_dir: .
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+math:
+  enabled: true
+  # Every delimiter KaTeX users expect. A dataset with prices in plain text
+  # (no backslash before the dollar sign) can drop "$" and keep the rest.
+  delimiters: ["$$", "$", "\\(", "\\["]
+
+instance_display:
+  fields:
+    - key: problem
+      type: text
+      label: "Problem"
+
+annotation_schemes:
+  - annotation_type: process_reward
+    name: step_grades
+    description: "Mark the first incorrect step. Every step after it is marked wrong too."
+    steps_key: steps
+    mode: first_error
+    reward_labels:
+      correct: "Valid"
+      incorrect: "Invalid"
+
+  - annotation_type: radio
+    name: verdict
+    description: "Overall, is the solution correct?"
+    labels:
+      - name: correct
+        tooltip: "Every step is valid and the final answer is right"
+      - name: minor_gap
+        tooltip: "The answer is right but a step is unjustified"
+      - name: incorrect
+        tooltip: "A step is wrong or the final answer is wrong"
+
+  - annotation_type: cloze
+    name: final_answer
+    description: "Work the problem yourself and enter the correct final answer."
+    source_field: answer_prompt
+    answer_field: answer_key
+    scoring: numeric
+    input_width: 8
+
+user_config:
+  allow_all_users: true
+  users: []

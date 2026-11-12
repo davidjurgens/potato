@@ -1,7 +1,6 @@
 annotation_task_name: All Phases Example Test
 task_dir: output/all-phases-example
 output_annotation_dir: output/all-phases-example/annotations
-output_annotation_format: jsonl
 data_files:
 - ../../../data/test_data.json
 item_properties:

@@ -1,7 +1,7 @@
 """
 Quality Control Module
 
-This module provides comprehensive quality control features for annotation projects:
+Quality control features for annotation projects:
 - Attention Checks: Inject known-answer items to verify annotator engagement
 - Gold Standards: Compare annotations against expert-labeled items for accuracy tracking
 - Pre-annotation Support: Pre-fill forms with model predictions
@@ -15,10 +15,21 @@ import logging
 import random
 import threading
 from datetime import datetime
+import time
 from typing import Dict, List, Optional, Any, Tuple, Set
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
+
+from potato.server_utils.annotation_keys import (
+    canonical_wire_answer,
+    split_annotation_key,
+)
+from potato.server_utils.training_grading import (
+    DEFAULT_GEOMETRY_TOLERANCE,
+    geometry_answer_is_correct,
+    looks_like_geometry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +48,12 @@ class AttentionCheckResult:
     actual: Dict[str, Any]
     timestamp: datetime = field(default_factory=datetime.now)
     response_time_seconds: Optional[float] = None
+    # Failed on speed rather than on content, so the admin page can tell the
+    # two apart when explaining a block.
+    too_fast: bool = False
+    # The participant was shown a warning or block for this failure. From
+    # then on the failure stands: the verdict told them the answer was wrong.
+    notified: bool = False
 
 
 @dataclass
@@ -80,9 +97,16 @@ class QualityControlConfig:
     gold_auto_promote_min_annotators: int = 3  # Minimum annotators before checking
     gold_auto_promote_agreement: float = 1.0   # Agreement threshold (1.0 = unanimous)
 
+    # Drawn answers (image annotation) are graded by overlap, not equality.
+    # The minimum IoU at which a user's shape counts as matching a gold shape.
+    # 0.5 matches the Pascal VOC / COCO detection convention and the default
+    # used for training practice questions.
+    geometry_iou_tolerance: float = 0.5
+
     # Pre-annotation config
     pre_annotation_enabled: bool = False
     pre_annotation_field: str = "predictions"
+    pre_annotation_predictions_file: Optional[str] = None
     pre_annotation_allow_modification: bool = True
     pre_annotation_show_confidence: bool = False
     pre_annotation_highlight_threshold: float = 0.7
@@ -114,14 +138,28 @@ class QualityControlManager:
         self.attention_items: List[Dict] = []
         self.attention_expected: Dict[str, Dict[str, Any]] = {}  # item_id -> expected_answer
         self.attention_results: Dict[str, List[AttentionCheckResult]] = defaultdict(list)  # user_id -> results
+        # Users who crossed the block threshold. Kept apart from the results
+        # so a block cannot be undone by re-answering the check that caused it.
+        self.blocked_users: Set[str] = set()
         self.user_items_since_attention: Dict[str, int] = defaultdict(int)  # user_id -> count
         self.user_items_since_gold: Dict[str, int] = defaultdict(int)  # user_id -> count
+        # Items already counted per user, so re-saving one item (every Next
+        # click saves) does not advance the attention/gold cadence again.
+        self.user_counted_items: Dict[str, Set[str]] = defaultdict(set)
+        #: (user_id, instance_id) -> monotonic clock reading when the SERVER
+        #: handed the item over. `min_response_time` used to be checked against
+        #: `response_time_seconds` out of the request body, which is a number
+        #: supplied by the party being measured -- see `record_item_served`.
+        self._served_at: "OrderedDict[Tuple[str, str], float]" = OrderedDict()
 
         # Gold standard data
         self.gold_items: List[Dict] = []
         self.gold_labels: Dict[str, Dict[str, Any]] = {}  # item_id -> gold_label
         self.gold_explanations: Dict[str, str] = {}  # item_id -> explanation
         self.gold_results: Dict[str, List[GoldStandardResult]] = defaultdict(list)  # user_id -> results
+        #: Annotators already logged as under `accuracy.min_threshold`, so the
+        #: warning fires on the crossing rather than on every later gold item.
+        self._gold_below_threshold: Set[str] = set()
 
         # Pre-annotation data (stored per-item)
         self.pre_annotations: Dict[str, Dict[str, Any]] = {}  # item_id -> pre_annotation_data
@@ -131,14 +169,279 @@ class QualityControlManager:
         self.promoted_gold_items: List[Dict] = []  # Items promoted to gold via consensus
         self.promoted_gold_labels: Dict[str, Dict[str, Any]] = {}  # Promoted item_id -> consensus_label
 
+        #: item_id -> predictions, from `pre_annotation.predictions_file`.
+        #: Kept apart from `pre_annotations`, which caches whatever was found
+        #: on the item itself.
+        self.file_pre_annotations: Dict[str, Dict[str, Any]] = {}
+
         # Load data files if configured
         self._load_attention_checks()
         self._load_gold_standards()
+        self._load_prediction_file()
+
+        # Restore results recorded by earlier runs of this study.
+        self._load_results()
 
         self.logger.info(f"QualityControlManager initialized: "
                         f"attention_checks={self.qc_config.attention_checks_enabled}, "
                         f"gold_standards={self.qc_config.gold_standards_enabled}, "
                         f"pre_annotation={self.qc_config.pre_annotation_enabled}")
+
+    # ------------------------------------------------------------------
+    # Persistence
+    #
+    # Attention-check and gold results used to live only in this object. A
+    # restart for a deploy, a crash or a config change wiped every quality
+    # signal the study had collected, and the admin API answered with a clean
+    # zero and `enabled: true` -- which reads as "nobody has failed a check"
+    # rather than "the record is gone". `is_user_blocked` reads the same list,
+    # so a restart also unblocked everyone who had been blocked.
+    # ------------------------------------------------------------------
+
+    def _results_file(self) -> Optional[Path]:
+        """Where this study's recorded QC results are kept, or None."""
+        output_dir = self.config.get("output_annotation_dir")
+        if not output_dir:
+            return None
+        path = Path(output_dir)
+        if not path.is_absolute():
+            path = Path(self.base_dir) / path
+        return path / "quality_control_results.json"
+
+    def _save_results(self) -> None:
+        """Write the recorded attention and gold results to disk.
+
+        Best-effort: a study must not stop taking annotations because the
+        quality-control side file could not be written.
+        """
+        path = self._results_file()
+        if path is None:
+            return
+
+        with self._lock:
+            payload = {
+                "version": 1,
+                "attention_results": {
+                    user_id: [self._attention_result_to_dict(r) for r in results]
+                    for user_id, results in self.attention_results.items()
+                },
+                "gold_results": {
+                    user_id: [self._gold_result_to_dict(r) for r in results]
+                    for user_id, results in self.gold_results.items()
+                },
+                "items_since_attention": dict(self.user_items_since_attention),
+                "items_since_gold": dict(self.user_items_since_gold),
+                "counted_items": {u: sorted(items)
+                                  for u, items in self.user_counted_items.items()},
+                # Auto-promotion state. Empty unless gold_standards.auto_promote
+                # is on, but without it a restart un-golds every item the study
+                # had promoted and throws away the partial agreement behind the
+                # ones still pending.
+                "item_annotations": {
+                    item_id: dict(by_user)
+                    for item_id, by_user in self.item_annotations.items()
+                },
+                "promoted_gold_items": list(self.promoted_gold_items),
+                "promoted_gold_labels": dict(self.promoted_gold_labels),
+                "blocked_users": sorted(self.blocked_users),
+            }
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+            tmp.replace(path)
+        except OSError as e:
+            self.logger.warning("Could not save quality control results to %s: %s", path, e)
+
+    def _load_results(self) -> None:
+        """Restore attention and gold results recorded by an earlier run."""
+        path = self._results_file()
+        if path is None or not path.exists():
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            self.logger.warning("Could not read quality control results from %s: %s", path, e)
+            return
+
+        if not isinstance(payload, dict):
+            self.logger.warning("Ignoring malformed quality control results in %s", path)
+            return
+
+        attention_loaded = gold_loaded = 0
+        with self._lock:
+            for user_id, records in (payload.get("attention_results") or {}).items():
+                for record in records or []:
+                    result = self._attention_result_from_dict(user_id, record)
+                    if result is not None:
+                        self.attention_results[user_id].append(result)
+                        attention_loaded += 1
+
+            for user_id, records in (payload.get("gold_results") or {}).items():
+                for record in records or []:
+                    result = self._gold_result_from_dict(user_id, record)
+                    if result is not None:
+                        self.gold_results[user_id].append(result)
+                        gold_loaded += 1
+
+            for user_id, count in (payload.get("items_since_attention") or {}).items():
+                try:
+                    self.user_items_since_attention[user_id] = int(count)
+                except (TypeError, ValueError):
+                    continue
+            for user_id, count in (payload.get("items_since_gold") or {}).items():
+                try:
+                    self.user_items_since_gold[user_id] = int(count)
+                except (TypeError, ValueError):
+                    continue
+
+            for user_id, items in (payload.get("counted_items") or {}).items():
+                if isinstance(items, list):
+                    self.user_counted_items[user_id].update(str(i) for i in items)
+
+            for item_id, by_user in (payload.get("item_annotations") or {}).items():
+                if isinstance(by_user, dict):
+                    self.item_annotations[item_id].update(by_user)
+
+            for gold_item in (payload.get("promoted_gold_items") or []):
+                if isinstance(gold_item, dict) and gold_item.get("id") \
+                        and gold_item.get("id") != "__phase_page__":
+                    self.promoted_gold_items.append(gold_item)
+
+            self.blocked_users.update(str(u) for u in payload.get("blocked_users") or [])
+
+            for item_id, label in (payload.get("promoted_gold_labels") or {}).items():
+                # Earlier runs promoted consent and survey pages, which share
+                # this sentinel id. They are not items.
+                if item_id == "__phase_page__":
+                    continue
+                if isinstance(label, dict):
+                    self.promoted_gold_labels[item_id] = label
+                    # is_gold_standard() reads gold_labels, so a promoted item
+                    # only stays gold if it is restored there too.
+                    self.gold_labels.setdefault(item_id, label)
+
+        if attention_loaded or gold_loaded:
+            self.logger.info(
+                "Restored quality control results: %d attention check(s), "
+                "%d gold evaluation(s)", attention_loaded, gold_loaded,
+            )
+
+    @staticmethod
+    def _attention_result_to_dict(result: "AttentionCheckResult") -> Dict[str, Any]:
+        return {
+            "item_id": result.item_id,
+            "passed": result.passed,
+            "expected": result.expected,
+            "actual": result.actual,
+            "timestamp": result.timestamp.isoformat() if result.timestamp else None,
+            "response_time_seconds": result.response_time_seconds,
+            "too_fast": result.too_fast,
+            "notified": result.notified,
+        }
+
+    @staticmethod
+    def _gold_result_to_dict(result: "GoldStandardResult") -> Dict[str, Any]:
+        return {
+            "item_id": result.item_id,
+            "correct": result.correct,
+            "gold_label": result.gold_label,
+            "user_response": result.user_response,
+            "explanation": result.explanation,
+            "timestamp": result.timestamp.isoformat() if result.timestamp else None,
+        }
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> datetime:
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                pass
+        return datetime.now()
+
+    def _attention_result_from_dict(
+        self, user_id: str, record: Any
+    ) -> Optional["AttentionCheckResult"]:
+        if not isinstance(record, dict) or not record.get("item_id"):
+            return None
+        return AttentionCheckResult(
+            item_id=record["item_id"],
+            user_id=user_id,
+            passed=bool(record.get("passed")),
+            expected=record.get("expected") or {},
+            actual=record.get("actual") or {},
+            timestamp=self._parse_timestamp(record.get("timestamp")),
+            response_time_seconds=record.get("response_time_seconds"),
+            too_fast=bool(record.get("too_fast")),
+            notified=bool(record.get("notified")),
+        )
+
+    def _gold_result_from_dict(
+        self, user_id: str, record: Any
+    ) -> Optional["GoldStandardResult"]:
+        if not isinstance(record, dict) or not record.get("item_id"):
+            return None
+        return GoldStandardResult(
+            item_id=record["item_id"],
+            user_id=user_id,
+            correct=bool(record.get("correct")),
+            gold_label=record.get("gold_label") or {},
+            user_response=record.get("user_response") or {},
+            explanation=record.get("explanation"),
+            timestamp=self._parse_timestamp(record.get("timestamp")),
+        )
+
+    #: How many serve stamps to keep. One per (annotator, item) currently on
+    #: screen is all that is ever needed; the bound is only so a long-running
+    #: server does not accumulate one per item ever served.
+    _SERVED_AT_LIMIT = 4096
+
+    def record_item_served(self, user_id: str, instance_id: str) -> None:
+        """Stamp the moment the server handed this item to this annotator.
+
+        `min_response_time` exists to catch someone clicking through without
+        reading. It was checked against `response_time_seconds` from the
+        request body -- a number supplied by the annotator's own client, which
+        is to say by the only party with a motive to change it. Two annotators
+        answering identically, milliseconds apart in a scripted loop, got
+        opposite outcomes purely from the number they reported: the one
+        claiming 0.4s was blocked, the one claiming 600s passed.
+
+        It also failed open. A client that sent nothing left the value None,
+        and the check requires non-None, so it silently did not run at all.
+
+        The server serves the item and receives the save, so it has both ends
+        and never has to ask. Monotonic rather than wall-clock: a clock
+        adjustment mid-annotation must not read as a fast answer.
+        """
+        with self._lock:
+            key = (user_id, instance_id)
+            self._served_at.pop(key, None)
+            self._served_at[key] = time.monotonic()
+            while len(self._served_at) > self._SERVED_AT_LIMIT:
+                self._served_at.popitem(last=False)
+
+    def measured_response_time(self, user_id: str,
+                               instance_id: str) -> Optional[float]:
+        """Seconds since the server served the item, or None if it cannot say.
+
+        None means the item was not served by this process -- a restart between
+        serve and save. The caller says so rather than treating it as a pass;
+        an unmeasurable check is not a passed one.
+
+        The stamp is NOT cleared on read. The annotation page saves twice for
+        one click, and both saves have to resolve against the same serve.
+        """
+        with self._lock:
+            served = self._served_at.get((user_id, instance_id))
+        if served is None:
+            return None
+        return max(0.0, time.monotonic() - served)
 
     def _parse_config(self, config: Dict[str, Any]) -> QualityControlConfig:
         """Parse quality control configuration from the main config."""
@@ -182,11 +485,33 @@ class QualityControlManager:
                 qc.gold_auto_promote_min_annotators = auto_promote.get('min_annotators', 3)
                 qc.gold_auto_promote_agreement = auto_promote.get('agreement_threshold', 1.0)
 
+        # Drawn-answer tolerance. Read from either block (and from the top level)
+        # so a project that only uses attention checks does not have to declare a
+        # gold_standards section just to loosen the IoU.
+        for source in (config.get('quality_control', {}) or {},
+                       gold_config, attn_config):
+            if isinstance(source, dict) and 'geometry_iou_tolerance' in source:
+                try:
+                    qc.geometry_iou_tolerance = float(source['geometry_iou_tolerance'])
+                except (TypeError, ValueError):
+                    self.logger.warning(
+                        "Ignoring non-numeric geometry_iou_tolerance: %r",
+                        source['geometry_iou_tolerance'])
+                break
+
         # Parse pre-annotation config
         pre_config = config.get('pre_annotation', {})
-        if pre_config.get('enabled', False):
+        writeback = writeback_prelabel_settings(config)
+        if writeback and not pre_config.get('enabled', False):
+            # Model-training write-back puts prelabels in item data; without
+            # this they were stored and never shown unless the deprecated
+            # pre_annotation block was also set, with a matching field.
+            qc.pre_annotation_enabled = True
+            qc.pre_annotation_field = writeback.get('field', 'predictions')
+        elif pre_config.get('enabled', False):
             qc.pre_annotation_enabled = True
             qc.pre_annotation_field = pre_config.get('field', 'predictions')
+            qc.pre_annotation_predictions_file = pre_config.get('predictions_file')
             qc.pre_annotation_allow_modification = pre_config.get('allow_modification', True)
             qc.pre_annotation_show_confidence = pre_config.get('show_confidence', False)
             qc.pre_annotation_highlight_threshold = pre_config.get('highlight_low_confidence', 0.7)
@@ -237,19 +562,42 @@ class QualityControlManager:
             items = self._load_json_or_jsonl(str(file_path))
 
             for item in items:
-                if 'id' not in item or 'expected_answer' not in item:
-                    self.logger.warning(f"Attention check item missing required fields: {item}")
+                missing = [f for f in ("id", "expected_answer") if f not in item]
+                if missing:
+                    self.logger.warning(
+                        "Attention check item skipped, missing %s: %s",
+                        ", ".join(missing), item)
                     continue
 
                 self.attention_items.append(item)
                 self.attention_expected[item['id']] = item['expected_answer']
 
             self.logger.info(f"Loaded {len(self.attention_items)} attention check items")
+            self._warn_if_nothing_loaded(
+                "Attention checks", self.attention_items, file_path,
+                ("id", "expected_answer"))
 
         except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse attention checks file: {e}")
         except Exception as e:
             self.logger.error(f"Failed to load attention checks: {e}")
+
+    def _warn_if_nothing_loaded(self, feature, loaded, file_path, required) -> None:
+        """Say loudly when a quality-control feature is on but has no items.
+
+        The per-item warnings scroll past, the manager still reports the
+        feature as enabled, and a study can run for weeks with quality control
+        doing nothing at all. That is a data-integrity failure, not a
+        formatting problem, so it gets ERROR and states the consequence.
+        """
+        if loaded:
+            return
+        self.logger.error(
+            "%s are enabled but NOT RUNNING: no usable items were loaded from "
+            "%s. Every item there was skipped or the file is empty. Each item "
+            "needs %s. Until this is fixed, the feature is off and nothing "
+            "downstream will say so.",
+            feature, file_path, " and ".join(f"`{f}`" for f in required))
 
     def _load_gold_standards(self) -> None:
         """Load gold standard items from file."""
@@ -269,8 +617,11 @@ class QualityControlManager:
             items = self._load_json_or_jsonl(str(file_path))
 
             for item in items:
-                if 'id' not in item or 'gold_label' not in item:
-                    self.logger.warning(f"Gold standard item missing required fields: {item}")
+                missing = [f for f in ("id", "gold_label") if f not in item]
+                if missing:
+                    self.logger.warning(
+                        "Gold standard item skipped, missing %s: %s",
+                        ", ".join(missing), item)
                     continue
 
                 self.gold_items.append(item)
@@ -279,6 +630,9 @@ class QualityControlManager:
                     self.gold_explanations[item['id']] = item['explanation']
 
             self.logger.info(f"Loaded {len(self.gold_items)} gold standard items")
+            self._warn_if_nothing_loaded(
+                "Gold standards", self.gold_items, file_path, ("id", "gold_label"))
+            self._warn_about_gold_mode()
 
         except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse gold standards file: {e}")
@@ -318,38 +672,56 @@ class QualityControlManager:
 
         return False
 
-    def get_attention_check_item(self, user_id: str) -> Optional[Dict]:
+    def get_attention_check_item(self, user_id: str, exclude=None) -> Optional[Dict]:
         """
         Get a random attention check item for a user.
 
         Args:
             user_id: The user ID
+            exclude: Item ids that cannot be given, such as checks already in
+                the user's queue. Picking one of those used to reset the
+                counter and then be refused, so the check was lost and the
+                next one was N items away.
 
         Returns:
             An attention check item dict, or None if none available
         """
         if not self.attention_items:
             return None
+        exclude = set(exclude or ())
 
         with self._lock:
             # Get items this user hasn't seen yet
             seen_ids = {r.item_id for r in self.attention_results.get(user_id, [])}
-            available = [item for item in self.attention_items if item['id'] not in seen_ids]
+            available = [item for item in self.attention_items
+                         if item['id'] not in seen_ids and item['id'] not in exclude]
 
             if not available:
-                # Recycle items if all have been seen
-                available = self.attention_items
+                # Recycle answered items, but never one already queued
+                available = [item for item in self.attention_items if item['id'] not in exclude]
+            if not available:
+                return None
 
             selected = random.choice(available)
             # Reset counter
             self.user_items_since_attention[user_id] = 0
             return selected
 
-    def record_regular_item(self, user_id: str) -> None:
-        """Record that a user annotated a regular (non-attention-check) item."""
+    def record_regular_item(self, user_id: str, item_id: Optional[str] = None) -> None:
+        """Record that a user annotated a regular (non-attention-check) item.
+
+        Counted once per item when ``item_id`` is given. This runs on every
+        save, and with two saves per item ``frequency: N`` fired about every
+        N/2 items.
+        """
         with self._lock:
+            if item_id is not None:
+                if item_id in self.user_counted_items[user_id]:
+                    return
+                self.user_counted_items[user_id].add(item_id)
             self.user_items_since_attention[user_id] = self.user_items_since_attention.get(user_id, 0) + 1
             self.user_items_since_gold[user_id] = self.user_items_since_gold.get(user_id, 0) + 1
+        self._save_results()
 
     def validate_attention_response(
         self,
@@ -375,33 +747,62 @@ class QualityControlManager:
             return None
 
         expected = self.attention_expected[item_id]
-        passed = self._compare_responses(expected, response)
+        answer_ok = self._compare_responses(expected, response)
 
-        # Check for suspiciously fast response
+        # A response faster than min_response_time fails the check, which is what
+        # the key is documented to do. It used to only log, and the log line
+        # could not fire either, because the response time never reached here.
+        too_fast = False
         if (response_time_seconds is not None and
             self.qc_config.attention_min_response_time > 0 and
             response_time_seconds < self.qc_config.attention_min_response_time):
+            too_fast = True
             self.logger.warning(f"User {user_id} responded to attention check {item_id} "
                               f"in {response_time_seconds:.1f}s (min: {self.qc_config.attention_min_response_time}s)")
-            # Still record the result but log the fast response
-
-        # Record result — at most one result per (user, item) pair.
-        # Re-saves on the same item replace the prior result rather than
-        # appending, so a single attention-check item can only count once.
-        result = AttentionCheckResult(
-            item_id=item_id,
-            user_id=user_id,
-            passed=passed,
-            expected=expected,
-            actual=response,
-            response_time_seconds=response_time_seconds
-        )
 
         with self._lock:
             user_results = self.attention_results[user_id]
             previous_failures = len([r for r in user_results if not r.passed])
 
-            # Replace any existing result for this (user, item) pair
+            # At most one result per (user, item) pair, merged rather than
+            # replaced. The annotation page saves twice for one click -- on
+            # selection, then again on Next -- and the second save carries the
+            # seconds spent looking at the confirmed answer. Keeping the last
+            # result therefore erased every min_response_time violation in the
+            # ordinary flow: a check answered in 3.9s against a minimum of 8
+            # was rewritten as a 40.9s pass by a Next that changed nothing, and
+            # the violation survived only as a log line.
+            #
+            # A re-save may correct the ANSWER. It may not launder the TIMING,
+            # so `too_fast` is sticky and the recorded time is the fastest one
+            # seen -- that is the reading min_response_time is about.
+            prior = next((r for r in user_results if r.item_id == item_id), None)
+            if prior is not None:
+                too_fast = too_fast or prior.too_fast
+                if prior.response_time_seconds is not None:
+                    response_time_seconds = (
+                        prior.response_time_seconds
+                        if response_time_seconds is None
+                        else min(response_time_seconds,
+                                 prior.response_time_seconds))
+
+            # Once the participant has been told a check failed, the failure
+            # stands. Re-answering after the warning is not evidence of
+            # attention, and letting it count turned a block back off. A
+            # change of answer before any verdict was shown (a misclick
+            # corrected on the same page) still counts.
+            failed_and_told = prior is not None and not prior.passed and prior.notified
+            passed = answer_ok and not too_fast and not failed_and_told
+            result = AttentionCheckResult(
+                item_id=item_id,
+                user_id=user_id,
+                passed=passed,
+                expected=expected,
+                actual=response,
+                response_time_seconds=response_time_seconds,
+                too_fast=too_fast
+            )
+
             self.attention_results[user_id] = [
                 r for r in user_results if r.item_id != item_id
             ]
@@ -409,21 +810,59 @@ class QualityControlManager:
 
             failures = len([r for r in self.attention_results[user_id] if not r.passed])
 
+        self._save_results()
+
         # Check thresholds — only log when crossing for the first time
         response_data = {"passed": passed}
 
         if failures >= self.qc_config.attention_block_threshold:
+            with self._lock:
+                self.blocked_users.add(user_id)
+                result.notified = True
+            self._save_results()
             response_data["blocked"] = True
             response_data["message"] = self.qc_config.attention_block_message
             if previous_failures < self.qc_config.attention_block_threshold:
                 self.logger.warning(f"User {user_id} blocked after {failures} attention check failures")
         elif failures >= self.qc_config.attention_warn_threshold and not passed:
+            with self._lock:
+                result.notified = True
+            self._save_results()
             response_data["warning"] = True
             response_data["message"] = self.qc_config.attention_warn_message
             if previous_failures < self.qc_config.attention_warn_threshold:
                 self.logger.info(f"User {user_id} warned after {failures} attention check failures")
 
         return response_data
+
+    def is_user_blocked(self, user_id: str) -> bool:
+        """True when the user has failed enough attention checks to be blocked.
+
+        Used by the completion flow to serve a failure/screen-out completion
+        code instead of the success code.
+        """
+        if not self.qc_config.attention_checks_enabled:
+            return False
+        with self._lock:
+            if user_id in self.blocked_users:
+                return True
+            failures = len([r for r in self.attention_results.get(user_id, []) if not r.passed])
+        return failures >= self.qc_config.attention_block_threshold
+
+    def record_skipped_attention_check(self, user_id: str, item_id: str) -> Optional[Dict[str, Any]]:
+        """Grade an attention check the user moved past without answering.
+
+        Skipping one recorded nothing, so a participant could press Next past
+        every check and finish with no failures and the success code. An
+        unanswered check is a failed one. Returns the result dict, or None
+        when the item is not a check or already has a result.
+        """
+        if item_id not in self.attention_expected:
+            return None
+        with self._lock:
+            if any(r.item_id == item_id for r in self.attention_results.get(user_id, [])):
+                return None
+        return self.validate_attention_response(user_id, item_id, {})
 
     def get_attention_check_stats(self, user_id: str) -> Dict[str, Any]:
         """Get attention check statistics for a user."""
@@ -447,6 +886,48 @@ class QualityControlManager:
     def is_gold_standard(self, item_id: str) -> bool:
         """Check if an item is a gold standard."""
         return item_id in self.gold_labels
+
+    def is_configured_gold_standard(self, item_id: str) -> bool:
+        """Whether the item came from `items_file` rather than auto-promotion.
+
+        A promoted item is never INJECTED -- it is served as ordinary work and
+        graded when it comes up -- so it must still count towards the spacing
+        of the checks that are injected. Treating it as a check removed it from
+        that counter, and a study promoting aggressively quietly starved its
+        own injection frequency.
+        """
+        return item_id in self.gold_labels and item_id not in self.promoted_gold_labels
+
+    def _warn_about_gold_mode(self) -> None:
+        """Say at boot what the configured mode will actually do.
+
+        `mode: training` loads the items, logs the same two lines as a working
+        config, passes `validate --strict`, and serves nothing: nothing in the
+        codebase delivers gold items during the training phase. The one honest
+        signal this subsystem has -- "enabled but NOT RUNNING" -- did not fire
+        for the single mode where they are enabled and not running.
+
+        `separate` and `mixed` are the same code path. A config author who
+        chose `separate` expecting a dedicated evaluation block gets items
+        mixed into the annotation stream, and had no way to find that out.
+        """
+        if not self.gold_items:
+            return
+        mode = self.qc_config.gold_mode
+        if mode == "training":
+            self.logger.warning(
+                "gold_standards.mode is 'training': %d gold items are loaded "
+                "and NONE will be served. No code path delivers gold items "
+                "during the training phase. Use mode: mixed to inject them "
+                "into the annotation stream, or the training phase's own "
+                "practice questions to grade during training.",
+                len(self.gold_items))
+        elif mode == "separate":
+            self.logger.info(
+                "gold_standards.mode 'separate' behaves as 'mixed': %d gold "
+                "items are injected into the annotation stream every %s items, "
+                "not held back for a dedicated evaluation block.",
+                len(self.gold_items), self.qc_config.gold_frequency)
 
     def should_inject_gold_standard(self, user_id: str, items_since_last: Optional[int] = None) -> bool:
         """
@@ -473,27 +954,33 @@ class QualityControlManager:
 
         return False
 
-    def get_gold_standard_item(self, user_id: str) -> Optional[Dict]:
+    def get_gold_standard_item(self, user_id: str, exclude=None) -> Optional[Dict]:
         """
         Get a gold standard item for a user.
 
         Args:
             user_id: The user ID
+            exclude: Item ids that cannot be given (already in the user's
+                queue); see get_attention_check_item.
 
         Returns:
             A gold standard item dict, or None if none available
         """
         if not self.gold_items:
             return None
+        exclude = set(exclude or ())
 
         with self._lock:
             # Get items this user hasn't seen yet
             seen_ids = {r.item_id for r in self.gold_results.get(user_id, [])}
-            available = [item for item in self.gold_items if item['id'] not in seen_ids]
+            available = [item for item in self.gold_items
+                         if item['id'] not in seen_ids and item['id'] not in exclude]
 
             if not available:
-                # Recycle items if all have been seen
-                available = self.gold_items
+                # Recycle answered items, but never one already queued
+                available = [item for item in self.gold_items if item['id'] not in exclude]
+            if not available:
+                return None
 
             self.user_items_since_gold[user_id] = 0
             return random.choice(available)
@@ -523,6 +1010,13 @@ class QualityControlManager:
         """
         if item_id not in self.gold_labels:
             return None
+        # An auto-promoted item's gold IS its source annotators' consensus,
+        # so grading them on it scores them against themselves: two
+        # annotators who agreed read 3/3 gold accuracy with no independent
+        # gold at all.
+        if any(item.get("id") == item_id and user_id in (item.get("source_annotators") or [])
+               for item in self.promoted_gold_items):
+            return None
 
         gold = self.gold_labels[item_id]
         correct = self._compare_responses(gold, response)
@@ -538,13 +1032,30 @@ class QualityControlManager:
             explanation=explanation
         )
 
+        # Record result — at most one result per (user, item) pair, the same
+        # rule attention checks use. Appending unconditionally made the
+        # denominator count *saves* rather than gold items: an annotator who
+        # changed their mind three times on one gold item was scored 1/3, and
+        # one who nudged a slider seven times was scored as having answered
+        # seven gold items.
         with self._lock:
+            self.gold_results[user_id] = [
+                r for r in self.gold_results[user_id] if r.item_id != item_id
+            ]
             self.gold_results[user_id].append(result)
+        self._save_results()
 
         # By default, gold standards are silent (recorded but no feedback to user)
         # Only include feedback if explicitly enabled in config
         show_feedback = (self.qc_config.gold_show_correct_answer or
                         self.qc_config.gold_show_explanation)
+
+        # The accuracy threshold is a MEASUREMENT and is evaluated whether or
+        # not the annotator is told. It used to sit inside the feedback branch
+        # below, so configuring `accuracy.min_threshold` on a silent study --
+        # the mode gold standards are recommended for -- evaluated nothing at
+        # all, and the admin dashboard had no way to learn who was under it.
+        below_threshold = self._note_accuracy_threshold(user_id)
 
         if not show_feedback:
             # Silent recording - just indicate it was recorded, no user feedback
@@ -559,15 +1070,47 @@ class QualityControlManager:
         if self.qc_config.gold_show_explanation and explanation:
             response_data["explanation"] = explanation
 
-        # Check accuracy threshold (only show warning if feedback is enabled)
-        accuracy_data = self.get_gold_accuracy(user_id)
-        if accuracy_data["total"] >= self.qc_config.gold_evaluation_count:
-            if accuracy_data["accuracy"] < self.qc_config.gold_min_accuracy:
-                response_data["accuracy_warning"] = True
-                response_data["current_accuracy"] = accuracy_data["accuracy"]
-                response_data["required_accuracy"] = self.qc_config.gold_min_accuracy
+        if below_threshold:
+            accuracy_data = self.get_gold_accuracy(user_id)
+            response_data["accuracy_warning"] = True
+            response_data["current_accuracy"] = accuracy_data["accuracy"]
+            response_data["required_accuracy"] = self.qc_config.gold_min_accuracy
 
         return response_data
+
+    def _note_accuracy_threshold(self, user_id: str) -> bool:
+        """Whether this annotator is under `accuracy.min_threshold`, logged once.
+
+        Silence is the default for gold standards, and silence towards the
+        ANNOTATOR is right. Silence towards the researcher is not: the
+        threshold exists to tell them who to look at.
+        """
+        accuracy_data = self.get_gold_accuracy(user_id)
+        if accuracy_data["total"] < self.qc_config.gold_evaluation_count:
+            return False
+        if accuracy_data["accuracy"] >= self.qc_config.gold_min_accuracy:
+            self._gold_below_threshold.discard(user_id)
+            return False
+        if user_id not in self._gold_below_threshold:
+            self._gold_below_threshold.add(user_id)
+            self.logger.warning(
+                "%s is below the gold standard accuracy threshold: %.2f over "
+                "%d evaluated items, threshold %.2f",
+                user_id, accuracy_data["accuracy"], accuracy_data["total"],
+                self.qc_config.gold_min_accuracy)
+        return True
+
+    def users_below_accuracy_threshold(self) -> List[str]:
+        """Annotators under `accuracy.min_threshold`, recomputed from results."""
+        if not self.qc_config.gold_standards_enabled:
+            return []
+        under = []
+        for user_id in list(self.gold_results.keys()):
+            accuracy_data = self.get_gold_accuracy(user_id)
+            if (accuracy_data["total"] >= self.qc_config.gold_evaluation_count
+                    and accuracy_data["accuracy"] < self.qc_config.gold_min_accuracy):
+                under.append(user_id)
+        return sorted(under)
 
     def get_gold_accuracy(self, user_id: str) -> Dict[str, Any]:
         """Get gold standard accuracy for a user."""
@@ -598,7 +1141,8 @@ class QualityControlManager:
         self,
         item_id: str,
         user_id: str,
-        response: Dict[str, Any]
+        response: Dict[str, Any],
+        origin: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Record an annotation for potential gold standard auto-promotion.
@@ -606,10 +1150,20 @@ class QualityControlManager:
         When enough annotators agree on a label, the item is automatically
         promoted to the gold standard pool.
 
+        A declared machine rater's answer is not recorded. Gold is what later
+        annotators are graded against, and tools that share a reference
+        database make the same mistake together, so their agreement is
+        correlated error rather than evidence. Counting them would let three
+        pipelines promote their shared error to the answer key with no person
+        involved. People who agree with the tools still promote the item on
+        their own.
+
         Args:
             item_id: The item ID
             user_id: The user ID
             response: The user's annotation response
+            origin: The participant's origin (``user_state.origin``). None or
+                empty means a person, as everywhere else.
 
         Returns:
             Dict with promotion info if item was promoted, None otherwise
@@ -617,22 +1171,33 @@ class QualityControlManager:
         if not self.qc_config.gold_auto_promote_enabled:
             return None
 
+        from potato.annotator_origin import is_machine
+        if is_machine(origin):
+            return None
+
         # Don't track items that are already gold standards
         if self.is_gold_standard(item_id):
             return None
 
         with self._lock:
-            # Record this annotation
-            self.item_annotations[item_id][user_id] = response
+            # Record the ANSWER, not the wire payload. A payload carries the
+            # same selection twice -- {"stance": "on", "stance:Sincere": "on"}
+            # -- and grouping by wire key made the "stance": "on" half agree
+            # between two annotators who had answered OPPOSITELY. The item was
+            # then promoted as unanimous with a consensus label asserting both
+            # answers, and everyone graded against it afterwards was wrong.
+            self.item_annotations[item_id][user_id] = canonical_wire_answer(response)
 
             # Check if we have enough annotators
             annotations = self.item_annotations[item_id]
             if len(annotations) < self.qc_config.gold_auto_promote_min_annotators:
-                return None
+                promotion_result = None
+            else:
+                # Check agreement
+                promotion_result = self._check_and_promote(item_id, annotations)
 
-            # Check agreement
-            promotion_result = self._check_and_promote(item_id, annotations)
-            return promotion_result
+        self._save_results()
+        return promotion_result
 
     def _check_and_promote(
         self,
@@ -660,14 +1225,27 @@ class QualityControlManager:
                 schema_responses[schema].append(value)
 
         # Check agreement for each schema
+        ratios = []
         for schema, values in schema_responses.items():
+            # A schema only one annotator answered is not unanimous, it is
+            # unopposed. Without this a partially-answered item promotes on a
+            # single opinion as soon as any OTHER schema has enough of them.
+            if len(values) < self.qc_config.gold_auto_promote_min_annotators:
+                all_schemas_agree = False
+                break
+
             # Calculate agreement ratio
             from collections import Counter
             value_counts = Counter(str(v).lower() for v in values)
-            most_common_value, most_common_count = value_counts.most_common(1)[0]
+            ranked = value_counts.most_common(2)
+            most_common_value, most_common_count = ranked[0]
             agreement_ratio = most_common_count / len(values)
+            ratios.append(agreement_ratio)
 
-            if agreement_ratio >= self.qc_config.gold_auto_promote_agreement:
+            # A tie has no consensus. With agreement_threshold 0.5 a 1-1 split
+            # passed ">=" and promoted whichever label was counted first.
+            tied = len(ranked) > 1 and ranked[1][1] == most_common_count
+            if not tied and agreement_ratio >= self.qc_config.gold_auto_promote_agreement:
                 # Find the original value (not lowercased)
                 for v in values:
                     if str(v).lower() == most_common_value:
@@ -690,7 +1268,8 @@ class QualityControlManager:
             "item_id": item_id,
             "consensus_label": consensus_label,
             "annotator_count": len(annotations),
-            "agreement": 1.0  # At this point we have consensus
+            # The weakest schema's majority share; 1.0 only when unanimous.
+            "agreement": min(ratios) if ratios else None,
         }
 
     def _promote_to_gold(
@@ -796,6 +1375,10 @@ class QualityControlManager:
 
         field = self.qc_config.pre_annotation_field
         if field not in item_data:
+            from_file = self.file_pre_annotations.get(str(item_id))
+            if from_file:
+                self.pre_annotations[item_id] = from_file
+                return from_file
             return None
 
         pre_data = item_data[field]
@@ -806,6 +1389,76 @@ class QualityControlManager:
         # Cache for later use
         self.pre_annotations[item_id] = pre_data
         return pre_data
+
+    def _load_prediction_file(self) -> None:
+        """Load `pre_annotation.predictions_file`, if one is named.
+
+        The key was accepted by the config, published in the JSON schema, and
+        read by nothing. Its sibling `field` works, so an author who set
+        `predictions_file`, booted clean and saw no pre-filled answers had no
+        reason to suspect the key -- they would suspect their paths, their data
+        shape, or the feature. `validate --strict` said "OK".
+
+        It is also the more natural of the two spellings. Every other
+        file-shaped key in Potato names a file (`gold_standards.items_file`,
+        `attention_checks.items_file`, `data_files`), while the route that
+        worked required folding the predictions into every item of the corpus.
+        Someone arriving with a model's output file will reach for this one.
+
+        Two shapes are accepted, because both are what a model writes: a
+        mapping of item id to predictions, and a list of records each naming
+        its own id.
+        """
+        path_name = self.qc_config.pre_annotation_predictions_file
+        if not self.qc_config.pre_annotation_enabled or not path_name:
+            return
+
+        path = Path(self.base_dir) / path_name
+        if not path.is_file():
+            self.logger.warning(
+                "pre_annotation.predictions_file %s does not exist; no "
+                "pre-annotations will be seeded from a file.", path)
+            return
+
+        try:
+            if path.suffix.lower() in (".jsonl", ".ndjson"):
+                records = self._load_json_or_jsonl(str(path))
+            else:
+                with open(path, "r", encoding="utf-8") as handle:
+                    records = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            self.logger.warning(
+                "Could not read pre_annotation.predictions_file %s: %s",
+                path, exc)
+            return
+
+        field = self.qc_config.pre_annotation_field
+        loaded = {}
+        if isinstance(records, dict):
+            for item_id, predictions in records.items():
+                if isinstance(predictions, dict):
+                    loaded[str(item_id)] = predictions
+        elif isinstance(records, list):
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                item_id = record.get("id") or record.get("instance_id")
+                if item_id is None:
+                    continue
+                predictions = record.get(field, record.get("predictions"))
+                if isinstance(predictions, dict):
+                    loaded[str(item_id)] = predictions
+
+        self.file_pre_annotations = loaded
+        if loaded:
+            self.logger.info(
+                "Loaded pre-annotations for %d item(s) from %s",
+                len(loaded), path)
+        else:
+            self.logger.warning(
+                "pre_annotation.predictions_file %s held no usable records. "
+                "Expected {item_id: {schema: value}} or a list of records each "
+                "with an `id` and a %r object.", path, field)
 
     def get_pre_annotations(self, item_id: str) -> Optional[Dict[str, Any]]:
         """Get cached pre-annotations for an item."""
@@ -827,6 +1480,11 @@ class QualityControlManager:
     # Utility Methods
     # =========================================================================
 
+    def _geometry_tolerance(self) -> float:
+        """Minimum IoU for a drawn answer to count as matching the gold shape."""
+        return getattr(self.qc_config, "geometry_iou_tolerance",
+                       DEFAULT_GEOMETRY_TOLERANCE)
+
     def _compare_responses(self, expected: Dict[str, Any], actual: Dict[str, Any]) -> bool:
         """
         Compare expected and actual responses.
@@ -844,39 +1502,134 @@ class QualityControlManager:
             True if responses match
         """
         for key, expected_value in expected.items():
-            # Handle both "schema_name" and "schema_name:label_name" formats
-            actual_value = None
-
-            # Direct match
-            if key in actual:
-                actual_value = actual[key]
-            else:
-                # Check for prefixed keys (schema_name:label_name format)
-                for actual_key, val in actual.items():
-                    if actual_key.startswith(key + ":") or actual_key == key:
-                        actual_value = val
-                        break
-
-            if actual_value is None:
+            readings = self._answer_readings(key, actual)
+            if not readings:
                 return False
-
-            # Compare values
-            if isinstance(expected_value, list):
-                if not isinstance(actual_value, list):
-                    actual_value = [actual_value]
-                if set(expected_value) != set(actual_value):
-                    return False
-            elif isinstance(expected_value, dict):
-                if not isinstance(actual_value, dict):
-                    return False
-                if not self._compare_responses(expected_value, actual_value):
-                    return False
-            else:
-                # Simple value comparison
-                if str(expected_value).lower() != str(actual_value).lower():
-                    return False
-
+            if not any(self._value_matches(expected_value, reading)
+                       for reading in readings):
+                return False
         return True
+
+    #: Values a client sends for "this option is selected" where the option
+    #: itself is carried by the key. The browser's own default for a checked
+    #: radio is "on"; rooms wrote "true" until it was aligned.
+    _SELECTED_MARKERS = {"on", "true", "yes", "1", "checked", "selected"}
+
+    def _answer_readings(self, key: str, actual: Dict[str, Any]) -> List[Any]:
+        """Every defensible reading of the annotator's answer for one schema.
+
+        ``/updateinstance`` accepts two payload shapes for the same selection,
+        and quality control only ever read one of them. The annotation page
+        posts ``{"sarcasm:Sarcastic": "Sarcastic"}`` -- the label in both
+        halves -- so comparing the value happened to work there. A client that
+        posts what the form element actually holds sends
+        ``{"sarcasm:Sarcastic": "on"}``, where the answer is in the KEY and the
+        value is the DOM default. Potato's own simulator sends that shape, so a
+        simulated annotator failed every check it was given no matter what it
+        answered, and anyone validating a QC config with the simulator saw 0%
+        and no reason for it.
+
+        Returned most-specific first. A reading is a candidate, not a claim:
+        the caller passes the check if any one of them matches.
+        """
+        readings: List[Any] = []
+        labelled = any(
+            (parsed := split_annotation_key(k)) is not None and parsed[0] == key
+            for k in actual)
+        # `/updateinstance` also writes the bare schema key, overwritten once
+        # per posted option, so for a multiselect it holds whichever box was
+        # posted LAST. Offering it as a reading let an annotator who ticked
+        # every box pass whenever the expected one happened to be posted last,
+        # and fail the same answer posted in another order. When the per-label
+        # keys are present they are the answer; the bare key is a lossy copy.
+        if key in actual and not labelled:
+            readings.append(actual[key])
+
+        # Both separators, because the route accepts both and its own 400
+        # message asks callers for the one that used to be misread. Splitting
+        # on the first colon turned `stance:::Sincere` into the label
+        # "::Sincere", so an annotator following the documented shape scored
+        # 0% on every gold item and attention check while storing exactly the
+        # same annotation as one who scored 100%.
+        selected, values = [], []
+        for actual_key, val in actual.items():
+            parsed = split_annotation_key(actual_key)
+            if parsed is None or parsed[0] != key:
+                continue
+            values.append(val)
+            if self._is_selected(val):
+                selected.append(parsed[1])
+
+        if len(values) == 1:
+            readings.append(values[0])
+        elif values:
+            readings.append(values)
+
+        # Multiselect: the labels the annotator ticked, both as a set and --
+        # when there is exactly one -- as the bare label, because a single-choice
+        # expected answer is written as a string, not a one-element list.
+        if selected:
+            readings.append(selected)
+            if len(selected) == 1:
+                readings.append(selected[0])
+
+        return readings
+
+    def _is_selected(self, value: Any) -> bool:
+        """Whether a posted value means "this option was chosen"."""
+        if value is None or value is False:
+            return False
+        if isinstance(value, str):
+            return value.strip() != "" and value.strip().lower() != "off"
+        return bool(value) or value == 0
+
+    def _value_matches(self, expected_value: Any, actual_value: Any) -> bool:
+        """One expected answer against one reading of the actual answer."""
+        if actual_value is None:
+            return False
+
+        # Drawn answers (boxes, polygons, masks, points) are graded by
+        # overlap, not equality. Two annotators never produce byte-identical
+        # geometry, so string comparison failed EVERY image gold standard and
+        # attention check regardless of how well the annotator drew — making
+        # both features unusable on vision projects.
+        #
+        # Checked before the list branch below, because a geometry answer IS
+        # a list and would otherwise be set-compared as though the objects
+        # were label strings (and unhashable dicts would raise).
+        #
+        # Shares its comparator with training practice questions
+        # (server_utils.training_grading) so a project's gold standards and
+        # its training answers are graded to the same standard.
+        if looks_like_geometry(expected_value):
+            return geometry_answer_is_correct(
+                actual_value, expected_value, self._geometry_tolerance())
+
+        # A chemical structure key, graded by structure (same comparator as
+        # training answers). Before the dict branch: a key IS a dict.
+        from potato.chemistry.structures import answer_is_correct, is_answer_key
+        if is_answer_key(expected_value):
+            return answer_is_correct(actual_value, expected_value)
+
+        if isinstance(expected_value, list):
+            if not isinstance(actual_value, list):
+                actual_value = [actual_value]
+            try:
+                return set(expected_value) == set(actual_value)
+            except TypeError:
+                # Unhashable members: fall back to an order-insensitive
+                # comparison rather than raising out of a grading pass.
+                return (len(expected_value) == len(actual_value)
+                        and all(e in actual_value for e in expected_value))
+        if isinstance(expected_value, dict):
+            return (isinstance(actual_value, dict)
+                    and self._compare_responses(expected_value, actual_value))
+        if isinstance(actual_value, list):
+            # A single expected answer against a multi-reading: matches when
+            # that is the only thing the annotator chose.
+            return (len(actual_value) == 1
+                    and self._value_matches(expected_value, actual_value[0]))
+        return str(expected_value).lower() == str(actual_value).lower()
 
     def get_all_attention_results(self) -> Dict[str, List[Dict]]:
         """Get all attention check results for all users."""
@@ -887,7 +1640,8 @@ class QualityControlManager:
                         "item_id": r.item_id,
                         "passed": r.passed,
                         "timestamp": r.timestamp.isoformat(),
-                        "response_time": r.response_time_seconds
+                        "response_time": r.response_time_seconds,
+                        "too_fast": r.too_fast
                     }
                     for r in results
                 ]
@@ -938,9 +1692,17 @@ class QualityControlManager:
                 }
 
             # Gold standard metrics
+            # `total_items` used to read len(self.gold_items), which counts the
+            # configured pool only, while `by_item` below is built from every
+            # graded item. A study with auto-promotion on reported 3 total and
+            # listed 13.
             gold_metrics = {
                 "enabled": self.qc_config.gold_standards_enabled,
-                "total_items": len(self.gold_items),
+                "total_items": len(self.gold_labels),
+                "configured_items": len(self.gold_items),
+                "promoted_items": len(self.promoted_gold_labels),
+                "mode": self.qc_config.gold_mode,
+                "below_accuracy_threshold": self.users_below_accuracy_threshold(),
                 "total_evaluations": sum(len(r) for r in self.gold_results.values()),
                 "total_correct": sum(
                     len([x for x in r if x.correct])
@@ -957,10 +1719,23 @@ class QualityControlManager:
             for user_id, results in self.gold_results.items():
                 correct = len([r for r in results if r.correct])
                 total = len(results)
+                # Auto-promotion makes the headline denominator depend on when
+                # an annotator arrived: items promoted behind them are graded,
+                # items promoted ahead of them are not. Three annotators on the
+                # same 12 items scored 2/2, 2/2 and 10/10. The configured pool
+                # is the same for everyone, so it is the comparable number and
+                # it is reported alongside.
+                configured = [r for r in results
+                              if self.is_configured_gold_standard(r.item_id)]
+                configured_correct = len([r for r in configured if r.correct])
                 gold_metrics["by_user"][user_id] = {
                     "correct": correct,
                     "total": total,
-                    "accuracy": correct / total if total > 0 else 0
+                    "accuracy": correct / total if total > 0 else 0,
+                    "configured_correct": configured_correct,
+                    "configured_total": len(configured),
+                    "configured_accuracy": (configured_correct / len(configured)
+                                            if configured else 0),
                 }
 
             # Per-item accuracy
@@ -1007,6 +1782,26 @@ class QualityControlManager:
             }
 
 
+def writeback_prelabel_settings(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """``model_training.writeback`` when it publishes prelabels, else None."""
+    training = config.get('model_training') or {}
+    if not isinstance(training, dict) or not training.get('enabled', False):
+        return None
+    writeback = training.get('writeback') or {}
+    if not isinstance(writeback, dict) or not writeback.get('schemas'):
+        return None
+    return writeback
+
+
+def quality_control_needed(config: Dict[str, Any]) -> bool:
+    """Whether anything in the config needs the quality-control manager."""
+    return bool(
+        (config.get('attention_checks') or {}).get('enabled', False)
+        or (config.get('gold_standards') or {}).get('enabled', False)
+        or (config.get('pre_annotation') or {}).get('enabled', False)
+        or writeback_prelabel_settings(config))
+
+
 def init_quality_control_manager(config: Dict[str, Any], base_dir: str) -> QualityControlManager:
     """Initialize the singleton QualityControlManager."""
     global _QUALITY_CONTROL_MANAGER
@@ -1028,3 +1823,31 @@ def clear_quality_control_manager():
     global _QUALITY_CONTROL_MANAGER
     with _QUALITY_CONTROL_LOCK:
         _QUALITY_CONTROL_MANAGER = None
+
+
+def count_dataset_items(instance_ids) -> int:
+    """How many of these ids came out of the dataset rather than the platform.
+
+    Attention checks and gold items are injected into an annotator's queue by
+    the platform, not drawn from the item pool, but they land in
+    ``instance_id_ordering`` and in the annotated set like anything else.
+    Anything that compares one of those collections against
+    ``max_annotations_per_user`` has to discount them, or every injected check
+    costs the annotator one real item -- and the only visible sign is a progress
+    bar that ends early.
+
+    Two places do that comparison, and they must agree: assignment top-up in
+    ``ItemStateManager`` and the completion check in
+    ``UserState.has_remaining_assignments``. When only one of them discounted,
+    the server kept assigning a twelfth item that the annotator was never
+    allowed to reach.
+    """
+    instance_ids = list(instance_ids or [])
+    manager = get_quality_control_manager()
+    if manager is None:
+        return len(instance_ids)
+    return sum(
+        1 for instance_id in instance_ids
+        if not (manager.is_attention_check(instance_id)
+                or manager.is_gold_standard(instance_id))
+    )

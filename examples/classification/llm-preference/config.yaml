@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 8080
 annotation_task_name: LLM Response Quality Comparison
 task_dir: .
 output_annotation_dir: annotation_output/llm-preference/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 data_files:
   - data/llm_responses.json

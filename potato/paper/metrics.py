@@ -1,0 +1,306 @@
+"""Agreement and coverage metrics for Paper Mode.
+
+Krippendorff's alpha uses ``simpledorff`` (the same implementation as the admin
+dashboard). Pairwise Cohen's kappa is implemented directly over label records so
+it works without a Flask context. Multiselect schemes get per-record alpha over
+(instance, label) selection units; radio/likert get standard per-instance alpha.
+"""
+
+import logging
+import statistics
+from collections import Counter, defaultdict
+from typing import Any, Dict, List, Optional, Tuple
+
+from potato.paper.collect import LabelRecord, ProjectData
+
+logger = logging.getLogger(__name__)
+
+
+def _alpha_nominal(units: Dict[Any, List[str]]) -> Optional[float]:
+    """Krippendorff's alpha (nominal) over unit -> list of values."""
+    rows = [
+        {"unit": unit, "annotator": f"{unit}#{i}", "value": value}
+        for unit, values in units.items()
+        for i, value in enumerate(values)
+        if len(values) >= 2
+    ]
+    if not rows or len({r["value"] for r in rows}) < 2:
+        return None
+    try:
+        import pandas as pd
+        import simpledorff
+        from simpledorff.metrics import nominal_metric
+
+        return float(simpledorff.calculate_krippendorffs_alpha_for_df(
+            pd.DataFrame(rows),
+            experiment_col="unit",
+            annotator_col="annotator",
+            class_col="value",
+            metric_fn=nominal_metric,
+        ))
+    except Exception:
+        logger.exception("Krippendorff's alpha computation failed")
+        return None
+
+
+def cohen_kappa(pairs: List[Tuple[str, str]]) -> Optional[float]:
+    """Cohen's kappa for a list of (rater_a_value, rater_b_value) pairs.
+
+    The computation is ``iaa.nominal.cohen_kappa``, the one the agreement
+    report uses, so a paper and ``/admin/iaa`` cannot print different kappas
+    for the same labels. An undefined kappa (both raters used one label
+    throughout, so chance agreement is 1) is None: publishing 1.0 read as
+    measured perfect agreement.
+    """
+    if not pairs:
+        return None
+    from potato.server_utils.iaa.nominal import cohen_kappa as _kappa
+    k = _kappa([a for a, _ in pairs], [b for _, b in pairs])
+    return None if k != k else float(k)
+
+
+def configured_labels(scheme: Dict[str, Any]) -> List[str]:
+    """The scheme's declared label set, verbatim from the config.
+
+    Distinct from the observed distribution: a label nobody happened to pick is
+    still part of the annotation scheme, and a dataset report has to describe
+    the choices annotators were offered, not just the ones they used.
+    """
+    out: List[str] = []
+    for label in scheme.get("labels", []) or []:
+        if isinstance(label, dict):
+            if label.get("name"):
+                out.append(str(label["name"]))
+        else:
+            out.append(str(label))
+    return out
+
+
+def _unit(record: LabelRecord) -> Any:
+    """The unit a record is a value of: the instance, or (instance, part)
+    for one part of a multi-part answer such as BWS best/worst."""
+    return (record.instance_id, record.part) if record.part else record.instance_id
+
+
+def _units_for_scheme(records: List[LabelRecord], scheme: Dict[str, Any]
+                      ) -> Dict[Any, List[str]]:
+    """unit -> values. Radio/likert: unit = instance, value = chosen label.
+    Multiselect: unit = (instance, label), value = 'selected'/'not' per
+    annotator who annotated that instance at all."""
+    name = scheme.get("name")
+    stype = scheme.get("annotation_type")
+    scheme_records = [r for r in records if r.schema == name]
+    if stype != "multiselect":
+        units: Dict[Any, List[str]] = defaultdict(list)
+        # Latest value per (annotator, instance) — duplicates shouldn't occur,
+        # but be safe.
+        # A BWS answer is two units, best and worst, keyed by ``part``.
+        latest: Dict[Tuple[str, Any], str] = {}
+        for r in scheme_records:
+            latest[(r.annotator, _unit(r))] = r.value
+        for (annotator, unit), value in latest.items():
+            units[unit].append(value)
+        return dict(units)
+
+    # Multiselect: which annotators touched each instance
+    annotators_by_instance: Dict[str, set] = defaultdict(set)
+    selected: Dict[Tuple[str, str], set] = defaultdict(set)
+    for r in scheme_records:
+        annotators_by_instance[r.instance_id].add(r.annotator)
+        selected[(r.instance_id, r.annotator)].add(r.value)
+    labels = configured_labels(scheme)
+    units = defaultdict(list)
+    for instance_id, annotators in annotators_by_instance.items():
+        for label in labels:
+            for annotator in annotators:
+                value = "selected" if label in selected[(instance_id, annotator)] else "not"
+                units[(instance_id, label)].append(value)
+    return dict(units)
+
+
+def _pairwise_kappas(records: List[LabelRecord], scheme_name: str
+                     ) -> List[Tuple[str, str, float, int]]:
+    """(annotator_a, annotator_b, kappa, shared_items) for every pair with overlap."""
+    by_annotator: Dict[str, Dict[Any, str]] = defaultdict(dict)
+    for r in records:
+        if r.schema == scheme_name:
+            by_annotator[r.annotator][_unit(r)] = r.value
+    names = sorted(by_annotator)
+    results = []
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            shared = sorted(set(by_annotator[a]) & set(by_annotator[b]), key=str)
+            if len(shared) < 2:
+                continue
+            pairs = [(by_annotator[a][iid], by_annotator[b][iid]) for iid in shared]
+            kappa = cohen_kappa(pairs)
+            if kappa is not None:
+                results.append((a, b, kappa, len(shared)))
+    return results
+
+
+def _percent_agreement(multi: Dict[Any, List[str]]) -> Optional[float]:
+    """Observed agreement over units with two or more values: per unit, the
+    share of value pairs that match, averaged over units (Fleiss' P-bar, the
+    number ``/admin/iaa`` reports as ``percent_agreement``)."""
+    from potato.server_utils.iaa.nominal import mean_pairwise_agreement
+    value = mean_pairwise_agreement([dict(enumerate(v)) for v in multi.values()])
+    return None if value != value else float(value)
+
+
+def interpret_alpha(alpha: Optional[float]) -> str:
+    """Krippendorff's own guidance (2004)."""
+    if alpha is None:
+        return "not computable"
+    if alpha >= 0.8:
+        return "acceptable agreement"
+    if alpha >= 0.667:
+        return "tentative agreement"
+    return "low agreement"
+
+
+def _quality_control(project: ProjectData) -> Dict[str, Any]:
+    """
+    What quality-control precautions the project configured, and what they cost.
+
+    Reviewers and editors challenge data quality from online panels routinely,
+    and what satisfies them is a statement of the precautions taken -- not a
+    better number. Everything here is read from the config and the saved
+    states, so the paragraph describes what the project actually did rather
+    than what a template assumes it did.
+    """
+    config = project.config
+    # Both blocks are TOP-LEVEL config keys, not children of `quality_control`
+    # -- that key holds only the drawn-answer tolerance overrides. Reading them
+    # from the wrong place reports every project as having no precautions at
+    # all, which is the most damaging thing this paragraph could get wrong.
+    attention = config.get("attention_checks") or {}
+    gold = config.get("gold_standards") or {}
+    training = config.get("training") or {}
+
+    outcomes = Counter(project.training_outcomes.values())
+    overlap = config.get("num_annotators_per_item")
+
+    return {
+        "attention_checks": {
+            "enabled": bool(attention.get("enabled")),
+            "frequency": attention.get("frequency"),
+            "probability": attention.get("probability"),
+            "block_threshold": (attention.get("failure_handling") or {}).get(
+                "block_threshold"),
+        },
+        "gold_standards": {
+            "enabled": bool(gold.get("enabled")),
+            "frequency": gold.get("frequency"),
+            "min_accuracy": (gold.get("accuracy") or {}).get("min_threshold"),
+            "evaluation_count": (gold.get("accuracy") or {}).get(
+                "evaluation_count"),
+        },
+        "training": {
+            "enabled": bool(training.get("enabled")),
+            "passing_criteria": training.get("passing_criteria") or {},
+            # None, not 0, when nobody reached the gate: "0 excluded" and "we
+            # have no record" are different claims and a methods section must
+            # not make the stronger one by accident.
+            "n_reached": (sum(outcomes.values()) or None),
+            "n_passed": outcomes.get("passed") or 0,
+            "n_failed": outcomes.get("failed") or 0,
+        },
+        "overlap": {
+            "num_annotators_per_item": overlap if isinstance(overlap, int) else None,
+            "config_value": overlap,
+        },
+    }
+
+
+def compute_metrics(project: ProjectData) -> Dict[str, Any]:
+    """All numbers the LaTeX report needs, per scheme and overall."""
+    records = project.records
+
+    # -- coverage ------------------------------------------------------------
+    annotations_per_instance = Counter(
+        (r.instance_id, r.schema) for r in records)
+    by_instance = Counter(r.instance_id for r in records)
+    per_annotator_items: Dict[str, set] = defaultdict(set)
+    for r in records:
+        per_annotator_items[r.annotator].add(r.instance_id)
+
+    # -- per scheme ----------------------------------------------------------
+    schemes_out = []
+    for scheme in project.schemes:
+        name = scheme.get("name")
+        scheme_records = [r for r in records if r.schema == name]
+        if not scheme_records:
+            continue
+        distribution = Counter(f"{r.part}: {r.value}" if r.part else r.value
+                               for r in scheme_records)
+        units = _units_for_scheme(records, scheme)
+        multi = {u: v for u, v in units.items() if len(v) >= 2}
+        alpha = _alpha_nominal(units)
+        kappas = _pairwise_kappas(records, name) \
+            if scheme.get("annotation_type") != "multiselect" else []
+        kappa_values = [k for _, _, k, _ in kappas]
+        schemes_out.append({
+            "name": name,
+            "annotation_type": scheme.get("annotation_type"),
+            "description": scheme.get("description", ""),
+            # The declared label set — what annotators could choose. Reporting
+            # only `distribution` would understate the scheme whenever a label
+            # went unused.
+            "labels": configured_labels(scheme),
+            "distribution": dict(distribution.most_common()),
+            "total_labels": sum(distribution.values()),
+            "alpha": alpha,
+            "alpha_interpretation": interpret_alpha(alpha),
+            "multi_annotated_units": len(multi),
+            "total_units": len(units),
+            "percent_agreement": _percent_agreement(multi),
+            "pairwise_kappa": {
+                "n_pairs": len(kappa_values),
+                "mean": statistics.mean(kappa_values) if kappa_values else None,
+                "min": min(kappa_values) if kappa_values else None,
+                "max": max(kappa_values) if kappa_values else None,
+            },
+        })
+
+    # -- annotators ----------------------------------------------------------
+    annotators_out = []
+    for annotator in sorted(per_annotator_items):
+        timings = project.timings.get(annotator, [])
+        annotators_out.append({
+            "annotator": annotator,
+            "items": len(per_annotator_items[annotator]),
+            "labels": sum(1 for r in records if r.annotator == annotator),
+            "median_seconds": round(statistics.median(timings), 1) if timings else None,
+        })
+
+    # -- timing overall --------------------------------------------------------
+    all_seconds = [s for timings in project.timings.values() for s in timings]
+
+    return {
+        "task_name": project.task_name,
+        "n_annotators": len(per_annotator_items),
+        # Declared tools and models, left out of everything below.
+        "n_machine_raters_excluded": len(getattr(project, "machine_raters", []) or []),
+        "n_annotated_instances": len(project.instance_ids),
+        "n_total_items": project.total_items,
+        "n_label_records": len(records),
+        "mean_annotations_per_instance": (
+            round(statistics.mean(by_instance.values()), 2) if by_instance else 0
+        ),
+        "instances_single_annotated": sum(
+            1 for (_iid, _s), c in annotations_per_instance.items() if c == 1),
+        "schemes": schemes_out,
+        "skipped_schemes": [
+            {"name": s.get("name"), "annotation_type": s.get("annotation_type")}
+            for s in project.skipped_schemes
+        ],
+        "annotators": annotators_out,
+        "quality_control": _quality_control(project),
+        "timing": {
+            "median_seconds_per_item": (
+                round(statistics.median(all_seconds), 1) if all_seconds else None),
+            "total_person_hours": (
+                round(sum(all_seconds) / 3600.0, 2) if all_seconds else None),
+        },
+    }

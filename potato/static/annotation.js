@@ -40,6 +40,24 @@ let currentAnnotations = {};
 let userState = null;
 let isLoading = false;
 let textSaveTimer = null;
+
+/**
+ * Text and number inputs reach `currentAnnotations` through a 1 s debounce of
+ * their own (see setupInputEventListeners). A save that ran inside that second
+ * sent what the box held before the edit: `syncAnnotationsFromDOM()` copies a
+ * non-empty value across but skips an empty one, so clearing a box and
+ * pressing Next kept the old text on the server. Every save path flushes these
+ * first.
+ */
+const pendingInputChanges = new Map(); // element -> debounce timer
+
+function flushPendingInputChanges() {
+    if (pendingInputChanges.size === 0) return;
+    const elements = [...pendingInputChanges.keys()];
+    pendingInputChanges.forEach(timer => clearTimeout(timer));
+    pendingInputChanges.clear();
+    elements.forEach(element => handleInputChange(element));
+}
 let currentSpanAnnotations = [];
 let debugLastInstanceId = null;
 let debugOverlayCount = 0;
@@ -64,8 +82,33 @@ let aiAssistantManger = new AIAssistantManager();
  * sendBeacon is the W3C standard for fire-and-forget requests during page unload —
  * regular fetch() is cancelled by browsers during unload.
  */
+/**
+ * Multiselect schemas on the page with no box ticked.
+ *
+ * Unticking the last box removes the schema from the payload entirely, and
+ * the server only clears a schema it is told about, so the last box to be
+ * unticked used to come back on the next visit. Naming these lets the server
+ * clear them.
+ */
+function clearedMultiselectSchemas(labelAnnotations) {
+    const named = new Set();
+    for (const key of Object.keys(labelAnnotations)) {
+        named.add(key);
+    }
+    const cleared = [];
+    document.querySelectorAll('form[data-annotation-type="multiselect"][data-schema-name]').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        const prefix = schema + ':';
+        if (![...named].some(key => key.startsWith(prefix))) {
+            cleared.push(schema);
+        }
+    });
+    return cleared;
+}
+
 function flushPendingSave() {
-    if (!textSaveTimer || !currentInstance) return;
+    if ((!textSaveTimer && pendingInputChanges.size === 0) || !currentInstance) return;
+    flushPendingInputChanges();
     clearTimeout(textSaveTimer);
     textSaveTimer = null;
 
@@ -77,15 +120,51 @@ function flushPendingSave() {
             labelAnnotations[`${schema}:${label}`] = value;
         }
     }
+    collectAnnotationDataInputs(labelAnnotations);
 
-    const payload = JSON.stringify({
+    const payload = JSON.stringify(decorateSavePayload({
         instance_id: currentInstance.id,
         annotations: labelAnnotations,
-        span_annotations: extractSpanAnnotationsFromDOM()
-    });
+        cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
+        span_annotations: extractSpanAnnotationsFromDOM(),
+        client_timestamp: new Date().toISOString(),
+        response_time_seconds: currentInstanceResponseSeconds()
+    }));
 
     navigator.sendBeacon('/updateinstance',
         new Blob([payload], {type: 'application/json'}));
+}
+
+/**
+ * Fold the blob schemas' hidden inputs into a `/updateinstance` payload.
+ *
+ * Shared by `saveAnnotations()` and `flushPendingSave()` because they build
+ * their payloads separately, and only the first one collected these — so the
+ * unload path posted an answer with the canvas schemas missing from it, which
+ * on the server reads as "the annotator cleared them" rather than "this
+ * message does not mention them".
+ */
+/**
+ * Seconds the current instance has been on screen, or null when it was never
+ * stamped (a phase page, or an instance built outside `loadCurrentInstance`).
+ */
+function currentInstanceResponseSeconds() {
+    if (!currentInstance || !currentInstance.displayedAt) return null;
+    return Math.max(0, (Date.now() - currentInstance.displayedAt) / 1000);
+}
+
+function collectAnnotationDataInputs(labelAnnotations) {
+    document.querySelectorAll('.annotation-data-input').forEach(input => {
+        if (input.name && input.value) {
+            // ::: is the separator the other annotation types use.
+            labelAnnotations[`${input.name}:::_data`] = input.value;
+        }
+        // What is being saved is the new baseline for the autosave check:
+        // measured against the arrival value forever, an edit undone back to
+        // it after a save was never saved, and the undone shape came back.
+        if (input.dataset.autosaveWired === 'true') input._arrivedWith = input.value;
+    });
+    return labelAnnotations;
 }
 
 window.addEventListener('beforeunload', flushPendingSave);
@@ -249,7 +328,16 @@ class FormLayoutManager {
             if (groupElement) {
                 // Move specified schemas into the group
                 groupConfig.schemas.forEach(schemaName => {
-                    const form = container.querySelector(`[data-schema-name="${schemaName}"]`);
+                    // Sixteen generators -- slider, span, the canvas and media
+                    // schemes, multi_document_event -- render their wrapper
+                    // without `data-schema-name`, so matching on that alone
+                    // silently left them outside the group they were listed in.
+                    // `layout.groups` validates the names against
+                    // `annotation_schemes`, so nothing warned: the group came up
+                    // with a title and fewer questions than it was given. Every
+                    // generator sets the element id to the scheme name.
+                    const form = container.querySelector(`[data-schema-name="${CSS.escape(schemaName)}"]`)
+                              || container.querySelector(`#${CSS.escape(schemaName)}.annotation-form`);
                     if (form) {
                         const content = groupElement.querySelector('.annotation-form-group-content');
                         if (content) {
@@ -349,6 +437,7 @@ class FormLayoutManager {
     setupResponsiveBreakpoints() {
         const mobile = this.config.breakpoints.mobile;
         const tablet = this.config.breakpoints.tablet;
+        const columns = this.config.grid.columns;
 
         // Only inject custom breakpoints if they differ from defaults
         if (mobile !== 480 || tablet !== 768) {
@@ -380,7 +469,112 @@ class FormLayoutManager {
                     .annotation-forms-grid .annotation-form[data-grid-columns="4"],
                     .annotation-forms-grid .annotation-form[data-grid-columns="5"],
                     .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
-                        grid-column: span 2;
+                        /*
+                         * !important because styles.css pins every
+                         * [data-grid-columns] to span 1 !important at its own
+                         * 480px. An author whose mobile threshold is below 480
+                         * -- the only reason to set one -- would otherwise get
+                         * one column through the whole band they widened.
+                         */
+                        grid-column: span 2 !important;
+                    }
+                }
+                /*
+                 * Grouped forms. styles.css collapses
+                 * .annotation-form-group-content to a single column at its own
+                 * hardcoded 480px and 768px, and the rules above only ever
+                 * touch per-form grid-column -- so a grouped form was one
+                 * column below 768px whatever the breakpoints key said,
+                 * while --layout-columns still computed to the configured
+                 * value, so the key read as honoured. These two re-state the
+                 * same behaviour at the author's thresholds. !important and
+                 * later source order are both needed: the 480px rule in
+                 * styles.css is itself !important.
+                 */
+                @media (max-width: ${tablet}px) {
+                    .annotation-form-group-content {
+                        grid-template-columns: 1fr !important;
+                    }
+                }
+                @media (min-width: ${tablet + 1}px) {
+                    .annotation-form-group-content {
+                        grid-template-columns:
+                            repeat(var(--layout-columns, 2), 1fr) !important;
+                    }
+                }
+                /*
+                 * And the variable those tracks are counted from. styles.css
+                 * pins --layout-columns to 1 !important at its own 480px, and
+                 * that beats the inline value the layout manager sets on the
+                 * container -- so restoring grid-template-columns alone still
+                 * produced one track between the author's tablet breakpoint
+                 * and 480px. The configured number is written literally
+                 * because CSS cannot read it back out of the inline style.
+                 */
+                @media (min-width: ${mobile + 1}px) {
+                    .annotation-forms-layout,
+                    .annotation-forms-grid {
+                        --layout-columns: ${columns} !important;
+                    }
+                }
+                /*
+                 * The last two rules styles.css applies unconditionally at its
+                 * own 768px, restated here so they end at the author's tablet
+                 * threshold instead.
+                 *
+                 * The container's track count is the one that mattered most:
+                 * styles.css sets grid-template-columns: 1fr directly, and a
+                 * literal declaration beats the var-based one above no matter
+                 * what --layout-columns computes to -- so restoring the
+                 * variable alone left the grid at one track while the variable
+                 * reported the configured number, which is exactly the shape
+                 * that reads as honoured.
+                 *
+                 * The span for data-grid-columns="2" is the second. Halving
+                 * spans of 3-6 to 2 in the tablet band is deliberate; taking 2
+                 * itself down to 1 is not, and it made a two-column span the
+                 * one width that could not be expressed anywhere in that band.
+                 */
+                @media (min-width: ${mobile + 1}px) {
+                    .annotation-forms-layout,
+                    .annotation-forms-grid {
+                        grid-template-columns:
+                            repeat(var(--layout-columns, 2), 1fr) !important;
+                    }
+                    .pairwise-forms-wrapper {
+                        grid-template-columns: repeat(2, 1fr);
+                    }
+                    .annotation-forms-grid .annotation-form[data-grid-columns="2"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="2"] {
+                        grid-column: span 2 !important;
+                    }
+                }
+                /*
+                 * And the halving band itself. styles.css reduces spans of 3-6
+                 * to 2 between 481px and 768px, both hardcoded. Above the
+                 * author's tablet threshold that rule is still in force -- so
+                 * with a tablet threshold of 420 a three-column form measured
+                 * span 2 at a 500px viewport, inside the band the author had
+                 * declared to be full-width territory. Restore the declared
+                 * span above their threshold; the injected halving rule above
+                 * still applies below it.
+                 */
+                @media (min-width: ${tablet + 1}px) {
+                    .annotation-forms-layout .annotation-form[data-grid-columns="3"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="3"] {
+                        grid-column: span 3 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns="4"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="4"] {
+                        grid-column: span 4 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns="5"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="5"] {
+                        grid-column: span 5 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns="6"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
+                        grid-column: span 6 !important;
                     }
                 }
             `;
@@ -473,6 +667,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         setLoading(false);
         setupInputEventListeners();
+        // Initialize display logic so SurveyFlow phase questions (consent,
+        // prestudy, poststudy) can conditionally show/hide based on earlier
+        // answers on the same page. The engine is generic — it scans the DOM
+        // for [data-display-logic-target="true"] — but was previously only
+        // started on annotation pages, leaving it inert on survey phases.
+        if (typeof initDisplayLogic === 'function') {
+            initDisplayLogic();
+        }
+        // Run AFTER initDisplayLogic so hidden required questions are already
+        // excluded from the required-field check.
         validateRequiredFields();
         return;
     }
@@ -606,15 +810,28 @@ function setupEventListeners() {
         });
     }
 
-    // Keyboard navigation and shortcuts
-    document.addEventListener('keydown', function (e) {
-        // Only block navigation when in text input fields (not radio/checkbox)
-        const inputType = e.target.getAttribute('type');
-        const isTextInput = e.target.tagName === 'TEXTAREA' ||
-            (e.target.tagName === 'INPUT' && inputType !== 'radio' && inputType !== 'checkbox');
+    installArrowNavigation();
+    installLabelKeyShortcuts();
+}
 
-        if (isTextInput) {
-            return; // Don't handle navigation when typing in text fields
+/**
+ * Left and right arrows change the item. The listener is on window, bubbling,
+ * so it runs after every handler on the page: a viewer that uses the arrows
+ * (video and audio seek, a range-slider thumb, rollout nudges) calls
+ * preventDefault and keeps them.
+ */
+function installArrowNavigation() {
+    window.addEventListener('keydown', function (e) {
+        // A running timed trial owns the keyboard (trial-timing.js).
+        if (window.potatoTrial && window.potatoTrial.ownsKeys) {
+            return;
+        }
+        if (e.defaultPrevented) {
+            return;
+        }
+        // Arrows in a text field or a <select> move the caret or the option.
+        if (isEditableElement(e.target)) {
+            return;
         }
 
         switch (e.key) {
@@ -628,18 +845,58 @@ function setupEventListeners() {
                 break;
         }
     });
+}
 
-    // Keyboard shortcuts for checkboxes and radio buttons (matches base_template.html behavior)
+/**
+ * True where a key types or picks rather than triggers a shortcut: text inputs,
+ * textareas, selects and contenteditable regions. Radios and checkboxes are
+ * not editable here; their shortcuts are the point.
+ */
+function isEditableElement(el) {
+    if (!el || !el.tagName) return false;
+    if (el.isContentEditable
+            || (el.closest && el.closest('[contenteditable]:not([contenteditable="false"])'))) {
+        return true;
+    }
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+    if (el.tagName === 'INPUT') {
+        const type = (el.getAttribute('type') || 'text').toLowerCase();
+        return type !== 'radio' && type !== 'checkbox';
+    }
+    return false;
+}
+
+/**
+ * Label shortcuts for checkboxes, radios, pairwise and BWS tiles, matched on
+ * each input's `data-key`. They fire on keyup, after every keydown handler has
+ * run, so the keydown each keyup pairs with is kept: it is recorded at window
+ * capture (before anything can stop it) and read at keyup, when its
+ * `defaultPrevented` holds what every later handler did.
+ */
+function installLabelKeyShortcuts() {
+    // `code` survives Shift being released first ("H" down, "h" up); synthetic
+    // events without one fall back to the key.
+    const keyId = (e) => e.code || (e.key || '').toLowerCase();
+    const keyDowns = new Map();
+    window.addEventListener('keydown', function (e) {
+        keyDowns.set(keyId(e), e);
+    }, true);
+
     document.addEventListener('keyup', function (e) {
-        // Don't handle when in text input fields (but allow radio/checkbox)
-        const activeElement = document.activeElement;
-        const activeId = activeElement.id;
-        const activeType = activeElement.getAttribute('type');
-        const isTextInput = activeElement.tagName === 'TEXTAREA' ||
-            activeId === 'go_to' ||
-            (activeElement.tagName === 'INPUT' && activeType !== 'radio' && activeType !== 'checkbox');
-
-        if (isTextInput) {
+        // A running timed trial owns the keyboard; its keys are not shortcuts.
+        if (window.potatoTrial && window.potatoTrial.ownsKeys) {
+            return;
+        }
+        // Act only on a key pressed on this page, with no modifier, that no
+        // widget handled on keydown. Ctrl+C would otherwise also toggle a
+        // label bound to `c`, and a triage, card-sort or viewer key would
+        // both do its own action and toggle a label bound to the same key.
+        const down = keyDowns.get(keyId(e));
+        keyDowns.delete(keyId(e));
+        if (!down || down.defaultPrevented || down.ctrlKey || down.metaKey || down.altKey) {
+            return;
+        }
+        if (isEditableElement(document.activeElement)) {
             return;
         }
 
@@ -797,18 +1054,13 @@ function setupSpanLabelSelector() {
                 // Add stack trace to see what's calling this
                 debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Change event stack trace:', new Error().stack);
 
-                // Check if this change event was triggered by programmatic setting
-                // If the checkbox was just set to checked by onlyOne, don't interfere
-                if (this.checked && this.hasAttribute('data-just-checked')) {
-                    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Ignoring change event for just-checked checkbox');
-                    this.removeAttribute('data-just-checked');
-                    return;
-                }
-
                 // Note: We don't manage checkbox state here anymore because the onclick
                 // handler (onlyOne function) already handles this correctly.
                 // This change event is just for logging and any additional functionality
                 // that might be needed in the future.
+                //
+                // The `data-just-checked` guard that used to sit here is gone with
+                // the forced re-check in onlyOne() that it existed to mask.
             });
 
             // Mark as set up
@@ -936,11 +1188,19 @@ async function loadCurrentInstance() {
             return;
         }
 
-        // Create current instance object from server-rendered data
+        // Create current instance object from server-rendered data.
+        //
+        // `displayedAt` is what `attention_checks.min_response_time` is measured
+        // against. The server used to derive the response time from
+        // `client_timestamp`, which nothing on this path ever sent, so the guard
+        // could not fire; deriving it from the send time would have measured
+        // network latency instead. Navigation is a full server re-render, so
+        // this is stamped once per instance shown.
         currentInstance = {
             id: instanceId,
             text: instanceTextElement.textContent || instanceTextElement.innerText,
-            displayed_text: instanceText
+            displayed_text: instanceText,
+            displayedAt: Date.now()
         };
 
         // Set global variable for span manager
@@ -1020,6 +1280,13 @@ async function loadCurrentInstance() {
         showError(true, error.message);
     } finally {
         setLoading(false);
+        // For code that runs once the item is on screen and its saved answers
+        // are restored (the timed-trial layer starts its clock here).
+        setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('potato:instance-ready', {
+                detail: { instanceId: currentInstance ? currentInstance.id : null }
+            }));
+        }, 0);
     }
 }
 
@@ -1073,22 +1340,38 @@ function clearAllFormInputs() {
         input.value = '';
     });
 
-    // Clear radio buttons
+    // Clear radio buttons and checkboxes.
+    //
+    // Only the `.checked` PROPERTY is reset — the `checked` attribute is deliberately
+    // left in place. loadCurrentInstance() calls this immediately before
+    // loadAnnotations(), which reconstructs currentAnnotations from
+    // hasAttribute('checked') precisely because the property is unreliable (Firefox
+    // restores form state across navigation). The attribute is the server's rendering
+    // of the current instance, so stripping it here would wipe every restored
+    // annotation rather than protect against stale state.
     const radioInputs = document.querySelectorAll('input[type="radio"]');
     radioInputs.forEach(input => {
         input.checked = false;
     });
 
-    // Clear checkboxes
     const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
     checkboxInputs.forEach(input => {
         input.checked = false;
     });
 
-    // Clear sliders
+    // Clear sliders. The touched marks go with the value -- left behind, the
+    // previous item's "the annotator moved this" would make the next item's
+    // default position look like an answer.
     const sliderInputs = document.querySelectorAll('input[type="range"]');
     sliderInputs.forEach(input => {
-        input.value = input.getAttribute('min') || input.getAttribute('starting_value') || '0';
+        if (input.getAttribute('data-server-set') === 'true') return;
+        // Back to the position the generator rendered, which is what
+        // `starting_value` sets. `min` was winning here and the generators
+        // never emit a `starting_value` attribute, so a slider configured to
+        // start mid-scale snapped to its minimum on every instance change.
+        input.value = input.getAttribute('value')
+                   || input.getAttribute('min') || '0';
+        input.removeAttribute('data-modified');
         const valueDisplay = document.getElementById(`${input.name}-value`);
         if (valueDisplay) {
             valueDisplay.textContent = input.value;
@@ -1125,10 +1408,30 @@ function clearAllFormInputs() {
         tile => tile.classList.remove('selected')
     );
 
-    // Clear ranking visual state (reset order numbers)
-    document.querySelectorAll('.ranking-list .ranking-item').forEach((item, idx) => {
+    // Clear ranking visual state. Renumbering alone left the PREVIOUS instance's
+    // row order on screen, so an item with no saved ranking opened showing the
+    // last item's answer as though it were the default. `data-placeholder-order`
+    // is the config order the generator rendered with; put the rows back in it
+    // unless the server restored an answer for this instance.
+    document.querySelectorAll('.ranking-order-input').forEach(input => {
+        if (input.getAttribute('data-server-set') === 'true') return;
+        const list = input.closest('fieldset')
+            ? input.closest('fieldset').querySelector('.ranking-list')
+            : null;
+        const placeholder = input.getAttribute('data-placeholder-order');
+        if (!list || !placeholder) return;
+        const items = Array.from(list.querySelectorAll('.ranking-item'));
+        splitKnownValues(placeholder, items.map(it => it.getAttribute('data-value'))).forEach(value => {
+            const item = items.find(it => it.getAttribute('data-value') === value);
+            if (item) list.appendChild(item);
+        });
+    });
+    document.querySelectorAll('.ranking-list .ranking-item').forEach(item => {
         const rank = item.querySelector('.ranking-rank');
-        if (rank) rank.textContent = idx + 1;
+        if (rank) {
+            rank.textContent =
+                Array.prototype.indexOf.call(item.parentElement.children, item) + 1;
+        }
     });
 
     // Clear hierarchical multiselect checkboxes
@@ -1156,6 +1459,13 @@ function clearAllFormInputs() {
         });
     }
 
+    // Clear trajectory edit (correction) visual state
+    if (window._trajEditState) {
+        Object.keys(window._trajEditState).forEach(k => {
+            window._trajEditState[k] = { entries: {}, final_answer: null };
+        });
+    }
+
     // Clear hidden annotation data inputs (image/audio/video annotations)
     // BUT only if they don't have server-provided data (data-server-set="true")
     // This prevents browser form restoration from persisting annotations across instances
@@ -1170,6 +1480,13 @@ function clearAllFormInputs() {
             debugLog('🔍 Preserving server-provided annotation data:', input.id);
         }
     });
+
+    // Re-seed turn-level annotation proxy widgets from their hidden inputs
+    // (the global input resets above wiped their visual state; the hidden
+    // turn-anno inputs survive when server-set, so refresh() repaints them)
+    if (window.turnAnnotations && typeof window.turnAnnotations.refresh === 'function') {
+        window.turnAnnotations.refresh();
+    }
 
     // Reset image annotation managers if they exist
     // BUT only if there's no server-provided annotation data to load
@@ -1222,8 +1539,17 @@ async function loadAnnotations() {
             }
         });
 
-        // Read radio button state from HTML 'checked' ATTRIBUTE
+        // Read radio button state from HTML 'checked' ATTRIBUTE.
+        //
+        // Radios in one group are mutually exclusive, so at most ONE may end up in
+        // currentAnnotations per schema. The server stamps `checked` once per stored
+        // label, so a state file carrying two values for one schema (data written
+        // before the GH #167 fix) would otherwise seed both here — the DOM shows one
+        // selection while currentAnnotations holds two, and the next save writes both
+        // straight back. Take the last checked radio per group, matching what the
+        // browser itself renders as selected.
         const radioInputs = document.querySelectorAll('input[type="radio"]');
+        const restoredRadios = {};
         radioInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
@@ -1232,10 +1558,24 @@ async function loadAnnotations() {
             // Sync the browser state to match server state
             input.checked = serverChecked;
             if (schema && labelName && serverChecked) {
+                // One selection per radio GROUP, which the browser defines by
+                // name. A multirate, rubric or conjoint schema has a group per
+                // row; keying by schema kept only the last row's answer.
+                const group = input.name || schema;
+                const earlier = restoredRadios[group];
+                if (earlier && earlier.labelName !== labelName) {
+                    debugWarn(`Multiple stored values for single-select schema '${schema}' ` +
+                              `('${earlier.labelName}' and '${labelName}'); ` +
+                              `keeping the last. Run 'potato repair-annotations' to fix the ` +
+                              `stored state.`);
+                    // Undo the earlier winner so state matches the rendered selection.
+                    delete currentAnnotations[schema][earlier.labelName];
+                }
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
                 }
                 currentAnnotations[schema][labelName] = input.value;
+                restoredRadios[group] = { labelName: labelName };
             }
         });
 
@@ -1282,12 +1622,17 @@ async function loadAnnotations() {
             }
         });
 
-        // Read slider state from HTML 'value' ATTRIBUTE
+        // Read slider state from HTML 'value' ATTRIBUTE. Same rule as the
+        // hidden inputs below, and for the same reason: the generators render
+        // slider, vas and soft_label at a starting position, so the value
+        // attribute is only evidence of an answer when the server put it there
+        // (marked data-server-set). Adopting it unconditionally recorded the
+        // default as this annotator's answer for every item they opened.
         const sliderInputs = document.querySelectorAll('input[type="range"]');
         sliderInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
-            // Read from HTML attribute - server sets this for saved slider values
+            if (!input.hasAttribute('data-server-set')) return;
             const serverValue = input.getAttribute('value');
             if (serverValue) {
                 input.value = serverValue;
@@ -1300,18 +1645,22 @@ async function loadAnnotations() {
             }
         });
 
-        // Read select dropdown state from server-rendered HTML
-        // The server sets the 'selected' attribute on the appropriate option
+        // Read select dropdown state from server-rendered HTML, the same way the
+        // checkboxes above are read.
+        //
+        // The `if (selectedOption)` guard used to mean that an instance with NO
+        // stored answer kept whatever the browser had put in the box. Chrome
+        // restores a select's selection across navigations within a tab, so
+        // moving to a fresh item re-applied the previous item's choice and the
+        // line below then recorded it as this item's answer. Fall through to the
+        // placeholder when the server rendered no selection: its value is the
+        // empty string, which is what "unanswered" has to look like.
         const selectInputs = document.querySelectorAll('select.annotation-input');
         selectInputs.forEach(select => {
             const schema = select.getAttribute('schema');
             const labelName = select.getAttribute('label_name');
-            // Find the option with 'selected' attribute (server-rendered)
             const selectedOption = select.querySelector('option[selected]');
-            if (selectedOption) {
-                // Sync browser state to server state
-                select.value = selectedOption.value;
-            }
+            select.value = selectedOption ? selectedOption.value : '';
             if (schema && labelName && select.value) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
@@ -1375,7 +1724,83 @@ function generateAnnotationForms() {
     validateRequiredFields();
 }
 
-async function saveAnnotations() {
+/**
+ * Send the current answers to the server.
+ *
+ * `background` marks a save the annotator did not ask for — the debounced
+ * autosave that fires while they are still working. A network failure there
+ * must not call showError(), because showError() sets `#main-content` to
+ * `display: none`: one dropped request and the entire annotation UI vanishes
+ * mid-task, taking the visible work with it. Measured, not theorised — with
+ * `/updateinstance` aborted, every step card's button reported a 0×0 rect and
+ * a null offsetParent. A save the annotator triggered by navigating still
+ * blocks, because there the failure is the thing they need to know about.
+ */
+/**
+ * Headers for a navigation POST to /annotate.
+ *
+ * `X-Potato-Navigation` asks the server for a short JSON answer. Without it the
+ * server renders the whole next page into the POST response, which this code
+ * then throws away and fetches again with a GET.
+ */
+function navigationEndpoint() {
+    // Where navigation actions are POSTed. A page that is not driven by the
+    // annotator's own queue (a live collaborative session) installs its own
+    // endpoint; it takes the same {action, go_to} body.
+    const nav = window.potatoNavigation;
+    return (nav && typeof nav.endpoint === 'string' && nav.endpoint) || '/annotate';
+}
+
+/**
+ * Let an installed hook add to a save payload before it is sent.
+ *
+ * Both save paths call this: the fetch in `saveAnnotations()` and the beacon
+ * in `flushPendingSave()`. A beacon cannot carry headers, so anything a
+ * feature needs the server to know about a save has to travel in the body.
+ */
+function decorateSavePayload(payload) {
+    const hooks = window.potatoSaveHooks;
+    if (!hooks || typeof hooks.decorate !== 'function') return payload;
+    try {
+        return hooks.decorate(payload) || payload;
+    } catch (error) {
+        console.warn('A save hook failed; saving without it:', error);
+        return payload;
+    }
+}
+
+function navigationHeaders(extra) {
+    return Object.assign({
+        'Content-Type': 'application/json',
+        'X-Potato-Navigation': '1',
+    }, extra || {});
+}
+
+/**
+ * Load the page the server has just moved this annotator to.
+ *
+ * A plain navigation rather than `location.reload()`: a reload makes Firefox
+ * and Safari revalidate every script and stylesheet on the page, and re-POSTs
+ * when the page itself came from a form POST. The fragment is dropped because
+ * navigating to the current URL plus a fragment only scrolls. `instance_id` is
+ * dropped because a GET carrying it moves the annotator back to that item,
+ * undoing the navigation the server has just made.
+ */
+function loadNavigatedPage(response) {
+    // A page that navigates somewhere other than /annotate (a live
+    // collaborative session) names the next page in this header.
+    const location = response && response.headers && response.headers.get('X-Potato-Location');
+    if (location) {
+        window.location.replace(new URL(location, window.location.href).toString());
+        return;
+    }
+    const url = new URL(window.location.href);
+    url.hash = '';
+    url.searchParams.delete('instance_id');
+    window.location.replace(url.toString());
+}
+
+async function saveAnnotations({ background = false } = {}) {
     if (!currentInstance || !currentInstance.id) {
         return;
     }
@@ -1395,9 +1820,23 @@ async function saveAnnotations() {
             headers['X-API-Key'] = window.config.api_key;
         }
 
+        // Apply text edits still inside their debounce. That schedules an
+        // autosave of its own, which this save makes redundant.
+        if (pendingInputChanges.size > 0) {
+            flushPendingInputChanges();
+            clearTimeout(textSaveTimer);
+            textSaveTimer = null;
+        }
         // Sync currentAnnotations from DOM to ensure we have the latest state
         // This handles cases where change events may not have fired (e.g., JS clicks)
         syncAnnotationsFromDOM();
+        // Span, link and event prelabels the annotator kept are theirs once
+        // they move on: on a navigation save, not on an autosave while they
+        // are still here.
+        const reviewedPrelabels = !background && prelabelsOffered();
+        if (!background) {
+            await commitAllPrelabels();
+        }
         // Save both label and span annotations via /updateinstance
         const spanAnnotations = extractSpanAnnotationsFromDOM();
         debugLog('[DEBUG] saveAnnotations: spanAnnotations to send:', spanAnnotations);
@@ -1411,25 +1850,25 @@ async function saveAnnotations() {
             }
         }
         // Also collect data from hidden annotation inputs (image/audio/video annotations)
-        const hiddenInputs = document.querySelectorAll('.annotation-data-input');
-        hiddenInputs.forEach(input => {
-            if (input.name && input.value) {
-                // Store the raw JSON value with schema name as key
-                // Use ::: separator to match the format used by other annotation types
-                const key = `${input.name}:::_data`;
-                labelAnnotations[key] = input.value;
-                debugLog('[DEBUG] saveAnnotations: collected hidden input:', input.name, '=', input.value.substring(0, 100) + '...');
-            }
-        });
+        collectAnnotationDataInputs(labelAnnotations);
 
         const response = await fetch('/updateinstance', {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({
+            body: JSON.stringify(decorateSavePayload({
                 instance_id: currentInstance.id,
                 annotations: labelAnnotations,
-                span_annotations: spanAnnotations
-            })
+                cleared_schemas: clearedMultiselectSchemas(labelAnnotations),
+                span_annotations: spanAnnotations,
+                client_timestamp: new Date().toISOString(),
+                response_time_seconds: currentInstanceResponseSeconds(),
+                // Moving on from predicted spans takes them over, so an item
+                // whose every span was deleted stays empty (routes.py).
+                prelabels_reviewed: reviewedPrelabels || undefined,
+                // The finished timed trial, if any (trial-timing.js).
+                trial: (window.potatoTrial && typeof window.potatoTrial.record === 'function')
+                    ? (window.potatoTrial.record() || undefined) : undefined
+            }))
         });
 
         if (response.ok) {
@@ -1437,15 +1876,34 @@ async function saveAnnotations() {
             const responseText = await response.text();
             try {
                 const result = JSON.parse(responseText);
+                // A 2xx is not consent. `/updateinstance` answers with a body
+                // that says whether it stored anything, and refusals used to
+                // arrive at HTTP 200 -- so checking `response.ok` alone reported
+                // every discarded save as a save. Read the body too, and keep
+                // reading it: an older server still answers 200 here.
+                if (result && result.status === 'error') {
+                    console.warn('[DEBUG] saveAnnotations: server refused the save:', result.message);
+                    reportSaveRefused(result.message);
+                    return false;
+                }
                 debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
                 handleQualityControlResponse(result);
+                document.dispatchEvent(new CustomEvent('potato:annotations-saved', {
+                    detail: { instanceId: currentInstance && currentInstance.id,
+                              background: background, result: result }
+                }));
             } catch (jsonError) {
                 console.error('[DEBUG] saveAnnotations: JSON parse error:', jsonError);
                 console.error('[DEBUG] saveAnnotations: Response text (first 500 chars):', responseText.substring(0, 500));
                 // Don't throw - the save may have succeeded even if response parsing failed
             }
         } else {
-            console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
+            let message = '';
+            try {
+                message = (JSON.parse(await response.text()) || {}).message || '';
+            } catch (e) { /* a non-JSON error body is still an error */ }
+            console.warn('[DEBUG] saveAnnotations: failed to save annotations:', response.status, message);
+            reportSaveRefused(message, response.status);
             return false;
         }
 
@@ -1453,9 +1911,82 @@ async function saveAnnotations() {
 
     } catch (error) {
         console.error('Error saving annotations:', error);
-        showError(true, 'Failed to save annotations: ' + error.message);
+        if (background) {
+            // Keep the work on screen. The next edit reschedules a save, and
+            // the unload flush is still there as a backstop.
+            showNotification(
+                'Could not save just now — your work is still here and will be sent again.',
+                'error');
+        } else {
+            showError(true, 'Failed to save annotations: ' + error.message);
+        }
         return false;
     }
+}
+
+/**
+ * Tell the annotator that the server did not keep what they just did.
+ *
+ * The failure that motivated this was silent on both sides: the page kept
+ * working -- radios checked, span drawn, diff recomputed -- while every
+ * autosave for six minutes was refused for a session the server had already
+ * dropped. Clicking Next was the first visible sign, and by then the only
+ * place the work existed was the DOM.
+ *
+ * A lost session is the one case worth interrupting for, because no amount of
+ * retrying fixes it and the fix (sign in again in another tab) has to happen
+ * before the page is navigated. Everything else gets the quieter notice: the
+ * work is still on screen and the next edit reschedules a save.
+ */
+/**
+ * The Retry button on the error panel.
+ *
+ * It used to call `loadCurrentInstance()`, which rebuilds the form from the
+ * *server-rendered HTML already in the document* -- the render that happened
+ * when the page was first loaded. Any answer given since then is not in those
+ * `checked` attributes, so after the session-recovery flow the form came back
+ * blank over answers that were safely on disk, with the header still reading
+ * "Not labeled". The span survived only because it is re-fetched over HTTP.
+ * That is the worst possible moment for an empty form: the annotator has just
+ * been told their work was at risk, so a blank one reads as "it was lost".
+ *
+ * So: save what is on screen first, and reload only once the server has it.
+ * A reload is a real round trip, which is what makes the answers come back;
+ * reloading by hand was the workaround, and this is it made into the button.
+ */
+async function retryAfterError() {
+    const retryBtn = document.getElementById('error-retry-btn');
+    if (retryBtn) retryBtn.disabled = true;
+    try {
+        // `false` means the save was refused; its own handler has already put
+        // the reason on screen, so leave the panel up rather than reloading
+        // into a page that will refuse the next edit too.
+        const saved = await saveAnnotations();
+        if (saved === false) return;
+    } catch (e) {
+        console.warn('[Retry] Could not save before reloading:', e);
+        return;
+    } finally {
+        if (retryBtn) retryBtn.disabled = false;
+    }
+    window.location.reload();
+}
+
+function reportSaveRefused(message, httpStatus) {
+    const sessionLost = httpStatus === 401 ||
+        /no active session|user state not found/i.test(String(message || ''));
+    if (sessionLost) {
+        showError(true,
+            'You are signed out, so nothing on this page is being saved. ' +
+            'Sign in again in another tab, then come back and edit anything ' +
+            'here to save it — do not reload or navigate away first.');
+        return;
+    }
+    showNotification(
+        'The server did not save that change' +
+        (message ? ' (' + message + ')' : '') +
+        '. Your work is still on screen.',
+        'error');
 }
 
 async function navigateToPrevious() {
@@ -1542,11 +2073,9 @@ async function navigateToPrevious() {
         }
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'prev_instance',
                 instance_id: currentInstance?.id
@@ -1565,10 +2094,9 @@ async function navigateToPrevious() {
                 overlayCount: getCurrentOverlayCount()
             });
 
-            // Add a small delay to ensure span manager operations complete before reload
-            setTimeout(() => {
-                window.location.reload();
-            }, 100);
+            // onInstanceChange() above is synchronous for the current id, so
+            // there is nothing to wait for before leaving the page.
+            loadNavigatedPage(response);
         } else {
             console.error('[DEEP DEBUG NAV] navigateToPrevious - Navigation failed:', response.status);
             setLoading(false);
@@ -1603,7 +2131,10 @@ async function handleNavigationResponseError(response) {
     showNotification('Navigation failed. Please try again.', 'error');
 }
 
-async function navigateToNext() {
+async function navigateToNext(options = {}) {
+    // `bypassRequired`: a timed trial that ran out moves on with no answer.
+    // The server checks the trial record before it lets that through.
+    const bypassRequired = !!(options && options.bypassRequired);
     debugLog('[DEEP DEBUG NAV] navigateToNext - ENTRY POINT');
     deepDebugState.navigationCalls++;
 
@@ -1617,9 +2148,14 @@ async function navigateToNext() {
         return;
     }
 
+    // A text_edit line the annotator left as it was is an answer: accepted
+    // unchanged. Only typing wrote the record, so Next on a correct line saved
+    // nothing and the export could not tell it from a line nobody opened.
+    recordAcceptedTextEdits();
+
     // Client-side required field validation
     hasAttemptedForwardValidation = true;
-    if (!validateRequiredFields({ showErrors: true })) {
+    if (!bypassRequired && !validateRequiredFields({ showErrors: true })) {
         debugLog('[NAV] navigateToNext - blocked by client-side validation');
         return;
     }
@@ -1691,11 +2227,9 @@ async function navigateToNext() {
         }
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'next_instance',
                 instance_id: currentInstance?.id
@@ -1714,10 +2248,9 @@ async function navigateToNext() {
                 overlayCount: getCurrentOverlayCount()
             });
 
-            // Add a small delay to ensure span manager operations complete before reload
-            setTimeout(() => {
-                window.location.reload();
-            }, 100);
+            // onInstanceChange() above is synchronous for the current id, so
+            // there is nothing to wait for before leaving the page.
+            loadNavigatedPage(response);
         } else {
             handleNavigationResponseError(response);
             setLoading(false);
@@ -1743,6 +2276,7 @@ async function navigateToInstance(instanceIndex) {
         }
     }
 
+    let leavingPage = false;
     try {
         setLoading(true);
 
@@ -1793,13 +2327,11 @@ async function navigateToInstance(instanceIndex) {
             }
         }
 
-        const headers = {
-            'Content-Type': 'application/json',
-        };
+        const headers = navigationHeaders();
         if (window.config.api_key) {
             headers['X-API-Key'] = window.config.api_key;
         }
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
@@ -1821,8 +2353,11 @@ async function navigateToInstance(instanceIndex) {
             } else {
                 debugLog('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
             }
-            // Reload the page to get the new instance data from the server
-            window.location.reload();
+            // Load the page the server moved us to. The loading state stays
+            // up until it arrives: clearing it here showed the instance being
+            // left, with Next enabled, for as long as the request took.
+            leavingPage = true;
+            loadNavigatedPage(response);
         } else {
             await handleNavigationResponseError(response);
         }
@@ -1830,8 +2365,75 @@ async function navigateToInstance(instanceIndex) {
         console.error('Error navigating to instance:', error);
         showError(true, error.message);
     } finally {
-        setLoading(false);
+        if (!leavingPage) setLoading(false);
     }
+}
+
+// Determine whether a schema/question is currently hidden by display_logic.
+// Hidden questions must be excluded from required-field validation so they
+// never block navigation. Used by both annotation schemes and SurveyFlow
+// phase questions (consent/prestudy/poststudy), which share this pipeline.
+function isSchemaHiddenByDisplayLogic(schemaName, form) {
+    // Authoritative source: the display-logic manager, once initialized.
+    // isSchemaVisible() returns true for schemas with no display_logic rule,
+    // so unconditional questions are never treated as hidden.
+    if (typeof displayLogicManager !== 'undefined' && displayLogicManager) {
+        if (!displayLogicManager.isSchemaVisible(schemaName)) {
+            return true;
+        }
+    }
+    // Fallback DOM check: covers the brief window before the manager finishes
+    // initializing, or pages where it is not present. A collapsed container
+    // carries the .display-logic-hidden class.
+    let el = form;
+    if (!el) {
+        const sel = '[data-schema-name="' +
+            ((window.CSS && CSS.escape) ? CSS.escape(schemaName) : schemaName) + '"]';
+        el = document.querySelector(sel);
+    }
+    if (el && el.closest && el.closest('.display-logic-hidden')) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * How far a budget schema (constant_sum, soft_label) is from its declared total.
+ *
+ * Returns null when the form is not a budget schema or the parts already add up.
+ * The total lives on the form as `data-constant-sum-total` / `data-soft-label-total`,
+ * which the generators have always emitted -- nothing read it.
+ */
+function budgetShortfall(form) {
+    if (!form) return null;
+    const totalAttr = form.getAttribute('data-constant-sum-total')
+                   || form.getAttribute('data-soft-label-total');
+    if (totalAttr === null) return null;
+
+    const total = parseInt(totalAttr, 10);
+    if (isNaN(total)) return null;
+
+    const parts = form.querySelectorAll(
+        '.constant-sum-number, .constant-sum-slider, .soft-label-slider');
+    if (!parts.length) return null;
+
+    let sum = 0;
+    parts.forEach(part => { sum += (parseInt(part.value, 10) || 0); });
+    return sum === total ? null : { sum: sum, total: total };
+}
+
+/**
+ * What a composite widget says is still missing, if anything.
+ *
+ * The widget owns this: it knows how many cells it declared, which of them are
+ * answered, and how to say so in the annotator's terms ("3 of 10 scored", "no
+ * decisive step chosen"). The validator just reads it. An empty or absent
+ * attribute means the widget is satisfied.
+ */
+function compositeShortfall(form) {
+    if (!form) return null;
+    const reason = form.getAttribute('data-incomplete-reason');
+    return reason && reason.trim() ? reason.trim() : null;
 }
 
 function validateRequiredFields(options) {
@@ -1853,6 +2455,9 @@ function validateRequiredFields(options) {
         const form = input.closest('.annotation-form');
         const schemaName = form ? (form.getAttribute('data-schema-name') || form.id) : null;
         if (!schemaName) return;
+        // Skip questions hidden by display_logic — a hidden required question
+        // must not block navigation or be flagged as unfilled.
+        if (isSchemaHiddenByDisplayLogic(schemaName, form)) return;
         if (!formGroups[schemaName]) {
             formGroups[schemaName] = { form: form, radios: {}, others: [] };
         }
@@ -1882,8 +2487,10 @@ function validateRequiredFields(options) {
         // Check other inputs (textbox, select, range, etc.)
         for (const input of group.others) {
             if (input.type === 'range') {
-                // Sliders: check if user has interacted (data-modified attribute)
-                if (input.getAttribute('data-modified') !== 'true') {
+                // Sliders: a range always reports a value, so "answered" means
+                // the annotator moved it, or the server sent one back.
+                if (input.getAttribute('data-modified') !== 'true'
+                        && input.getAttribute('data-server-set') !== 'true') {
                     schemaFilled = false;
                     break;
                 }
@@ -1893,11 +2500,42 @@ function validateRequiredFields(options) {
             }
         }
 
+        // Budget schemas carry one rule the per-input test cannot express: the
+        // parts have to add up. constant_sum clamps upward only, so an annotator
+        // could put 10 in each of four boxes, read "Allocated: 40 / 100", and
+        // advance with 40 points' worth of allocation stored. soft_label holds
+        // its total by redistributing, except when `min_per_label` floors stop
+        // the other sliders absorbing the difference.
+        let reason = null;
+        if (schemaFilled) {
+            const shortfall = budgetShortfall(group.form);
+            if (shortfall) {
+                schemaFilled = false;
+                reason = `${shortfall.sum} of ${shortfall.total} allocated`;
+            }
+        }
+
+        // A composite widget declares its own cells, so only it can say whether
+        // they are all answered. The per-input test above sees one hidden input
+        // holding JSON and asks only whether it is non-empty, which made
+        // `required` mean "touched once": an agent_scorecard declaring four
+        // agents by two dimensions plus two team dimensions asks ten questions
+        // and was satisfied by one, and a failure_attribution with a null
+        // decisive step passed. Each widget sets `data-incomplete-reason` on its
+        // form when it writes its value, and clears it when it is done.
+        if (schemaFilled) {
+            const declared = compositeShortfall(group.form);
+            if (declared) {
+                schemaFilled = false;
+                reason = declared;
+            }
+        }
+
         if (!schemaFilled) {
             allRequiredFilled = false;
             const legend = group.form.querySelector('legend');
             const label = legend ? legend.textContent.trim() : schemaName;
-            unfilledSchemas.push({ name: schemaName, label: label });
+            unfilledSchemas.push({ name: schemaName, label: label, reason: reason });
         }
 
         // Only show visual feedback if user has attempted forward navigation
@@ -1929,13 +2567,19 @@ function updateRequiredFieldsError(unfilledSchemas) {
         errorDiv = document.createElement('div');
         errorDiv.id = 'required-fields-error';
         errorDiv.className = 'required-fields-error';
+        // Pressing Next and having nothing happen needs an explanation, and a
+        // banner that only appears on screen is not one. This matters more now
+        // that composite widgets put the specific shortfall in here -- "3 of 10
+        // scored" is the useful half, and it was the half nobody heard.
+        errorDiv.setAttribute('role', 'alert');
         const navDiv = document.querySelector('.potato-nav');
         if (navDiv) {
             navDiv.parentNode.insertBefore(errorDiv, navDiv);
         }
     }
 
-    const labels = unfilledSchemas.map(s => `<strong>${s.label}</strong>`).join(', ');
+    const labels = unfilledSchemas.map(
+        s => `<strong>${s.label}</strong>${s.reason ? ` (${s.reason})` : ''}`).join(', ');
     const plural = unfilledSchemas.length > 1;
     errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> Please answer the required question${plural ? 's' : ''}: ${labels}`;
     errorDiv.style.display = 'block';
@@ -2057,12 +2701,19 @@ function syncAnnotationsFromDOM() {
         }
     });
 
-    // Sync sliders
+    // Sync sliders. Unlike every other input here, a range reports a value
+    // whether or not anyone touched it -- slider, vas and soft_label all render
+    // at a starting position -- so collecting unconditionally recorded a
+    // default answer for every item an annotator merely scrolled past, and
+    // `require_fully_annotated` could not tell the difference. Take the same
+    // signal the requiredness check takes.
     const sliders = document.querySelectorAll('input[type="range"].annotation-input');
     sliders.forEach(input => {
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
-        if (schema && labelName) {
+        const touched = input.getAttribute('data-modified') === 'true'
+                     || input.getAttribute('data-server-set') === 'true';
+        if (schema && labelName && touched) {
             if (!currentAnnotations[schema]) {
                 currentAnnotations[schema] = {};
             }
@@ -2131,6 +2782,100 @@ function whetherNone(checkbox) {
 }
 
 // Input event handling functions
+/**
+ * Mark every slider belonging to this scheme as touched.
+ *
+ * Scheme-wide rather than per-input because the constrained group widgets --
+ * `soft_label`, `constant_sum` -- move their sibling sliders in code when one
+ * is dragged, assigning `.value` without dispatching an event. Marking only the
+ * slider under the cursor stored one number out of a distribution that only
+ * means anything whole. Answering one slider of a group scheme is answering the
+ * scheme.
+ */
+function markSliderSchemeTouched(input) {
+    const schema = input.getAttribute('schema');
+    if (!schema) {
+        input.setAttribute('data-modified', 'true');
+        return;
+    }
+    document
+        .querySelectorAll(`input[type="range"].annotation-input[schema="${CSS.escape(schema)}"]`)
+        .forEach(sibling => sibling.setAttribute('data-modified', 'true'));
+}
+
+/** The span manager, then every link, coreference and event manager. */
+function prelabelManagers() {
+    return [
+        window.spanManager,
+        ...Object.values(window.spanLinkManagers || {}),
+        ...Object.values(window.eventAnnotationManagers || {}),
+        ...Array.from(document.querySelectorAll('.coref-container'))
+            .map(el => el._coreferenceManager),
+    ].filter(Boolean);
+}
+
+/** Ids of the spans on the item now, deleted prelabels gone; null when
+ *  the page has no span manager. A model's link, chain mention or event
+ *  argument whose span the annotator deleted is dropped, not stored. */
+function liveSpanIds() {
+    const manager = window.spanManager;
+    if (!manager || !manager.annotations) return null;
+    return new Set((manager.annotations.spans || []).map(span => span.id));
+}
+window.potatoLiveSpanIds = liveSpanIds;
+
+/** Whether this page showed a model's spans, links, chains or events. */
+function prelabelsOffered() {
+    return prelabelManagers().some(manager => manager.prelabelsOffered);
+}
+
+/**
+ * Store every prelabel still on the item as the annotator's: the spans
+ * first, then the links, chains and events drawn between them. Runs on a
+ * navigation save, and before the first edit of any one scheme stores
+ * anything. Once the annotator has stored something here the server stops
+ * offering prelabels, so an edit that stored only its own scheme's lost the
+ * untouched ones of every other scheme.
+ */
+async function commitAllPrelabels() {
+    for (const manager of prelabelManagers()) {
+        if (typeof manager.commitPrelabels === 'function') {
+            try {
+                await manager.commitPrelabels();
+            } catch (err) {
+                console.error('Could not store prelabels', err);
+            }
+        }
+    }
+}
+window.commitAllPrelabels = commitAllPrelabels;
+
+/**
+ * The `input` event populateInputValues() dispatches after it sets a slider
+ * or number box, so constant_sum totals, VAS readouts and soft-label bars
+ * redraw. It is not an answer: the save listeners skip it. Dispatched as a
+ * plain `input` it was saved on page load, and a model's prelabel became the
+ * annotator's answer, and the item counted as done, before anyone touched it.
+ */
+function restoreInputEvent() {
+    return new CustomEvent('input', { bubbles: true, detail: { potatoRestore: true } });
+}
+
+function isRestoreEvent(event) {
+    return !!(event && event.detail && event.detail.potatoRestore);
+}
+
+/** Debounced `handleInputChange` for typing; flushed by every save path. */
+function debounceInputChange(event) {
+    if (isRestoreEvent(event)) return;
+    const element = event.target;
+    clearTimeout(pendingInputChanges.get(element));
+    pendingInputChanges.set(element, setTimeout(() => {
+        pendingInputChanges.delete(element);
+        handleInputChange(element);
+    }, 1000));
+}
+
 function setupInputEventListeners() {
     // Set up event listeners for all annotation inputs
     const inputs = document.querySelectorAll('.annotation-input');
@@ -2141,13 +2886,7 @@ function setupInputEventListeners() {
 
         if (inputType === 'text' || tagName === 'textarea') {
             // Text inputs and textareas - debounced saving
-            let timer;
-            input.addEventListener('input', function (event) {
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    handleInputChange(event.target);
-                }, 1000);
-            });
+            input.addEventListener('input', debounceInputChange);
             debugLog(`Set up event listener for ${tagName} element:`, input.id);
         } else if (inputType === 'radio' || inputType === 'checkbox') {
             // Radio/checkbox inputs - immediate saving
@@ -2155,12 +2894,18 @@ function setupInputEventListeners() {
                 handleInputChange(event.target);
             });
         } else if (inputType === 'range') {
-            // Slider inputs - immediate saving with value display
+            // Slider inputs - immediate saving with value display.
+            // A range always has a value, so nothing else can tell "the
+            // annotator chose 50" from "the slider renders at 50". Mark it on
+            // the first interaction: syncAnnotationsFromDOM skips unmarked
+            // ranges, and the required-scheme check reads the same attribute.
             input.addEventListener('input', function (event) {
                 const valueDisplay = document.getElementById(`${input.name}-value`);
                 if (valueDisplay) {
                     valueDisplay.textContent = event.target.value;
                 }
+                if (isRestoreEvent(event)) return;
+                markSliderSchemeTouched(event.target);
                 handleInputChange(event.target);
             });
         } else if (tagName === 'select') {
@@ -2170,13 +2915,7 @@ function setupInputEventListeners() {
             });
         } else if (inputType === 'number') {
             // Number inputs - debounced saving
-            let timer;
-            input.addEventListener('input', function (event) {
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    handleInputChange(event.target);
-                }, 1000);
-            });
+            input.addEventListener('input', debounceInputChange);
         } else if (inputType === 'hidden') {
             // Hidden inputs (used by triage and other custom schemas) - listen for change events
             input.addEventListener('change', function (event) {
@@ -2185,7 +2924,183 @@ function setupInputEventListeners() {
             debugLog(`Set up event listener for hidden input:`, input.id);
         }
     });
+
+    setupAnnotationDataAutosave();
 }
+
+/**
+ * Autosave for the blob schemas — image, video, audio, tiered, spatial,
+ * episode, grounding_eval, region_caption, rollout_evaluation.
+ *
+ * These do not post through `handleInputChange`: they own a canvas or a
+ * timeline, serialize the whole answer into one `.annotation-data-input`, and
+ * are collected wholesale inside `saveAnnotations()`. That collection was the
+ * ONLY thing that read them, and it runs on navigation — so until an annotator
+ * pressed Next or Previous, nothing they drew had reached the server.
+ *
+ * Measured before this existed: four shapes drawn, five seconds elapsed,
+ * `/get_annotations` empty and no save timer pending, so the `beforeunload`
+ * flush (which returns early unless `textSaveTimer` is set) had nothing to
+ * flush either. Closing the tab lost the work.
+ *
+ * It stayed invisible because every persistence test navigates, and navigation
+ * saves explicitly — and because a project that also has a radio or text
+ * schema saves on those, sweeping the blob inputs up as a side effect.
+ */
+function setupAnnotationDataAutosave() {
+    // Only `.annotation-data-input`: the mask input is legacy and is not
+    // collected into the payload — mask RLE already travels inside the main
+    // blob, whose write dispatches this same event.
+    document.querySelectorAll('input.annotation-data-input')
+        .forEach(input => {
+            // `setupInputEventListeners()` runs from both render paths and can
+            // run twice in one document. Re-wiring would re-read the baseline
+            // below from a value the annotator had already changed, and then
+            // suppress the save that value needs.
+            if (input.dataset.autosaveWired === 'true') return;
+            input.dataset.autosaveWired = 'true';
+
+            // What the instance arrived holding. A manager that writes the
+            // same thing back while setting itself up has not been edited, and
+            // must not be saved: an empty answer still counts as an answer, so
+            // an init-time save marks an untouched instance as done, and
+            // `/annotate` ends the task as soon as nothing is left unanswered.
+            // From the value the server rendered (mark_arrival_values), not
+            // the live value or the `value` attribute, which on a hidden
+            // input is the same thing: a widget that set itself up first
+            // (region_caption writes an empty caption list before its canvas
+            // loads) moved both, and the prelabel filling it in then read as
+            // an edit.
+            const rendered = input.getAttribute('data-arrived-value');
+            input._arrivedWith = rendered === null ? input.value : rendered;
+            input.addEventListener('change', function () {
+                // Every event reschedules, changed or not: a widget redraws in
+                // bursts (region_caption went empty, then the image tool moved
+                // a polygon, then both came back), and a timer left running
+                // from the middle of the burst checked a passing state.
+                if (!annotationDataChanged(input, input._arrivedWith)
+                        && !textSaveTimer) return;
+                scheduleAnnotationDataSave({ onlyIfChanged: true });
+            });
+            debugLog('Set up autosave for annotation data input:', input.id);
+        });
+}
+
+/**
+ * Has this input moved away from what the instance arrived holding?
+ *
+ * Guards the autosave centrally rather than trusting each of the nine managers
+ * to know when it is hydrating. Two cases are "no": the value is byte-identical
+ * to what arrived, or it went from nothing to an empty answer — `[]`, `{}` and
+ * the empty string all mean "the annotator has drawn nothing yet".
+ */
+function annotationDataChanged(input, arrivedWith) {
+    const now = input.value;
+    if (now === arrivedWith) return false;
+    // A prelabel arrives as the server's JSON ({"a": 1, "b": 2}) and a
+    // widget writes it back compactly ({"a":1,"b":2}): the same answer,
+    // which byte comparison read as an edit, so an untouched prelabel was
+    // saved on arrival and the item counted as done.
+    if (sameAnnotationData(now, arrivedWith)) return false;
+    return !(isEmptyAnnotationData(now) && isEmptyAnnotationData(arrivedWith));
+}
+
+function sameAnnotationData(a, b) {
+    if (!a || !b) return false;
+    // `color` is left out: the image tool fills in the label's colour on a
+    // shape that arrived without one, which is presentation, not an edit.
+    const canonical = (value) => {
+        if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+        if (value && typeof value === 'object') {
+            return '{' + Object.keys(value).filter((key) => key !== 'color').sort().map(
+                (key) => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
+        }
+        return JSON.stringify(value);
+    };
+    // A region_caption answer lists every region on its canvas, captioned or
+    // not; a region with no caption is no part of the answer. Compared as
+    // listed, a canvas prelabel with one more region than the caption
+    // prelabel read as an edit and both were stored on arrival.
+    const answered = (value) => (value && Array.isArray(value.captions))
+        ? Object.assign({}, value, {captions: value.captions.filter(
+            (entry) => entry && String(entry.caption || '').trim())})
+        : value;
+    try {
+        return canonical(answered(JSON.parse(a))) === canonical(answered(JSON.parse(b)));
+    } catch (e) {
+        return false;
+    }
+}
+
+function isEmptyAnnotationData(value) {
+    if (!value) return true;
+    const trimmed = value.trim();
+    if (trimmed === '[]' || trimmed === '{}') return true;
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.length === 0;
+        if (parsed && typeof parsed === 'object') {
+            // A timeline serializes to {segments: [], tracking: {}} when empty,
+            // so an object counts as empty when every value it holds is.
+            return Object.values(parsed).every(
+                v => v == null
+                    || (Array.isArray(v) && v.length === 0)
+                    || (typeof v === 'object' && Object.keys(v).length === 0));
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Debounce a save of the canvas/timeline schemas.
+ *
+ * Deliberately shares `textSaveTimer` rather than owning a second timer: that
+ * is the handle `flushPendingSave()` checks on beforeunload and on tab hide,
+ * so using it is what makes a closed tab flush instead of returning early.
+ *
+ * The delay is longer than the 500 ms used for a click on a radio button
+ * because drawing arrives in bursts — a mask stroke fires on every path, and
+ * dragging a box fires on every modify.
+ */
+function scheduleAnnotationDataSave(options) {
+    if (!currentInstance) return;
+    // A direct call from a widget always saves; the autosave listener's call
+    // checks again when the timer fires. A companion schema can pass through
+    // a different value while the page sets itself up (grounding_eval
+    // captured the canvas while annotation.js cleared it, then restored it),
+    // and a save scheduled for that moment stored an untouched prelabel.
+    // A save already pending that is not this check's own (a widget's
+    // direct call, or a text box's debounce, which shares the timer) stays a
+    // save that happens.
+    const onlyIfChanged = !!(options && options.onlyIfChanged)
+        && !(textSaveTimer && textSaveTimer !== conditionalSaveTimer);
+    clearTimeout(textSaveTimer);
+    textSaveTimer = setTimeout(() => {
+        textSaveTimer = null;
+        conditionalSaveTimer = null;
+        if (onlyIfChanged && !anyAnnotationDataChanged()) return;
+        saveAnnotations({ background: true });
+    }, 800);
+    conditionalSaveTimer = onlyIfChanged ? textSaveTimer : null;
+}
+
+let conditionalSaveTimer = null;
+
+function anyAnnotationDataChanged() {
+    // A companion canvas (the image_annotation scheme grounding_eval draws
+    // on) shows one expression's regions at a time and changes whenever an
+    // expression is put on screen; grounding's own input says whether
+    // anything was edited. region_caption's canvas is not one: its shapes
+    // are the regions themselves, and deleting an uncaptioned one is an edit.
+    return Array.from(document.querySelectorAll('input.annotation-data-input'))
+        .some(input => input.dataset.autosaveWired === 'true'
+            && input.dataset.companionCanvas !== 'true'
+            && annotationDataChanged(input, input._arrivedWith));
+}
+
+window.scheduleAnnotationDataSave = scheduleAnnotationDataSave;
 
 function handleInputChange(element) {
     const schema = element.getAttribute('schema');
@@ -2208,13 +3123,35 @@ function handleInputChange(element) {
     if (inputType === 'radio') {
         // For radio buttons, only save if checked
         if (element.checked) {
-            const oldValue = currentAnnotations[schema] ? currentAnnotations[schema][labelName] : null;
-            // Radio buttons are mutually exclusive — clear old entries for this schema
+            // The PREVIOUSLY SELECTED option for this schema — not this input's own
+            // entry. A radio/likert group stores one key per option, so the outgoing
+            // answer lives under a *different* labelName than the incoming one;
+            // reading currentAnnotations[schema][labelName] here always yielded
+            // undefined, which is why every recorded change had old_value: null and
+            // a 5→4 revision was indistinguishable from a first-time 4.
+            let oldLabel = null, oldValue = null;
+            if (currentAnnotations[schema]) {
+                const prior = Object.keys(currentAnnotations[schema])
+                    .filter(k => k !== labelName && k !== 'free_response');
+                if (prior.length) {
+                    oldLabel = prior[prior.length - 1];
+                    oldValue = currentAnnotations[schema][oldLabel];
+                }
+            }
+            // Radio buttons are mutually exclusive — clear old entries for this schema,
+            // but keep the free-response text that radio/multiselect attach to the
+            // same schema (it is a separate answer, not a competing option).
+            const freeResponse = currentAnnotations[schema]
+                ? currentAnnotations[schema]['free_response'] : undefined;
             currentAnnotations[schema] = {};
+            if (freeResponse !== undefined) {
+                currentAnnotations[schema]['free_response'] = freeResponse;
+            }
             value = element.value;
             // Track radio button selection
             if (window.interactionTracker) {
-                window.interactionTracker.trackAnnotationChange(schema, labelName, 'select', oldValue, value, 'user');
+                window.interactionTracker.trackAnnotationChange(
+                    schema, labelName, 'select', oldValue, value, 'user', oldLabel);
             }
         } else {
             return; // Don't save unchecked radio buttons
@@ -2239,6 +3176,13 @@ function handleInputChange(element) {
             }
             debugLog(`Removed annotation: ${schema}.${labelName}`);
 
+            // Unticking changes the answer too: a question gated by
+            // count_gt 1, or by count_equals 0, has to update now. This branch
+            // returns before the evaluation below, so it was never re-run.
+            if (displayLogicManager) {
+                displayLogicManager.evaluateForSchema(schema);
+            }
+
             // Track annotation deselection
             if (window.interactionTracker) {
                 window.interactionTracker.trackAnnotationChange(schema, labelName, 'deselect', oldValue, null, 'user');
@@ -2247,7 +3191,7 @@ function handleInputChange(element) {
             // Auto-save the removal
             clearTimeout(textSaveTimer);
             textSaveTimer = setTimeout(() => {
-                saveAnnotations();
+                saveAnnotations({ background: true });
             }, 500);
             return;
         }
@@ -2273,9 +3217,113 @@ function handleInputChange(element) {
     // Auto-save
     clearTimeout(textSaveTimer);
     textSaveTimer = setTimeout(() => {
-        saveAnnotations();
+        saveAnnotations({ background: true });
     }, 500);
+
+    // Hotkey review mode: auto-advance once the instance is complete
+    maybeAutoAdvance();
 }
+
+/**
+ * Review mode (config: review_mode: {enabled, auto_advance, advance_on, delay_ms}).
+ *
+ * After each annotation change, if auto-advance is on and the instance is
+ * "complete", navigate to the next instance automatically — this turns
+ * keyboard-labeled schemas into a hotkey-driven review queue (press key,
+ * page advances).
+ *
+ * advance_on:
+ *   "complete" (default) — every annotation schema on the page has a value
+ *   "required"           — all required-validated schemas are filled
+ */
+let autoAdvanceTimer = null;
+function maybeAutoAdvance() {
+    const rm = (window.config && window.config.review_mode) || {};
+    if (!rm.enabled || rm.auto_advance === false) return;
+    if (isLoading) return;
+
+    const advanceOn = rm.advance_on || 'complete';
+    let ready;
+    if (advanceOn === 'required') {
+        ready = validateRequiredFields();
+    } else {
+        // Every schema form on the page must have at least one annotation.
+        const forms = document.querySelectorAll('.annotation-form[data-schema-name]');
+        ready = forms.length > 0;
+        forms.forEach(form => {
+            const name = form.getAttribute('data-schema-name');
+            if (!name) return;
+            const inState = currentAnnotations[name] &&
+                Object.keys(currentAnnotations[name]).length > 0;
+            // Hidden data-input schemas (turn-level, tool_call_review, ...)
+            // hold state in their input value instead of currentAnnotations.
+            const dataInput = form.querySelector('.annotation-data-input');
+            const inInput = dataInput && dataInput.value;
+            if (!inState && !inInput) ready = false;
+        });
+    }
+    if (!ready) return;
+
+    const delay = typeof rm.delay_ms === 'number' ? rm.delay_ms : 350;
+    clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = setTimeout(() => {
+        debugLog('[review-mode] instance complete — auto-advancing');
+        navigateToNext();
+    }, delay);
+}
+
+/**
+ * Show answers that arrived from somewhere other than this page.
+ *
+ * A live collaborative session hears that a teammate changed a scheme on this
+ * item and has to show it without a reload. `changes` maps a scheme name to
+ * its whole new answer, `{label: value}`, or to null when it was cleared.
+ * Schemes not named are left exactly as they are, including any edit of this
+ * annotator's own that has not been saved yet.
+ *
+ * `populateInputValues()` cannot do this on its own: it fills inputs from
+ * `currentAnnotations` but never empties one, so a label a teammate removed
+ * would stay on screen, and it skips radios marked `data-server-set`.
+ *
+ * Nothing here counts as this annotator's input: no change events, and the
+ * redraw event is the restore kind the save listeners ignore.
+ */
+function applyRemoteLabels(changes) {
+    syncAnnotationsFromDOM();
+    const inputs = Array.from(document.querySelectorAll('.annotation-input'));
+    for (const [schema, labels] of Object.entries(changes || {})) {
+        const answer = labels && Object.keys(labels).length ? labels : null;
+        inputs.filter(input => input.getAttribute('schema') === schema).forEach(input => {
+            const label = input.getAttribute('label_name');
+            const value = answer && label != null ? answer[label] : undefined;
+            const has = value !== undefined && value !== null && value !== '' && value !== false;
+            const type = (input.type || '').toLowerCase();
+            if (type === 'radio' || type === 'checkbox') {
+                input.checked = has;
+                if (has) input.setAttribute('data-server-set', 'true');
+                else input.removeAttribute('data-server-set');
+                return;
+            }
+            input.value = has ? String(value) : '';
+            input.removeAttribute('data-modified');
+            if (has && (type === 'range' || type === 'hidden')) {
+                input.setAttribute('data-server-set', 'true');
+            } else {
+                input.removeAttribute('data-server-set');
+            }
+            input.dispatchEvent(restoreInputEvent());
+        });
+        if (answer) {
+            currentAnnotations[schema] = Object.assign({}, answer);
+        } else {
+            delete currentAnnotations[schema];
+        }
+    }
+    // The custom schemes (ranking, BWS, pairwise, ...) redraw from
+    // currentAnnotations; the native inputs above already match it.
+    populateInputValues();
+}
+window.potatoApplyRemoteLabels = applyRemoteLabels;
 
 function populateInputValues() {
     if (!currentAnnotations) return;
@@ -2349,12 +3397,15 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
+            // A value the server sent back was answered by a person, so it has
+            // to keep surviving the sync now that untouched ranges are skipped.
+            input.setAttribute('data-server-set', 'true');
             const valueDisplay = document.getElementById(`${input.name}-value`);
             if (valueDisplay) {
                 valueDisplay.textContent = currentAnnotations[schema][labelName];
             }
-            // Dispatch input event to trigger display updates (constant_sum, VAS, etc.)
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+            // Redraw displays (constant_sum, VAS, etc.) without saving.
+            input.dispatchEvent(restoreInputEvent());
             debugLog(`Populated slider ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
@@ -2379,8 +3430,8 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
-            // Dispatch input event to trigger constant_sum display updates
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+            // Redraw constant_sum displays without saving.
+            input.dispatchEvent(restoreInputEvent());
             debugLog(`Populated number ${input.id} with value:`, currentAnnotations[schema][labelName]);
         }
     });
@@ -2421,6 +3472,9 @@ function populateInputValues() {
     // Restore trajectory eval annotations
     restoreTrajectoryEvalAnnotations();
 
+    // Restore trajectory edit (correction) annotations
+    restoreTrajectoryEditAnnotations();
+
     // Update character counters for text schemas with min_chars/show_char_count
     updateAllCharCounters();
 
@@ -2430,6 +3484,36 @@ function populateInputValues() {
 /**
  * Restore ranking annotations by reordering items to match saved order.
  */
+function splitKnownValues(stored, values) {
+    // Split a comma-joined answer back into option values. A plain
+    // split(',') breaks any option whose own text has a comma in it
+    // ("Paris, France"), so match the known values first.
+    var known = values.filter(function (v) { return v; })
+        .sort(function (a, b) { return b.length - a.length; });
+    var out = [], pos = 0;
+    while (pos <= stored.length - 1) {
+        while (stored.charAt(pos) === ' ') pos++;
+        var match = null;
+        for (var i = 0; i < known.length; i++) {
+            var v = known[i], end = pos + v.length;
+            if (stored.substr(pos, v.length) === v && (end === stored.length || stored.charAt(end) === ',')) {
+                match = v; break;
+            }
+        }
+        if (match === null) {
+            var next = stored.indexOf(',', pos);
+            var stop = next < 0 ? stored.length : next;
+            var piece = stored.slice(pos, stop).trim();
+            if (piece) out.push(piece);
+            pos = stop + 1;
+        } else {
+            out.push(match);
+            pos += match.length + 1;
+        }
+    }
+    return out;
+}
+
 function restoreRankingAnnotations() {
     const hiddenInputs = document.querySelectorAll('.ranking-order-input');
     hiddenInputs.forEach(input => {
@@ -2443,8 +3527,8 @@ function restoreRankingAnnotations() {
             // Reorder DOM items
             const list = input.closest('fieldset').querySelector('.ranking-list');
             if (list) {
-                const order = savedOrder.split(',');
                 const items = Array.from(list.querySelectorAll('.ranking-item'));
+                const order = splitKnownValues(savedOrder, items.map(it => it.getAttribute('data-value')));
                 order.forEach((val, idx) => {
                     const item = items.find(it => it.getAttribute('data-value') === val);
                     if (item) {
@@ -2472,18 +3556,38 @@ function restoreHierarchicalAnnotations() {
             input.setAttribute('data-modified', 'true');
             input.setAttribute('data-server-set', 'true');
             // Check matching checkboxes
-            const selected = savedLabels.split(',').map(s => s.trim()).filter(Boolean);
             const tree = input.closest('fieldset').querySelector('.hier-tree');
+            const allValues = tree ? Array.from(tree.querySelectorAll('.hier-checkbox')).map(cb => cb.value) : [];
+            const selected = splitKnownValues(savedLabels, allValues);
             if (tree) {
                 tree.querySelectorAll('.hier-checkbox').forEach(cb => {
                     cb.checked = selected.includes(cb.value);
                 });
+                // Open the branches above each checked label, as the page
+                // does when it loads an answer: a teammate's nested choice
+                // must not be checked inside a collapsed branch.
+                tree.querySelectorAll('.hier-checkbox:checked').forEach(cb => {
+                    let branch = cb.closest('.hier-children');
+                    while (branch) {
+                        branch.style.display = 'block';
+                        const node = branch.closest('.hier-node');
+                        const toggle = node && node.querySelector(':scope > .hier-node-row .hier-toggle');
+                        if (toggle) {
+                            toggle.innerHTML = '&#9660;';
+                            toggle.setAttribute('aria-expanded', 'true');
+                        }
+                        branch = node && node.parentElement ? node.parentElement.closest('.hier-children') : null;
+                    }
+                });
                 // Update tags display
                 const tagsContainer = tree.parentElement.querySelector('.hier-selected-tags');
                 if (tagsContainer) {
-                    tagsContainer.innerHTML = selected.map(s =>
-                        '<span class="hier-tag">' + s + '</span>'
-                    ).join('');
+                    tagsContainer.replaceChildren(...selected.map(s => {
+                        const tag = document.createElement('span');
+                        tag.className = 'hier-tag';
+                        tag.textContent = s;
+                        return tag;
+                    }));
                 }
             }
             debugLog('Restored hierarchical annotation for', schema);
@@ -2537,15 +3641,17 @@ function restoreRangeSliderDisplays() {
             highVal = currentAnnotations[schema]['range_high'];
         }
 
-        // If we have saved values, restore them
-        if (lowVal != null && highVal != null) {
-            const renderFn = window['rangeSliderRender_' + schema];
-            if (renderFn) {
-                renderFn(parseInt(lowVal), parseInt(highVal));
-            }
-        }
+        // Only a restored answer is an answer. Stamping data-modified
+        // unconditionally said "the annotator touched this" about a widget
+        // nobody had touched -- harmless only for as long as the value stayed
+        // empty, and the same flag is what made an untouched ranking overwrite
+        // a real one.
+        if (lowVal == null || highVal == null) return;
 
-        // Always mark hidden inputs as modified so they get synced
+        const renderFn = window['rangeSliderRender_' + schema];
+        if (renderFn) {
+            renderFn(parseInt(lowVal), parseInt(highVal));
+        }
         lowInput.setAttribute('data-modified', 'true');
         highInput.setAttribute('data-modified', 'true');
     });
@@ -2586,24 +3692,40 @@ function restoreTextEditAnnotations() {
         const labelName = hiddenInput.getAttribute('label_name');
         if (!labelName || !currentAnnotations[schema][labelName]) return;
 
+        const stored = currentAnnotations[schema][labelName];
+        const editor = form.querySelector('.text-edit-textarea');
+
+        // Records written before the textarea and the hidden input were separated can
+        // hold either shape under this one key: the JSON blob when the annotator
+        // typed, or the plain edited string when they accepted the pre-filled source
+        // verbatim and never fired `oninput`. Read both, so a legacy plain-text record
+        // still restores the editor instead of throwing and leaving it blank.
+        let editedText = null;
         try {
-            const data = JSON.parse(currentAnnotations[schema][labelName]);
-            if (data && data.edited_text !== undefined) {
-                const editor = form.querySelector('.text-edit-textarea');
-                if (editor) {
-                    editor.value = data.edited_text;
-                    // Trigger diff update
-                    if (typeof window.textEditOnInput === 'function') {
-                        window.textEditOnInput(schema);
-                    }
-                }
+            const data = JSON.parse(stored);
+            if (data && typeof data === 'object' && data.edited_text !== undefined) {
+                editedText = data.edited_text;
+            } else if (typeof data === 'string') {
+                editedText = data;
             }
-            hiddenInput.value = currentAnnotations[schema][labelName];
-            hiddenInput.setAttribute('data-server-set', 'true');
-            hiddenInput.setAttribute('data-modified', 'true');
         } catch (e) {
-            debugLog('Error restoring text edit annotation:', e);
+            editedText = typeof stored === 'string' ? stored : null;
         }
+
+        if (editor && editedText !== null) {
+            editor.value = editedText;
+            // Recompute the diff and REWRITE the hidden input in the canonical JSON
+            // shape, so a legacy plain-text record converges on the next save.
+            if (typeof window.textEditOnInput === 'function') {
+                window.textEditOnInput(schema, { restore: true });
+            }
+        }
+
+        if (!hiddenInput.value) {
+            hiddenInput.value = stored;
+        }
+        hiddenInput.setAttribute('data-server-set', 'true');
+        hiddenInput.setAttribute('data-modified', 'true');
     });
 }
 
@@ -2628,9 +3750,16 @@ function restoreExtractiveQaAnnotations() {
             hiddenInput.setAttribute('data-server-set', 'true');
             hiddenInput.setAttribute('data-modified', 'true');
 
+            // Start from the plain passage: a restore shown over another
+            // answer (a teammate's, live) must not keep the old one's marks.
+            var unansBtn = document.getElementById(schema + '-unanswerable');
+            var passage = document.getElementById(schema + '-passage');
+            if (passage && passage.querySelector('.eqa-highlight')) {
+                passage.replaceChildren(document.createTextNode(passage.textContent));
+            }
+            if (unansBtn) unansBtn.classList.remove('eqa-unanswerable-active');
             if (data.unanswerable) {
                 document.getElementById(schema + '-answer-text').textContent = 'Unanswerable';
-                var unansBtn = document.getElementById(schema + '-unanswerable');
                 if (unansBtn) unansBtn.classList.add('eqa-unanswerable-active');
             } else if (data.answer_text) {
                 document.getElementById(schema + '-answer-text').textContent = data.answer_text;
@@ -2639,10 +3768,16 @@ function restoreExtractiveQaAnnotations() {
                 if (container && data.start >= 0 && data.end > data.start) {
                     var text = container.textContent;
                     var color = container.dataset.highlightColor || '#FFEB3B';
-                    container.innerHTML = text.substring(0, data.start) +
-                        '<span class="eqa-highlight" style="background-color:' + color + '">' +
-                        text.substring(data.start, data.end) + '</span>' +
-                        text.substring(data.end);
+                    // textContent has decoded the passage's entities, so it
+                    // must go back in as text, not markup.
+                    var mark = document.createElement('span');
+                    mark.className = 'eqa-highlight';
+                    mark.style.backgroundColor = color;
+                    mark.textContent = text.substring(data.start, data.end);
+                    container.replaceChildren(
+                        document.createTextNode(text.substring(0, data.start)),
+                        mark,
+                        document.createTextNode(text.substring(data.end)));
                 }
             }
         } catch (e) {
@@ -2775,6 +3910,47 @@ function restoreTrajectoryEvalAnnotations() {
 }
 
 /**
+ * Restore trajectory edit (correction) annotations from currentAnnotations.
+ * Populates the IIFE's per-schema state from the saved JSON, then rebuilds the
+ * editors (prefilling textareas with edited_text) and re-runs the visual pass.
+ */
+function restoreTrajectoryEditAnnotations() {
+    const forms = document.querySelectorAll('.trajectory-edit-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.trajectory-edit-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const raw = currentAnnotations[schema][labelName];
+            const data = JSON.parse(raw);
+            hiddenInput.value = raw;
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+
+            if (window._trajEditState) {
+                const st = window._trajEditState[schema] || { entries: {}, final_answer: null };
+                st.entries = {};
+                (data.steps || []).forEach(e => {
+                    st.entries[e.step_index + '::' + e.field] = e;
+                });
+                st.final_answer = data.final_answer || null;
+                window._trajEditState[schema] = st;
+            }
+            if (typeof window._trajEditBuild === 'function') window._trajEditBuild();
+            if (typeof window._trajEditRestore === 'function') window._trajEditRestore();
+        } catch (e) {
+            debugLog('Error restoring trajectory edit annotation:', e);
+        }
+    });
+}
+
+/**
  * Update all character counters for text schemas with min_chars/show_char_count.
  */
 function updateAllCharCounters() {
@@ -2809,7 +3985,21 @@ function updateAllCharCounters() {
     });
 }
 
-// Span annotation functions
+/**
+ * Enforce single-select across a group of same-class inputs.
+ *
+ * Called from the inline onclick of radio, likert, confidence and span-label
+ * inputs. It unchecks the siblings; it must NOT touch the clicked input.
+ *
+ * It used to end with `checkbox.checked = true`, which is a no-op for the
+ * `type="radio"` schemas but made the `type="checkbox"` span palette one-way:
+ * the browser untoggled the box correctly, this put it straight back, and an
+ * armed code could never be disarmed. Since applying a code consumes the text
+ * selection, that also made the in-vivo `i` shortcut — which needs a live
+ * selection — unreachable for the rest of the page's life. Measured with a
+ * capture-phase listener: `checked` was false on the way in, true by the time
+ * the change event fired.
+ */
 function onlyOne(checkbox) {
     debugLog('🔍 [DEBUG] onlyOne() called with checkbox:', {
         id: checkbox.id,
@@ -2836,18 +4026,10 @@ function onlyOne(checkbox) {
             x[i].checked = false;
         }
     }
-    // Ensure the clicked checkbox is checked
-    debugLog('🔍 [DEBUG] onlyOne() - Setting clicked checkbox to checked:', checkbox.id);
-    checkbox.setAttribute('data-just-checked', 'true'); // Flag to prevent change event interference
-    checkbox.checked = true;
-
-    // Remove the flag after a short delay in case the change event doesn't fire
-    setTimeout(() => {
-        if (checkbox.hasAttribute('data-just-checked')) {
-            debugLog('🔍 [DEBUG] onlyOne() - Removing data-just-checked flag after timeout');
-            checkbox.removeAttribute('data-just-checked');
-        }
-    }, 100);
+    // The clicked input keeps whatever the browser's own toggle just gave it:
+    // checked when arming, unchecked when the annotator clicks it again.
+    debugLog('🔍 [DEBUG] onlyOne() - Leaving clicked input as the browser set it:',
+        { id: checkbox.id, checked: checkbox.checked });
 }
 
 function extractSpanAnnotationsFromDOM() {
@@ -2859,7 +4041,10 @@ function extractSpanAnnotationsFromDOM() {
      */
     debugLog('[DEBUG] extractSpanAnnotationsFromDOM called');
 
-    const overlays = document.querySelectorAll('.span-overlay');
+    // AI keyword highlights share the .span-overlay class but are display
+    // only: they carry no schema or offsets, and posting them made the server
+    // refuse the whole save.
+    const overlays = document.querySelectorAll('.span-overlay:not(.ai-keyword-overlay)');
     const spanAnnotations = [];
 
     for (const overlay of overlays) {
@@ -2867,6 +4052,9 @@ function extractSpanAnnotationsFromDOM() {
         const label = overlay.getAttribute('data-label');
         const start = parseInt(overlay.getAttribute('data-start'));
         const end = parseInt(overlay.getAttribute('data-end'));
+        if (!schema || !label || Number.isNaN(start) || Number.isNaN(end)) {
+            continue;
+        }
         const title = overlay.querySelector('.span-label')?.textContent?.trim() || label;
 
         // Get the text value by finding the covered segments
@@ -4138,6 +5326,12 @@ function aggressiveFirefoxInstanceIdFix() {
     if (!isFirefox) {
         return; // Only apply to Firefox
     }
+    // Phase pages (consent, instructions, surveys) have no instance. Their
+    // synthetic '__phase_page__' id must survive, or saveAnnotations() sends
+    // nothing and required answers never reach the server.
+    if (window.config && !window.config.is_annotation_page) {
+        return;
+    }
 
     debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: Starting aggressive Firefox fix');
 
@@ -4185,7 +5379,7 @@ function aggressiveFirefoxInstanceIdFix() {
             }
         }
 
-        // Method 4: If we still don't have it, try to get it from the server via API
+        // Method 4: If we still don't have it, try to get it from the server via API.
         if (!correctInstanceId) {
             debugLog('🔍 [DEBUG] aggressiveFirefoxInstanceIdFix: No instance_id found, trying API call');
 
@@ -4216,6 +5410,9 @@ function aggressiveFirefoxInstanceIdFix() {
 
 // Helper function to apply the instance_id fix
 function applyInstanceIdFix(instanceIdInput, correctInstanceId) {
+    if (!correctInstanceId) {
+        return; // Nothing found to fix with; never blank the current id.
+    }
     const currentValue = instanceIdInput.value;
 
     if (currentValue !== correctInstanceId) {
@@ -4329,11 +5526,9 @@ async function jumpToUnannotatedPrev() {
         await saveAnnotations();
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'jump_to_unannotated_prev',
                 instance_id: currentInstance?.id
@@ -4353,8 +5548,8 @@ async function jumpToUnannotatedPrev() {
                 }
             }
 
-            debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, reloading page');
-            window.location.reload();
+            debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, loading page');
+            loadNavigatedPage(response);
         } else {
             console.error('[NAV] jumpToUnannotatedPrev - Navigation failed:', response.status);
             setLoading(false);
@@ -4399,11 +5594,9 @@ async function jumpToUnannotated() {
         await saveAnnotations();
 
         // Use the correct endpoint and payload for navigation
-        const response = await fetch('/annotate', {
+        const response = await fetch(navigationEndpoint(), {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'jump_to_unannotated',
                 instance_id: currentInstance?.id
@@ -4423,8 +5616,8 @@ async function jumpToUnannotated() {
                 }
             }
 
-            debugLog('[NAV] jumpToUnannotated - Navigation successful, reloading page');
-            window.location.reload();
+            debugLog('[NAV] jumpToUnannotated - Navigation successful, loading page');
+            loadNavigatedPage(response);
         } else {
             await handleNavigationResponseError(response);
             setLoading(false);
@@ -4457,6 +5650,74 @@ function handleQualityControlResponse(result) {
     if (isWarning) {
         showNotification(message || 'Please read items carefully before answering.', 'warning');
     }
+
+    // Gold standard feedback. Nothing rendered this: the function reacted to
+    // `blocked` and `warning` only, so turning `feedback` on put the correct
+    // answer in a response body the annotator could read in devtools and
+    // showed them nothing on the page. That is the wrong way round for the one
+    // mode meant to teach.
+    if (qcResult && qcResult.type === 'gold_standard' && qcResult.silent !== true) {
+        showGoldStandardFeedback(qcResult);
+    }
+}
+
+/**
+ * Show feedback for a graded gold standard item.
+ *
+ * Only reached when `gold_standards.feedback` is on -- a silent study returns
+ * `{recorded: true, silent: true}` and nothing here fires.
+ * @param {object} qcResult - The qc_result block from /updateinstance
+ */
+function showGoldStandardFeedback(qcResult) {
+    const parts = [];
+    if (qcResult.correct === true) {
+        parts.push('Correct.');
+    } else if (qcResult.correct === false) {
+        parts.push('That is not the expected answer.');
+    }
+    if (qcResult.gold_label) {
+        const expected = formatGoldLabel(qcResult.gold_label);
+        if (expected) {
+            parts.push('Expected: ' + expected + '.');
+        }
+    }
+    if (qcResult.explanation) {
+        parts.push(qcResult.explanation);
+    }
+    if (parts.length) {
+        showNotification(parts.join(' '), qcResult.correct ? 'success' : 'warning');
+    }
+
+    if (qcResult.accuracy_warning) {
+        const current = Math.round((qcResult.current_accuracy || 0) * 100);
+        const required = Math.round((qcResult.required_accuracy || 0) * 100);
+        showNotification(
+            'Your accuracy on check items is ' + current + '%, below the ' +
+            required + '% this task asks for. Please read each item carefully.',
+            'warning');
+    }
+}
+
+/**
+ * Render a gold label for display: "Sarcastic", or "stance: Sarcastic" when
+ * more than one schema is graded.
+ * @param {object|string} goldLabel - The expected answer
+ * @returns {string} A human-readable rendering
+ */
+function formatGoldLabel(goldLabel) {
+    if (typeof goldLabel === 'string') {
+        return goldLabel;
+    }
+    if (!goldLabel || typeof goldLabel !== 'object') {
+        return '';
+    }
+    const entries = Object.entries(goldLabel);
+    if (entries.length === 1) {
+        return String(entries[0][1]);
+    }
+    return entries.map(function (pair) {
+        return pair[0] + ': ' + String(pair[1]);
+    }).join(', ');
 }
 
 /**
@@ -4470,7 +5731,12 @@ function showNotification(message, type = 'info') {
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-container';
-        container.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 9999;';
+        // A max-width the container never had. Every message that used it was
+        // one short sentence, so nothing was constraining the box; gold
+        // standard feedback carries the expected label and an explanation and
+        // is several times longer.
+        container.style.cssText = 'position: fixed; top: 80px; right: 20px; ' +
+            'z-index: 9999; max-width: min(360px, calc(100vw - 40px));';
         document.body.appendChild(container);
     }
 
@@ -4485,6 +5751,8 @@ function showNotification(message, type = 'info') {
         font-weight: 500;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         animation: slideIn 0.3s ease;
+        line-height: 1.45;
+        overflow-wrap: break-word;
         background-color: ${type === 'info' ? '#e0f2fe' : type === 'success' ? '#dcfce7' : type === 'warning' ? '#fef3c7' : '#fee2e2'};
         color: ${type === 'info' ? '#0369a1' : type === 'success' ? '#166534' : type === 'warning' ? '#92400e' : '#dc2626'};
         border: 1px solid ${type === 'info' ? '#7dd3fc' : type === 'success' ? '#86efac' : type === 'warning' ? '#fcd34d' : '#fca5a5'};
@@ -4567,11 +5835,13 @@ function populatePairwiseTileContent() {
         return;
     }
 
-    // Get items from instance text
-    let items = null;
+    // The item's own fields first. `items_key` names the field holding the two
+    // candidates, so a scheme that configures it has said where its data is,
+    // and parsing the rendered text instead is guessing over an answer.
+    let items = pairwiseItemsFromInstanceData(pairwiseForms[0]);
     const instanceText = document.getElementById('instance-text');
 
-    if (instanceText) {
+    if (!items && instanceText) {
         const textContent = instanceText.querySelector('#text-content');
         const contentElement = textContent || instanceText;
 
@@ -4611,16 +5881,6 @@ function populatePairwiseTileContent() {
         }
     }
 
-    // Method 4: Try window.currentInstanceData
-    if (!items) {
-        const firstForm = pairwiseForms[0];
-        const itemsKey = firstForm.getAttribute('data-items-key') || 'text';
-        if (window.currentInstanceData && window.currentInstanceData[itemsKey]) {
-            const data = window.currentInstanceData[itemsKey];
-            if (Array.isArray(data) && data.length >= 2) items = data;
-        }
-    }
-
     if (items && items.length >= 2) {
         // Create pairwise items display ONCE at top (if not exists)
         createPairwiseItemsDisplay(items, pairwiseForms[0]);
@@ -4628,17 +5888,111 @@ function populatePairwiseTileContent() {
         // Wrap pairwise forms in a flex container for side-by-side layout
         wrapPairwiseFormsInFlexContainer(pairwiseForms);
 
-        // Hide the "Text to Annotate" section
-        const instanceTextContainer = document.querySelector('.instance-text-container');
-        if (instanceTextContainer) {
-            instanceTextContainer.style.display = 'none';
-        }
-        // Also hide the "Text to Annotate" heading
-        const textHeading = document.querySelector('h5.mb-3');
-        if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
-            textHeading.style.display = 'none';
+        // Hide the main text only when it is the SAME text as the candidates.
+        // With `items_key` naming a field of its own, the text field usually
+        // holds the question -- hiding it takes away what the annotator is
+        // being asked, which is not a duplicate of anything. Same rule as
+        // error_span's `sourceText === instanceText` guard.
+        if (pairwiseCandidatesAreTheMainText(items)) {
+            const instanceTextContainer =
+                document.querySelector('.instance-text-container');
+            if (instanceTextContainer) {
+                instanceTextContainer.style.display = 'none';
+            }
+            hideInstanceTextHeading();
         }
     }
+}
+
+/** Whether every candidate already appears in the rendered instance text. */
+function pairwiseCandidatesAreTheMainText(items) {
+    const element = document.getElementById('text-content')
+        || document.getElementById('instance-text');
+    if (!element) return false;
+    const flatten = text => String(text).replace(/\s+/g, ' ').trim();
+    const rendered = flatten(element.textContent || '');
+    if (!rendered) return false;
+    return items.every(item => {
+        const candidate = flatten(item);
+        return candidate.length > 0 && rendered.indexOf(candidate) !== -1;
+    });
+}
+
+/**
+ * The two candidates, read from the item's own fields.
+ *
+ * This used to read `window.currentInstanceData`, which is assigned in exactly
+ * one place: inside `populateDynamicSchemaContent`, for the dynamic-schema
+ * family. A page with only a pairwise scheme never ran that function, so the
+ * global did not exist and neither `items_key` nor a {left, right} pair ever
+ * rendered -- the only shape that worked was the one Method 3 parses out of
+ * the rendered text with a regex. A page that DID carry a dynamic scheme set
+ * the global, but only after the pairwise setup had already run and given up,
+ * so the same feature broke a second way.
+ *
+ * The item is on the page the whole time, in <script id="instance_data">, so
+ * read that instead of depending on another feature having run first.
+ */
+function pairwiseItemsFromInstanceData(form) {
+    const data = getEmbeddedInstanceData();
+    if (!data) return null;
+
+    const itemsKey = form.getAttribute('data-items-key') || 'text';
+    const configured = data[itemsKey];
+    if (Array.isArray(configured) && configured.length >= 2) {
+        return configured.map(item => String(item));
+    }
+
+    if (configured !== undefined && !Array.isArray(configured)) {
+        console.warn('[PAIRWISE] items_key "' + itemsKey + '" holds a ' +
+            (typeof configured) + ', not a list of candidates.');
+    }
+
+    // A two-sided comparison is often stored as a named pair rather than a
+    // list. Second, so a scheme that names a field of its own always wins on
+    // the items that have it -- but an item that carries the pair instead
+    // still renders, because a study whose items are not all shaped alike is
+    // the normal case and the alternative is a blank comparison.
+    if (typeof data.left === 'string' && typeof data.right === 'string') {
+        return [data.left, data.right];
+    }
+    return null;
+}
+
+/**
+ * The full current item, parsed from the page.
+ *
+ * `window.currentInstanceData` is the same object when something has already
+ * set it; this fills it in when nothing has, so neither caller depends on the
+ * order the two ran in.
+ */
+function getEmbeddedInstanceData() {
+    if (window.currentInstanceData) return window.currentInstanceData;
+    const script = document.getElementById('instance_data');
+    if (!script) return null;
+    try {
+        window.currentInstanceData = JSON.parse(script.textContent);
+        return window.currentInstanceData;
+    } catch (e) {
+        console.warn('[PAIRWISE] Could not parse the embedded instance data.');
+        return null;
+    }
+}
+
+/**
+ * Hide the "Text to Annotate:" heading above the main text container.
+ *
+ * Three callers hide the text container itself and left the heading behind:
+ * two of them tried, with `h5.mb-3`, which has matched nothing since the
+ * heading became `h5.instance-text-heading`. Matching on the heading's text
+ * was the second half of the same bug -- the heading is configurable through
+ * `instance_text_heading` and `ui_lang`, so a renamed or translated one would
+ * have been left behind even once the selector was right.
+ */
+function hideInstanceTextHeading() {
+    document.querySelectorAll('.instance-text-heading').forEach(heading => {
+        heading.style.display = 'none';
+    });
 }
 
 /**
@@ -4683,13 +6037,21 @@ function wrapPairwiseFormsInFlexContainer(pairwiseForms) {
         annotationFormsContainer.insertBefore(wrapper, annotationFormsContainer.firstChild);
     }
 
-    // Move ALL annotation forms into the wrapper
+    // Move ALL annotation forms into the wrapper. A form gated by
+    // display_logic sits inside a .display-logic-container, which is what is
+    // hidden and shown; moving the form out of it left the container empty and
+    // the question always visible. Move the container instead.
+    const moved = new Set();
     allForms.forEach(form => {
+        const gate = form.closest('.display-logic-container');
+        const node = (gate && annotationFormsContainer.contains(gate)) ? gate : form;
+        if (moved.has(node)) return;
+        moved.add(node);
         // Set default grid column if not specified
-        if (!form.hasAttribute('data-grid-columns')) {
-            form.setAttribute('data-grid-columns', '1');
+        if (!node.hasAttribute('data-grid-columns')) {
+            node.setAttribute('data-grid-columns', form.getAttribute('data-grid-columns') || '1');
         }
-        wrapper.appendChild(form);
+        wrapper.appendChild(node);
     });
 }
 
@@ -4746,6 +6108,30 @@ function escapeHtml(text) {
  * Select a pairwise tile (binary mode).
  * @param {HTMLElement} tile - The tile element clicked
  */
+/**
+ * Mirror the `selected` class onto `aria-checked`.
+ *
+ * The tiles carry role="radio", and a radio whose checked state lives only in
+ * a CSS class tells a screen reader nothing about which one is chosen. Derived
+ * from the class in one place rather than set at each of the sites that add or
+ * remove it, so the two cannot drift apart.
+ */
+function syncPairwiseTileAria(scope) {
+    const root = scope || document;
+    root.querySelectorAll('.pairwise-tile').forEach(tile => {
+        tile.setAttribute('aria-checked',
+            tile.classList.contains('selected') ? 'true' : 'false');
+    });
+    // Tie and Neither are real buttons rather than tiles, so they get the
+    // toggle attribute a button uses. Same reason: the state lived only in a
+    // class, and a class is not announced.
+    root.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn')
+        .forEach(button => {
+            button.setAttribute('aria-pressed',
+                button.classList.contains('selected') ? 'true' : 'false');
+        });
+}
+
 function selectPairwiseTile(tile) {
     const schema = tile.getAttribute('data-schema');
     const value = tile.getAttribute('data-value');
@@ -4765,6 +6151,7 @@ function selectPairwiseTile(tile) {
 
     // Select this tile
     tile.classList.add('selected');
+    syncPairwiseTileAria(scope);
 
     // Update hidden input — in multi-dim mode find the dimension-specific input
     let hiddenInput;
@@ -4775,6 +6162,12 @@ function selectPairwiseTile(tile) {
     }
     if (hiddenInput) {
         hiddenInput.value = value;
+        // Every other hidden-input widget (bws, ranking, triage) marks its input
+        // touched here. Pairwise did not, so syncAnnotationsFromDOM -- which
+        // deliberately ignores untouched hidden inputs, because browsers restore
+        // their .value across a reload -- skipped the answer, and so did the
+        // display-logic DOM fallback.
+        hiddenInput.setAttribute('data-modified', 'true');
         // Trigger annotation save
         registerAnnotation(hiddenInput);
         // Trigger change event for validation
@@ -4808,6 +6201,7 @@ function selectPairwiseOption(btn) {
 
     // Select this button
     btn.classList.add('selected');
+    syncPairwiseTileAria(scope);
 
     // Update hidden input
     let hiddenInput;
@@ -4818,6 +6212,12 @@ function selectPairwiseOption(btn) {
     }
     if (hiddenInput) {
         hiddenInput.value = value;
+        // Every other hidden-input widget (bws, ranking, triage) marks its input
+        // touched here. Pairwise did not, so syncAnnotationsFromDOM -- which
+        // deliberately ignores untouched hidden inputs, because browsers restore
+        // their .value across a reload -- skipped the answer, and so did the
+        // display-logic DOM fallback.
+        hiddenInput.setAttribute('data-modified', 'true');
         // Trigger annotation save
         registerAnnotation(hiddenInput);
         // Trigger change event for validation
@@ -4862,8 +6262,14 @@ function restorePairwiseAnnotations() {
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             const savedValue = currentAnnotations[schema][labelName];
             hiddenInput.value = savedValue;
+            // Mark it touched, as bws and ranking do on restore. An unmarked
+            // hidden input is invisible to syncAnnotationsFromDOM.
+            hiddenInput.setAttribute('data-modified', 'true');
 
-            // Select the appropriate tile or button
+            // Select the appropriate tile or button, and only that one: a
+            // teammate's choice shown live replaces the one on screen.
+            form.querySelectorAll('.pairwise-tile, .pairwise-tie-btn, .pairwise-neither-btn')
+                .forEach(t => t.classList.remove('selected'));
             if (savedValue === 'tie' || savedValue === 'neither') {
                 const optionBtn = form.querySelector(`.pairwise-tie-btn[data-value="${savedValue}"], .pairwise-neither-btn[data-value="${savedValue}"]`);
                 if (optionBtn) {
@@ -4907,6 +6313,7 @@ function restorePairwiseAnnotations() {
             if (!dim || !currentAnnotations[schema][dim]) return;
             const val = currentAnnotations[schema][dim];
             input.value = val;
+            input.setAttribute('data-modified', 'true');
 
             const row = input.closest('.pairwise-dimension-row');
             if (!row) return;
@@ -4942,17 +6349,20 @@ function restorePairwiseAnnotations() {
                     cb.checked = jdata.reasons.includes(cb.value);
                 });
             }
-            if (jdata.rationale) {
-                const ta = div.querySelector('.pairwise-rationale-textarea');
-                if (ta) {
-                    ta.value = jdata.rationale;
-                    updatePairwiseRationaleCounter(ta);
-                }
+            const ta = div.querySelector('.pairwise-rationale-textarea');
+            if (ta && (jdata.rationale || ta.value)) {
+                ta.value = jdata.rationale || '';
+                updatePairwiseRationaleCounter(ta);
             }
         } catch(e) {
             debugLog('[PAIRWISE] Error restoring justification:', e);
         }
     });
+
+    // A restored selection is a selection: the checked state has to follow the
+    // class here too, or a returning annotator hears "not checked" on the tile
+    // they already picked.
+    syncPairwiseTileAria(document);
 }
 
 /**
@@ -5084,10 +6494,7 @@ function populateBwsItemsDisplay() {
     if (instanceTextContainer) {
         instanceTextContainer.style.display = 'none';
     }
-    const textHeading = document.querySelector('h5.mb-3');
-    if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
-        textHeading.style.display = 'none';
-    }
+    hideInstanceTextHeading();
 }
 
 /**
@@ -5188,6 +6595,7 @@ function restoreBwsAnnotations() {
                 const savedValue = currentAnnotations[schema]['best'];
                 bestInput.value = savedValue;
                 bestInput.setAttribute('data-modified', 'true');
+                form.querySelectorAll('.bws-best-tile').forEach(t => t.classList.remove('selected'));
                 const tile = form.querySelector(`.bws-best-tile[data-value="${savedValue}"]`);
                 if (tile) tile.classList.add('selected');
                 debugLog(`[BWS] Restored best: ${schema}/best = ${savedValue}`);
@@ -5202,6 +6610,7 @@ function restoreBwsAnnotations() {
                 const savedValue = currentAnnotations[schema]['worst'];
                 worstInput.value = savedValue;
                 worstInput.setAttribute('data-modified', 'true');
+                form.querySelectorAll('.bws-worst-tile').forEach(t => t.classList.remove('selected'));
                 const tile = form.querySelector(`.bws-worst-tile[data-value="${savedValue}"]`);
                 if (tile) tile.classList.add('selected');
                 debugLog(`[BWS] Restored worst: ${schema}/worst = ${savedValue}`);
@@ -5323,6 +6732,24 @@ function populateExtractiveQa(form, schemaName, data, instanceText) {
     }
 }
 
+/**
+ * Record each text_edit field still showing its untouched source as accepted
+ * (edit distance 0). A field with a record already is left alone.
+ */
+function recordAcceptedTextEdits() {
+    document.querySelectorAll('.shadcn-text-edit-container').forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        const hidden = form.querySelector('.text-edit-data-input');
+        const editor = form.querySelector('.text-edit-textarea');
+        const source = schema && document.getElementById(schema + '-source-text');
+        if (!hidden || !editor || !source || hidden.value) return;
+        if (!source.textContent || editor.value !== source.textContent) return;
+        if (typeof window.textEditOnInput === 'function') {
+            window.textEditOnInput(schema);
+        }
+    });
+}
+
 function populateTextEdit(form, schemaName, data) {
     const sourceField = form.getAttribute('data-source-field');
     if (!sourceField || !data[sourceField]) return;
@@ -5343,16 +6770,37 @@ function populateTextEdit(form, schemaName, data) {
 }
 
 function populateErrorSpan(form, schemaName, data, instanceText) {
+    // `source_field` names the field to mark errors in; without it this always
+    // rendered the configured text_key, so an MQM scheme meant to mark the
+    // translation marked the source instead.
+    const sourceField = form.getAttribute('data-source-field');
+    const sourceText = (sourceField && typeof data[sourceField] === 'string')
+        ? data[sourceField]
+        : instanceText;
+    if (sourceField && typeof data[sourceField] !== 'string') {
+        console.warn('[DynamicSchema] error_span ' + schemaName +
+            ' names source_field "' + sourceField +
+            '" but the item has no text under that key; showing the main text field.');
+    }
     const textContainer = document.getElementById(schemaName + '-text');
     if (textContainer && !textContainer.textContent.trim()) {
-        textContainer.textContent = instanceText;
+        textContainer.textContent = sourceText;
     }
 
     // Hide the duplicate "Text to Annotate" section — the error span container
-    // IS the interactive text area and showing the same text twice is confusing
-    const instanceTextSection = document.getElementById('instance-text');
-    if (instanceTextSection) {
-        instanceTextSection.style.display = 'none';
+    // IS the interactive text area and showing the same text twice is
+    // confusing. Only when it IS the same text: a scheme pointed at another
+    // field needs the main text left on screen, because that is the source the
+    // annotator is comparing against.
+    if (sourceText === instanceText) {
+        const instanceTextSection = document.getElementById('instance-text');
+        if (instanceTextSection) {
+            instanceTextSection.style.display = 'none';
+        }
+        // The heading is a sibling of that container, not a child, so hiding
+        // the container on its own left "Text to Annotate:" standing over
+        // empty space.
+        hideInstanceTextHeading();
     }
 }
 
@@ -5364,22 +6812,36 @@ function populateCardSort(form, schemaName, data) {
     const sourceItems = document.getElementById(schemaName + '-source-items');
     if (!sourceItems || sourceItems.children.length > 0) return;
 
-    items.forEach(function(item, idx) {
-        const card = document.createElement('div');
-        card.className = 'card-sort-card';
-        card.draggable = true;
-        card.setAttribute('data-card-text', item);
-        card.textContent = item;
-        card.ondragstart = function(e) {
-            e.dataTransfer.setData('text/plain', item);
-            e.dataTransfer.setData('application/x-source-group', '__source__');
-            card.classList.add('card-sort-dragging');
-        };
-        card.ondragend = function() {
-            card.classList.remove('card-sort-dragging');
-        };
+    // Build through the schema's own createCard, which is exported for exactly
+    // this. Hand-rolling a second copy here is how the starting cards -- the
+    // only ones an annotator ever sees before they touch anything -- ended up
+    // without the tabindex, role and keyboard handlers that createCard gives
+    // every card it makes.
+    items.forEach(function(item) {
+        let card;
+        if (typeof window._cardSortCreateCard === 'function') {
+            card = window._cardSortCreateCard(item, schemaName, '__source__');
+        } else {
+            card = document.createElement('div');
+            card.className = 'card-sort-card';
+            card.draggable = true;
+            card.setAttribute('data-card-text', item);
+            card.textContent = item;
+            card.ondragstart = function(e) {
+                e.dataTransfer.setData('text/plain', item);
+                e.dataTransfer.setData('application/x-source-group', '__source__');
+                card.classList.add('card-sort-dragging');
+            };
+            card.ondragend = function() {
+                card.classList.remove('card-sort-dragging');
+            };
+        }
         sourceItems.appendChild(card);
     });
+
+    if (typeof window._cardSortBindZones === 'function') {
+        window._cardSortBindZones(schemaName);
+    }
 }
 
 function populateConjoint(form, schemaName, data) {
@@ -5391,61 +6853,122 @@ function populateConjoint(form, schemaName, data) {
         profiles = data[profilesField];
     }
 
-    // If no profiles in data, generate from config attributes
+    // Profiles come from the item (`profiles_field`) or, for a scheme built
+    // from `attributes`, from the server, which draws and records a design per
+    // annotator and item. With neither, the cards keep their em dashes.
     if (!profiles) {
-        // Read attribute definitions from the form's data-attributes or from inline config
-        const attrCells = form.querySelectorAll('.conjoint-attr-value');
-        if (attrCells.length === 0) return;
-
-        // Collect unique attributes
-        const attrs = {};
-        attrCells.forEach(cell => {
-            const attrName = cell.getAttribute('data-attr');
-            if (attrName && !attrs[attrName]) attrs[attrName] = [];
-        });
-
-        // Try to read levels from inline script config
-        const formScript = form.closest('.annotation_schema');
-        const scriptEl = formScript ? formScript.querySelector('script') : null;
-        let configData = null;
-        if (scriptEl) {
-            try {
-                // Look for conjointConfig in the script text
-                const scriptText = scriptEl.textContent;
-                const match = scriptText.match(/var\s+conjointConfig\s*=\s*(\{[^;]+\})/);
-                if (match) configData = JSON.parse(match[1]);
-            } catch (e) {}
-        }
-
-        // If we have config data, use it to generate random profiles
-        if (configData && configData.attributes) {
-            const profileCards = form.querySelectorAll('.conjoint-profile-card');
-            profileCards.forEach((card, idx) => {
-                const profileNum = card.getAttribute('data-profile');
-                configData.attributes.forEach(attr => {
-                    const cell = card.querySelector(`.conjoint-attr-value[data-attr="${attr.name}"]`);
-                    if (cell && attr.levels && attr.levels.length > 0) {
-                        // Use a deterministic index based on profile num and attribute
-                        // to vary levels across profiles for each instance
-                        const instanceId = document.getElementById('instance_id');
-                        const seed = (instanceId ? instanceId.value.length : 0) + idx;
-                        const levelIdx = (seed + attr.name.length + idx * 7) % attr.levels.length;
-                        cell.textContent = attr.levels[levelIdx];
-                    }
-                });
-            });
-        }
+        return;
     } else if (Array.isArray(profiles)) {
-        // Profiles from data
+        // Profiles from data.
+        //
+        // The generator only emits attribute rows for entries in the config's
+        // `attributes` block, but it accepts `attributes` OR `profiles_field`.
+        // So a data-driven conjoint had no `.conjoint-attr-value` cells to fill,
+        // and rendered as three blank cards with a radio under each: the
+        // annotator was asked to choose between nothing, and the config
+        // validated. Build the rows from the data's own keys when the config
+        // did not declare any.
         const profileCards = form.querySelectorAll('.conjoint-profile-card');
+        if (!form.querySelector('.conjoint-attr-value')) {
+            buildConjointRowsFromData(profileCards, profiles);
+        }
         profiles.forEach((profile, idx) => {
             if (idx < profileCards.length) {
                 const card = profileCards[idx];
                 Object.keys(profile).forEach(attrName => {
-                    const cell = card.querySelector(`.conjoint-attr-value[data-attr="${attrName}"]`);
+                    const cell = card.querySelector(
+                        `.conjoint-attr-value[data-attr="${CSS.escape(attrName)}"]`);
                     if (cell) cell.textContent = profile[attrName];
                 });
             }
         });
+        reconcileConjointCardCount(form, profileCards, profiles.length);
     }
+}
+
+/**
+ * Make the number of cards on screen the number of profiles in the data.
+ *
+ * The generator emits `profiles_per_set` cards, which it has to decide once
+ * for the whole scheme, while the data decides per item. Two profiles under
+ * the default of three left an "Option 3" whose every attribute read as an em
+ * dash -- with a live "Choose this" radio under it, so an annotator could pick
+ * the empty one and the study would record a preference for nothing.
+ *
+ * The other direction is a silent cap rather than a stray control: profiles
+ * past the last card were dropped with nothing on screen saying so, so an
+ * annotator compared three of five options believing they had seen the set.
+ * That one says so where they can read it.
+ */
+function reconcileConjointCardCount(form, profileCards, profileCount) {
+    profileCards.forEach((card, idx) => {
+        if (idx < profileCount) return;
+        card.remove();
+    });
+
+    const container = form.querySelector('.conjoint-profiles');
+    if (!container) return;
+    let notice = container.parentNode.querySelector('.conjoint-truncation-notice');
+    if (profileCount <= profileCards.length) {
+        if (notice) notice.remove();
+        return;
+    }
+    if (!notice) {
+        notice = document.createElement('p');
+        notice.className = 'conjoint-truncation-notice';
+        notice.setAttribute('role', 'status');
+        container.parentNode.insertBefore(notice, container);
+    }
+    // The annotator is told the set is incomplete. The config key that fixes
+    // it goes to the console, because they are not the person who can change
+    // it and naming a YAML setting in the interface tells them nothing they
+    // can act on.
+    notice.textContent = 'Showing ' + profileCards.length + ' of ' +
+        profileCount + ' options for this item.';
+    console.warn('[CONJOINT] ' + (form.getAttribute('data-schema-name') || '') +
+        ': this item has ' + profileCount + ' profiles but the scheme renders ' +
+        profileCards.length + '. Raise profiles_per_set to ' + profileCount + '.');
+}
+
+/**
+ * Give every card the same rows, in the same order, from the profiles' own keys.
+ *
+ * Every card gets a row for every attribute seen anywhere in the set, so the
+ * cards stay aligned when one profile omits a key — a missing value reads as an
+ * empty cell in the right row, rather than shifting the rows below it up and
+ * silently changing what the annotator is comparing.
+ */
+function buildConjointRowsFromData(profileCards, profiles) {
+    const attrNames = [];
+    profiles.forEach(profile => {
+        if (!profile || typeof profile !== 'object') return;
+        Object.keys(profile).forEach(name => {
+            if (!attrNames.includes(name)) attrNames.push(name);
+        });
+    });
+    if (attrNames.length === 0) return;
+
+    profileCards.forEach(card => {
+        const tbody = card.querySelector('.conjoint-profile-table tbody');
+        if (!tbody) return;
+        const profileNum = card.getAttribute('data-profile');
+        attrNames.forEach(name => {
+            const row = document.createElement('tr');
+            row.className = 'conjoint-attr-row';
+
+            const nameCell = document.createElement('td');
+            nameCell.className = 'conjoint-attr-name';
+            nameCell.textContent = name;
+
+            const valueCell = document.createElement('td');
+            valueCell.className = 'conjoint-attr-value';
+            valueCell.setAttribute('data-attr', name);
+            if (profileNum) valueCell.setAttribute('data-profile', profileNum);
+            valueCell.textContent = '\u2014';
+
+            row.appendChild(nameCell);
+            row.appendChild(valueCell);
+            tbody.appendChild(row);
+        });
+    });
 }

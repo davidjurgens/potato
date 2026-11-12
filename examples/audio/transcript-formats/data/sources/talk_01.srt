@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:06,500
+Host: Welcome back. Today we're talking about what happens to a transcript before anyone annotates it.
+
+2
+00:00:06,500 --> 00:00:12,000
+Host: You've argued that most of the errors people blame on annotators actually start upstream.
+
+3
+00:00:12,000 --> 00:00:21,400
+Guest: Right. If the diarization is wrong, every downstream label inherits that mistake, and nobody notices until analysis.
+
+4
+00:00:21,400 --> 00:00:28,900
+Guest: So the first thing I do with any corpus is listen to ten random minutes against the transcript.
+
+5
+00:00:28,900 --> 00:00:35,200
+Host: Ten minutes out of how many hours, typically?
+
+6
+00:00:35,200 --> 00:00:44,000
+Guest: However many it takes to stop finding surprises. Usually it's more than people budget for.

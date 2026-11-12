@@ -2,20 +2,70 @@
 Utility functions around parsing arguments.
 """
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
+
+
+#: Commands `flask_server.main()` intercepts from sys.argv before this parser
+#: runs. They cannot be `mode` choices -- each has its own flag grammar -- but
+#: leaving them out of `--help` entirely hid `validate` and `preview`, which is
+#: the loop every piece of Potato's agent-facing documentation is built around.
+#: An agent that trusted `--help` concluded the documented workflow did not
+#: exist in its build.
+#:
+#: `tests/unit/test_cli_dispatch.py` checks this list against the tokens really
+#: dispatched, so a new command cannot be added without appearing here.
+STAGE1_COMMANDS = {
+    "validate": "check a config the way the server checks it at boot",
+    "preview": "show what a config declares, and render it in a browser",
+    "mcp": "run the MCP server for coding agents",
+    "import": "build a project from an existing annotation file",
+    "label": "label a dataset with models, and certify the labels",
+    "snapshot": "freeze a project under an id you can cite, and compare snapshots",
+    "plugins": "list installed plugins, or load one to check what it adds",
+    "transcripts": "convert transcripts into annotation data",
+    "convokit": "build a project from a ConvoKit corpus",
+    "deploy": "put a task on a host, and take it down again",
+    "share": "serve a task on a temporary public URL",
+    "download-models": "fetch segmentation model weights",
+    "training": "run a training agent, register one, or check a GPU host",
+    "vendor": "install the large browser libraries some features need",
+    "version": "print the version, and the commit when run from a checkout",
+}
+
+STAGE1_HELP = "other commands:\n" + "\n".join(
+    f"  {name:<17}{summary}" for name, summary in STAGE1_COMMANDS.items()
+) + "\n\nRun `potato <command> --help` for that command's own options."
 
 
 def arguments():
     """
     Creates and returns the arg parser for Potato on the command line.
     """
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        epilog=STAGE1_HELP,
+        formatter_class=RawDescriptionHelpFormatter,
+    )
     parser.set_defaults(show_path=False, show_similarity=False)
 
     parser.add_argument(
         "mode",
-        choices=['start', 'migrate', 'reset-password', 'codebook'],
-        help="set the mode when potato is used, currently supporting: start, migrate, reset-password, codebook",
+        # `transcripts` and `convokit` are deliberately absent: flask_server.main()
+        # intercepts both from sys.argv before this parser ever runs, so listing
+        # them here advertised modes that could not be reached. Any command
+        # dispatched in that first stage must stay out of these choices --
+        # tests/unit/test_cli_dispatch.py enforces that the two sets are disjoint.
+        choices=['start', 'migrate', 'reset-password', 'codebook',
+                 'repair-annotations'],
+        # "currently supporting: start, migrate, ..." read as the complete
+        # list of what Potato does, and it is not -- nine more commands are
+        # dispatched before this parser runs and appear only in the epilog. A
+        # reader who took the sentence at face value concluded `potato mcp`
+        # and `potato validate` did not exist. Name what this argument accepts,
+        # and say where the rest are.
+        help=(
+            "what to do with the config file. See 'other commands' below for "
+            "the ones that take their own arguments instead"
+        ),
         default="start",
     )
 
@@ -92,6 +142,17 @@ def arguments():
     )
 
     parser.add_argument(
+        "--host",
+        action="store",
+        type=str,
+        dest="host",
+        help="interface to bind to (default: 0.0.0.0). Use 127.0.0.1 to accept "
+             "only local connections, e.g. when fronting the server with a tunnel "
+             "or reverse proxy.",
+        default=None,
+    )
+
+    parser.add_argument(
         "--persist-sessions",
         action="store_true",
         dest="persist_sessions",
@@ -146,7 +207,7 @@ def arguments():
         "--dry-run",
         action="store_true",
         dest="dry_run",
-        help="[migrate mode] Show what changes would be made without applying them",
+        help="[migrate/codebook mode] Show what changes would be made without applying them",
         default=False,
     )
 
@@ -166,6 +227,24 @@ def arguments():
         dest="username",
         help="[reset-password mode] Username to reset password for",
         default=None,
+    )
+
+    # Annotation repair arguments (GH #167)
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        dest="apply",
+        help="[repair-annotations mode] Write the repairs. Without this the run is a "
+             "dry run that only reports what would change.",
+        default=False,
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        dest="no_backup",
+        help="[repair-annotations mode] Do not write user_state.json.bak before "
+             "overwriting. Only meaningful with --apply.",
+        default=False,
     )
 
     return parser.parse_args()

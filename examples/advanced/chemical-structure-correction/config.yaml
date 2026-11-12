@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Checking and correcting optical structure recognition (OCSR) output.
+#
+# Each item shows the structure image from the source document beside the
+# structure the recogniser produced. The annotator marks the atoms it got
+# wrong, then corrects the structure in the editor, which starts from the
+# recognised SMILES. The true structure is kept on the server (answer_field)
+# and graded in the `chemistry` export.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/chemical-structure-correction/config.yaml -p 8000
+#
+# Optional, for InChIKeys in the browser:   potato vendor fetch rdkit
+# Optional, for grading and export InChIKeys: pip install "potato-annotation[chemistry]"
+#
+# The images are drawn from the true SMILES by generate_images.py; the
+# recognised SMILES were edited by hand to contain typical recognition errors.
+
+port: 8000
+annotation_task_name: "Structure recognition check"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/structures.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+instance_display:
+  layout:
+    direction: horizontal
+    gap: 16px
+  fields:
+    - key: page_image
+      type: image
+      label: "Source image"
+    - key: recognised_smiles
+      type: molecule
+      label: "Recognised structure"
+      display_options:
+        # openchemlib is committed with Potato; `engine: rdkit` draws with
+        # RDKit.js instead, after `potato vendor fetch rdkit`.
+        engine: openchemlib
+        height: 300
+        show_atom_numbers: false
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: viewer_selection
+    name: wrong_atoms
+    description: "Mark the atoms the recogniser got wrong"
+    viewer_field: recognised_smiles
+    labels:
+      - "wrong element"
+      - "wrong bond or charge"
+      - "wrong stereo"
+    instructions: >-
+      Choose a label, then click atoms in the recognised structure (or use the
+      atom list). Leave it empty when the structure is right.
+
+  - annotation_type: chemical_structure
+    name: corrected
+    description: "Correct the structure so it matches the source image"
+    prefill_field: recognised_smiles
+    # The true structure, graded in the export; never sent to the page.
+    answer_field: true_smiles
+    rdkit: auto
+    editor_height: 380
+    label_requirement:
+      required: true
+    instructions: >-
+      The editor starts from the recognised structure. Edit it with the mouse,
+      or paste a SMILES string and press Load. Leave it unchanged when it is
+      already right.
+
+  - annotation_type: radio
+    name: verdict
+    description: "How good was the recognition?"
+    labels:
+      - name: "Correct"
+        key_value: "1"
+      - name: "Minor errors"
+        key_value: "2"
+      - name: "Wrong structure"
+        key_value: "3"
+    label_requirement:
+      required: true

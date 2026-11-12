@@ -339,6 +339,7 @@ class TestActiveLearningWorkflows:
             items_data = {
                 "item1": {"id": "item1", "text": "This product is okay."},
                 "item2": {"id": "item2", "text": "I'm not sure about this."},
+                "item3": {"id": "item3", "text": "I did not like it."},
             }
 
             for item_id, item_data in items_data.items():
@@ -361,6 +362,12 @@ class TestActiveLearningWorkflows:
             # User 2 annotations (conflicting for item1)
             user2.add_label_annotation("item1", Label("sentiment", "negative"), True)
             user2.add_label_annotation("item2", Label("sentiment", "neutral"), True)
+
+            # Both agree on item3. item1 is a 1-1 tie, which majority vote and
+            # consensus both leave out, so item3 is what gives every strategy
+            # two classes to train on.
+            user1.add_label_annotation("item3", Label("sentiment", "negative"), True)
+            user2.add_label_annotation("item3", Label("sentiment", "negative"), True)
 
             # Trigger training
             manager.force_training()
@@ -694,7 +701,9 @@ class TestActiveLearningWorkflows:
         user2.add_label_annotation("item2", Label("sentiment", "negative"), True)
         user2.add_label_annotation("item3", Label("sentiment", "positive"), True)
 
-        # User 3 annotations
+        # User 3 annotations. User 3 breaks the item3 tie: a 1-1 split has no
+        # majority and is left out of training.
+        user3.add_label_annotation("item3", Label("sentiment", "positive"), True)
         user3.add_label_annotation("item4", Label("sentiment", "negative"), True)
         user3.add_label_annotation("item5", Label("sentiment", "neutral"), True)
 

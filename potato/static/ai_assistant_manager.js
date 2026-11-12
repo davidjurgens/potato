@@ -1,3 +1,38 @@
+
+/**
+ * Model output as safe HTML, with its inline markdown rendered.
+ *
+ * Two problems, one place. Model text was interpolated straight into
+ * `innerHTML`: a hint is generated from the item under annotation, so a
+ * document containing markup could put it on the page unescaped. And the
+ * model writes markdown -- `**Identify the pain points:**` is a normal thing
+ * for it to return -- which showed up as literal asterisks, with no lever
+ * available to the author except asking the model in the prompt not to
+ * format its answer.
+ *
+ * Escape first, then apply inline markdown to the escaped text, so every tag
+ * in the output is one this function put there.
+ */
+function aiTextToSafeHtml(text) {
+    const escaped = String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    return escaped
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+        .replace(/\n/g, '<br>');
+}
+
+// Published so `visual_ai_assistant.js`, which loads after this file, uses
+// the same one. Both render MODEL output into `innerHTML`; that is one
+// question with one answer, unlike the author-authored surfaces which
+// deliberately differ.
+window.aiTextToSafeHtml = aiTextToSafeHtml;
+
 // Debug logging utility - respects the debug setting from server config
 function aiDebugLog(...args) {
     if (window.config && window.config.debug) {
@@ -143,7 +178,7 @@ class AIAssistantManager {
             const response = await fetch('/api/colors');
             if (response.ok) {
                 this.colors = await response.json();
-                console.log('[AIAssistant] Colors loaded:', this.colors);
+                aiDebugLog('[AIAssistant] Colors loaded:', this.colors);
             }
         } catch (error) {
             console.warn('[AIAssistant] Error loading colors:', error);
@@ -189,7 +224,7 @@ class AIAssistantManager {
                 // Query tooltip fresh each time - it may have been replaced by getAiAssistantName()
                 const tooltip = node.querySelector('.tooltip');
 
-                console.log('[AIAssistant] Click detected on ai-help:', {
+                aiDebugLog('[AIAssistant] Click detected on ai-help:', {
                     target: event.target.className,
                     clickedHint: !!clickedHint,
                     clickKeyword: !!clickKeyword,
@@ -254,16 +289,16 @@ class AIAssistantManager {
     positionTooltip(tooltip) {
         // Get the parent ai-help element to position relative to
         const aiHelp = tooltip.closest('.ai-help');
-        console.log('[AIAssistant] positionTooltip called, aiHelp:', aiHelp);
+        aiDebugLog('[AIAssistant] positionTooltip called, aiHelp:', aiHelp);
         if (!aiHelp) {
-            console.log('[AIAssistant] No aiHelp found, cannot position');
+            aiDebugLog('[AIAssistant] No aiHelp found, cannot position');
             return;
         }
 
         const rect = aiHelp.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
-        console.log('[AIAssistant] aiHelp rect:', rect);
-        console.log('[AIAssistant] tooltip rect:', tooltipRect);
+        aiDebugLog('[AIAssistant] aiHelp rect:', rect);
+        aiDebugLog('[AIAssistant] tooltip rect:', tooltipRect);
 
         // Position below the button, centered
         let top = rect.bottom + 8; // 8px gap below the button
@@ -284,10 +319,10 @@ class AIAssistantManager {
             top = rect.top - tooltipRect.height - 8;
         }
 
-        console.log('[AIAssistant] Setting tooltip position:', { top, left });
+        aiDebugLog('[AIAssistant] Setting tooltip position:', { top, left });
         tooltip.style.top = `${top}px`;
         tooltip.style.left = `${left}px`;
-        console.log('[AIAssistant] Tooltip computed style:', window.getComputedStyle(tooltip).cssText.substring(0, 200));
+        aiDebugLog('[AIAssistant] Tooltip computed style:', window.getComputedStyle(tooltip).cssText.substring(0, 200));
     }
 
     startLoading(tooltip, assistantType) {
@@ -320,7 +355,7 @@ class AIAssistantManager {
     }
 
     toggleAssistant(assistantType, annotationId, tooltip) {
-        console.log('[AIAssistant] toggleAssistant called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+        aiDebugLog('[AIAssistant] toggleAssistant called:', { assistantType, annotationId, hasTooltip: !!tooltip });
 
         // Check if this assistant type is supported for the current content
         if (!this.shouldShowButton(assistantType)) {
@@ -354,7 +389,7 @@ class AIAssistantManager {
         }
 
         if (assistantType == "keyword") {
-            console.log('[AIAssistant] Keyword clicked, checking spanManager:', {
+            aiDebugLog('[AIAssistant] Keyword clicked, checking spanManager:', {
                 spanManagerExists: !!window.spanManager,
                 inAiSpans: window.spanManager?.inAiSpans?.(annotationId)
             });
@@ -381,29 +416,40 @@ class AIAssistantManager {
     }
 
 
+    /** The scheme name behind a numeric annotation id, for telemetry. */
+    schemaNameFor(annotationId) {
+        const form = Array.from(document.querySelectorAll('.annotation-form[data-annotation-id]'))
+            .find(f => f.getAttribute('data-annotation-id') === String(annotationId));
+        return (form && (form.getAttribute('data-schema-name') || form.id)) || String(annotationId);
+    }
+
     async getAiAssistantDefault(assistantType, annotationId, tooltip) {
-        console.log('[AIAssistant] getAiAssistantDefault called:', { assistantType, annotationId, hasTooltip: !!tooltip });
+        aiDebugLog('[AIAssistant] getAiAssistantDefault called:', { assistantType, annotationId, hasTooltip: !!tooltip });
 
         if (!tooltip) {
             console.error('Tooltip element not found');
             return;
         }
 
-        // Track AI request
+        // Track AI request. The tracker wants the scheme's NAME: passing the
+        // numeric annotation id stored schema_name as "0", "1", ..., so the
+        // save path, which stamps final_annotation by name, never matched an
+        // event and nothing could say what the annotator did after a hint.
+        const schemaName = this.schemaNameFor(annotationId);
         if (window.interactionTracker) {
-            window.interactionTracker.trackAIRequest(annotationId);
+            window.interactionTracker.trackAIRequest(schemaName);
         }
 
         try {
             this.startLoading(tooltip, assistantType);
-            console.log('[AIAssistant] Fetching data for:', assistantType);
+            aiDebugLog('[AIAssistant] Fetching data for:', assistantType);
             const data = await this.fetchAssistantData(assistantType, annotationId);
-            console.log('[AIAssistant] Received data:', data);
+            aiDebugLog('[AIAssistant] Received data:', data);
 
             // Track AI response
             if (window.interactionTracker) {
                 const suggestions = this.extractSuggestionsFromData(data);
-                window.interactionTracker.trackAIResponse(annotationId, suggestions);
+                window.interactionTracker.trackAIResponse(schemaName, suggestions);
             }
 
             this.renderAssistant(tooltip, assistantType, data, annotationId);
@@ -482,18 +528,20 @@ class AIAssistantManager {
                     content = '<div>Unknown assistant type</div>';
             }
         } else {
-            content = data.res;
+            // A non-JSON assistant response is still model output, and it went
+            // into `innerHTML` below verbatim.
+            content = aiTextToSafeHtml(data.res);
         }
 
 
-        console.log('[AIAssistant] Setting tooltip content:', content);
+        aiDebugLog('[AIAssistant] Setting tooltip content:', content);
         tooltip.innerHTML = `
             <button class="tooltip-close" title="Close">&times;</button>
             <div class="assistant-content">
                 ${content}
             </div>
         `;
-        console.log('[AIAssistant] Tooltip innerHTML set, tooltip element:', tooltip);
+        aiDebugLog('[AIAssistant] Tooltip innerHTML set, tooltip element:', tooltip);
 
         // Add close button event listener
         const closeBtn = tooltip.querySelector('.tooltip-close');
@@ -505,7 +553,7 @@ class AIAssistantManager {
         }
 
         this.activeTooltips.add(tooltip);
-        console.log(this.activeTooltips);
+        aiDebugLog(this.activeTooltips);
     }
 
     renderHint(data) {
@@ -513,12 +561,12 @@ class AIAssistantManager {
             <div class="hint-section">
                 <div class="content-item">
                     <span class="label">Hint:</span>
-                    <span class="value">${data.hint || 'No hint available'}</span>
+                    <span class="value">${aiTextToSafeHtml(data.hint) || 'No hint available'}</span>
                 </div>
                 ${data.suggestive_choice ? `
                     <div class="content-item">
                         <span class="label">Suggestion:</span>
-                        <span class="value suggestion">${data.suggestive_choice}</span>
+                        <span class="value suggestion">${aiTextToSafeHtml(data.suggestive_choice)}</span>
                     </div>
                 ` : ''}
             </div>
@@ -526,7 +574,7 @@ class AIAssistantManager {
     }
 
     renderKeyword(data, annotationId) {
-        console.log('[AIAssistant] renderKeyword called:', { data, annotationId });
+        aiDebugLog('[AIAssistant] renderKeyword called:', { data, annotationId });
 
         // Get the text-content element (not instance-text) to match positioning calculations
         // #instance-text contains both #text-content and #span-overlays, which causes offset mismatches
@@ -537,31 +585,69 @@ class AIAssistantManager {
         }
 
         const text = textContent.textContent || textContent.innerText;
-        console.log('[AIAssistant] Text content length:', text.length);
-
-        // Parse the new label_keywords format
-        const labelKeywords = data.label_keywords;
-        if (!labelKeywords || !Array.isArray(labelKeywords)) {
-            console.error('[AIAssistant] Invalid label_keywords format:', data);
-            return;
-        }
+        aiDebugLog('[AIAssistant] Text content length:', text.length);
 
         // Get the annotation form to find the schema name
         // The form's id attribute is the schema name (e.g., "sentiment")
         const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${CSS.escape(String(annotationId))}"]`);
         const schemaName = annotationForm?.id || annotationForm?.dataset.schemaName || 'default';
 
+        // /api/get_ai_suggestion returns a bare ARRAY of spans
+        // ({label, start, end, text, reasoning}). This function only understood
+        // the older {label_keywords: [{label, keywords: [...]}]} shape, so every
+        // real response was rejected as "Invalid label_keywords format" and the
+        // feature drew nothing at all.
+        //
+        // The server's start/end are offsets into the RAW item text. Overlays
+        // are positioned against #text-content, whose textContent is a
+        // different string (120 chars here for a 76-char message, once the
+        // display's own whitespace is counted), so those offsets do not
+        // transfer — using them directly produced 0x0 overlays. Locate the
+        // span's text in the DOM string instead, which is what the legacy
+        // branch below has always done.
+        if (Array.isArray(data)) {
+            const resolved = [];
+            data.forEach(s => {
+                if (!s || typeof s.text !== 'string' || !s.text.trim()) return;
+                const at = text.toLowerCase().indexOf(s.text.toLowerCase().trim());
+                if (at === -1) {
+                    aiDebugLog('[AIAssistant] keyword not found in displayed text:', s.text);
+                    return;
+                }
+                resolved.push({
+                    label: s.label,
+                    start: at,
+                    end: at + s.text.trim().length,
+                    text: text.substring(at, at + s.text.trim().length),
+                    schema: schemaName,
+                });
+            });
+            if (resolved.length === 0) {
+                aiDebugLog('[AIAssistant] No usable keyword spans in response:', data);
+                return;
+            }
+            this.insertKeywordHighlights(resolved, annotationId);
+            return;
+        }
+
+        // Legacy shape: labels with bare keyword strings, offsets found here.
+        const labelKeywords = data.label_keywords;
+        if (!labelKeywords || !Array.isArray(labelKeywords)) {
+            console.error('[AIAssistant] Invalid label_keywords format:', data);
+            return;
+        }
+
         // Find keywords in text and create highlight data
         const highlights = [];
-        console.log('[AIAssistant] Processing label_keywords:', labelKeywords);
+        aiDebugLog('[AIAssistant] Processing label_keywords:', labelKeywords);
 
         labelKeywords.forEach(({ label, keywords }) => {
             if (!keywords || !Array.isArray(keywords)) {
-                console.log('[AIAssistant] Skipping label with no keywords:', label);
+                aiDebugLog('[AIAssistant] Skipping label with no keywords:', label);
                 return;
             }
 
-            console.log(`[AIAssistant] Finding keywords for label "${label}":`, keywords);
+            aiDebugLog(`[AIAssistant] Finding keywords for label "${label}":`, keywords);
 
             keywords.forEach(keyword => {
                 if (!keyword || typeof keyword !== 'string') return;
@@ -573,7 +659,7 @@ class AIAssistantManager {
 
                 while ((startIndex = lowerText.indexOf(lowerKeyword, startIndex)) !== -1) {
                     const foundText = text.substring(startIndex, startIndex + keyword.length);
-                    console.log(`[AIAssistant] Found "${foundText}" at position ${startIndex}-${startIndex + keyword.length}`);
+                    aiDebugLog(`[AIAssistant] Found "${foundText}" at position ${startIndex}-${startIndex + keyword.length}`);
                     highlights.push({
                         label: label,
                         start: startIndex,
@@ -586,15 +672,26 @@ class AIAssistantManager {
             });
         });
 
-        console.log('[AIAssistant] Total highlights found:', highlights.length, highlights);
+        aiDebugLog('[AIAssistant] Total highlights found:', highlights.length, highlights);
 
         if (highlights.length === 0) {
-            console.log('[AIAssistant] No keywords found in text');
+            aiDebugLog('[AIAssistant] No keywords found in text');
             return;
         }
 
-        // Always use spanManager for keyword highlighting
-        // This ensures consistent positioning and z-index with other overlays
+        this.insertKeywordHighlights(highlights, annotationId);
+    }
+
+    /**
+     * Hand resolved keyword spans to the span manager.
+     *
+     * Always goes through spanManager so AI keyword overlays share the
+     * positioning and z-index of every other overlay. Note the dependency this
+     * makes explicit: keyword highlighting needs a span-capable display, so a
+     * project with `ai_support` but no span scheme has no spanManager and the
+     * feature cannot draw, however good the model's answer was.
+     */
+    insertKeywordHighlights(highlights, annotationId) {
         if (window.spanManager && typeof window.spanManager.insertAiKeywordHighlights === 'function') {
             window.spanManager.insertAiKeywordHighlights(highlights, annotationId);
         } else {
@@ -647,8 +744,8 @@ class AIAssistantManager {
     }
 
     renderRationale(data) {
-        console.log('[AIAssistant] renderRationale called with data:', data);
-        console.log('[AIAssistant] rationales:', data.rationales);
+        aiDebugLog('[AIAssistant] renderRationale called with data:', data);
+        aiDebugLog('[AIAssistant] rationales:', data.rationales);
 
         // Handle error responses
         if (data.error) {
@@ -677,8 +774,8 @@ class AIAssistantManager {
 
         const rationaleItems = rationales.map(r => `
             <div class="rationale-item">
-                <span class="rationale-label">${this.escapeHtml(r.label)}:</span>
-                <span class="rationale-reasoning">${this.escapeHtml(r.reasoning)}</span>
+                <span class="rationale-label">${aiTextToSafeHtml(r.label)}:</span>
+                <span class="rationale-reasoning">${aiTextToSafeHtml(r.reasoning)}</span>
             </div>
         `).join('');
 
@@ -731,11 +828,27 @@ class AIAssistantManager {
             const labelElement = annotationForm.querySelector(`label[for="${input.id}"]`);
             const labelText = labelElement?.textContent?.toLowerCase().trim();
 
-            // Check if this input matches the suggested label
+            // Check if this input matches the suggested label.
+            //
+            // There used to be a fourth clause, `suggestedLabelStr.includes(
+            // inputValue)`, testing in the opposite direction to the other
+            // three: any label whose NAME appeared anywhere inside the
+            // suggestion matched. So a model declining to commit had its
+            // non-answer rendered to the annotator as an endorsement, with a
+            // sparkle and a title reading "AI Suggested":
+            //
+            //   "The reviewer does not say anything about the food."  -> No
+            //   "I know the answer is unclear."                       -> No
+            //   "The image is not a circle, it is a square."   -> square AND circle
+            //
+            // English makes that ordinary rather than exotic: "not", "know",
+            // "another", "north" all contain "no", and short labels are the
+            // normal case for a two-way scheme. The other three clauses absorb
+            // label/id/text mismatches and none of them can match across a
+            // whole sentence; only that one could.
             const isMatch = inputValue === suggestedLabelStr ||
                             inputId?.includes(suggestedLabelStr) ||
-                            labelText?.includes(suggestedLabelStr) ||
-                            suggestedLabelStr.includes(inputValue);
+                            labelText?.includes(suggestedLabelStr);
 
             if (isMatch) {
                 aiDebugLog('[AIAssistant] Found matching label:', { inputValue, labelText, suggestedLabelStr });
@@ -774,7 +887,7 @@ class AIAssistantManager {
         // Store the highlighted elements for later cleanup
         if (highlightedElements.length > 0) {
             this.highlightedLabels.set(annotationId, highlightedElements);
-            console.log(`[AIAssistant] Highlighted ${highlightedElements.length} elements for annotation ${annotationId}`);
+            aiDebugLog(`[AIAssistant] Highlighted ${highlightedElements.length} elements for annotation ${annotationId}`);
         }
     }
 
@@ -811,9 +924,9 @@ class AIAssistantManager {
     }
 
     async getAiAssistantName() {
-        console.log('[AIAssistant] getAiAssistantName() called');
+        aiDebugLog('[AIAssistant] getAiAssistantName() called');
         const forms = document.querySelectorAll('.annotation-form');
-        console.log('[AIAssistant] Found annotation forms:', forms.length);
+        aiDebugLog('[AIAssistant] Found annotation forms:', forms.length);
 
         forms.forEach(async (node) => {
             const aiHelp = node.querySelector(".ai-help");

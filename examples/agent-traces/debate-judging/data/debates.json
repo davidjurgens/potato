@@ -1,0 +1,27 @@
+[
+  {
+    "id": "debate_001",
+    "motion": "This house would require all published AI research to include reproducibility artifacts.",
+    "conversation": [
+      {"speaker": "moderator", "text": "Motion: all published AI research must include reproducibility artifacts. Pro opens.", "agent_id": "moderator", "addressee": "pro", "turn_id": "b1-t0"},
+      {"speaker": "pro", "text": "Irreproducible results are unfalsifiable claims. A 2020 survey found only 15% of accepted ML papers shipped runnable code, and independent replications of headline results routinely fail. Requiring artifacts converts marketing into science.", "agent_id": "pro", "addressee": "moderator", "turn_id": "b1-t1"},
+      {"speaker": "con", "text": "The mandate is regressive. Industrial labs with proprietary data simply won't publish — we lose the result entirely rather than gaining an artifact. Academic labs without engineering staff bear compliance costs that favor the already-resourced.", "agent_id": "con", "addressee": "pro", "turn_id": "b1-t2", "reply_to": "b1-t1"},
+      {"speaker": "pro", "text": "The proprietary-data objection is handled by tiered artifacts: model cards, evaluation harnesses, and synthetic-data replications qualify. NeurIPS's checklist already operates this way and industrial submissions increased after its adoption.", "agent_id": "pro", "addressee": "con", "turn_id": "b1-t3", "reply_to": "b1-t2"},
+      {"speaker": "con", "text": "If 'artifact' is diluted to a checklist and a model card, the motion no longer guarantees reproducibility — Pro has conceded the strong claim while keeping the strong rhetoric. A checklist mandate is the status quo, not this motion.", "agent_id": "con", "addressee": "pro", "turn_id": "b1-t4", "reply_to": "b1-t3"},
+      {"speaker": "pro", "text": "I concede tiered artifacts weaken the guarantee, but they shift the default: today artifacts are optional everywhere; under the motion, absence requires justification. Defaults govern behavior — opt-out beats opt-in in every compliance domain.", "agent_id": "pro", "addressee": "con", "turn_id": "b1-t5", "reply_to": "b1-t4"},
+      {"speaker": "moderator", "text": "Time. Both sides close: Pro on defaults and falsifiability, Con on exclusion effects and the diluted-mandate objection.", "agent_id": "moderator", "turn_id": "b1-t6"}
+    ]
+  },
+  {
+    "id": "debate_002",
+    "motion": "This house believes coding agents should be allowed to merge changes without human review below a risk threshold.",
+    "conversation": [
+      {"speaker": "moderator", "text": "Motion: coding agents may auto-merge low-risk changes. Pro opens.", "agent_id": "moderator", "addressee": "pro", "turn_id": "b2-t0"},
+      {"speaker": "pro", "text": "Human review of trivial changes is theater. Dependency bumps, formatting, and test-only changes have near-zero incident rates but consume 30% of review bandwidth. Gate on measured risk — blast radius, test coverage, rollback cost — not on ceremony.", "agent_id": "pro", "addressee": "moderator", "turn_id": "b2-t1"},
+      {"speaker": "con", "text": "Risk scoring is exactly what agents get wrong. The 2024 supply-chain incidents were 'low-risk dependency bumps.' Human review isn't about catching the average case — it's the last defense on the tail case the scorer mislabels.", "agent_id": "con", "addressee": "pro", "turn_id": "b2-t2", "reply_to": "b2-t1"},
+      {"speaker": "pro", "text": "Tail risk argues for better gates, not human gates: reviewers rubber-stamp dependency bumps precisely because they can't audit them. Automated provenance checks catch what bored humans don't. The empirical question is which gate has the lower miss rate.", "agent_id": "pro", "addressee": "con", "turn_id": "b2-t3", "reply_to": "b2-t2"},
+      {"speaker": "con", "text": "I accept that human review of lockfiles is weak. But the motion says 'without human review,' not 'with stronger automated review.' Accountability matters: when the auto-merged change ships an incident, who is responsible? Removing the human removes the accountable party.", "agent_id": "con", "addressee": "pro", "turn_id": "b2-t4", "reply_to": "b2-t3"},
+      {"speaker": "moderator", "text": "Closing statements received. The bench will rule on whether accountability or empirical miss-rates carry the motion.", "agent_id": "moderator", "turn_id": "b2-t5"}
+    ]
+  }
+]

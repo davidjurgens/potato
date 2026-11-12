@@ -1,8 +1,19 @@
 """
 Flask Routes Module
 
-This module contains all the route handlers for the Flask server.
-It defines the HTTP endpoints and their associated logic for:
+IMPORT ORDER MATTERS. The handlers below are registered with module-level
+``@app.route`` decorators against ``potato.flask_server.app``, and
+``create_app()`` rebinds that global to the app it builds. So importing this
+module after such an app has served its first request raises Flask's
+
+    AssertionError: The setup method 'route' can no longer be called on the
+    application. It has already handled its first request.
+
+which names nothing about Potato and reads as a Flask problem. Import
+``potato.routes`` before anything serves. See the note at the ``global app``
+line in ``create_app`` and ``tests/unit/test_routes_import_order.py``.
+
+All the route handlers for the Flask server, covering:
 - User authentication and session management
 - Navigation between annotation phases
 - Form handling and validation
@@ -28,11 +39,15 @@ Key Features:
 from __future__ import annotations
 
 import json
+import math
+import re
 import logging
 import traceback
 import datetime
 from datetime import timedelta
-from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
+from flask import (Flask, Response, session, render_template, request,
+                   redirect, url_for, jsonify, make_response,
+                   after_this_request)
 import time
 import uuid
 
@@ -43,7 +58,7 @@ from potato.flask_server import (
     init_user_state, UserAuthenticator, UserPhase,
     move_to_prev_instance, move_to_next_instance, go_to_id,
     get_annotations_for_user_on, get_span_annotations_for_user_on,
-    _instance_meets_required_annotation_rules,
+    _instance_meets_required_annotation_rules, _scheme_is_required,
     render_page_with_annotations, get_current_page_html,
     validate_annotation, parse_html_span_annotation, Label, SpanAnnotation,
     get_users, get_total_annotations, update_annotation_state,
@@ -61,6 +76,8 @@ from potato.admin import admin_dashboard
 from potato.ai.ai_help_wrapper import generate_ai_help_html
 from potato.ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color, set_span_color, SPAN_COLOR_PALETTE
+from potato.server_utils.annotation_keys import (
+    split_annotation_key, is_selection_marker)
 
 # Import annotation history
 from potato.annotation_history import AnnotationHistoryManager
@@ -70,71 +87,217 @@ from potato.logging_config import is_ui_debug_enabled, get_debug_log_settings
 from potato.quality_control import get_quality_control_manager
 
 # Import adjudication
-from potato.adjudication import get_adjudication_manager, AdjudicationDecision
+from potato.adjudication import (
+    get_adjudication_manager, AdjudicationDecision, annotator_aliases,
+    blind_item_dict, blind_annotator_signals, unblind_user_id)
 
 # Import diversity manager
 from potato.diversity_manager import get_diversity_manager
 
 import os
 from potato.item_state_management import Item
-from potato.flask_server import get_displayed_text
+from potato.flask_server import (get_displayed_text, apply_conjoint_profiles,
+                                  annotator_record)
+
+
+def _qc_answer_payload(annotations: dict):
+    """Flatten a `/updateinstance` annotations payload for QC and webhooks.
+
+    Returns ``(all_annotations, final_by_schema)``. A function rather than
+    inline in the route so the shape quality control grades is the one tests
+    feed it.
+    """
+    all_annotations = {}
+    final_by_schema = {}
+    for key, value in (annotations or {}).items():
+        # Parse schema:label format. `:::` first -- it is the form
+        # this route's own refusal message asks callers to send, and
+        # splitting on the first colon reads its label as "::Sincere".
+        parsed = split_annotation_key(key)
+        if parsed is not None:
+            schema_name, label_name = parsed
+            all_annotations[schema_name] = value
+            # ALSO keep the label. The annotation page happens to put
+            # it in the value as well, so collapsing to `schema` looked
+            # lossless; anything posting what the form element holds
+            # sends `{"sarcasm:Sincere": "on"}`, and this threw away
+            # the only copy of the answer. Grading then compared the
+            # expected label against the string "on" and failed every
+            # check and gold item, however well they were answered.
+            # Both keys are kept because the bare one is what the
+            # webhook payload and auto-promotion have always carried.
+            all_annotations[key] = value
+            # What the annotator ends up with, as a LABEL. The value
+            # beside it is the form's own marker ("on"), and
+            # `suggestion_accepted` holds a label -- comparing the two
+            # is the whole point of recording both.
+            final_by_schema[schema_name] = (
+                label_name if is_selection_marker(value) else value)
+        else:
+            all_annotations[key] = value
+    return all_annotations, final_by_schema
+
+
+def _chosen_labels(annotations: dict, types: Optional[dict] = None) -> dict:
+    """See potato.server_utils.annotation_keys.chosen_labels."""
+    from potato.server_utils.annotation_keys import chosen_labels
+    return chosen_labels(annotations, types)
 
 
 def _inject_quality_control_item_if_needed(username, user_state):
-    qc_manager = get_quality_control_manager()
-    if not qc_manager:
+    """Delegates to `server_utils.quality_control_injection`.
+
+    It moved there so `/pocket/api/batch` could call it too. A blueprint cannot
+    import this module at request time -- the `@app.route` decorators re-run and
+    Flask refuses -- so the shared logic has to live somewhere neither surface
+    owns.
+    """
+    from potato.server_utils.quality_control_injection import (
+        inject_quality_control_item_if_needed,
+    )
+
+    return inject_quality_control_item_if_needed(username, user_state, config)
+
+
+def _has_annotated_all_assigned(user_state) -> bool:
+    """Whether every item this user holds has been annotated.
+
+    Distinct from holding nothing: a user who drained their queue still HOLDS
+    those items, so a check on assignment count alone reads them as busy
+    forever.
+    """
+    try:
+        assigned = set(user_state.get_assigned_instance_ids() or ())
+    except Exception:
+        return False
+    if not assigned:
+        return False
+    try:
+        annotated = set(user_state.get_annotated_instance_ids() or ())
+    except Exception:
+        return False
+    return assigned.issubset(annotated)
+
+
+def _qc_blocked(username) -> bool:
+    """Whether attention checks have blocked this user. False when QC is off."""
+    try:
+        from potato.quality_control import get_quality_control_manager
+        qc_manager = get_quality_control_manager()
+        return bool(qc_manager is not None and qc_manager.is_user_blocked(username))
+    except Exception:
+        logger.error("Could not read the quality-control block state for %s", username,
+                     exc_info=True)
+        return False
+
+
+def _unmet_required_labels(user_state) -> list:
+    """Questions on the current phase page whose required answer was not given.
+
+    A consent question declares ``label_requirement.required_label`` (for
+    example "I agree"). The page enforced it in the browser only, and the
+    route advanced on any POST, so a participant who answered "I disagree"
+    reached the annotation phase with one crafted request.
+
+    A question marked ``required: true`` needs any answer. That was checked in
+    the browser only, so a bare POST to /prestudy skipped a required screener
+    question, and an ``exit_when`` rule on it never ran. A question hidden by
+    its own ``display_logic`` is skipped, as on annotation pages.
+    """
+    phase, page = user_state.get_current_phase_and_page()
+    schemes = (config.get("_phase_page_schemes") or {}).get(page) or []
+    if not schemes:
+        return []
+    stored = (getattr(user_state, "phase_to_page_to_label_to_value", {}) or {}).get(phase, {}).get(page, {}) or {}
+    selected = {}
+    for label, value in stored.items():
+        if value is None or value is False:
+            continue
+        if isinstance(value, str) and value.strip().lower() in ("", "false", "off"):
+            continue
+        chosen = selected.setdefault(label.get_schema(), set())
+        chosen.add(label.get_name())
+        # A phase question can also be posted as {"age_consent": "I agree"},
+        # with the answer in the value.
+        if isinstance(value, str):
+            chosen.add(value)
+    hidden = set()
+    if any(s.get("display_logic") for s in schemes):
+        try:
+            from potato.server_utils.display_logic import compute_hidden_schemas
+            from potato.server_utils.phase_flow import collect_flow_answers
+            hidden = compute_hidden_schemas(schemes, collect_flow_answers(config, user_state))
+        except Exception:
+            logger.warning("display_logic could not be evaluated on %s; every "
+                           "required question there counts as visible", page,
+                           exc_info=True)
+    unmet = []
+    for scheme in schemes:
+        name = scheme.get("name")
+        if name in hidden:
+            continue
+        lr = scheme.get("label_requirement")
+        required = lr.get("required_label") if isinstance(lr, dict) else None
+        if required:
+            required = {required} if isinstance(required, str) else set(required)
+            if not (selected.get(name, set()) & required):
+                unmet.append(name)
+        elif _scheme_is_required(scheme) and not selected.get(name):
+            unmet.append(name)
+    return unmet
+
+
+def _drop_hidden_phase_answers(user_state) -> None:
+    """Forget answers to questions the page hides from this participant.
+
+    `display_logic` hides a question in the browser, but a POST that answered
+    it anyway was stored: participants in one condition had answers to a
+    question only the other condition sees. Run as the page is left, once its
+    answers are final.
+    """
+    phase, page = user_state.get_current_phase_and_page()
+    schemes = (config.get("_phase_page_schemes") or {}).get(page) or []
+    if not any(isinstance(s, dict) and s.get("display_logic") for s in schemes):
         return
-
-    current_instance = user_state.get_current_instance()
-    current_instance_id = current_instance.get_id() if current_instance else None
-    if current_instance_id and (
-        qc_manager.is_attention_check(current_instance_id) or qc_manager.is_gold_standard(current_instance_id)
-    ):
+    try:
+        from potato.server_utils.display_logic import compute_hidden_schemas
+        from potato.server_utils.phase_flow import collect_flow_answers
+        hidden = compute_hidden_schemas(schemes, collect_flow_answers(config, user_state))
+    except Exception:
+        logger.warning("display_logic could not be evaluated on %s; its answers "
+                       "are kept as given", page, exc_info=True)
         return
+    stored = (getattr(user_state, "phase_to_page_to_label_to_value", {}) or {}).get(
+        phase, {}).get(page)
+    if not hidden or not stored:
+        return
+    dropped = [label for label in list(stored) if label.get_schema() in hidden]
+    for label in dropped:
+        del stored[label]
+    if dropped:
+        logger.info("Dropped %d answer(s) to hidden question(s) %s on %s",
+                    len(dropped), sorted({l.get_schema() for l in dropped}), page)
 
-    assigned_ids = set(user_state.get_assigned_instance_ids())
-    annotated_ids = set(user_state.get_annotated_instance_ids()) if hasattr(user_state, "get_annotated_instance_ids") else set()
-    seen_qc_ids = assigned_ids | annotated_ids
 
-    current_index = user_state.get_current_instance_index()
-    insert_index = current_index + 1 if current_index >= 0 else 0
-
-    def inject_item(item_data):
-        item_id = item_data.get("id")
-        if not item_id or item_id in seen_qc_ids:
-            return False
-
-        prepared_item = dict(item_data)
-        text_key = config.get("item_properties", {}).get("text_key", "text")
-        if "displayed_text" not in prepared_item:
-            raw_text = prepared_item.get(text_key, prepared_item.get("text", ""))
-            prepared_item["displayed_text"] = get_displayed_text(raw_text) if raw_text is not None else ""
-
-        item_manager = get_item_state_manager()
-        if item_manager.has_item(item_id):
-            existing_item = item_manager.get_item(item_id)
-            if existing_item and isinstance(existing_item.get_data(), dict):
-                existing_data = existing_item.get_data()
-                if "displayed_text" not in existing_data:
-                    existing_data["displayed_text"] = prepared_item["displayed_text"]
-            item = item_manager.get_item(item_id)
-        else:
-            item_manager.add_item(item_id, prepared_item)
-            item = item_manager.get_item(item_id)
-
-        return user_state.assign_instance_at_index(item, insert_index)
-
-    if qc_manager.should_inject_attention_check(username):
-        attention_item = qc_manager.get_attention_check_item(username)
-        if attention_item and inject_item(attention_item):
-            logger.info(f"Injected attention check {attention_item.get('id')} for user {username}")
-            return
-
-    if qc_manager.should_inject_gold_standard(username):
-        gold_item = qc_manager.get_gold_standard_item(username)
-        if gold_item and inject_item(gold_item):
-            logger.info(f"Injected gold standard {gold_item.get('id')} for user {username}")
-            return
+def _refuse_unmet_phase_page(username, user_state):
+    """The response that keeps a participant on a page with an unmet
+    required answer, or None when the page may be left."""
+    # A runtime page (jsPsych, OSWeb, ...) is left only by its own finish
+    # call, once the run's data is stored. Without this a bare POST to
+    # /prestudy, or a leaked next_instance, would skip the task.
+    from potato.runtimes.phase import is_complete, runtime_pages
+    _page = user_state.get_current_phase_and_page()[1]
+    if _page in runtime_pages(config) and not is_complete(user_state, _page):
+        logger.warning("%s tried to leave task page %s before finishing it",
+                       username, _page)
+        return get_current_page_html(config, username), 400
+    unmet = _unmet_required_labels(user_state)
+    if not unmet:
+        _drop_hidden_phase_answers(user_state)
+        return None
+    logger.warning("%s tried to leave %s without the required answer to %s",
+                   username, user_state.get_current_phase_and_page()[1], unmet)
+    return get_current_page_html(config, username), 400
 
 
 def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
@@ -243,15 +406,93 @@ def apply_debug_phase_skip(user_id: str) -> bool:
 from potato.server_utils.admin_key import (
     get_admin_api_key as _get_admin_api_key,
     validate_admin_api_key as _validate_admin_api_key,
+    request_is_local,
 )
 
 def get_admin_api_key():
     """Get the admin API key. See potato.server_utils.admin_key for details."""
     return _get_admin_api_key(config)
 
-def validate_admin_api_key(provided_key: str) -> bool:
-    """Validate an admin API key. See potato.server_utils.admin_key for details."""
-    return _validate_admin_api_key(provided_key, config)
+def _caller_presented_admin_key() -> bool:
+    """True when this request carried the real admin key.
+
+    Distinguishes "authorized because they hold the key" from "authorized by
+    the debug bypass or an RBAC role", which decides whether echoing the key
+    back discloses anything.
+    """
+    import hmac as _hmac
+    try:
+        supplied = request.headers.get('X-API-Key') or session.get('admin_api_key')
+    except RuntimeError:
+        return False
+    if not supplied:
+        return False
+    expected = get_admin_api_key()
+    if not expected:
+        return False
+    return _hmac.compare_digest(str(supplied), str(expected))
+
+
+def validate_admin_api_key(provided_key: str, permission: str = None) -> bool:
+    """Authorize an admin request.
+
+    ``permission`` names what the route does. It defaults to reading the
+    dashboard; routes that change accounts or settings pass a stronger one, so
+    a role that may only look at the dashboard cannot reset passwords.
+
+    Backward compatible: a valid shared admin API key (or debug mode) always
+    passes. Additionally, a logged-in user holding the RBAC
+    ``view_admin_dashboard`` permission is authorized without the key, so
+    role-based admins can use the admin endpoints. This single wrapper routes
+    every inline admin guard in this module through RBAC without touching each
+    call site.
+    """
+    if _validate_admin_api_key(provided_key, config):
+        return True
+    # Consult RBAC for the current logged-in user, when in a request context.
+    try:
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        return get_rbac_manager().check(
+            permission or Permission.VIEW_ADMIN_DASHBOARD, request, session
+        )
+    except Exception:
+        return False
+
+
+# -------------------------------------------------------------------
+# Media endpoints that fetch a caller-supplied URL
+# -------------------------------------------------------------------
+
+def media_login_required(f):
+    """Require an authenticated session on an endpoint that fetches a URL.
+
+    These are not covered by the global `before_request` gate: it whitelists
+    the bare "/api/" prefix, so it never runs for any route under it. They were
+    therefore reachable by anyone who could open the port, and each one asks
+    the server to fetch a URL the caller chose.
+
+    Answers 401 JSON rather than redirecting; every caller is XHR from the
+    annotation page, and a 302 to the login HTML reads as success to a JSON
+    client.
+    """
+    from functools import wraps
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Debug lets these answer without a login, as debug_grants_admin
+        # does, only for requests from this machine: each one fetches a URL
+        # the caller chose.
+        if 'username' not in session and not (
+                config.get("debug", False) and request_is_local(request)):
+            return jsonify({"error": "Authentication required"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _media_url_allowlist():
+    """Hosts an operator has declared safe for server-side media fetches."""
+    allow = config.get("media_url_allowlist") or []
+    return list(allow) if isinstance(allow, (list, tuple)) else [allow]
 
 
 # -------------------------------------------------------------------
@@ -268,27 +509,102 @@ def serve_media(filepath):
     """
     from flask import send_from_directory, abort
 
-    task_dir = config.get("task_dir", ".")
-    media_subdir = config.get("media_directory", "media")
+    from potato.media.paths import resolve_media_path
 
-    # Resolve relative to task_dir
-    if os.path.isabs(media_subdir):
-        media_dir = media_subdir
-    else:
-        media_dir = os.path.join(task_dir, media_subdir)
-
-    media_dir = os.path.realpath(media_dir)
-
-    # Security: ensure the resolved file is inside media_dir
-    requested = os.path.realpath(os.path.join(media_dir, filepath))
-    if not requested.startswith(media_dir + os.sep) and requested != media_dir:
-        logger.warning(f"Media path traversal blocked: {filepath}")
+    # One traversal guard, shared with the media proxy and the critique
+    # service (potato/media/paths.py) -- it used to be written out separately
+    # in each, which is how they drift.
+    media_dir, requested = resolve_media_path(config, filepath, context="Media")
+    if media_dir is None:
         abort(403)
 
     if not os.path.isfile(requested):
         abort(404)
 
-    return send_from_directory(media_dir, filepath)
+    # A listening test's stimuli are heard only through their opaque slot
+    # URLs; serving them here would let a participant match files by hash.
+    from potato.listening.blind import is_protected_media
+    if is_protected_media(config, requested):
+        abort(404)
+
+    # DICOM and NIfTI headers carry patient information that the volume
+    # routes filter (display_tags); handing out the raw file would bypass
+    # that. An administrator who wants downloads opts in.
+    if not config.get("serve_raw_medical_files"):
+        from potato.media.volumes import is_raw_medical_file
+        if is_raw_medical_file(requested):
+            logger.warning("Refused raw medical file %s (serve_raw_medical_files "
+                           "is off)", filepath)
+            abort(403)
+
+    # A .gz file is served as the bytes on disk. Left to its guess, Flask sends
+    # `Content-Encoding: gzip` for one, and the browser then inflates it before
+    # the page sees it -- which breaks every reader that indexes into the
+    # compressed file: a bgzipped VCF or BED read through its .tbi index takes
+    # byte ranges of the compressed stream (genome_locus / igv.js), and a
+    # gzipped structure is inflated by the viewer itself.
+    # (.svgz keeps the header: an <img> needs it to draw one.)
+    import mimetypes
+    _type, encoding = mimetypes.guess_type(filepath)
+    raw_bytes = bool(encoding) and not filepath.lower().endswith(".svgz")
+    response = send_from_directory(
+        media_dir, filepath,
+        mimetype="application/octet-stream" if raw_bytes else None)
+    # Range support exists and worked -- a range request gets 206 with a
+    # correct Content-Range -- and was never advertised on the 200. Chrome's
+    # media element probes with a range regardless, which is why seeking always
+    # worked and why this went unnoticed; anything that reads the header first
+    # takes its absence at its word.
+    response.headers.setdefault("Accept-Ranges", "bytes")
+    # Media is project data, and it can come from an import of someone
+    # else's export, so it is never run as the server's own page: no type
+    # sniffing, and a document type (HTML, SVG, XML) opened directly gets an
+    # opaque origin with no scripts. An <img> of an SVG is unaffected; a
+    # codebook page opened in a tab still renders.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if os.path.splitext(filepath.lower())[1] in _ACTIVE_MEDIA_SUFFIXES:
+        response.headers["Content-Security-Policy"] = "sandbox"
+    return response
+
+
+def _logged_keys(value):
+    """What a debug line may say about a request body: its keys, never the
+    values. Answers include survey responses, and a sensitive-questions page
+    is designed so that no single answer is recorded in the clear."""
+    if isinstance(value, dict):
+        return sorted(str(k) for k in value)
+    return type(value).__name__
+
+
+def _media_nosniff(response):
+    """nosniff on every /media response, errors included: a 403, 404 or 416
+    comes from abort() or send_from_directory, and a 405 from routing, before
+    serve_media sets its headers."""
+    from flask import request
+    if request.path.startswith("/media/"):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return response
+
+
+#: Media types a browser runs as a document (scripts, same-origin requests).
+_ACTIVE_MEDIA_SUFFIXES = {".html", ".htm", ".xhtml", ".xht", ".svg", ".svgz", ".xml",
+                          ".xsl", ".xslt", ".mht", ".mhtml", ".shtml"}
+
+
+def serve_plugin_static(plugin, filepath):
+    """A static file from a loaded plugin's assets folder (potato/plugins.py).
+
+    Only plugins the config loaded have a folder here; send_from_directory
+    refuses paths that leave it.
+    """
+    from flask import send_from_directory, abort
+
+    from potato.plugins import static_folder
+
+    folder = static_folder(plugin)
+    if folder is None:
+        abort(404)
+    return send_from_directory(folder, filepath)
 
 
 def serve_trace_screenshot(filepath):
@@ -373,62 +689,72 @@ def home():
 
     # Check if user has an active session
     if 'username' not in session:
-        # Check for URL-direct login (used by Prolific, MTurk, etc.)
+        # Check for crowd-provider login (Prolific, MTurk, generic panels, etc.)
         login_config = config.get('login', {})
         login_type = login_config.get('type', 'standard')
 
-        if login_type in ['url_direct', 'prolific']:
-            # Get the URL argument name (default to PROLIFIC_PID for backwards compatibility)
-            url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
-            username = request.args.get(url_argument)
+        from potato.crowdsourcing import get_crowd_provider
+        provider = get_crowd_provider()
+        if provider is None and login_type in ['url_direct', 'prolific']:
+            # Server started via a path that skipped init (e.g. some tests):
+            # resolve the provider on first use.
+            from potato.crowdsourcing import init_crowd_provider
+            provider = init_crowd_provider(config)
 
-            # Also capture SESSION_ID and STUDY_ID if provided (for Prolific tracking)
-            prolific_session_id = request.args.get('SESSION_ID')
-            prolific_study_id = request.args.get('STUDY_ID')
+        if provider is not None:
+            # Handle platform preview mode (e.g. MTurk worker hasn't accepted the HIT)
+            if provider.is_preview(request.args):
+                logger.info("Crowd platform preview mode detected - showing preview page")
+                return provider.preview_response()
 
-            # Capture MTurk-specific parameters
-            mturk_assignment_id = request.args.get('assignmentId')
-            mturk_hit_id = request.args.get('hitId')
-            mturk_submit_to = request.args.get('turkSubmitTo')
-
-            # Handle MTurk preview mode (worker hasn't accepted the HIT yet)
-            if mturk_assignment_id == 'ASSIGNMENT_ID_NOT_AVAILABLE':
-                logger.info("MTurk preview mode detected - showing preview page")
-                return render_template("mturk_preview.html",
-                                      title=config.get("annotation_task_name", "Task Preview"),
-                                      task_description=config.get("task_description", ""),
-                                      annotation_task_name=config.get("annotation_task_name", "Annotation Task"))
-
-            if username:
-                logger.info(f"URL-direct login: user={username}, session_id={prolific_session_id}, study_id={prolific_study_id}")
+            identity = provider.extract_identity(request.args)
+            if identity is not None:
+                username = identity.worker_id
+                logger.info(f"URL-direct login: user={username}, "
+                            f"session_id={identity.session_id}, study_id={identity.study_id}")
 
                 # Auto-register and login the user
                 user_authenticator = UserAuthenticator.get_instance()
 
                 # Add user if not exists (passwordless for URL-direct)
                 if not user_authenticator.is_valid_username(username):
+                    # crowd_provider records which platform the worker came
+                    # from; the admin crowd tab reads it. The prolific_* keys
+                    # are historical and are written for every provider.
                     result = user_authenticator.add_user(username, None,
-                                                         prolific_session_id=prolific_session_id,
-                                                         prolific_study_id=prolific_study_id)
+                                                         prolific_session_id=identity.session_id,
+                                                         prolific_study_id=identity.study_id,
+                                                         crowd_provider=provider.name,
+                                                         mturk_assignment_id=identity.extra.get('assignmentId'),
+                                                         mturk_hit_id=identity.extra.get('hitId'))
                     logger.debug(f"Auto-registered URL-direct user {username}: {result}")
+                    if result != "Success":
+                        logger.warning("Refused URL-direct login for %r: %s", username, result)
+                        return render_template(
+                            "home.html", login_error=result,
+                            title=config.get("annotation_task_name", "Annotation Platform")), 403
 
                 # Set session
                 session['username'] = username
                 session.permanent = True
 
-                # Store Prolific IDs in session for later use
-                if prolific_session_id:
-                    session['prolific_session_id'] = prolific_session_id
-                if prolific_study_id:
-                    session['prolific_study_id'] = prolific_study_id
-
-                # Store MTurk IDs in session for completion flow
-                if mturk_assignment_id:
-                    session['mturk_assignment_id'] = mturk_assignment_id
-                if mturk_hit_id:
-                    session['mturk_hit_id'] = mturk_hit_id
-                if mturk_submit_to:
-                    session['mturk_submit_to'] = mturk_submit_to
+                # Generalized crowd keys plus the historical prolific_*/mturk_*
+                # keys, which admin.py and older templates still read.
+                session['crowd_provider'] = provider.name
+                if identity.session_id:
+                    session['crowd_session_id'] = identity.session_id
+                    session['prolific_session_id'] = identity.session_id
+                if identity.study_id:
+                    session['crowd_study_id'] = identity.study_id
+                    session['prolific_study_id'] = identity.study_id
+                if identity.extra:
+                    session['crowd_extra'] = dict(identity.extra)
+                if identity.extra.get('assignmentId'):
+                    session['mturk_assignment_id'] = identity.extra['assignmentId']
+                if identity.extra.get('hitId'):
+                    session['mturk_hit_id'] = identity.extra['hitId']
+                if identity.extra.get('turkSubmitTo'):
+                    session['mturk_submit_to'] = identity.extra['turkSubmitTo']
 
                 # Initialize user state if needed
                 if not get_user_state_manager().has_user(username):
@@ -440,6 +766,19 @@ def home():
                 user_state = usm.get_user_state(username)
 
                 if user_state:
+                    # Record platform metadata with the user state so annotation
+                    # output can be joined with the platform's submission records
+                    if not hasattr(user_state, 'crowd_metadata') or user_state.crowd_metadata is None:
+                        user_state.crowd_metadata = {}
+                    user_state.crowd_metadata['provider'] = provider.name
+                    user_state.crowd_metadata['worker_id'] = username
+                    if identity.session_id:
+                        user_state.crowd_metadata['session_id'] = identity.session_id
+                    if identity.study_id:
+                        user_state.crowd_metadata['study_id'] = identity.study_id
+                    for extra_key, extra_value in identity.extra.items():
+                        user_state.crowd_metadata[extra_key] = extra_value
+
                     # Set user to the first phase if they're in LOGIN
                     # Use advance_phase() which properly looks up the first page
                     # for the phase (fixes issue #113: page was None for phased workflows)
@@ -452,24 +791,18 @@ def home():
                         logger.debug(f"Assigning instances to URL-direct user {username}")
                         get_item_state_manager().assign_instances_to_user(user_state)
 
-                    # Track with Prolific API if configured
-                    prolific_study = get_prolific_study()
-                    if prolific_study and prolific_session_id:
-                        try:
-                            prolific_study.add_new_user({
-                                'PROLIFIC_PID': username,
-                                'SESSION_ID': prolific_session_id
-                            })
-                            logger.debug(f"Tracked user {username} with Prolific API")
-                        except Exception as e:
-                            logger.warning(f"Failed to track user with Prolific API: {e}")
+                    # Platform-side arrival tracking (e.g. Prolific API session tracking)
+                    try:
+                        provider.on_arrival(identity)
+                    except Exception as e:
+                        logger.warning(f"Crowd provider arrival tracking failed: {e}")
 
                 # Redirect to home to process the now-logged-in user
                 return redirect(url_for("home"))
 
             else:
-                # URL-direct login configured but no username in URL
-                # Show error or redirect to a waiting page
+                # URL-direct login configured but no participant ID in URL
+                url_argument = provider.id_param()
                 logger.warning(f"URL-direct login configured but '{url_argument}' not found in URL")
                 return render_template("error.html",
                                       message=f"Missing required URL parameter: {url_argument}. "
@@ -478,7 +811,8 @@ def home():
         logger.debug("No active session, rendering login page")
         return render_template("home.html",
                               title=config.get("annotation_task_name", "Annotation Platform"),
-                              require_password=config.get("require_password", True))
+                              require_password=config.get("require_password", True),
+                              **_sso_login_context())
 
     user_id = session['username']
     logger.debug(f"Active session for user: {user_id}")
@@ -516,6 +850,16 @@ def home():
     return render_template("error.html", message="Invalid application state")
 
 
+def _resume_authenticated_login_phase(username):
+    """Resume an existing state that never advanced past authentication."""
+    manager = get_user_state_manager()
+    user_state = manager.get_user_state(username)
+    if user_state is not None and user_state.get_phase() == UserPhase.LOGIN:
+        # Use the configured flow so consent/instructions are not skipped.
+        manager.advance_phase(username)
+        manager.save_user_state(user_state)
+
+
 @app.route("/auth", methods=["GET", "POST"])
 def auth():
     """
@@ -542,6 +886,7 @@ def auth():
     """
     # Check if user is already logged in
     if 'username' in session and get_user_state_manager().has_user(session['username']):
+        _resume_authenticated_login_phase(session['username'])
         logger.debug(f"User {session['username']} already logged in, redirecting to annotate")
         return redirect(url_for("annotate"))
 
@@ -568,7 +913,12 @@ def auth():
             user_authenticator = UserAuthenticator.get_instance()
             if not user_authenticator.is_valid_username(user_id):
                 logger.info(f"Auto-registering new user in passwordless mode: {user_id}")
-                user_authenticator.add_user(user_id, None)
+                result = user_authenticator.add_user(user_id, None)
+                if result != "Success":
+                    return render_template("home.html",
+                                          login_error=result,
+                                          title=config.get("annotation_task_name", "Annotation Platform"),
+                                          require_password=require_password)
 
         # Authenticate the user against the configured backend
         if UserAuthenticator.authenticate(user_id, password):
@@ -593,6 +943,7 @@ def auth():
                 else:
                     usm.advance_phase(user_id)
                 return redirect(url_for("annotate"))
+            _resume_authenticated_login_phase(user_id)
             return redirect(url_for("annotate"))
         else:
             logger.warning(f"Login failed for user: {user_id}")
@@ -601,9 +952,23 @@ def auth():
                                   login_error=error_msg,
                                   login_email=user_id,
                                   title=config.get("annotation_task_name", "Annotation Platform"),
-                                  require_password=require_password)
+                                  require_password=require_password,
+                                  **_sso_login_context())
 
     # GET request - show the login form
+    return render_template("home.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"),
+                         require_password=config.get("require_password", True),
+                         **_sso_login_context())
+
+
+def _sso_login_context():
+    """The SSO buttons and local-form switch every login render needs.
+
+    `/` used to render the login page without these, so an SSO-only task
+    showed annotators no sign-in button and offered the password and
+    register forms instead.
+    """
     oauth_providers = []
     allow_local_login = True
     try:
@@ -613,12 +978,7 @@ def auth():
             allow_local_login = authenticator.auth_config.get("allow_local_login", False)
     except ValueError:
         pass  # Authenticator not yet initialized
-
-    return render_template("home.html",
-                         title=config.get("annotation_task_name", "Annotation Platform"),
-                         require_password=config.get("require_password", True),
-                         oauth_providers=oauth_providers,
-                         allow_local_login=allow_local_login)
+    return {"oauth_providers": oauth_providers, "allow_local_login": allow_local_login}
 
 
 @app.route("/passwordless-login", methods=["GET", "POST"])
@@ -734,8 +1094,21 @@ def oauth_login(provider):
                              require_password=config.get("require_password", True),
                              oauth_providers=authenticator.get_login_providers()), 404
 
-    callback_url = url_for("oauth_callback", provider=provider, _external=True)
-    return client.authorize_redirect(callback_url)
+    return client.authorize_redirect(_oauth_callback_url(provider))
+
+
+def _oauth_callback_url(provider):
+    """The redirect URI sent to the provider.
+
+    In a Hugging Face Space the app sits behind a proxy that ends TLS, so the
+    URL Flask builds is ``http://`` on an internal host, which no provider
+    accepts. Spaces set ``SPACE_HOST`` to the public host name, and the
+    callback is built on it.
+    """
+    space_host = os.environ.get("SPACE_HOST", "").strip()
+    if space_host:
+        return f"https://{space_host}" + url_for("oauth_callback", provider=provider)
+    return url_for("oauth_callback", provider=provider, _external=True)
 
 
 @app.route("/auth/callback/<provider>")
@@ -811,13 +1184,28 @@ def oauth_callback(provider):
                              require_password=config.get("require_password", True),
                              oauth_providers=authenticator.get_login_providers())
 
+    # SSO claims captured for RBAC sso_role_mapping (e.g. "org:acme").
+    sso_claims = [f"provider:{provider}"]
+
     # Check GitHub org restriction (requires API call)
     allowed_org = oauth_backend.get_allowed_org(provider)
+    if allowed_org and provider == "huggingface":
+        org_ok, reason, user_orgs = oauth_backend.huggingface_org_check(profile, allowed_org)
+        sso_claims.extend(f"org:{o}" for o in user_orgs)
+        if not org_ok:
+            logger.warning("Hugging Face org check failed: %s not in %s",
+                           profile.get("preferred_username"), allowed_org)
+            return render_template("home.html",
+                                   login_error=reason,
+                                   title=config.get("annotation_task_name", "Annotation Platform"),
+                                   require_password=config.get("require_password", True),
+                                   oauth_providers=authenticator.get_login_providers()), 403
     if allowed_org and provider == "github":
         try:
             orgs_resp = client.get("user/orgs", token=token)
             orgs = orgs_resp.json()
             user_orgs = [o.get("login", "").lower() for o in orgs]
+            sso_claims.extend(f"org:{o}" for o in user_orgs if o)
             if allowed_org.lower() not in user_orgs:
                 reason = (
                     f"Access restricted to members of the '{allowed_org}' "
@@ -859,19 +1247,39 @@ def oauth_callback(provider):
                                  oauth_providers=authenticator.get_login_providers())
 
     # Register the user in the OAuth backend
-    authenticator.add_user(user_id, None,
-                          oauth_provider=provider,
-                          oauth_profile=profile)
+    is_new = not authenticator.is_valid_username(user_id)
+    result = authenticator.add_user(user_id, None,
+                                    oauth_provider=provider,
+                                    oauth_profile=profile)
+    if is_new and result != "Success":
+        logger.warning("Refused OAuth sign-in for %r: %s", user_id, result)
+        return render_template("home.html",
+                             login_error="Your account could not be created on this task.",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             require_password=config.get("require_password", True),
+                             oauth_providers=authenticator.get_login_providers()), 403
 
-    # Create Flask session
+    return _finish_sso_sign_in(user_id, sso_claims, provider)
+
+
+def _finish_sso_sign_in(user_id, sso_claims, provider, saml_session=None):
+    """Start the Potato session for an identity a provider vouched for.
+
+    ``saml_session`` (NameID and SessionIndex) is kept so that signing out
+    can end the IdP session too, and so an IdP-initiated logout can tell
+    whether it names this browser's session.
+    """
     session.clear()
     session['username'] = user_id
+    session['sso_claims'] = sso_claims
+    if saml_session:
+        session['saml'] = saml_session
     session.permanent = True
-    logger.info("OAuth login successful: provider=%s, user=%s", provider, user_id)
+    logger.info("SSO login successful: provider=%s, user=%s", provider, user_id)
 
     # Initialize user state if needed
     if not get_user_state_manager().has_user(user_id):
-        logger.debug("Initializing state for new OAuth user: %s", user_id)
+        logger.debug("Initializing state for new SSO user: %s", user_id)
         usm = get_user_state_manager()
         usm.add_user(user_id)
 
@@ -885,6 +1293,220 @@ def oauth_callback(provider):
             usm.advance_phase(user_id)
 
     return redirect(url_for("home"))
+
+
+# --- SAML SSO Routes ---
+
+#: Cookie holding the signed AuthnRequest id between /saml/login and /saml/acs.
+SAML_REQUEST_COOKIE = "potato_saml_request"
+SAML_REQUEST_MAX_AGE = 600
+#: Cookie holding the signed LogoutRequest id between /logout and /saml/sls.
+#: The IdP returns the browser with a top-level GET, so SameSite=Lax is sent.
+SAML_LOGOUT_COOKIE = "potato_saml_logout"
+
+
+def _saml_cookie(secure):
+    """(name, path) of the request cookie.
+
+    Over https it is a __Host- cookie on path /: the browser then refuses a
+    copy set by a sibling subdomain or with a Domain attribute, which would
+    otherwise let a shared parent domain plant the attacker's own valid token
+    and re-open login CSRF. Plain http (development) keeps a path-scoped name.
+    """
+    if secure:
+        return "__Host-" + SAML_REQUEST_COOKIE, "/"
+    return SAML_REQUEST_COOKIE, (request.script_root or "") + "/saml/"
+
+
+def _saml_refusal(message, status=403):
+    return render_template("home.html",
+                           login_error=message,
+                           title=config.get("annotation_task_name", "Annotation Platform"),
+                           require_password=config.get("require_password", True),
+                           **_sso_login_context()), status
+
+
+def _saml_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt="potato-saml-request")
+
+
+@app.route("/saml/login")
+def saml_login():
+    """Send the browser to the IdP with a new AuthnRequest.
+
+    The request id travels in its own cookie, not the session: the IdP
+    returns the browser with a cross-site POST, and the session cookie is
+    SameSite=Lax, which a browser does not send on one.
+    """
+    from potato.auth_backends.saml_backend import request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None:
+        return redirect(url_for("home"))
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    try:
+        target, request_id = backend.login_redirect(data, base)
+    except Exception as exc:
+        logger.error("SAML sign-in could not start: %s", exc)
+        return _saml_refusal("Sign-in through your institution is unavailable right now.", 503)
+    response = redirect(target)
+    secure = data["https"] == "on"
+    name, path = _saml_cookie(secure)
+    response.set_cookie(name, _saml_serializer().dumps(request_id),
+                        max_age=SAML_REQUEST_MAX_AGE, httponly=True, secure=secure,
+                        samesite="None" if secure else "Lax", path=path)
+    return response
+
+
+@app.route("/saml/acs", methods=["POST"])
+def saml_acs():
+    """The IdP's response: verify it, then start the Potato session."""
+    from itsdangerous import BadSignature
+    from potato.auth_backends.saml_backend import SAMLError, request_data_from_flask
+    authenticator = UserAuthenticator.get_instance()
+    backend = authenticator.get_saml_backend()
+    if backend is None:
+        return redirect(url_for("home"))
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    cookie_name, cookie_path = _saml_cookie(data["https"] == "on")
+    request_id = None
+    token = request.cookies.get(cookie_name)
+    if token:
+        try:
+            request_id = _saml_serializer().loads(token, max_age=SAML_REQUEST_MAX_AGE)
+        except BadSignature:
+            request_id = None
+    try:
+        user_id, attributes, saml_session = backend.process_response(
+            data, base, request_id, with_session=True)
+    except SAMLError as exc:
+        return _saml_refusal(str(exc))
+    except Exception as exc:
+        logger.error("SAML response could not be processed: %s", exc)
+        return _saml_refusal("Your institution's sign-in could not be verified.")
+
+    if not backend.auto_register and not authenticator.is_valid_username(user_id) \
+            and not authenticator.is_authorized_user(user_id):
+        logger.warning("SAML user %s not pre-authorized (auto_register=false)", user_id)
+        return _saml_refusal("Your account is not authorized for this task.")
+
+    is_new = not authenticator.is_valid_username(user_id)
+    result = authenticator.add_user(user_id, None, saml_attributes=attributes)
+    if is_new and result != "Success":
+        logger.warning("Refused SAML sign-in for %r: %s", user_id, result)
+        return _saml_refusal("Your account could not be created on this task.")
+
+    response = _finish_sso_sign_in(user_id, backend.sso_claims(attributes), "saml",
+                                   saml_session=saml_session)
+    response.delete_cookie(cookie_name, path=cookie_path, secure=data["https"] == "on")
+    return response
+
+
+def _saml_logout_cookie(secure):
+    if secure:
+        return "__Host-" + SAML_LOGOUT_COOKIE, "/"
+    return SAML_LOGOUT_COOKIE, (request.script_root or "") + "/saml/"
+
+
+def _saml_single_logout(saml_session):
+    """Send the browser to the IdP to end its session too, or None.
+
+    Called after the Potato session is cleared, so an IdP that never answers
+    still leaves the annotator signed out of Potato.
+    """
+    from potato.auth_backends.saml_backend import request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None or not saml_session or not backend.slo_enabled():
+        return None
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    try:
+        target, request_id = backend.logout_redirect(data, base, saml_session)
+    except Exception as exc:
+        logger.error("SAML single logout could not start: %s", exc)
+        return None
+    response = redirect(target)
+    secure = data["https"] == "on"
+    name, path = _saml_logout_cookie(secure)
+    response.set_cookie(name, _saml_serializer().dumps(request_id),
+                        max_age=SAML_REQUEST_MAX_AGE, httponly=True, secure=secure,
+                        samesite="Lax", path=path)
+    return response
+
+
+@app.route("/saml/sls")
+def saml_sls():
+    """The IdP's side of single logout: the answer to ours, or one it started."""
+    from itsdangerous import BadSignature
+    from potato.auth_backends.saml_backend import SAMLError, request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None:
+        return redirect(url_for("home"))
+    data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    secure = data["https"] == "on"
+    title = config.get("annotation_task_name", "Annotation Platform")
+    if "SAMLResponse" in request.args:
+        name, path = _saml_logout_cookie(secure)
+        request_id = None
+        token = request.cookies.get(name)
+        if token:
+            try:
+                request_id = _saml_serializer().loads(token, max_age=SAML_REQUEST_MAX_AGE)
+            except BadSignature:
+                request_id = None
+        try:
+            result = backend.process_logout(data, base, request_id, None)
+        except Exception as exc:
+            logger.error("SAML logout response could not be processed: %s", exc)
+            result = {"confirmed": False}
+        detail = ("You are signed out of this task and of your institution's sign-in."
+                  if result.get("confirmed") else
+                  "You are signed out of this task. Your institution did not confirm "
+                  "that its own sign-in ended, so close the browser if others use "
+                  "this computer.")
+        response = make_response(render_template(
+            "logged_out.html", title=title, detail=detail, sign_in_url=url_for("home")))
+        response.delete_cookie(name, path=path, secure=secure)
+        return response
+    def refused(message):
+        # Nothing was signed out, so the page must not say so.
+        still_in = bool(session.get("username"))
+        return (render_template(
+            "logged_out.html", title=title, heading="Logout request not accepted", refused=True,
+            subtitle=("You are still signed in to this task." if still_in
+                      else "Nothing was changed."),
+            detail=message, sign_in_url=None if still_in else url_for("home")), 400)
+
+    try:
+        result = backend.process_logout(data, base, None, session.get("saml"))
+    except SAMLError as exc:
+        return refused(str(exc))
+    except Exception as exc:
+        logger.error("SAML logout request could not be processed: %s", exc)
+        return refused("This logout request could not be verified.")
+    if result.get("end_session"):
+        logger.info("IdP-initiated logout ended the session of %s", session.get("username"))
+        session.clear()
+    if result.get("redirect"):
+        return redirect(result["redirect"])
+    return render_template("logged_out.html", title=title,
+                           detail="You are signed out of this task.",
+                           sign_in_url=url_for("home"))
+
+
+@app.route("/saml/metadata")
+def saml_metadata():
+    """This service provider's metadata, for the IdP administrator."""
+    from potato.auth_backends.saml_backend import request_data_from_flask
+    backend = UserAuthenticator.get_instance().get_saml_backend()
+    if backend is None:
+        return ("SAML is not configured for this task.", 404)
+    _data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
+    try:
+        xml = backend.metadata(base)
+    except Exception as exc:
+        logger.error("SAML metadata could not be built: %s", exc)
+        return ("SAML metadata could not be built; see the server log.", 500)
+    return Response(xml, mimetype="application/samlmetadata+xml")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -914,10 +1536,17 @@ def logout_page():
     # Check login type before clearing session (config is module-level, not session-dependent)
     login_config = config.get('login', {})
     login_type = login_config.get('type', 'standard')
+    saml_session = session.get('saml')
 
     # Clear the session
     session.clear()
     logger.info("User logged out successfully")
+
+    # Signed in through SAML with an IdP that offers single logout: end the
+    # institution's session too, which returns to /saml/sls.
+    single_logout = _saml_single_logout(saml_session)
+    if single_logout is not None:
+        return single_logout
 
     if login_type in ['url_direct', 'prolific']:
         # Cannot redirect to home — it requires a URL parameter (e.g., PROLIFIC_PID)
@@ -941,6 +1570,78 @@ def logout():
     """
     logger.debug("Redirecting /logout to logout_page")
     return logout_page()
+
+def _incoming_schema_names(annotations: dict) -> set:
+    """Schema names present in an ``{"schema:label": value}`` payload.
+
+    Keys use ``:::`` for the JSON-blob schemas (image/audio/video ``_data``) and a
+    single ``:`` for everything else; keys with neither are malformed and skipped.
+    """
+    names = set()
+    for key in annotations or {}:
+        parsed = split_annotation_key(key)
+        if parsed:
+            names.add(parsed[0])
+    return names
+
+
+def _annotation_owner(instance_id=None, write=False):
+    """``(owner, collab_session, refusal)``: whose annotations this request is about.
+
+    The session user, unless the page belongs to a live collaborative session
+    (see ``potato.collab.context``); then the team user, with the member's
+    membership and the item checked, and a refusal to return when they fail.
+    """
+    from potato.collab.context import annotation_owner
+    return annotation_owner(instance_id, write=write)
+
+
+def _collab_viewing_item(collab_session):
+    from potato.collab.context import viewing_item
+    return viewing_item(collab_session)
+
+
+def _preclear_exclusive_schemas(user_state, username, instance_id, schema_names,
+                                *, complete_set: bool) -> None:
+    """Drop stale labels for schemas whose incoming state supersedes what's stored.
+
+    Two distinct reasons to clear, deliberately kept apart (GH #167):
+
+    * **single-select** (``radio``/``likert``/``confidence``): each option is stored
+      under its own ``Label(schema, option)``, so a changed answer would otherwise
+      accumulate beside the old one. Always clear, regardless of ``complete_set``.
+    * **multiselect**: labels are per-checkbox and legitimately plural, but a
+      *deselected* checkbox is communicated only by its absence from the payload.
+      Clearing is therefore correct **only** when the caller sends the complete set.
+      The legacy ``/updateinstance`` format posts one checkbox at a time, so it must
+      pass ``complete_set=False`` or every save would wipe the other selections.
+
+    Clearing goes through ``UserState.clear_schema_labels``, which routes to the
+    instance's labels during the annotation phase and to the current phase page's
+    labels otherwise — so consent, instructions, training, prestudy and poststudy are
+    covered by the same call. (Reaching into ``instance_id_to_label_to_value``
+    directly, as this code used to, both missed every phase page and raised
+    AttributeError on the MySQL backend, which has no such attribute.)
+    """
+    from potato.server_utils.schema_exclusivity import is_multiselect, is_single_select
+
+    for schema_name in schema_names:
+        should_clear = is_single_select(schema_name, username) or (
+            complete_set and is_multiselect(schema_name, username))
+        if not should_clear:
+            continue
+        try:
+            removed = user_state.clear_schema_labels(instance_id, schema_name)
+        except NotImplementedError:
+            logger.warning(
+                f"User state {type(user_state).__name__} cannot clear schema labels; "
+                f"stale labels for '{schema_name}' may persist")
+            continue
+        if removed:
+            logger.debug(
+                f"Cleared {removed} stale label(s) for schema '{schema_name}' "
+                f"(user={username}, instance={instance_id})")
+
 
 @app.route("/submit_annotation", methods=["POST"])
 def submit_annotation():
@@ -970,17 +1671,16 @@ def submit_annotation():
         flask.Response: JSON response with submission result
     """
     logger.debug("=== SUBMIT ANNOTATION ROUTE START ===")
-    logger.debug(f"Session: {dict(session)}")
+    logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
     logger.debug(f"Request content type: {request.content_type}")
     logger.debug(f"Request is JSON: {request.is_json}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
 
 
     if 'username' not in session:
         logger.warning("Annotation submission without active session")
-        return jsonify({"status": "error", "message": "No active session"})
+        return jsonify({"status": "error", "message": "No active session"}), 401
 
     user_id = session['username']
     logger.debug(f"Using user_id: {user_id}")
@@ -992,24 +1692,24 @@ def submit_annotation():
         data = request.get_json()
         instance_id = data.get("instance_id")
         annotations = data.get("annotations", {})
-        logger.debug(f"Received JSON data: {data}")
+        logger.debug("Received JSON keys: %s", _logged_keys(data))
     else:
         instance_id = request.form.get("instance_id")
         annotation_data = request.form.get("annotation_data")
-        logger.debug(f"Received form data: {dict(request.form)}")
+        logger.debug("Received form fields: %s", sorted(request.form.keys()))
         if annotation_data:
             annotations = json.loads(annotation_data)
-            logger.debug(f"Parsed annotation_data: {annotations}")
+            logger.debug("Parsed annotation_data for %d key(s)", len(annotations) if hasattr(annotations, "__len__") else 0)
         else:
             annotations = {}
             logger.debug("No annotation_data found in form")
 
     logger.debug(f"Instance ID: {instance_id}")
-    logger.debug(f"Annotations: {annotations}")
+    logger.debug("Annotation keys: %s", _logged_keys(annotations))
 
     if not instance_id:
         logger.warning("Missing instance_id")
-        return jsonify({"status": "error", "message": "Missing instance_id"})
+        return jsonify({"status": "error", "message": "Missing instance_id"}), 400
 
     try:
         logger.debug(f"Getting user state for user_id: {user_id}")
@@ -1018,23 +1718,28 @@ def submit_annotation():
         logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
 
+        # Payload is {schema: {label: value}}, i.e. the complete state per schema, so
+        # stale labels can be cleared the same way /updateinstance does (GH #167).
+        _preclear_exclusive_schemas(
+            user_state, user_id, instance_id, set(annotations), complete_set=True)
+
         # Process the annotations
         annotations_processed = 0
         for schema_name, label_data in annotations.items():
-            logger.debug(f"Processing schema: {schema_name}, label_data: {label_data}, type: {type(label_data)}")
+            logger.debug("Processing schema: %s, label_data type: %s", schema_name, type(label_data).__name__)
 
             if isinstance(label_data, dict):
                 # Nested structure: {'schema': {'label': 'value'}}
                 for label_name, value in label_data.items():
                     label = Label(schema_name, label_name)
-                    logger.debug(f"Adding annotation: {schema_name}:{label_name} = {value}")
+                    logger.debug("Adding annotation: %s:%s", schema_name, label_name)
                     user_state.add_label_annotation(instance_id, label, value)
                     annotations_processed += 1
             elif isinstance(label_data, str):
                 # Direct string value for text annotations: {'schema': 'value'}
                 # For text annotations, we need to create a label with a default name
                 label = Label(schema_name, "text_box")
-                logger.debug(f"Adding text annotation: {schema_name}:text_box = {label_data}")
+                logger.debug("Adding text annotation: %s:text_box", schema_name)
                 user_state.add_label_annotation(instance_id, label, label_data)
                 annotations_processed += 1
             else:
@@ -1059,8 +1764,8 @@ def submit_annotation():
 
         # Log the saved annotations
         all_annotations = user_state.get_all_annotations()
-        logger.debug(f"All annotations after save: {all_annotations}")
-        logger.debug(f"Annotations for instance {instance_id}: {all_annotations.get(instance_id, 'Not found')}")
+        logger.debug("Instances with annotations after save: %d", len(all_annotations or {}))
+        logger.debug("Annotations stored for instance %s: %s", instance_id, instance_id in (all_annotations or {}))
 
 
         logger.info(f"Successfully saved annotation for {instance_id} from {user_id}")
@@ -1069,7 +1774,48 @@ def submit_annotation():
 
     except Exception as e:
         logger.error(f"Error saving annotation: {type(e).__name__}: {str(e)}", exc_info=True)
-        return jsonify({"status": "error", "message": "Failed to save annotation"})
+        return jsonify({"status": "error", "message": "Failed to save annotation"}), 500
+
+def _register_error(message: str):
+    """The login page with a registration error, in the task's own form.
+
+    These renders passed only the message, so the page fell back to the
+    default title and the passwordless form: someone told to log in instead
+    was shown a form with no password field.
+    """
+    return render_template(
+        "home.html",
+        login_error=message,
+        title=config.get("annotation_task_name", "Annotation Platform"),
+        require_password=config.get("require_password", True),
+        **_sso_login_context())
+
+
+def _username_owns_annotations(username: str) -> bool:
+    """True when this username already has an annotation directory on disk.
+
+    Used only to refuse a registration that would adopt it. Deliberately
+    narrow: the existence of the stored state, nothing about its contents.
+    On the MySQL backend the state is a database row, not a file.
+    """
+    usm = get_user_state_manager()
+    if getattr(usm, "use_database", False) and username:
+        # An error here refuses the registration rather than allowing it.
+        try:
+            return usm._mysql_user_state_cls.has_stored_state(username, usm.db_manager)
+        except Exception:
+            logger.exception("Could not check the database for '%s'", username)
+            return True
+    output_dir = config.get("output_annotation_dir")
+    if not output_dir or not username:
+        return False
+    try:
+        candidate = os.path.join(output_dir, username)
+        return (os.path.isdir(candidate)
+                and os.path.isfile(os.path.join(candidate, "user_state.json")))
+    except (OSError, ValueError, TypeError):
+        return False
+
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -1079,10 +1825,9 @@ def register():
     Args:
         username: The username to initialize state for
     """
-    logger.debug("=== REGISTER ROUTE START ===")
-    logger.debug(f"Session before registration: {dict(session)}")
-    logger.debug(f"Request form data: {dict(request.form)}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
+    # Field names only: the form holds the password, and the headers the
+    # session cookie, and potato.log keeps DEBUG lines in debug mode.
+    logger.debug("Register request with fields: %s", sorted(request.form.keys()))
 
     if 'username' in session:
         logger.warning(f"User already logged in with username: {session['username']}, redirecting to annotate")
@@ -1093,19 +1838,57 @@ def register():
 
     logger.debug(f"Registration attempt for username: {username}")
 
+    sso_context = _sso_login_context()
+    if sso_context["oauth_providers"] and not sso_context["allow_local_login"]:
+        logger.warning("Refused password registration for '%s': this task "
+                       "signs in through SSO only (allow_local_login is false)",
+                       username)
+        return render_template(
+            "home.html",
+            login_error="This task signs in through single sign-on only.",
+            title=config.get("annotation_task_name", "Annotation Platform"),
+            require_password=config.get("require_password", True),
+            **sso_context), 403
+
     if not username or not password:
         logger.warning("Missing username or password")
-        return render_template("home.html",
-                                login_error="Username and password are required")
+        return _register_error("Username and password are required")
 
     # Register the user with the authenticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
+
+    # A known account is not a desync: the annotator pressed Register rather
+    # than Log in. Asking the roster first matters, because the check below
+    # used to see alice's own annotations and tell her to have her account
+    # restored, and log an ERROR saying the roster was out of step.
+    if user_authenticator.is_valid_username(username):
+        logger.info("Registration for '%s' refused: the account already exists",
+                    username)
+        return _register_error("An account with that username already exists. "
+                               "Log in instead.")
+
+    # Refuse a username that already owns annotations but is not a known
+    # account. That combination means the roster and the output directory have
+    # gone out of step -- the roster file deleted, or the study moved without
+    # it -- and registering would hand a stranger somebody else's work,
+    # because an annotator's directory is keyed on the username alone.
+    if _username_owns_annotations(username):
+        logger.error(
+            "Refused registration for '%s': %s already holds annotations "
+            "but the account is not in the roster. The roster file "
+            "(authentication.user_config_path) is missing or out of step with "
+            "the output directory; restore it rather than re-registering.",
+            username, os.path.join(config.get("output_annotation_dir", ""),
+                                   username))
+        return _register_error("That username is already in use on this task. "
+                               "Ask the study administrator to restore your account.")
+
     result = user_authenticator.add_user(username, password)
 
     if result != "Success":
         logger.warning(f"Registration failed for '{username}': {result}")
-        return render_template("home.html", login_error=result)
+        return _register_error(result)
 
     # Persist user config if explicitly configured. The user is already
     # registered in memory at this point (add_user succeeded above) — a
@@ -1122,7 +1905,7 @@ def register():
     session['username'] = username
     session.permanent = True
 
-    logger.debug(f"Session after registration: {dict(session)}")
+    logger.debug("Session keys after registration: %s", _logged_keys(dict(session)))
     logger.debug(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No session ID'}")
     logger.debug(f"User state manager has user '{username}': {get_user_state_manager().has_user(username)}")
     logger.debug(f"All users in state manager: {get_user_state_manager().get_user_ids()}")
@@ -1140,21 +1923,17 @@ def register():
     logger.debug(f"Retrieved user state for '{username}': {user_state}")
     logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-    # Determine the first phase from config
-    phases_config = config.get('phases', {})
-    phases_order = phases_config.get('order', ['annotation'])
-    first_phase_name = phases_order[0] if phases_order else 'annotation'
-    # Get the phase type from the config (phase name may differ from type, e.g., 'prescreen' has type 'prestudy')
-    first_phase_config = phases_config.get(first_phase_name, {})
-    first_phase_type = first_phase_config.get('type', first_phase_name)
-    first_phase = UserPhase.fromstr(first_phase_type)
-    logger.debug(f"First phase from config: {first_phase_name} (type={first_phase_type}) -> {first_phase}")
-
-    # Set user to the first phase if they're in LOGIN
+    # Set user to the first phase if they're in LOGIN.
+    #
+    # This used to read `phases.order[0]` straight out of the config and trust
+    # it. A phase named in the order but never defined -- or defined but
+    # unloadable -- has no entry in `phase_type_to_name_to_page`, so the
+    # annotator was parked on a page that does not exist and every subsequent
+    # request, `/` included, 500ed on a KeyError. `advance_phase` walks the
+    # sequence the loader actually registered, which is the only sequence that
+    # can be rendered.
     if user_state and user_state.get_phase() == UserPhase.LOGIN:
-        logger.debug(f"Advancing user {username} to first phase: {first_phase}")
-        # Use first_phase_name as the page since that's the key in the phase config
-        user_state.advance_to_phase(first_phase, first_phase_name)
+        usm.advance_phase(username)
         logger.debug(f"User state phase after advancement: {user_state.get_phase()}")
 
     # Assign instances if user doesn't have any
@@ -1191,7 +1970,11 @@ def consent():
     # If the user is returning information from the page
     if request.method == 'POST':
         # The form should require that the user consent to the study
-        logger.debug(f'POST -> CONSENT: {request.form}')
+        logger.debug("POST -> CONSENT, fields: %s", sorted(request.form.keys()))
+
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
 
         # Now that the user has consented, advance the state
         # and have the home page redirect to the appropriate next phase
@@ -1226,10 +2009,13 @@ def instructions():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        logger.debug(f'POST -> INSTRUCTIONS: {request.form}')
+        logger.debug("POST -> INSTRUCTIONS, fields: %s", sorted(request.form.keys()))
 
         # Now that the user has read the instructions, advance the state
         # and have the home page redirect to the appropriate next phase
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
@@ -1319,7 +2105,28 @@ def training():
 
     # Handle POST requests (annotation submission)
     if request.method == 'POST':
-        logger.debug(f'POST -> TRAINING: {request.form}')
+        logger.debug("POST -> TRAINING, fields: %s", sorted(request.form.keys()))
+
+        # Persist the graded training state however this handler returns.
+        #
+        # Nothing saved after grading, so `total_correct`, `total_attempts`,
+        # `total_mistakes`, `passed` and `failed` all stayed at their initial
+        # values on disk while the in-memory object was correct. The page and
+        # the log showed "Total Mistakes: 1"; the file said 0. Anything reading
+        # the state -- an admin report, a restart, the DONE page deciding
+        # whether this annotator failed qualification -- saw a study where
+        # nobody had answered anything.
+        #
+        # Registered here rather than at each exit because the grading block
+        # has nine of them, between the pass, fail, retry and advance paths.
+        @after_this_request
+        def _persist_training_state(response):
+            try:
+                get_user_state_manager().save_user_state(user_state)
+            except Exception:
+                logger.exception(
+                    "Could not persist training state for %s", username)
+            return response
 
         # Get the current training instance
         current_instance = user_state.get_current_training_instance()
@@ -1330,11 +2137,16 @@ def training():
         instance_id = current_instance.get_id()
         instance_text = current_instance.get_data().get('displayed_text', current_instance.get_data().get('text', ''))
 
-        # Process the annotation
-        if request.is_json:
-            annotation_data = request.get_json()
-        else:
-            annotation_data = dict(request.form)
+        # Read the answer from STORED state, not from the form.
+        #
+        # Training answers arrive through the same /updateinstance autosave as every
+        # other phase, keyed Label(schema, label). Reading request.form instead meant
+        # grading against raw field names, and only radio and likert have a field name
+        # equal to the bare schema — every other type is named "schema:::label" and so
+        # never matched a correct_answers key, scoring the answer wrong no matter what
+        # the user picked. dict(request.form) also keeps only the first value per key,
+        # which made a multiselect impossible to grade at all.
+        annotation_data = user_state.get_training_answers()
 
         # Get correct answers for this training instance
         correct_answers = get_training_correct_answers(instance_id)
@@ -1350,9 +2162,14 @@ def training():
             # Check if the answer is correct
             is_correct = check_training_answer(annotation_data, correct_answers)
 
-            # Track category performance for category-based assignment
+            # Track category performance for category-based assignment, from
+            # the FIRST attempt at each question. Recording every attempt
+            # counted a retried question twice, so wrong-then-right qualified
+            # an annotator that right-first-time did not.
             instance_categories = get_training_instance_categories(instance_id)
-            if instance_categories:
+            first_attempt = not training_state.completed_questions.get(
+                instance_id, {}).get('attempts', 0)
+            if instance_categories and first_attempt:
                 training_state.record_category_answer(instance_categories, is_correct)
 
             if is_correct:
@@ -1361,9 +2178,12 @@ def training():
                 training_state.add_answer(instance_id, True, training_state.get_mistakes_for_question(instance_id) + 1)
                 training_state.clear_feedback()
 
-                # Check if user has passed based on min_correct
+                # Pass early once min_correct is reached, unless every question
+                # must be answered correctly: that cannot be decided before the
+                # last one has been asked.
                 min_correct = passing_criteria.get('min_correct', len(training_state.training_instances))
-                if training_state.get_correct_answer_count() >= min_correct:
+                if (not passing_criteria.get('require_all_correct', False)
+                        and training_state.get_correct_answer_count() >= min_correct):
                     # User has passed training
                     training_state.set_passed(True)
                     logger.info(f'User {username} passed training with {training_state.get_correct_answer_count()} correct answers')
@@ -1384,55 +2204,19 @@ def training():
 
                 # Move to next training question or complete training
                 if user_state.advance_training_question():
-                    # More questions available
-                    training_state.set_feedback(True, "Correct! Moving to next question.", False)
-                    # Get next instance for display
-                    next_instance = user_state.get_current_training_instance()
-                    next_instance_text = next_instance.get_data().get('displayed_text', next_instance.get_data().get('text', ''))
-                    return render_template("training.html",
-                                         instance_text=next_instance_text,
-                                         instance_id=next_instance.get_id(),
-                                         feedback="Correct! Moving to next question.",
-                                         feedback_type="success",
-                                         show_feedback=True,
-                                         allow_retry=False,
-                                         current_question=current_question_num + 1,
-                                         total_questions=total_questions,
-                                         correct_count=training_state.get_correct_answer_count(),
-                                         mistake_count=training_state.get_total_mistakes(),
-                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                         username=username)
+                    # More questions available. Wipe this page's stored answers first:
+                    # every training question shares one phase page key, so otherwise
+                    # the next question inherits — and is graded against — this one's.
+                    user_state.clear_phase_page_annotations()
+                    training_state.set_feedback(
+                        True, "Correct! Moving to next question.", False, "success")
+                    # Redirect rather than render, matching consent/instructions/
+                    # poststudy (issue #124) so a refresh cannot resubmit the answer.
+                    return redirect(url_for("home"))
                 else:
                     # All questions completed
-                    require_all = passing_criteria.get('require_all_correct', False)
-                    if require_all and training_state.get_correct_answer_count() < total_questions:
-                        # User didn't get all correct
-                        training_state.set_failed(True)
-                        user_state.set_current_phase_and_page((UserPhase.DONE, None))
-                        return render_template("training_failed.html",
-                                             message="You did not answer all training questions correctly.",
-                                             correct_count=training_state.get_correct_answer_count(),
-                                             total_questions=total_questions,
-                                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                             username=username)
-                    else:
-                        # Training completed successfully
-                        training_state.set_passed(True)
-                        logger.info(f'User {username} completed training successfully')
-
-                        # Calculate category qualifications based on training performance
-                        cat_config = config.get('category_assignment', {})
-                        if cat_config.get('enabled', False):
-                            qual_config = cat_config.get('qualification', {})
-                            threshold = qual_config.get('threshold', 0.7)
-                            min_questions = qual_config.get('min_questions', 1)
-                            qualified = user_state.calculate_and_set_qualifications(threshold, min_questions)
-                            if qualified:
-                                logger.info(f'User {username} qualified for categories: {qualified}')
-
-                        usm = get_user_state_manager()
-                        usm.advance_phase(username)
-                        return redirect(url_for("home"))
+                    return _finish_training(username, user_state, training_state,
+                                            passing_criteria, training_config, total_questions)
             else:
                 logger.info(f'User {username} answered training question {instance_id} incorrectly')
                 # Record the mistake
@@ -1462,27 +2246,23 @@ def training():
                                          annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
                                          username=username)
 
-                # Get explanation for incorrect answer
-                explanation = get_training_explanation(instance_id)
+                # Get explanation for incorrect answer. `feedback.show_explanations`
+                # and `feedback.allow_retry` are the documented spellings; they
+                # were validated and then never read.
+                feedback_config = training_config.get('feedback') or {}
+                explanation = (get_training_explanation(instance_id)
+                               if feedback_config.get('show_explanations', True) else "")
 
                 # Check if user should be allowed to retry
-                allow_retry = training_config.get('allow_retry', True)
+                allow_retry = training_config.get('allow_retry',
+                                                  feedback_config.get('allow_retry', True))
 
                 if allow_retry:
-                    training_state.set_feedback(True, f"Incorrect. {explanation}", True)
-                    return render_template("training.html",
-                                         instance_text=instance_text,
-                                         instance_id=instance_id,
-                                         feedback=f"Incorrect. {explanation}",
-                                         feedback_type="error",
-                                         show_feedback=True,
-                                         allow_retry=True,
-                                         current_question=current_question_num,
-                                         total_questions=total_questions,
-                                         correct_count=training_state.get_correct_answer_count(),
-                                         mistake_count=training_state.get_total_mistakes(),
-                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                         username=username)
+                    # Same question again; the previous answer stays on the page so the
+                    # user can see and change it.
+                    training_state.set_feedback(
+                        True, f"Incorrect. {explanation}", True, "error")
+                    return redirect(url_for("home"))
                 else:
                     # No retry allowed - check failure action
                     failure_action = training_config.get('failure_action', 'move_to_done')
@@ -1498,39 +2278,17 @@ def training():
                     else:
                         # Advance to next question even though wrong
                         if user_state.advance_training_question():
-                            next_instance = user_state.get_current_training_instance()
-                            next_instance_text = next_instance.get_data().get('displayed_text', next_instance.get_data().get('text', ''))
-                            training_state.set_feedback(True, f"Incorrect. {explanation} Moving to next question.", False)
-                            return render_template("training.html",
-                                                 instance_text=next_instance_text,
-                                                 instance_id=next_instance.get_id(),
-                                                 feedback=f"Previous answer was incorrect: {explanation}",
-                                                 feedback_type="warning",
-                                                 show_feedback=True,
-                                                 allow_retry=False,
-                                                 current_question=current_question_num + 1,
-                                                 total_questions=total_questions,
-                                                 correct_count=training_state.get_correct_answer_count(),
-                                                 mistake_count=training_state.get_total_mistakes(),
-                                                 annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                                 username=username)
+                            user_state.clear_phase_page_annotations()
+                            training_state.set_feedback(
+                                True,
+                                f"Previous answer was incorrect: {explanation}",
+                                False, "warning")
+                            return redirect(url_for("home"))
                         else:
                             # No more questions - check if passed
-                            min_correct = passing_criteria.get('min_correct', total_questions)
-                            if training_state.get_correct_answer_count() >= min_correct:
-                                training_state.set_passed(True)
-                                usm = get_user_state_manager()
-                                usm.advance_phase(username)
-                                return redirect(url_for("home"))
-                            else:
-                                training_state.set_failed(True)
-                                user_state.set_current_phase_and_page((UserPhase.DONE, None))
-                                return render_template("training_failed.html",
-                                                     message="You did not meet the minimum correct answers requirement.",
-                                                     correct_count=training_state.get_correct_answer_count(),
-                                                     min_correct=min_correct,
-                                                     annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                                     username=username)
+                            return _finish_training(username, user_state, training_state,
+                                                    passing_criteria, training_config,
+                                                    total_questions)
 
         except Exception as e:
             logger.error(f'Error processing training annotation: {e}')
@@ -1542,81 +2300,24 @@ def training():
     else:
         logger.debug(f'GET <-- TRAINING for user {username}')
 
-        # Get the current training instance
-        current_instance = user_state.get_current_training_instance()
-        if not current_instance:
+        # Bail out clearly if there is nothing to show; get_current_page_html would
+        # otherwise render an empty question.
+        if not user_state.get_current_training_instance():
             logger.error(f'No training instance available for user {username}')
             return render_template("error.html", message="No training instance available")
 
-        instance_text = current_instance.get_data().get('displayed_text', current_instance.get_data().get('text', ''))
-
-        # Check if we should show feedback from previous attempt
-        show_feedback = training_state.show_feedback if training_state else False
-        feedback_message = training_state.feedback_message if training_state else ""
-        allow_retry = training_state.allow_retry if training_state else False
-
-        return render_template("training.html",
-                             instance_text=instance_text,
-                             instance_id=current_instance.get_id(),
-                             feedback=feedback_message,
-                             feedback_type="error" if allow_retry else "info",
-                             show_feedback=show_feedback,
-                             allow_retry=allow_retry,
-                             current_question=current_question_num,
-                             total_questions=total_questions,
-                             correct_count=training_state.get_correct_answer_count(),
-                             mistake_count=training_state.get_total_mistakes(),
-                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                             username=username)
+        # Render the generated phase page, exactly like consent/instructions/prestudy/
+        # poststudy. This is what finally puts the annotation schemes on screen: the
+        # standalone training.html carried a literal "{{ TASK_LAYOUT }}" that nothing
+        # ever substituted, so the form was always empty.
+        return get_current_page_html(config, username)
 
 
-def check_training_answer(user_answer: dict, correct_answers: dict) -> bool:
-    """
-    Check if the user's answer matches the correct answers.
+# Grading lives in server_utils/training_grading.py so the storage layer can call it
+# without importing this module (which would be circular). Re-exported here because
+# tests and older call sites import it from routes.
+from potato.server_utils.training_grading import check_training_answer  # noqa: E402,F401
 
-    Handles different annotation types:
-    - Radio/single select: string comparison
-    - Multiselect/checkbox: set comparison (order-independent)
-    - Likert/number: numeric comparison
-    - Text: exact or fuzzy string match
-
-    Args:
-        user_answer: Dictionary of user's answers by schema name
-        correct_answers: Dictionary of correct answers by schema name
-
-    Returns:
-        True if all answers are correct, False otherwise
-    """
-    for schema_name, correct_value in correct_answers.items():
-        if schema_name not in user_answer:
-            return False
-
-        user_value = user_answer[schema_name]
-
-        # Handle multiselect/checkbox (list comparison)
-        if isinstance(correct_value, list):
-            if isinstance(user_value, list):
-                if set(user_value) != set(correct_value):
-                    return False
-            elif isinstance(user_value, str):
-                # Single value submitted, check if it's the only correct answer
-                if len(correct_value) != 1 or user_value not in correct_value:
-                    return False
-            else:
-                return False
-        # Handle numeric values
-        elif isinstance(correct_value, (int, float)):
-            try:
-                if float(user_value) != float(correct_value):
-                    return False
-            except (ValueError, TypeError):
-                return False
-        # Handle string comparison (radio, text)
-        else:
-            if str(user_value).strip().lower() != str(correct_value).strip().lower():
-                return False
-
-    return True
 
 @app.route("/prestudy", methods=["GET", "POST"])
 def prestudy():
@@ -1639,9 +2340,12 @@ def prestudy():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        logger.debug(f'POST -> PRESTUDY: {request.form}')
+        logger.debug("POST -> PRESTUDY, fields: %s", sorted(request.form.keys()))
 
         # Advance the state and redirect to the appropriate next phase
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
@@ -1703,8 +2407,11 @@ def _ibws_check_and_advance(user_state) -> bool:
 
     # Add new tuples to ISM
     id_key = config["item_properties"]["id_key"]
+    from potato.server_utils.runtime_items import record_runtime_item
     for t in new_tuples:
         ism.add_item(str(t[id_key]), t)
+        # Kept so a restart does not prune this round from annotators' queues.
+        record_runtime_item(config, str(t[id_key]), t, "ibws")
 
     # Re-render displayed text for new items
     from potato.flask_server import _render_displayed_text  # noqa: cross-import
@@ -1719,17 +2426,160 @@ def _ibws_check_and_advance(user_state) -> bool:
     return True
 
 
+#: Sent by annotation.js on its navigation POSTs (Next, Previous, go-to,
+#: jump-to-unannotated). Asks /annotate to answer with JSON instead of the page.
+#: Only the value "1" does; "0" or anything else gets the page, as it reads.
+NAVIGATION_REQUEST_HEADER = "X-Potato-Navigation"
+
+
+#: Image references the grid shows as pictures rather than as text.
+_GRID_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+                        ".tif", ".tiff", ".avif")
+
+
+def _grid_tile_kind(value) -> str:
+    if not isinstance(value, str):
+        return "text"
+    path = value.split("?", 1)[0].split("#", 1)[0].lower()
+    if value.startswith("data:image/") or path.endswith(_GRID_IMAGE_SUFFIXES):
+        return "image"
+    return "text"
+
+
+@app.route("/annotate/grid", methods=["GET"])
+def annotate_grid():
+    """Label a page of items at once for one radio or multiselect scheme.
+
+    The items come from the annotator's own assignment, topped up through
+    assign_instances_to_user exactly as Next does, so the assignment strategy
+    and the per-item annotator cap hold. Saving goes through /updateinstance,
+    one item at a time, from the page: the grid has no save path of its own,
+    so both the user side and the item side are written and agreement sees
+    grid labels like any others.
+    """
+    grid = config.get("grid_view") or {}
+    if not grid.get("enabled"):
+        return redirect(url_for("annotate"))
+    if "username" not in session:
+        return redirect(url_for("home"))
+    username = session["username"]
+    usm = get_user_state_manager()
+    if not usm.has_user(username):
+        return redirect(url_for("annotate"))
+    user_state = usm.get_user_state(username)
+    if user_state.get_phase() != UserPhase.ANNOTATION:
+        return redirect(url_for("annotate"))
+    # Blocked by attention checks: the annotation page says so and stops.
+    if _qc_blocked(username):
+        return redirect(url_for("annotate"))
+
+    scheme = next((s for s in config.get("annotation_schemes") or []
+                   if isinstance(s, dict) and s.get("name") == grid.get("scheme")), None)
+    if scheme is None:
+        return redirect(url_for("annotate"))
+    page_size = int(grid.get("page_size", 24))
+
+    ism = get_item_state_manager()
+    annotated = set(user_state.get_annotated_instance_ids())
+
+    def pending():
+        return [iid for iid in user_state.instance_id_ordering
+                if iid not in annotated and ism.has_item(iid)]
+
+    items = pending()
+    while len(items) < page_size:
+        if not ism.assign_instances_to_user(user_state):
+            break
+        topped_up = pending()
+        if len(topped_up) == len(items):
+            break
+        items = topped_up
+
+    # Attention checks and gold items, placed in the page at the configured
+    # frequency and assigned the way the single-item page assigns them, so a
+    # grid save is scored like any other.
+    from potato.server_utils.quality_control_injection import quality_control_page
+    try:
+        page_ids = quality_control_page(username, user_state, config, items[:page_size])
+    except Exception:  # never refuse the page over quality control
+        logger.exception("Could not place quality-control items in the grid for %s", username)
+        page_ids = items[:page_size]
+
+    tiles = []
+    for iid in page_ids:
+        content = ism.get_item(iid).get_text()
+        kind = _grid_tile_kind(content)
+        tiles.append({"id": iid, "kind": kind,
+                      "content": content if isinstance(content, str) else str(content)})
+
+    kind = scheme.get("annotation_type")
+    labels = []
+    if kind == "triage":
+        # The triage scheme's own buttons: its labels, its keys, and the value
+        # its hidden `decision` input stores, so the normal page shows a grid
+        # decision as if it had been made there.
+        from potato.server_utils.schemas import triage as triage_schema
+        for value, default_label in (("accept", triage_schema.DEFAULT_ACCEPT_LABEL),
+                                     ("reject", triage_schema.DEFAULT_REJECT_LABEL),
+                                     ("skip", triage_schema.DEFAULT_SKIP_LABEL)):
+            labels.append({"name": str(scheme.get(f"{value}_label", default_label)),
+                           "value": value,
+                           "key": str(scheme.get(f"{value}_key",
+                                                 triage_schema.DEFAULT_KEYBINDINGS[value]))})
+    else:
+        for index, label in enumerate(scheme.get("labels") or []):
+            name = str(label if isinstance(label, str) else (label or {}).get("name"))
+            labels.append({"name": name, "value": name,
+                           "key": str(index + 1) if index < 9 else ""})
+
+    return render_template(
+        "annotate_grid.html",
+        title=config.get("annotation_task_name", "Annotation"),
+        scheme_name=scheme["name"],
+        scheme_description=scheme.get("description", ""),
+        multiple=kind == "multiselect",
+        scheme_kind=kind,
+        labels=labels,
+        tiles=tiles,
+        n_annotated=len(annotated),
+        username=username,
+        # ui.theme: a forced light/dark theme applies here too, and in auto
+        # mode the page carries the same toggle as the annotation page.
+        ui_theme=_grid_ui_theme(),
+    )
+
+
+def _grid_ui_theme():
+    from potato.server_utils.theme import resolve_ui_theme
+    return resolve_ui_theme(config)
+
+
+def _review_scope(username, user_state):
+    """What a Previous/go_to review on /annotate is tied to: the user, the
+    phase and page, and the IBWS round when there is one."""
+    try:
+        phase, page = user_state.get_current_phase_and_page()
+        phase = getattr(phase, "name", str(phase))
+    except Exception:
+        phase, page = None, None
+    ibws_round = None
+    if config.get("ibws_config"):
+        from potato.ibws_manager import get_ibws_manager
+        mgr = get_ibws_manager()
+        ibws_round = getattr(mgr, "current_round", None) if mgr else None
+    return f"{username}|{phase}|{page}|{ibws_round}"
+
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
     Handle annotation page requests.
     """
     logger.debug("=== ANNOTATE ROUTE START ===")
-    logger.debug(f"Session: {dict(session)}")
+    logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
     logger.debug(f"Request method: {request.method}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Request content type: {request.content_type}")
     logger.debug(f"Request is JSON: {request.is_json}")
 
@@ -1768,8 +2618,22 @@ def annotate():
             elif request.form:
                 action = request.form.get('action')
 
-            if action == 'next_instance':
+            if action == 'next_instance' and cur_phase == UserPhase.TRAINING:
+                # In training the Next button means "grade this practice question",
+                # which advances one QUESTION, not one phase. Hand off to training()
+                # rather than skipping the whole phase.
+                #
+                # This is also what removes the need for any training-specific
+                # JavaScript: the shared Next button already flushes the debounce,
+                # awaits saveAnnotations() and only then POSTs here, so the answer is
+                # durably stored before it is read back for grading.
+                logger.debug(f"next_instance during training for {username}, grading")
+                return training()
+            elif action == 'next_instance':
                 # Treat as "submit current phase page" - advance to next phase
+                refused = _refuse_unmet_phase_page(username, user_state)
+                if refused is not None:
+                    return refused
                 logger.info(f"Leaked next_instance from phase {cur_phase}, advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
@@ -1784,9 +2648,54 @@ def annotate():
         # so POST data is preserved for phase processing
         return home()
 
-    # If the user hasn't yet been assigned anything to annotate, do so now
-    if not user_state.has_assignments():
-        logger.debug(f"User {username} has no assignments, assigning instances")
+    # A user blocked by attention checks gets no more work. The block used to
+    # be only an overlay in the page: reloading handed out the next item and
+    # its saves were stored. They go to the end of the task, where a crowd
+    # participant gets the platform's failure code.
+    if _qc_blocked(username):
+        logger.info("%s is blocked by attention checks; ending their task", username)
+        user_state.advance_to_phase(UserPhase.DONE, None)
+        get_user_state_manager().save_user_state(user_state)
+        return redirect(url_for("done"))
+
+    # Device routing: phones/tablets get the touch surface (/pocket) when the
+    # task supports it; either way, record the device class so admins can see
+    # who annotates from mobile. ?desktop=1 is the sticky opt-out ("Desktop
+    # site"); opening /pocket clears it again. Tracking/redirect failures must
+    # never take down the annotation page.
+    if request.method == "GET":
+        try:
+            from potato.pocket.devices import get_device_tracker, is_touch_device
+            from potato.pocket.routes import pocket_routing_state
+
+            user_agent = request.headers.get("User-Agent", "")
+            get_device_tracker().record(username, user_agent, "annotate")
+            if request.args.get("desktop") == "1":
+                session["force_desktop"] = True
+            if (is_touch_device(user_agent)
+                    and not session.get("force_desktop")
+                    and pocket_routing_state()["available"]):
+                logger.info(f"Touch device detected for {username}; routing to /pocket")
+                # script_root, so a phone behind a URL prefix lands on this
+                # study's /pocket and not on the bare host's.
+                return redirect(request.script_root + "/pocket")
+        except Exception:
+            logger.debug("Device routing check failed", exc_info=True)
+
+    # If the user hasn't yet been assigned anything to annotate, do so now.
+    #
+    # Also top up when they hold assignments and have annotated all of them.
+    # The condition used to be "holds nothing", so a returning annotator was
+    # permanently retired the first time they drained their queue: on a
+    # `watch_data_directory` study -- a corpus that keeps arriving, which
+    # implies a standing pool of annotators who come back -- they were shown
+    # the completion page, with a completion code, while unassigned items sat
+    # in the pool. The only way to consume the incoming stream was to keep
+    # creating accounts. Assignment still respects every cap, so an annotator
+    # who is genuinely finished gets nothing and falls through to completion
+    # exactly as before.
+    if not user_state.has_assignments() or _has_annotated_all_assigned(user_state):
+        logger.debug(f"User {username} has no unannotated assignments, assigning instances")
         get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"User has assignments after assignment: {user_state.has_assignments()}")
 
@@ -1798,12 +2707,64 @@ def annotate():
                 logger.info(f"Adjudicator {username} has no annotation items, redirecting to /adjudicate")
                 return redirect(url_for("adjudicate"))
 
+            # A surplus annotator: every item already has its full complement,
+            # so nothing could be assigned. Falling through from here advanced
+            # the phase and showed the completion page -- "You have completed
+            # the annotation task and your responses are saved" to somebody who
+            # never saw an item, with no annotation_output directory and not a
+            # line in the log. On a pilot that reads as a broken study; in the
+            # field it pays people for a page they could not work on.
+            #
+            # The phase is deliberately left at ANNOTATION so a reload
+            # gives them work once whatever _diagnose_no_work names has
+            # been dealt with -- more data, a raised cap, a group they
+            # belong to, a quota above zero.
+            if _engine_assigns():
+                return _engine_no_work_page(username, user_state)
+            reason, headline, explanation, advice = _diagnose_no_work(
+                username, user_state)
+            logger.warning(
+                "No items could be assigned to %s (%s): %s. Showing the "
+                "no-work page rather than the completion page.",
+                username, reason, advice,
+            )
+            return render_template(
+                "no_work_available.html",
+                annotation_task_name=config.get(
+                    "annotation_task_name", "Annotation Platform"),
+                no_work_reason=reason,
+                no_work_headline=headline,
+                no_work_explanation=explanation,
+            )
+
     # IBWS: Check if round is complete and advance if needed
     if config.get("ibws_config"):
         _ibws_check_and_advance(user_state)
 
+    # Going back -- Previous, or a jump to an item -- starts a review, and a
+    # review is not a request to finish. Without this, once every item held an
+    # answer (an image item does as soon as it is visited: no shapes is an
+    # answer), pressing Previous to check an earlier item ended the study, on
+    # that request or on the page load after it. The review ends when Next
+    # reaches the end of the list, which finishes the study as before.
+    #
+    # The flag names the phase, page and IBWS round it was set in, so one left
+    # behind by a path that finishes without clearing it (an IBWS round, the
+    # labeling engine's no-work page, a phase change outside /annotate)
+    # expires instead of suppressing the next phase's completion check.
+    review_scope = _review_scope(username, user_state)
+    nav_action = None
+    if request.method == 'POST':
+        if request.is_json and isinstance(request.json, dict):
+            nav_action = request.json.get('action')
+        else:
+            nav_action = request.form.get('action')
+    if nav_action in ("prev_instance", "go_to"):
+        session["potato_reviewing"] = review_scope
+    reviewing = session.get("potato_reviewing") == review_scope
+
     # See if this user has finished annotating all of their assigned instances
-    if not user_state.has_remaining_assignments():
+    if not reviewing and not user_state.has_remaining_assignments():
         # For IBWS, don't advance phase if more rounds are possible
         if config.get("ibws_config"):
             from potato.ibws_manager import get_ibws_manager
@@ -1815,9 +2776,18 @@ def annotate():
                 logger.debug(f"User {username} has no remaining assignments (IBWS complete), advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
+        elif _engine_assigns():
+            return _engine_no_work_page(username, user_state)
         else:
+            waiting = _held_items_wait_page(username, user_state)
+            if waiting is not None:
+                return waiting
             logger.debug(f"User {username} has no remaining assignments, advancing phase")
+            last_item = user_state.get_current_instance_id()
             get_user_state_manager().advance_phase(username)
+            # Finishing leaves the last item, and its blanks count.
+            if last_item:
+                get_item_state_manager().reevaluate_adaptive_boost(last_item)
             return redirect(url_for("home"))
 
     _inject_quality_control_item_if_needed(username, user_state)
@@ -1826,9 +2796,9 @@ def annotate():
     if request.method == 'POST':
         logger.debug(f"POST request to annotate")
         if request.is_json:
-            logger.debug(f"POST JSON data: {request.get_json()}")
+            logger.debug("POST JSON keys: %s", _logged_keys(request.get_json(silent=True)))
         else:
-            logger.debug(f"POST form data: {dict(request.form)}")
+            logger.debug("POST form fields: %s", sorted(request.form.keys()))
 
     if request.is_json and request.json and 'action' in request.json:
        logger.debug(f"Action from JSON: {request.json['action']}")
@@ -1844,6 +2814,15 @@ def annotate():
     # behavioral data. We do NOT save annotations during navigation - they should
     # already be saved by the time the user navigates.
 
+    # The item this action leaves. Adaptive escalation counts a blank answer
+    # only from an annotator who has gone past the item, so it is checked
+    # again once they have.
+    try:
+        left_from = user_state.get_current_instance_id()
+        left_index = user_state.get_current_instance_index()
+    except Exception:
+        left_from, left_index = None, -1
+
     if action == "prev_instance":
         logger.debug(f"Moving to previous instance for user: {username}")
         moved_back = move_to_prev_instance(username)
@@ -1856,7 +2835,8 @@ def annotate():
         acm = get_ai_cache_manager()
         if acm:
             acm.start_prefetch(user_state.current_instance_index,
-                               getattr(acm, "prefetch_page_count_on_prev", 0) )
+                               getattr(acm, "prefetch_page_count_on_prev", 0),
+                               instance_ids=user_state.instance_id_ordering)
     elif action == "next_instance":
         logger.debug(f"Moving to next instance for user: {username}")
         # Check required annotations before allowing forward navigation
@@ -1864,6 +2844,26 @@ def annotate():
         block_response = _check_required_or_block(user_state, current_id)
         if block_response is not None:
             return block_response
+
+        # Leaving an attention check without answering it fails it.
+        try:
+            from potato.quality_control import get_quality_control_manager
+            qc_manager = get_quality_control_manager()
+            # A timed trial that ran out (trial_timing) is not a skip: the
+            # participant had no time left to answer. It is not graded, and
+            # stays visible as a timeout in trials.csv.
+            from potato.trial_timing import excuses_required_answer as _timed_out
+            _trial = (getattr(user_state, "instance_id_to_trial", None) or {}).get(str(current_id))
+            if qc_manager is not None and current_id and not _timed_out(_trial):
+                skipped = qc_manager.record_skipped_attention_check(username, current_id)
+                if skipped is not None:
+                    logger.warning("%s moved past attention check %s without answering",
+                                   username, current_id)
+                    if skipped.get("blocked"):
+                        _reclaim_blocked_user_assignments(username, user_state,
+                                                          current_instance_id=current_id)
+        except Exception:
+            logger.error("Could not grade a skipped attention check", exc_info=True)
 
         moved_forward = move_to_next_instance(username)
         if not moved_forward and user_state.is_at_end_index():
@@ -1881,14 +2881,26 @@ def annotate():
                         if ibws_mgr and ibws_mgr.is_completed():
                             logger.debug(f"User {username} completed all IBWS rounds")
                             get_user_state_manager().advance_phase(username)
+                            # The last item is left too, and its blanks count.
+                            get_item_state_manager().reevaluate_adaptive_boost(left_from)
                             return redirect(url_for("home"))
+                elif _engine_assigns():
+                    return _engine_no_work_page(username, user_state)
                 else:
+                    if _held_items_wait_page(username, user_state) is not None:
+                        # The GET renders the held page (top of this route).
+                        return redirect(url_for("annotate"))
                     logger.debug(f"User {username} completed all assignments at end-of-list")
+                    session.pop("potato_reviewing", None)
                     get_user_state_manager().advance_phase(username)
+                    # The last item is left too, and its blanks count.
+                    get_item_state_manager().reevaluate_adaptive_boost(left_from)
                     return redirect(url_for("home"))
         acm = get_ai_cache_manager()
         if acm:
-            acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
+            acm.start_prefetch(user_state.current_instance_index,
+                               getattr(acm, "prefetch_page_count_on_next", 0),
+                               instance_ids=user_state.instance_id_ordering)
 
     elif action == "go_to":
         # Try to get go_to from JSON first, then form
@@ -1900,19 +2912,27 @@ def annotate():
 
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
+            try:
+                target_index = int(go_to_value)
+            except (TypeError, ValueError):
+                # The page only sends numbers; anything else was a 500.
+                return jsonify({"status": "error",
+                                "message": "go_to must be an item number"}), 400
             # Block forward go_to if required annotations aren't met
-            target_index = int(go_to_value)
             if target_index > user_state.current_instance_index:
                 current_id = user_state.get_current_instance_id()
                 block_response = _check_required_or_block(user_state, current_id)
                 if block_response is not None:
                     return block_response
 
-            go_to_id(username, go_to_value)
+            go_to_id(username, target_index)
             acm = get_ai_cache_manager()
             if acm:
-                acm.start_prefetch(user_state.current_instance_index, 1)
-                acm.start_prefetch(user_state.current_instance_index, -1)
+                ordering = user_state.instance_id_ordering
+                acm.start_prefetch(user_state.current_instance_index, 1,
+                                   instance_ids=ordering)
+                acm.start_prefetch(user_state.current_instance_index, -1,
+                                   instance_ids=ordering)
 
         else:
             logger.warning('go_to action requested but no go_to value provided')
@@ -1947,9 +2967,14 @@ def annotate():
     else:
         logger.debug(f'Action "{action}" - no specific handling')
 
+    # Forward only: Previous leaves the item unfinished, not answered.
+    if left_from and getattr(user_state, "get_current_instance_index", lambda: -1)() > left_index:
+        get_item_state_manager().reevaluate_adaptive_boost(left_from)
+
     # After processing the action, check again if user has completed all assignments
     # This handles the case where the user just finished their last item
-    if not user_state.has_remaining_assignments():
+    # (not while they are reviewing earlier items; see `reviewing` above)
+    if not reviewing and not user_state.has_remaining_assignments():
         if config.get("ibws_config"):
             from potato.ibws_manager import get_ibws_manager
             ibws_mgr = get_ibws_manager()
@@ -1960,9 +2985,16 @@ def annotate():
                 logger.debug(f"User {username} has completed all IBWS assignments, advancing phase")
                 get_user_state_manager().advance_phase(username)
                 return redirect(url_for("home"))
+        elif _engine_assigns():
+            return _engine_no_work_page(username, user_state)
         else:
+            if _held_items_wait_page(username, user_state) is not None:
+                # The GET renders the held page (top of this route).
+                return redirect(url_for("annotate"))
             logger.debug(f"User {username} has completed all assignments, advancing phase")
             get_user_state_manager().advance_phase(username)
+            if left_from:
+                get_item_state_manager().reevaluate_adaptive_boost(left_from)
             # Use redirect to ensure next phase handler gets a GET request (fixes issue #115)
             return redirect(url_for("home"))
 
@@ -1990,6 +3022,36 @@ def annotate():
             # Don't change the current instance if the requested one isn't assigned to this user
 
     logger.debug("=== ANNOTATE ROUTE END ===")
+
+    # A plain page load under the engine lands on the request the person
+    # holds, not the last item they finished: a returning annotator otherwise
+    # saw their old answer and had to press Next to reach the new request.
+    if (request.method == "GET" and not request.args and _engine_assigns()):
+        try:
+            from potato.labeling_engine.integration.hooks import held_item_ids_for_user
+            held = set(held_item_ids_for_user(user_state))
+            current = user_state.get_current_instance_id()
+            if held and current not in held:
+                ordering = list(getattr(user_state, "instance_id_ordering", []) or [])
+                target = next((i for i, iid in enumerate(ordering) if iid in held), None)
+                if target is not None:
+                    user_state.current_instance_index = target
+        except Exception:
+            logger.debug("engine: could not move to the held request", exc_info=True)
+
+    # The annotation page's own navigation buttons load the next page with a
+    # separate GET as soon as this answers, so rendering the whole page here
+    # only for the browser to discard it cost a full render and a larger
+    # response on every Next. They say so with this header; any other client
+    # posting here still gets the page.
+    if request.method == 'POST' and request.headers.get(NAVIGATION_REQUEST_HEADER) == "1":
+        response = jsonify({
+            "status": "ok",
+            "instance_id": user_state.get_current_instance_id(),
+        })
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
     # Render the page with any existing annotations
     # Prevent browser caching so window.location.reload() always gets fresh content
     # (browsers may serve stale cached GET responses after JS-triggered reloads)
@@ -1998,6 +3060,46 @@ def annotate():
     response.headers['Pragma'] = 'no-cache'
     return response
 
+def _engine_blind_refusal(username, instance_id):
+    """A 403 when the labeling engine has this person labeling this item blind.
+
+    Blind requests (calibration, certification, audit) are what the engine's
+    accuracy estimates and guarantees are computed from. A suggestion seen
+    before answering pulls the answer toward the machine and inflates its
+    measured accuracy, so the server refuses to produce one, whatever the
+    page shows.
+    """
+    # The study's own no-assistance comparison group (ai_support.holdout)
+    # is refused the same way: an assisted answer in that group would be the
+    # very contamination the group exists to measure.
+    from potato.assist_holdout import is_held_out
+    if is_held_out(config, username, instance_id):
+        return jsonify({
+            "html": "", "error": "This item is in the study's no-assistance comparison "
+                                 "group, so no AI suggestion is shown."}), 403
+    from potato.labeling_engine.integration.hooks import is_blind
+    if is_blind(username, instance_id):
+        return jsonify({
+            "html": "", "error": "This item is being labeled blind for the labeling "
+                                 "engine, so no AI suggestion is shown."}), 403
+    return None
+
+
+#: Routes that put a model's view of the current item in front of the
+#: annotator. Each calls ``_engine_blind_refusal`` first;
+#: tests/server/test_labeling_engine_server.py checks every one returns 403 on
+#: a blind item, so a new AI route must be listed here to ship.
+ENGINE_BLIND_ROUTES = (
+    ("GET", "/get_ai_suggestion"),
+    ("GET", "/api/get_ai_suggestion"),
+    ("GET", "/api/ai_assistant"),
+    ("POST", "/api/chat/send"),
+    ("POST", "/api/critique_annotations"),
+    ("GET", "/api/option_highlights/0"),
+    ("GET", "/api/prm/prelabel"),
+)
+
+
 @app.route('/get_ai_suggestion', methods=['GET'])
 def get_ai_suggestion():
     if 'username' not in session:
@@ -2005,6 +3107,9 @@ def get_ai_suggestion():
 
     username = session['username']
     user_state = get_user_state(username)
+    blind = _engine_blind_refusal(username, user_state.get_current_instance_id())
+    if blind is not None:
+        return blind
     ais = get_ai_cache_manager()
 
     if ais is None:
@@ -2020,9 +3125,31 @@ def get_ai_suggestion():
     if annotation_id < 0 or annotation_id >= num_schemes:
         return jsonify({"error": "annotationId out of range"}), 400
 
+    # `aiAssistant` is user-supplied and was the one parameter here not
+    # checked: an unrecognized name reached
+    # `ai_prompt[annotation_type].get(ai_assistant).get("output_format")` and
+    # raised AttributeError on None -- a 500, four lines after `annotationId`
+    # gets a clean 400. Valid names come from the prompt registry rather than a
+    # literal list, so adding a prompt file cannot leave this behind.
     ai_assistant = request.args.get('aiAssistant')
+    scheme = (config.get("annotation_schemes") or [])[annotation_id]
+    annotation_type = scheme.get("annotation_type") if isinstance(scheme, dict) else None
+    available = (get_ai_prompt() or {}).get(annotation_type) or {}
+    if ai_assistant not in available:
+        return jsonify({
+            "error": f"Unknown aiAssistant {ai_assistant!r} for annotation "
+                     f"type {annotation_type!r}",
+            "available": sorted(available),
+        }), 400
 
-    instance_id = user_state.get_current_instance_index()
+    # The item, by id. `get_current_instance_index()` is the annotator's
+    # POSITION in their own ordering, and the AI cache resolved it against the
+    # corpus in file order -- the same item only under `fixed_order`. Under
+    # `random` or any reordering strategy the hint was about a different item
+    # than the one on screen, and its answer was stamped onto the visible one.
+    instance_id = user_state.get_current_instance_id()
+    if instance_id is None:
+        return jsonify({"error": "No current instance"}), 400
 
     res = ais.get_ai_help(instance_id, annotation_id, ai_assistant)
     logger.debug(f"AI suggestion result: {res}")
@@ -2035,6 +3162,113 @@ def get_ai_suggestion():
         return jsonify({"error": res})
     else:
         return jsonify(res)
+
+
+def _trained_step_ratings(trained, n_steps):
+    """A written-back step-model rating as prelabel suggestions, keeping only
+    steps that exist with a reward the scheme stores (-1, 0, 1). Item data
+    can be edited by hand or come from another tool, and the widget would
+    drop a bad entry without saying so."""
+    import math
+
+    if not isinstance(trained, dict) or not isinstance(trained.get("steps"), list):
+        return []
+    out, seen = [], set()
+    for step in trained["steps"]:
+        if not isinstance(step, dict):
+            continue
+        index, reward = step.get("index"), step.get("reward")
+        if isinstance(index, bool) or not isinstance(index, int) \
+                or not 0 <= index < n_steps or index in seen:
+            continue
+        if isinstance(reward, bool) or reward not in (-1, 0, 1):
+            continue
+        confidence = step.get("confidence")
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) \
+                or not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            confidence = None
+        seen.add(index)
+        out.append({"index": index, "reward": int(reward),
+                    "confidence": confidence,
+                    "reasoning": "Rated by the project's trained step model"})
+    return out
+
+
+# Per-(instance, schema) cache of LLM step pre-labels so repeated clicks on the
+# "AI pre-label" button don't re-query the model. Keyed by (instance_id, schema).
+_PRM_PRELABEL_CACHE: dict = {}
+
+
+@app.route('/api/prm/prelabel', methods=['GET'])
+def prm_prelabel():
+    """Return LLM-suggested per-step process rewards for one process_reward schema.
+
+    Query params: ``instance_id`` and ``schema`` (the process_reward scheme
+    name). Response: ``{"steps": [{index, reward, reasoning, confidence}],
+    "cached": bool}``. The human verifies each suggestion in the UI.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance_id = request.args.get('instance_id')
+    schema_name = request.args.get('schema')
+    if not instance_id or not schema_name:
+        return jsonify({"error": "instance_id and schema are required"}), 400
+    blind = _engine_blind_refusal(session['username'], str(instance_id))
+    if blind is not None:
+        return blind
+
+    # Resolve the process_reward scheme by name.
+    scheme = None
+    for s in config.get("annotation_schemes", []):
+        if s.get("name") == schema_name:
+            scheme = s
+            break
+    if scheme is None or scheme.get("annotation_type") != "process_reward":
+        return jsonify({"error": f"No process_reward schema named '{schema_name}'"}), 404
+    if not scheme.get("ai_prelabel"):
+        return jsonify({"error": "AI pre-labeling is not enabled for this schema"}), 400
+
+    ism = get_item_state_manager()
+    if not ism.has_item(str(instance_id)):
+        return jsonify({"error": f"Unknown instance '{instance_id}'"}), 404
+    item = ism.get_item(str(instance_id))
+    data = item.get_data()
+    steps_key = scheme.get("steps_key", "steps")
+    steps = data.get(steps_key) if isinstance(data, dict) else None
+    if not isinstance(steps, list) or not steps:
+        return jsonify({"steps": [], "error": f"No steps found under '{steps_key}'"}), 200
+
+    # A prm-reward run's written-back rating comes first: it was trained on
+    # this project's own step labels, and it costs no judge call.
+    try:
+        from potato.model_review import prediction_field
+        trained = (data.get(prediction_field(config)) or {}).get(schema_name)
+    except AttributeError:
+        trained = None
+    rated = _trained_step_ratings(trained, len(steps))
+    if rated:
+        return jsonify({"steps": rated, "cached": False, "source": "model"})
+
+    cache_key = (str(instance_id), schema_name)
+    cached = _PRM_PRELABEL_CACHE.get(cache_key)
+    if cached is not None:
+        return jsonify({"steps": cached, "cached": True})
+
+    try:
+        from potato.ai.judge import JudgeService
+        suggestions = JudgeService(config).judge_steps(str(instance_id), scheme, steps)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("PRM prelabel failed for %s/%s: %s", instance_id, schema_name, exc)
+        return jsonify({"error": "AI pre-labeling failed"}), 500
+
+    if suggestions is None:
+        return jsonify({
+            "error": "AI judge unavailable — check ai_support / judge_alignment config"
+        }), 503
+
+    _PRM_PRELABEL_CACHE[cache_key] = suggestions
+    return jsonify({"steps": suggestions, "cached": False})
 
 
 @app.route('/api/option_highlights/<int:annotation_id>', methods=['GET'])
@@ -2060,12 +3294,17 @@ def get_option_highlights(annotation_id):
 
     username = session['username']
     user_state = get_user_state(username)
+    blind = _engine_blind_refusal(username, user_state.get_current_instance_id())
+    if blind is not None:
+        return blind
     ais = get_ai_cache_manager()
 
     if ais is None:
         return jsonify({"error": "AI support not enabled"}), 400
 
-    instance_id = user_state.get_current_instance_index()
+    instance_id = user_state.get_current_instance_id()
+    if instance_id is None:
+        return jsonify({"error": "No current instance"}), 400
 
     # Get option highlights
     result = ais.get_option_highlights(instance_id, annotation_id)
@@ -2145,10 +3384,37 @@ def trigger_option_highlight_prefetch():
     if request.is_json and request.json:
         prefetch_count = request.json.get("count")
 
-    instance_id = user_state.get_current_instance_index()
-    ais.start_option_highlight_prefetch(instance_id, prefetch_count)
+    index = user_state.get_current_instance_index()
+    # No model calls for items this annotator will see unassisted.
+    from potato.assist_holdout import assist_withheld
+    ais.start_option_highlight_prefetch(
+        index, prefetch_count,
+        instance_ids=user_state.instance_id_ordering,
+        skip=lambda instance_id: assist_withheld(config, username, instance_id))
 
-    return jsonify({"status": "prefetch_started", "from_instance": instance_id})
+    return jsonify({"status": "prefetch_started",
+                    "from_instance": user_state.get_current_instance_id()})
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """Unauthenticated liveness probe for containers and load balancers.
+
+    Deliberately says almost nothing. It is reachable without a session (the
+    path is whitelisted in ``check_session_validity``), so anything it reports
+    is public: no task name, no item or annotator counts, no config. Callers
+    that need those use ``/admin/health`` with an API key.
+
+    Returns 200 once the state managers exist, 503 while the server is still
+    coming up. A container HEALTHCHECK and the deploy provider's post-create
+    poll both key on that transition.
+    """
+    try:
+        get_user_state_manager()
+        get_item_state_manager()
+    except Exception:
+        return jsonify({"status": "starting"}), 503
+    return jsonify({"status": "ok"}), 200
 
 
 # Admin routes for system inspection (read-only)
@@ -2323,7 +3589,6 @@ def admin_user_state(user_id):
     """
     logger.debug("=== ADMIN USER STATE ROUTE START ===")
     logger.debug(f"Requested user_id: {user_id}")
-    logger.debug(f"Request headers: {dict(request.headers)}")
     logger.debug(f"Debug mode: {config.get('debug', False)}")
 
     # Check API key
@@ -2494,6 +3759,24 @@ def admin_item_state():
         }), 500
 
 
+def _plain_annotations(value):
+    """``{schema: {label: value}}`` from a state keyed by Label objects.
+
+    jsonify sorts keys, and Label objects cannot be ordered: the endpoint
+    answered "'<' not supported between instances of 'Label' and 'Label'"
+    for any item someone had annotated.
+    """
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, inner in value.items():
+        if hasattr(key, "get_schema") and hasattr(key, "get_name"):
+            out.setdefault(str(key.get_schema()), {})[str(key.get_name())] = inner
+        else:
+            out[str(key)] = _plain_annotations(inner) if isinstance(inner, dict) else inner
+    return out
+
+
 @app.route("/admin/item_state/<item_id>", methods=["GET"])
 def admin_item_state_detail(item_id):
     """
@@ -2532,7 +3815,8 @@ def admin_item_state_detail(item_id):
             if user_state:
                 user_annotations = user_state.get_all_annotations()
                 if item_id in user_annotations:
-                    item_annotations[username] = user_annotations[item_id]
+                    item_annotations[username] = _plain_annotations(
+                        user_annotations[item_id])
 
         return jsonify({
             "item_id": item_id,
@@ -2564,6 +3848,10 @@ def admin_api_test_reset_state():
     """
     if not config.get('debug', False):
         return jsonify({'error': 'This endpoint is only available in debug mode'}), 403
+    # Wipes every annotator's state: debug alone is not enough when the port is
+    # reachable from other machines.
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({'error': 'Admin authentication required'}), 403
 
     try:
         from potato.user_state_management import clear_user_state_manager, init_user_state_manager
@@ -2681,6 +3969,12 @@ def admin_api_config():
     Returns:
         flask.Response: JSON response with configuration data or update result
     """
+    # The POST branch is authorized inside admin_dashboard.update_config(), but
+    # the GET branch read straight from `config` and returned it to anyone.
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     if request.method == "GET":
         # Return current configuration
         response_data = {
@@ -2698,6 +3992,9 @@ def admin_api_config():
         return jsonify(response_data)
 
     elif request.method == "POST":
+        # Changing assignment settings needs more than dashboard access.
+        if not validate_admin_api_key(api_key, permission="manage_assignment"):
+            return jsonify({"error": "The manage_assignment permission is required"}), 403
         # Update configuration
         config_updates = request.get_json()
         if not config_updates:
@@ -2721,6 +4018,10 @@ def admin_api_set_user_instances(username):
     Returns:
         flask.Response: JSON response with updated user info
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key, permission="manage_assignment"):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     data = request.get_json()
     if not data or 'max_instances' not in data:
         return jsonify({"error": "max_instances is required"}), 400
@@ -2755,6 +4056,10 @@ def admin_api_stale_assignments():
     Returns:
         flask.Response: JSON with stale assignment info
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     import time
     ism = get_item_state_manager()
     usm = get_user_state_manager()
@@ -2792,6 +4097,10 @@ def admin_api_reclaim_instance():
         instance_id (str): The instance to reclaim
         username (str): The user to reclaim from
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key, permission="manage_assignment"):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     data = request.get_json()
     if not data or 'instance_id' not in data or 'username' not in data:
         return jsonify({"error": "instance_id and username are required"}), 400
@@ -2923,6 +4232,161 @@ def admin_api_agreement():
     return jsonify(result)
 
 
+@app.route("/admin/api/agent_rollup", methods=["GET"])
+def admin_api_agent_rollup():
+    """
+    Per-agent aggregation of turn-level annotations across the dataset.
+
+    For every turn-level scheme (``turn_level: true``), rolls up annotated
+    turns by the ``agent_id`` snapshot stored with each value: counts,
+    numeric means (likert/slider/number), and categorical value counts
+    (radio/multiselect/select). Admin-only endpoint requiring API key.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.turn_annotations import compute_agent_rollup
+        report = compute_agent_rollup(
+            get_item_state_manager(), get_user_state_manager(), config,
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute agent rollup")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
+def _agreement_drift():
+    """
+    The agreement-over-time report for ``/admin/iaa``, or None.
+
+    Returns None rather than raising: the drift section is an addition to a
+    page that already worked, and a project with no timestamps -- or with
+    ``calibration.enabled: false`` -- must still get its IAA table.
+    """
+    settings = (config.get("calibration") or {})
+    if settings.get("enabled") is False:
+        return None
+    try:
+        from potato.server_utils.iaa.drift import (codebook_markers,
+                                                   compute_agreement_over_time)
+
+        markers = codebook_markers(
+            config.get("task_dir", "."),
+            config.get("annotation_task_name", "default"),
+        )
+        return compute_agreement_over_time(
+            get_item_state_manager(), get_user_state_manager(), config,
+            n_windows=int(settings.get("windows", 6)),
+            by=str(settings.get("window_by", "count")),
+            markers=markers,
+        )
+    except Exception:
+        logger.exception("Agreement-over-time report failed; "
+                         "showing the IAA table without it")
+        return None
+
+
+@app.route("/admin/iaa/drift", methods=["GET"])
+def admin_iaa_drift():
+    """
+    Agreement per time window, with codebook markers and a drift verdict.
+
+    Separate from ``/admin/iaa`` because it costs one extra IAA pass per
+    window: a script polling the agreement numbers should not pay for the
+    timeline unless it wants it.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    report = _agreement_drift()
+    if report is None:
+        return jsonify({"error": "Agreement drift tracking is unavailable. "
+                                 "Check the server log, or calibration.enabled"}), 503
+
+    from potato.server_utils.iaa.dispatcher import json_safe
+    return jsonify(json_safe(report))
+
+
+@app.route("/admin/calibration", methods=["GET"])
+def admin_calibration():
+    """Past calibration rounds, who is eligible, and how a live round is going."""
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    from potato import calibration
+
+    usm = get_user_state_manager()
+    history = calibration.round_history(config)
+    latest = history[0] if history else None
+    progress = (calibration.round_progress(usm, latest["usernames"])
+                if latest else [])
+    # The round is over once nobody recalled is still working through it.
+    calibration.close_if_finished(config, latest, progress)
+    return jsonify({
+        "training_enabled": bool((config.get("training") or {}).get("enabled")),
+        "eligible": calibration.eligible_users(usm),
+        "rounds": history,
+        "progress": progress,
+    })
+
+
+@app.route("/admin/calibration/start", methods=["POST"])
+def admin_calibration_start():
+    """
+    Send annotators back through the training exercise.
+
+    Body: ``{"usernames": [...], "reason": "..."}``. Omitting ``usernames``
+    recalls everyone eligible, which is the usual case -- drift is a property
+    of the guidelines, so it affects the whole team, not one person.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    from potato import calibration
+
+    payload = request.get_json(silent=True) or {}
+    usm = get_user_state_manager()
+    usernames = payload.get("usernames")
+    if not usernames:
+        usernames = calibration.eligible_users(usm)
+
+    try:
+        result = calibration.start_round(
+            config, usm, usernames,
+            started_by=session.get("username", "admin"),
+            reason=str(payload.get("reason") or ""),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Failed to start calibration round")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(result)
+
+
+def _admin_wants_html() -> bool:
+    """Whether an admin report route should render its page or return JSON.
+
+    ``?format=html`` / ``?format=json`` decide when given. Otherwise the
+    Accept header does: a browser navigating to ``/admin/iaa`` asks for
+    ``text/html`` first and gets the page, while ``fetch()``, ``requests``
+    and curl send ``*/*`` (or nothing) and keep getting the JSON every
+    analysis script reads. Before this, a researcher who typed the URL got a
+    wall of JSON and had to know the ``?format=html`` incantation.
+    """
+    fmt = (request.args.get("format") or "").lower()
+    if fmt:
+        return fmt == "html"
+    best = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    return best == "text/html"
+
+
 @app.route("/admin/iaa", methods=["GET"])
 def admin_iaa():
     """
@@ -2930,7 +4394,7 @@ def admin_iaa():
 
     Computes a schema-appropriate set of metrics (nominal: Cohen/Fleiss kappa,
     Krippendorff alpha; ordinal: weighted kappa, Spearman rho; continuous:
-    Pearson, ICC; span: token kappa, span F1, alpha_U, gamma; etc.).
+    Pearson, ICC; span: token kappa, span F1, positional alpha, gamma; etc.).
     Restricted to items whose per-item annotator cap is >= 2 and that have
     reached that cap.
 
@@ -2949,11 +4413,727 @@ def admin_iaa():
         logger.exception("Failed to compute overlap IAA")
         return jsonify({"error": str(exc)}), 500
 
-    if (request.args.get("format") or "json").lower() == "html":
+    if _admin_wants_html():
         try:
-            return render_template("admin/iaa.html", report=report)
+            # Only the HTML path is presented. The JSON body stays the nested
+            # report every downstream analysis script reads; flattening it for
+            # the benefit of a table would be a breaking API change.
+            from potato.server_utils.iaa.presentation import present
+
+            return render_template("admin/iaa.html", report=present(report),
+                                   drift=_agreement_drift())
         except Exception:
             # Template optional; fall back to JSON if missing.
+            logger.exception("Falling back to JSON: IAA page failed to render")
+    # NaN is not valid JSON, and an undefined metric is genuinely common here
+    # (fewer than two annotators, no overlap items yet). Emit null instead, or
+    # the browser's JSON.parse rejects the whole response.
+    from potato.server_utils.iaa.dispatcher import json_safe
+    return jsonify(json_safe(report))
+
+
+@app.route("/admin/api/iaa_summary", methods=["GET"])
+def admin_api_iaa_summary():
+    """One headline agreement number per schema, for the dashboard overview.
+
+    The full report stays on ``/admin/iaa``; this is the row a researcher
+    checks first, with the metric chosen by
+    :func:`potato.server_utils.iaa.presentation.headlines`.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.iaa import compute_overlap_iaa
+        from potato.server_utils.iaa.dispatcher import json_safe
+        from potato.server_utils.iaa.presentation import headlines
+        report = compute_overlap_iaa(
+            get_item_state_manager(), get_user_state_manager(), config,
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute overlap IAA summary")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(json_safe({
+        "schemas": headlines(report),
+        "n_overlap_items": report.get("n_overlap_items"),
+    }))
+
+
+@app.route("/admin/api/alt-test", methods=["GET"])
+def admin_api_alt_test():
+    """The alt-test: can a declared machine annotator replace a human here?
+
+    ``annotator`` is the machine's user id, ``schema`` the scheme, ``epsilon``
+    the cost-benefit allowance (paper: 0.2 experts, 0.15 skilled, 0.1 crowd).
+    Without ``annotator`` the response lists the machines to choose from.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    from potato.server_utils import alt_test_report
+    from potato.server_utils.iaa.dispatcher import json_safe
+    annotator = request.args.get("annotator")
+    schema = request.args.get("schema")
+    if not annotator or not schema:
+        return jsonify({
+            "error": "Pass annotator=<machine user id> and schema=<scheme name>",
+            "machine_annotators": alt_test_report.declared_machines(
+                get_user_state_manager()),
+            "schemas": [s.get("name") for s in config.get("annotation_schemes", [])],
+        }), 400
+    try:
+        epsilon = float(request.args.get("epsilon", 0.2))
+    except ValueError:
+        return jsonify({"error": "epsilon must be a number"}), 400
+    try:
+        report = alt_test_report.build_report(
+            get_item_state_manager(), get_user_state_manager(), config,
+            annotator, schema, epsilon=epsilon)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Failed to compute the alt-test")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(json_safe(report))
+
+
+def _record_judge_comparison_if_enabled(username, instance_id):
+    """On human save, log the human↔judge comparison if inline mode is on."""
+    ja = config.get("judge_alignment", {}) or {}
+    if not (ja.get("inline", {}) or {}).get("enabled"):
+        return
+    try:
+        from potato.server_utils import judge_alignment as ja_mod
+        schemas = ja_mod.judge_scoped_schemas(config)
+        allow = set((ja.get("inline", {}) or {}).get("schemas", []) or [])
+        if allow:
+            schemas = [s for s in schemas if s.get("name") in allow]
+        preds = ja_mod.load_predictions(config)
+        for schema_info in schemas:
+            schema_name = schema_info.get("name")
+            # Each schema has its own prompt versions.
+            version = ja_mod.latest_prompt_version(config, schema_name)
+            version_preds = preds.get(version, {}) if version else {}
+            pred = version_preds.get(f"{instance_id}::{schema_name}")
+            if not pred:
+                continue
+            human_label = ja_mod.human_label_for(instance_id, schema_name, username)
+            if human_label is None:
+                continue
+            ja_mod.record_comparison(
+                config, instance_id, schema_name, human_label,
+                pred.get("predicted_label"), version or "",
+                username=username,
+            )
+    except Exception as e:
+        logger.warning(f"Judge comparison recording failed for {instance_id}: {e}")
+
+
+@app.route("/admin/judge-alignment", methods=["GET"])
+def admin_judge_alignment():
+    """LLM-judge ↔ human alignment report: Cohen's κ, confusion, disagreements.
+
+    Mirrors /admin/iaa. Pass ?format=html for the rendered page (default JSON),
+    and ?prompt_version=<v> to view a specific judge prompt version.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.judge_alignment import (
+            compute_judge_alignment, gather_pairs, judge_scoped_schemas, latest_prompt_version)
+        users = get_users()
+        pv = request.args.get("prompt_version")
+        report = compute_judge_alignment(config, users, prompt_version=pv)
+        # E4: judge bias + robustness eval cards (the axis beyond κ).
+        try:
+            from potato.server_utils.judge_bias import eval_cards_from_pairs
+
+            def _text_len(iid):
+                from potato.item_state_management import get_item_state_manager
+                ism = get_item_state_manager()
+                try:
+                    return len(str(ism.get_item(iid).get_data())) if ism else 0
+                except Exception:
+                    return 0
+            schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+            pairs = gather_pairs(config, users, schemas, pv or latest_prompt_version(config))
+            from potato.server_utils.judge_alignment import load_position_bias
+
+            stored = load_position_bias(config)
+            report["eval_cards"] = eval_cards_from_pairs(
+                pairs, report.get("per_schema", {}), _text_len,
+                position_by_schema={name: probe.get("swap")
+                                    for name, probe in stored.items()
+                                    if probe.get("swap")},
+                prompt_version=report.get("prompt_version") or "")
+        except Exception:
+            logger.exception("eval-card computation failed (non-fatal)")
+    except Exception as exc:
+        logger.exception("Failed to compute judge alignment")
+        return jsonify({"error": str(exc)}), 500
+
+    if _admin_wants_html():
+        try:
+            return render_template("admin/judge_alignment.html", report=report)
+        except Exception:
+            pass
+    return jsonify(report)
+
+
+@app.route("/admin/labeling-engine", methods=["GET"])
+def admin_labeling_engine():
+    """The labeling engine's page: contracts, calibration, requests, calls.
+
+    The page reads ``/api/engine/v1``; this route only checks access and
+    hands it each scheme's selective-risk target for the chart's reference
+    line.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        # An HTML page: a browser without an admin session (a bookmark, a
+        # shared link) goes to the dashboard's key form, not a JSON error.
+        return redirect(url_for("admin"))
+    from potato.labeling_engine.integration.hooks import get_engine
+    eng = get_engine()
+    task_name = config.get("annotation_task_name", "Annotation Platform")
+    if eng is None:
+        return render_template("admin/labeling_engine.html", engine_off=True, targets={},
+                               annotation_task_name=task_name), 404
+    targets = {}
+    for c in eng.cfg.contracts:
+        if c.kind == "selective_risk" and c.error is not None:
+            targets[c.schema] = min(float(c.error), targets.get(c.schema, 1.0))
+    return render_template("admin/labeling_engine.html", targets=targets,
+                           annotation_task_name=task_name)
+
+
+@app.route("/admin/api/judge-alignment/run", methods=["POST"])
+def admin_judge_alignment_run():
+    """Run/re-run the judge over human-annotated instances.
+
+    Optional JSON body: {"rubrics": {schema_name: rubric}, "max_per_schema": N}.
+    Editing a rubric creates a new prompt version so κ can be tracked across
+    calibration rounds. Returns a run summary.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.ai.cost import SpendCapExceeded
+        from potato.server_utils.judge_alignment import run_judge_batch
+        summary = run_judge_batch(
+            config, get_users(),
+            rubric_overrides=body.get("rubrics"),
+            max_per_schema=body.get("max_per_schema"),
+        )
+    except SpendCapExceeded as exc:
+        # 402, not 500: nothing failed. The run was refused before it started,
+        # which is the point -- halting halfway would leave a part-judged
+        # project and a bill for it.
+        return jsonify({"error": str(exc), "cap_usd": exc.cap,
+                        "spent_usd": exc.spent,
+                        "estimate": exc.estimate.to_dict() if exc.estimate else None,
+                        "ran": False}), 402
+    except Exception as exc:
+        logger.exception("Failed to run judge batch")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(summary)
+
+
+@app.route("/admin/model-review", methods=["GET"])
+def admin_model_review():
+    """
+    The human-QC picture over model prelabels.
+
+    Reports the confidence-ordered queue, the items the model predicted
+    nothing on (the false-negative pool), and the precision/recall computed
+    from review verdicts.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato import model_review
+        report = model_review.summarize_project(get_item_state_manager(), config)
+    except Exception as exc:
+        logger.exception("Model-review summary failed")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
+@app.route("/admin/active-learning/stats", methods=["GET"])
+def admin_active_learning_stats():
+    """
+    Active learning state and training history.
+
+    Which schemas have a fitted model, where the schema cycler is, and the
+    recorded training runs. Previously reachable only by importing the manager
+    in a Python REPL, which is what the guide told administrators to do.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.active_learning_manager import get_active_learning_manager
+        manager = get_active_learning_manager()
+    except Exception as exc:
+        logger.exception("Could not reach the active learning manager")
+        return jsonify({"error": str(exc)}), 500
+
+    if manager is None:
+        return jsonify({"enabled": False,
+                        "reason": "Active learning is not configured"})
+
+    try:
+        return jsonify(manager.get_stats())
+    except Exception as exc:
+        logger.exception("Active learning stats failed")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/model-review/verdict", methods=["POST"])
+def model_review_verdict():
+    """
+    Record a reviewer's verdict on one item's prelabels.
+
+    Body: ``{"instance_id": ..., "verdict": "accept"|"correct"|"reject",
+    "schema_name": ..., "note": ...}``.
+
+    Stored separately from annotations on purpose: "the model was right" and
+    "a human independently chose this label" are different facts, and storing
+    the first as the second makes model precision unmeasurable.
+
+    A ``correct`` verdict moves the item into every later training run's
+    train split, so a verdict is accepted only from the annotator the item
+    is assigned to (or an admin with ``X-API-Key``), and only same-origin.
+    """
+    from potato.server_utils.origin_check import is_same_origin
+
+    if not is_same_origin():
+        return jsonify({"error": "Cross-origin request rejected"}), 403
+    as_admin = validate_admin_api_key(request.headers.get('X-API-Key'))
+    if 'username' not in session and not as_admin:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    body = request.get_json(silent=True) or {}
+    instance_id = body.get("instance_id")
+    if not instance_id:
+        return jsonify({"error": "instance_id is required"}), 400
+    if not as_admin:
+        user_state = get_user_state(session['username'])
+        if user_state is None or str(instance_id) not in {
+                str(i) for i in user_state.get_assigned_instance_ids()}:
+            return jsonify({"error": "Item %s is not assigned to you"
+                            % instance_id}), 403
+
+    from potato import model_review
+
+    try:
+        model_review.record_verdict(config, model_review.ReviewVerdict(
+            instance_id=str(instance_id),
+            reviewer=session['username'] if not as_admin else
+            session.get('username') or "admin",
+            verdict=str(body.get("verdict") or ""),
+            schema_name=str(body.get("schema_name") or ""),
+            note=str(body.get("note") or ""),
+        ))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Could not record a model-review verdict")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/admin/api/ai-cost", methods=["GET"])
+def admin_ai_cost():
+    """
+    What AI has cost this project, and what the next judge run would cost.
+
+    The complaint about the commercial platforms is not the price, it is the
+    surprise: credits consumed by auto-labelling and discovered at export
+    time. This is the number that has to exist BEFORE the button is pressed.
+
+    Query: ``?max_per_schema=N`` to price a smaller run.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.ai import cost
+        from potato.item_state_management import get_item_state_manager
+        from potato.server_utils.judge_alignment import (
+            _judge_batch_work, estimate_batch_cost)
+
+        max_per_schema = request.args.get("max_per_schema")
+        work = _judge_batch_work(
+            config, get_users(), get_item_state_manager(),
+            int(max_per_schema) if max_per_schema else None)
+        projected = estimate_batch_cost(config, [text for _iid, text in work])
+        spent = cost.total_spend(config)
+    except Exception as exc:
+        logger.exception("AI cost report failed")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({
+        "spent": spent,
+        "next_judge_run": dict(projected.to_dict(),
+                               summary=projected.summary()),
+    })
+
+
+@app.route("/admin/api/judge-position-bias", methods=["POST"])
+def admin_judge_position_bias():
+    """
+    Is the judge judging, or just picking whatever is listed first?
+
+    Runs every sampled item twice -- once with the allowed labels in
+    configured order, once reversed -- and reports how often the verdict
+    changed. A judge that reads the item answers the same either way.
+
+    Body: ``{"schema": "<name>", "max_items": 50}``. This makes TWO model
+    calls per item, so it samples rather than covering the project, and the
+    response says how many items it actually used.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    from potato.ai.cost import SpendCapExceeded
+
+    try:
+        from potato.ai import position_bias
+        from potato.ai.judge import JudgeService
+        from potato.server_utils.judge_alignment import judge_scoped_schemas
+
+        schemas = judge_scoped_schemas(config)
+        wanted = body.get("schema")
+        if wanted:
+            schemas = [s for s in schemas if s.get("name") == wanted]
+        if not schemas:
+            return jsonify({"error": "No categorical schema is in scope for "
+                                     "the judge"}), 400
+
+        max_items = int(body.get("max_items") or 50)
+        ism = get_item_state_manager()
+        text_key = (config.get("item_properties") or {}).get("text_key", "text")
+
+        items = []
+        for instance_id, item in ism.iter_items():
+            data = item.get_data() if hasattr(item, "get_data") else {}
+            text = (data or {}).get(text_key)
+            if isinstance(text, str) and text:
+                items.append({"instance_id": instance_id, "text": text})
+            if len(items) >= max_items:
+                break
+
+        from potato.server_utils.judge_alignment import (
+            check_batch_against_cap, estimate_batch_cost, record_batch_spend,
+            save_position_bias)
+
+        # This is the most expensive action in the tool: TWO model calls per
+        # item per schema. Pricing it at one call would understate it by half,
+        # which is exactly the surprise the budget feature exists to prevent.
+        projected = estimate_batch_cost(
+            config, [i["text"] for i in items] * len(schemas),
+            calls_per_item=2)
+        check_batch_against_cap(config, projected, "position_bias_probe")
+
+        service = JudgeService(config)
+        report = {}
+        n_probed = 0
+        try:
+            for scheme in schemas:
+                results = position_bias.probe_batch(service, scheme, items)
+                n_probed += len(results)
+                summary = position_bias.summarize(results)
+                # Stored WITHOUT the per-item results: the eval card needs the
+                # rates, and keeping every verdict pair would grow the file by
+                # a row per item on every re-run.
+                save_position_bias(config, scheme.get("name"), summary)
+                summary["results"] = [r.to_dict() for r in results]
+                report[scheme.get("name")] = summary
+        finally:
+            # Charged for the schemes that ran, not the ones the projection
+            # covered. A probe that dies on the second of three schemes has
+            # spent a third of the money, not all of it.
+            record_batch_spend(config, projected, "position_bias_probe",
+                               n_probed)
+    except SpendCapExceeded as exc:
+        return jsonify({"error": str(exc), "cap_usd": exc.cap,
+                        "spent_usd": exc.spent,
+                        "estimate": exc.estimate.to_dict() if exc.estimate else None,
+                        "ran": False}), 402
+    except Exception as exc:
+        logger.exception("Position-bias probe failed")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"schemas": report, "n_items_sampled": len(items),
+                    "estimated_cost": projected.rescaled(n_probed).to_dict()})
+
+
+@app.route("/admin/api/rollout/judge-batch", methods=["POST"])
+def admin_rollout_judge_batch():
+    """Run the rollout judge over every rollout item in the project.
+
+    Optional JSON body: {"schemas": [name], "max_items": N, "streams": [id],
+    "prompt_version": "v2"}.
+
+    Costs one model call per stream and an ffmpeg seek per sampled frame, so
+    ``max_items`` exists and the summary names everything it skipped —
+    an alignment number computed over a silently truncated sample is worse
+    than no number.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.rollouts.batch import run_judge_batch
+
+        summary = run_judge_batch(
+            config,
+            schema_names=body.get("schemas"),
+            max_items=body.get("max_items"),
+            stream_ids=body.get("streams"),
+            prompt_version=body.get("prompt_version", ""),
+        )
+    except Exception as exc:
+        logger.exception("Failed to run the rollout judge batch")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(summary)
+
+
+@app.route("/admin/api/rollout/alignment", methods=["GET"])
+def admin_rollout_alignment():
+    """Score the recorded rollout-judge predictions against the human consensus.
+
+    Query: ?schema=<name>&tolerance=0.5&prompt_version=<v>.
+
+    Separate from the batch so the alignment can be recomputed at a different
+    tolerance, or after more people annotate, without paying for the model
+    calls again.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        tolerance = float(request.args.get("tolerance") or 0.5)
+    except ValueError:
+        return jsonify({"error": "tolerance must be a number of seconds"}), 400
+
+    try:
+        from potato.rollouts.batch import alignment_report
+        from potato.server_utils.iaa.dispatcher import json_safe
+
+        report = alignment_report(
+            config, schema_name=request.args.get("schema"),
+            tolerance=tolerance, version=request.args.get("prompt_version"))
+    except Exception as exc:
+        logger.exception("Failed to compute rollout judge alignment")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(json_safe(report))
+
+
+@app.route("/admin/api/judge-alignment/autocalibrate", methods=["POST"])
+def admin_judge_alignment_autocalibrate():
+    """Auto-calibrate the judge: re-run with human corrections injected as
+    few-shot examples, creating a new prompt version, and report base vs new κ.
+
+    Optional JSON body: {"max_corrections": N, "max_per_schema": N}.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.server_utils.judge_autocalibrate import autocalibrate
+        report = autocalibrate(
+            config, get_users(),
+            max_corrections=int(body.get("max_corrections", 5)),
+            max_per_schema=body.get("max_per_schema"),
+        )
+    except Exception as exc:
+        logger.exception("Failed to auto-calibrate judge")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
+def _build_annotation_observations(users, schemas):
+    """(worker, item::schema, label) observations from stored annotations (E2)."""
+    from potato.server_utils.judge_alignment import human_label_for
+    from potato.item_state_management import get_item_state_manager
+    ism = get_item_state_manager()
+    if ism is None:
+        return []
+    obs = []
+    for iid in ism.get_instance_ids():
+        for schema in schemas:
+            key = f"{iid}::{schema}"
+            for u in users:
+                lab = human_label_for(str(iid), schema, u)
+                if lab is not None:
+                    obs.append((u, key, lab))
+    return obs
+
+
+@app.route("/admin/annotation-integrity", methods=["GET"])
+def admin_annotation_integrity():
+    """Per-annotator LLM-cheating / low-effort detection (E2), no ground truth.
+
+    ?format=html for the dashboard. Uses the judge to supply reference LLM labels
+    when available (for the LLM-echo signal); otherwise Correlated-Agreement only.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.cheating_detection import detect_llm_cheating
+        from potato.server_utils.judge_alignment import judge_scoped_schemas, run_judge_batch
+        # schemas: prefer judge-scoped (categorical) schemes; fall back to all radio/multiselect names
+        schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+        if not schemas:
+            schemas = [s.get("name") for s in (config.get("annotation_schemes") or [])
+                       if s.get("annotation_type") in ("radio", "multiselect", "multiple_choice")]
+        users = get_users()
+        obs = _build_annotation_observations(users, schemas)
+        # Optional reference LLM labels from cached judge predictions (best-effort).
+        llm_labels = None
+        try:
+            from potato.server_utils.judge_alignment import load_predictions, latest_prompt_version
+            preds = load_predictions(config).get(latest_prompt_version(config) or "", {})
+            llm_labels = {f"{k.split('::')[0]}::{k.split('::')[1]}": v.get("predicted_label")
+                          for k, v in preds.items()
+                          if isinstance(v, dict) and v.get("predicted_label") and "::" in k}
+            llm_labels = llm_labels or None
+        except Exception:
+            llm_labels = None
+        reports = [r.to_dict() for r in detect_llm_cheating(obs, llm_labels=llm_labels)]
+    except Exception as exc:
+        logger.exception("Failed to compute annotation integrity")
+        return jsonify({"error": str(exc)}), 500
+
+    payload = {"reports": reports, "n_annotators": len(reports),
+               "used_llm_labels": bool(llm_labels)}
+    if _admin_wants_html():
+        try:
+            return render_template("admin/annotation_integrity.html", **payload)
+        except Exception:
+            pass
+    return jsonify(payload)
+
+
+@app.route("/admin/api/perspectivist", methods=["GET"])
+def admin_perspectivist_export():
+    """Soft-label / perspectivist export (E3): per-item label distributions,
+    ambiguity flags, and per-annotator perspectives — preserves disagreement
+    instead of collapsing to one answer. ?schema=<name> to restrict; default all.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.perspectivist import perspectivist_export, annotator_perspectives
+        from potato.server_utils.judge_alignment import judge_scoped_schemas
+        wanted = request.args.get("schema")
+        schemas = ([wanted] if wanted else
+                   [s.get("name") for s in (config.get("annotation_schemes") or [])
+                    if s.get("annotation_type") in ("radio", "multiselect", "multiple_choice")]
+                   or [s.get("name") for s in judge_scoped_schemas(config)])
+        obs = _build_annotation_observations(get_users(), schemas)
+        try:
+            thr = float(request.args.get("ambiguity_threshold", 0.5))
+        except (TypeError, ValueError):
+            thr = 0.5
+        items = perspectivist_export(obs, ambiguity_threshold=thr)
+        ambiguous = sum(1 for it in items if it["ambiguous"])
+        return jsonify({"items": items, "n_items": len(items),
+                        "n_ambiguous": ambiguous,
+                        "perspectives": annotator_perspectives(obs)})
+    except Exception as exc:
+        logger.exception("Failed to build perspectivist export")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/admin/api/induce-metrics", methods=["GET"])
+def admin_induce_metrics():
+    """Agent-metric induction (E11): mine recurring evaluation metrics from the
+    free-text annotations on a scheme, for a human to confirm into a rubric.
+
+    ?schema=<free-text scheme name> (required), ?min_support=N (default 2).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    schema = request.args.get("schema")
+    if not schema:
+        return jsonify({"error": "schema query param is required"}), 400
+    try:
+        from potato.server_utils.metric_induction import induce_metrics
+        from potato.ai.judge import JudgeService
+        from potato.item_state_management import get_item_state_manager
+        ism = get_item_state_manager()
+        comments = []
+        if ism is not None:
+            for iid in ism.get_instance_ids():
+                for u in get_users():
+                    anns = get_annotations_for_user_on(u, str(iid)) or {}
+                    val = anns.get(schema)
+                    text = None
+                    if isinstance(val, dict):
+                        text = val.get("text") or (next(iter(val.keys())) if val else None)
+                    elif isinstance(val, str):
+                        text = val
+                    if text and len(str(text).strip()) > 3:
+                        comments.append(str(text).strip())
+        llm = JudgeService(config)._get_endpoint()
+        if llm is None:
+            return jsonify({"error": "no LLM endpoint configured for induction"}), 400
+        min_support = int(request.args.get("min_support", 2))
+        cands = [c.to_dict() for c in induce_metrics(comments, llm, min_support=min_support)]
+    except Exception as exc:
+        logger.exception("Failed to induce metrics")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"schema": schema, "n_comments": len(comments),
+                    "candidate_metrics": cands})
+
+
+@app.route("/admin/triage-queue", methods=["GET"])
+def admin_triage_queue():
+    """Signal-based triage queue: items ranked by their quality signal.
+
+    Shows the remaining (incomplete) items ordered by the triage priority that
+    was assigned at load/ingestion time (errors / thumbs-down / low score
+    first), with the reason that flagged each one. Pass ?format=html for the
+    rendered page (default JSON).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.triage import compute_triage_queue
+        report = compute_triage_queue(config)
+    except Exception as exc:
+        logger.exception("Failed to compute triage queue")
+        return jsonify({"error": str(exc)}), 500
+
+    if _admin_wants_html():
+        try:
+            return render_template("admin/triage_queue.html", report=report)
+        except Exception:
             pass
     return jsonify(report)
 
@@ -3017,24 +5197,32 @@ def admin_api_step_agreement():
     Query params:
         scheme: Annotation scheme name (required)
         metric: "krippendorff_alpha" or "cohens_kappa" (default: krippendorff_alpha)
+        level: "nominal", "ordinal" or "interval" for alpha (default: nominal)
 
     Returns:
         JSON with overall, per_step, and per_instance agreement.
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.step_agreement import compute_step_agreement
         from potato.item_state_management import get_item_state_manager
 
         scheme_name = request.args.get("scheme", "")
         metric = request.args.get("metric", "krippendorff_alpha")
+        level = request.args.get("level", "nominal")
 
         if not scheme_name:
             return jsonify({"error": "scheme parameter is required"}), 400
+        if level not in ("nominal", "ordinal", "interval"):
+            return jsonify({"error": "level must be nominal, ordinal or interval"}), 400
 
         ism = get_item_state_manager()
         # Collect step-level annotations from all instances
         annotations = {}
-        for instance_id, item in ism.instance_id_to_instance.items():
+        for instance_id, item in ism.iter_items():
             annotator_data = {}
             for annotator_id, ann in item.get_annotations().items():
                 if scheme_name in ann:
@@ -3049,7 +5237,8 @@ def admin_api_step_agreement():
             }), 404
 
         result = compute_step_agreement(
-            annotations, scheme_name=scheme_name, metric=metric
+            annotations, scheme_name=scheme_name, metric=metric,
+            level_of_measurement=level,
         )
         return jsonify(result)
 
@@ -3068,14 +5257,25 @@ def admin_api_step_quality():
     Returns:
         JSON with gold standard results and attention check stats.
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         step_qc_config = config.get("quality_control", {}).get("step_level", {})
         if not step_qc_config.get("enabled", False):
             return jsonify({"enabled": False, "message": "Step-level QC not configured"})
 
         from potato.step_quality_control import StepQualityControlManager
+        from potato.item_state_management import get_item_state_manager
         task_dir = config.get("task_dir", ".")
         manager = StepQualityControlManager(step_qc_config, task_dir)
+        annotations = {}
+        for instance_id, item in get_item_state_manager().iter_items():
+            stored = item.get_annotations()
+            if stored:
+                annotations[instance_id] = stored
+        manager.score_annotations(annotations)
         return jsonify(manager.get_quality_summary())
 
     except Exception as e:
@@ -3098,6 +5298,192 @@ def admin_api_quality_control():
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
+
+
+@app.route("/admin/api/expertise", methods=["GET"])
+def admin_api_expertise():
+    """
+    Per-annotator, per-category expertise scores for dynamic category routing.
+
+    Admin-only. Returns ``enabled: False`` when the dynamic router is off.
+
+    There was no way to read these at all: the scores lived in memory, nothing
+    persisted them, and no route reported them, so a router that had recorded
+    36 agreements and no disagreement in a run with a flat dissenter could only
+    be caught by running the server with -v and reading DEBUG lines. A router
+    whose state cannot be looked at cannot be checked against the suspicion
+    that one of your annotators is being routed oddly.
+    """
+    result = admin_dashboard.get_expertise_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/writing_process", methods=["GET"])
+def admin_api_writing_process():
+    """
+    Per-annotator typing-dynamics rollup: how free-text responses were produced.
+
+    Admin-only. Returns ``enabled: False`` when keystroke_logging is off, so the
+    dashboard can hide the panel rather than render an error.
+
+    Also available as the ``writing_process`` key of /admin/api/behavioral_analytics;
+    this route exists so the panel can refresh on its own without recomputing the
+    whole behavioral rollup.
+    """
+    result = admin_dashboard.get_writing_process_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/annotation_process", methods=["GET"])
+def admin_api_annotation_process():
+    """
+    Per-annotator drawing-dynamics rollup: how geometry annotations were made.
+
+    Admin-only. Returns ``enabled: False`` when annotation_telemetry is off, so
+    the dashboard can hide the panel rather than render an error.
+
+    Also available as the ``annotation_process`` key of
+    /admin/api/behavioral_analytics; this route exists so the panel can refresh
+    on its own without recomputing the whole behavioral rollup.
+    """
+    result = admin_dashboard.get_annotation_process_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+def _ai_holdout_fraction() -> float:
+    from potato.assist_holdout import holdout_settings
+    return holdout_settings(config)[0]
+
+
+@app.route("/admin/api/ai_influence", methods=["GET"])
+def admin_api_ai_influence():
+    """
+    Whether AI assistance changed the answers: the assisted group against the
+    study's no-assistance comparison group (ai_support.holdout), per scheme.
+    Admin-only endpoint requiring API key. See potato/assist_effect.py.
+    """
+    result = admin_dashboard.get_ai_influence_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+def _snapshot_config_path():
+    path = config.get("__config_file__")
+    if not path:
+        raise LookupError("The server does not know its config file path")
+    return path
+
+
+def _snapshot_row(manifest):
+    return {k: v for k, v in manifest.items() if k != "bundle_contents"}
+
+
+@app.route("/admin/api/snapshots", methods=["GET"])
+def admin_api_snapshots():
+    """
+    The project's citable snapshots, newest first (potato/snapshots).
+    Admin-only endpoint requiring API key or an admin session.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.snapshots.store import list_snapshots
+    try:
+        snapshots = list_snapshots(_snapshot_config_path())
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"snapshots": [_snapshot_row(m) for m in snapshots]})
+
+
+@app.route("/admin/api/snapshots", methods=["POST"])
+def admin_api_create_snapshot():
+    """
+    Freeze the project as it is now (`potato snapshot create`).
+
+    JSON Body (optional):
+        note (str): what the snapshot is for
+        tag (str): a name to point at it
+        force (bool): write one even if nothing changed
+
+    Returns 201 with the manifest, or 200 with ``unchanged: true`` and the
+    existing snapshot when nothing changed since the latest one.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key'), permission="export_data"):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.snapshots.build import SnapshotUnchanged, create_snapshot
+    data = request.get_json(silent=True) or {}
+    try:
+        manifest = create_snapshot(_snapshot_config_path(), note=str(data.get("note") or ""),
+                                   tag=(str(data["tag"]).strip() or None) if data.get("tag") else None,
+                                   force=bool(data.get("force")))
+    except SnapshotUnchanged as unchanged:
+        return jsonify({"unchanged": True, "snapshot": _snapshot_row(unchanged.existing)})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except FileExistsError as exc:
+        return jsonify({"error": str(exc)}), 409
+    except (LookupError, OSError) as exc:
+        logger.exception("Snapshot failed")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"unchanged": False, "snapshot": _snapshot_row(manifest)}), 201
+
+
+@app.route("/admin/api/throughput", methods=["GET"])
+def admin_api_throughput():
+    """
+    Throughput per annotator: items per active hour, median active time per
+    item, by day, and first-pass approval / rework when the review workflow is
+    on. Admin-only endpoint requiring API key. See potato/throughput.py.
+    """
+    result = admin_dashboard.get_throughput_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/memo_issues", methods=["GET"])
+def admin_api_memo_issues():
+    """
+    Issues raised from the Notes panel, across the project, newest first.
+    ``?status=open|resolved`` filters. Admins see every issue, private ones
+    included, as adjudicators do. Admin-only endpoint requiring API key.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.memos import MemoError, list_issues
+    from potato.memos.api import memos_enabled
+    if not memos_enabled(config):
+        return jsonify({"enabled": False, "issues": []})
+    try:
+        issues = list_issues(config.get("task_dir", "."),
+                             project=config.get("annotation_task_name") or "default",
+                             requester="__admin__", is_privileged=True,
+                             status=request.args.get("status") or None)
+    except MemoError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"enabled": True, "issues": issues})
+
+
+@app.route("/admin/api/trace_writeback", methods=["GET"])
+def admin_api_trace_writeback():
+    """
+    Langfuse / LangSmith write-back: how many scores are pending, sent and
+    failed, and the latest errors (trace_ingestion/writeback.py).
+    Admin-only endpoint requiring API key or an admin session.
+    """
+    if not validate_admin_api_key(request.headers.get('X-API-Key')):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.trace_ingestion.writeback import get_queue
+    queue = get_queue(config, start=False)
+    if queue is None:
+        return jsonify({"enabled": False})
+    return jsonify({"enabled": True, **queue.status()})
 
 
 @app.route("/admin/api/behavioral_analytics", methods=["GET"])
@@ -3265,7 +5651,8 @@ def _trigger_ai_prefetch_after_reorder(user_state) -> None:
         # Prefetch count from AI cache config
         prefetch_count = getattr(acm, 'prefetch_page_count_on_next', 5)
 
-        acm.start_prefetch(current_index, prefetch_count)
+        acm.start_prefetch(current_index, prefetch_count,
+                           instance_ids=getattr(user_state, "instance_id_ordering", None))
         logger.debug(f"Triggered AI prefetch after diversity reorder from index {current_index}")
 
     except Exception as e:
@@ -3288,6 +5675,10 @@ def admin_api_icl_status():
         - accuracy_metrics: Verification-based accuracy
         - labeling_paused: Whether labeling is currently paused
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3316,6 +5707,10 @@ def admin_api_icl_examples():
     Returns:
         JSON with examples grouped by schema
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3363,6 +5758,10 @@ def admin_api_icl_predictions():
     Returns:
         JSON with predictions list
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3417,6 +5816,10 @@ def admin_api_icl_accuracy():
     Returns:
         JSON with accuracy metrics
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3456,6 +5859,10 @@ def admin_api_icl_trigger():
     Returns:
         JSON with operation result
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3620,6 +6027,15 @@ def agent_chat_send():
     try:
         sandbox = _get_agent_sandbox()
 
+        # A chat finished before a restart has no in-memory session left, but
+        # its transcript is stored; starting a new one would overwrite it.
+        from potato import agent_chat_store
+        from potato.agent_proxy import get_agent_session_manager
+        if get_agent_session_manager().get_session(username, instance_id) is None:
+            task_dir, project = agent_chat_store.store_location(config)
+            if agent_chat_store.get_transcript(task_dir, project, username, instance_id):
+                return jsonify({"error": "Chat session already finished"}), 400
+
         # Get or create session
         agent_session = _get_or_create_agent_session(username, instance_id)
 
@@ -3657,12 +6073,20 @@ def agent_chat_send():
         if isinstance(e, SandboxViolation):
             return jsonify({"error": str(e)}), 400
         logger.error("Agent chat send error: %s", traceback.format_exc())
+        # A misconfigured proxy never gets past _initialize, and "An internal
+        # error occurred" sent the person who could fix it looking in the wrong
+        # place -- the real message was in the log and the page said nothing.
+        # A ValueError from the factory is a config error, not a runtime one.
+        if isinstance(e, (ValueError, ImportError)):
+            return jsonify({
+                "error": "The agent is not configured correctly: %s" % e,
+            }), 400
         return jsonify({"error": "An internal error occurred"}), 400
 
 
 @app.route("/agent_chat/finish", methods=["POST"])
 def agent_chat_finish():
-    """Finish the chat and write conversation data to the item."""
+    """Finish the chat and store the conversation for this user and item."""
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
@@ -3698,17 +6122,25 @@ def agent_chat_finish():
                 "timestamp": msg.timestamp,
             })
 
-        # Write conversation into item data
-        item_data = item.get_data()
-        # Find the conversation field key from instance_display config
-        conv_key = "conversation"
-        display_fields = config.get("instance_display", {}).get("fields", [])
-        for field in display_fields:
-            if field.get("type") == "interactive_chat":
-                conv_key = field.get("key", "conversation")
-                break
-
-        item_data[conv_key] = conversation
+        # Store the conversation against THIS user and item. It used to be
+        # written into the shared item's data, so every other annotator of the
+        # item was shown this conversation in place of a chat of their own,
+        # and the transcript was lost on restart and absent from exports. The
+        # page render overlays it for this user only
+        # (agent_chat_store.with_user_transcript).
+        from potato import agent_chat_store
+        task_dir, project = agent_chat_store.store_location(config)
+        agent_chat_store.save_transcript(
+            task_dir,
+            project=project,
+            user_id=username,
+            instance_id=instance_id,
+            field_key=agent_chat_store.chat_field_key(config) or "conversation",
+            conversation=conversation,
+            step_count=agent_session.step_count,
+            started_at=agent_session.started_at,
+            proxy_type=(config.get("agent_proxy") or {}).get("type"),
+        )
 
         # Mark session as finished
         agent_session.finished = True
@@ -3783,8 +6215,13 @@ def go_to():
         return home()
 
     if request.method == 'POST':
-        logger.debug(f'POST -> GO_TO: {request.form}')
-        go_to_id(username, request.form.get("go_to"))
+        logger.debug("POST -> GO_TO, fields: %s", sorted(request.form.keys()))
+        try:
+            target_index = int(request.form.get("go_to"))
+        except (TypeError, ValueError):
+            return jsonify({"status": "error",
+                            "message": "go_to must be an item number"}), 400
+        go_to_id(username, target_index)
 
     # Prevent browser caching so window.location.reload() always gets fresh content
     response = make_response(render_page_with_annotations(username))
@@ -3806,6 +6243,10 @@ def get_annotations():
         instance_id = request.args.get('instance_id')
         if not instance_id:
             return jsonify({"error": "No instance_id provided"}), 400
+        # On a live session page this is the team's answer (potato/collab).
+        username, _collab, _refusal = _annotation_owner(instance_id)
+        if _refusal is not None:
+            return _refusal
 
         # Get user state
         user_state = get_user_state_manager().get_user_state(username)
@@ -3819,9 +6260,14 @@ def get_annotations():
         # label_annotations is keyed by Label objects (schema, name) ->
         # value; that is not JSON-serializable. Flatten to
         # {schema: [selected label names]} (skip falsy/unset values).
+        # A value of 0 is an answer (a slider at its minimum), so it is kept;
+        # only an unset or unticked entry is skipped. `label_values` carries
+        # the stored values beside the names: a text, number or slider answer
+        # IS its value, and the names alone could not show it.
         serializable_label_annotations = {}
+        label_values = {}
         for lbl, value in (label_annotations or {}).items():
-            if value in (False, None, "", 0):
+            if value is False or value is None or value == "":
                 continue
             schema = getattr(lbl, "schema", None)
             name = getattr(lbl, "name", None)
@@ -3832,6 +6278,7 @@ def get_annotations():
                 continue
             serializable_label_annotations.setdefault(
                 schema, []).append(name)
+            label_values.setdefault(schema, {})[name] = value
 
         # Convert span annotations to serializable format
         serializable_span_annotations = {}
@@ -3841,6 +6288,7 @@ def get_annotations():
         # Combine annotations
         annotations = {
             "label_annotations": serializable_label_annotations,
+            "label_values": label_values,
             "span_annotations": serializable_span_annotations
         }
 
@@ -3849,6 +6297,483 @@ def get_annotations():
     except Exception as e:
         logger.error(f"Error getting annotations: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/image_annotations/previous', methods=['GET'])
+def get_previous_image_annotations():
+    """
+    Return this user's image annotations for the item BEFORE their current one.
+
+    Backs "copy from previous image" (V7's carry-over). It matters most for
+    image sequences where the scene barely changes -- video frames, satellite
+    time series, microscopy z-stacks -- where redrawing the same twenty boxes
+    per frame is the bulk of the work.
+
+    Reads only the requesting user's own state, so it exposes nothing they
+    cannot already see by pressing Previous.
+
+    Query params:
+        schema: the image_annotation schema name (required)
+
+    Returns:
+        {"instance_id", "schema", "objects": [...], "count"} on success, or
+        {"objects": [], "reason": "no_previous"} at the start of the queue --
+        an empty result, not an error, because "nothing to copy" is a normal
+        state the button has to render.
+    """
+    try:
+        if 'username' not in session:
+            return jsonify({"error": "No user session"}), 401
+
+        schema = request.args.get('schema')
+        if not schema:
+            return jsonify({"error": "No schema provided"}), 400
+
+        _owner, _collab, _refusal = _annotation_owner()
+        if _refusal is not None:
+            return _refusal
+        user_state = get_user_state_manager().get_user_state(_owner)
+        if not user_state:
+            return jsonify({"error": "User not found"}), 404
+
+        if _collab is not None:
+            # The member's own place in the session's items, not the team's.
+            ordering = list(_collab.item_ids)
+            _viewing = _collab_viewing_item(_collab)
+            index = (ordering.index(_viewing.get_id())
+                     if _viewing is not None and _viewing.get_id() in ordering else None)
+        else:
+            index = user_state.get_current_instance_index()
+            ordering = getattr(user_state, 'instance_id_ordering', []) or []
+        if index is None or index <= 0 or index > len(ordering):
+            return jsonify({"instance_id": None, "schema": schema,
+                            "objects": [], "count": 0,
+                            "reason": "no_previous"})
+
+        previous_id = ordering[index - 1]
+        labels = user_state.get_label_annotations(previous_id) or {}
+
+        # Image annotations live under a single "_data" label per schema,
+        # holding the JSON blob ImageAnnotationManager serializes.
+        raw = None
+        for label_obj, value in labels.items():
+            if (getattr(label_obj, 'get_schema', None)
+                    and label_obj.get_schema() == schema
+                    and label_obj.get_name() == "_data"):
+                raw = value
+                break
+
+        objects = []
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(parsed, list):
+                    objects = parsed
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Previous image annotations for %s/%s are not valid JSON; "
+                    "returning empty", previous_id, schema)
+
+        return jsonify({"instance_id": previous_id, "schema": schema,
+                        "objects": objects, "count": len(objects)})
+
+    except Exception as e:
+        logger.error(f"Error getting previous image annotations: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/calibration', methods=['GET'])
+def get_item_calibration():
+    """
+    Camera calibration for one item, so 3D boxes can be drawn onto its images.
+
+    The 3D viewer fetches this once per item and renders a verification panel
+    per camera: the annotator edits the cuboid in the point cloud and watches
+    it land on the car in the photograph. Without it, placing an oriented box
+    on a few dozen lidar returns is close to guessing.
+
+    Query params:
+        field: the item field holding the calibration (default "calibration")
+
+    Returns ``{"cameras": [...], "warnings": [...]}``, or ``{"cameras": [],
+    "reason": ...}`` with a 200 when the item simply has no calibration --
+    that is a normal state for a lidar-only project, not an error, and the
+    panel has to render it. A calibration that exists but cannot be read is a
+    400 carrying the parser's message, because that one an admin must fix.
+    """
+    from potato.media.calibration import CalibrationError, parse_calibration
+
+    try:
+        if 'username' not in session:
+            return jsonify({"error": "No user session"}), 401
+
+        field = request.args.get('field') or 'calibration'
+        instance_id = request.args.get('instance_id')
+        if not instance_id:
+            user_state = get_user_state_manager().get_user_state(
+                session['username'])
+            instance_id = user_state.get_current_instance_id() if user_state \
+                else None
+        if not instance_id:
+            return jsonify({"cameras": [], "reason": "no_instance"})
+
+        try:
+            item = get_item_state_manager().get_item(instance_id)
+        except (KeyError, AttributeError):
+            item = None
+        data = item.get_data() if item is not None else None
+        if not isinstance(data, dict):
+            return jsonify({"cameras": [], "reason": "no_instance"})
+
+        raw = data.get(field)
+        if raw is None or raw == "":
+            return jsonify({"cameras": [], "reason": "no_calibration",
+                            "field": field})
+
+        # Relative paths in a calibration resolve against the media directory,
+        # the same root serve_media uses -- so an admin writes one path that
+        # works for the image, the cloud and the calibration alike.
+        #
+        # Resolved through resolve_media_path rather than a plain join: this
+        # path comes out of a project's data file and is handed to open(), so
+        # without the containment guard a crafted data file could read any file
+        # the server can. Same guard, one implementation, per potato/media/paths.
+        from potato.media.paths import resolve_media_path
+
+        def resolve(path):
+            _root, target = resolve_media_path(config, path,
+                                               context="Calibration")
+            return target
+
+        try:
+            calibration = parse_calibration(raw, resolve=resolve)
+        except CalibrationError as exc:
+            return jsonify({"error": str(exc), "field": field}), 400
+
+        cameras = []
+        for cam in calibration.cameras:
+            entry = cam.to_dict()
+            entry["image_url"] = _media_url_for(cam.image)
+            cameras.append(entry)
+
+        return jsonify({"instance_id": instance_id, "cameras": cameras,
+                        "warnings": calibration.warnings})
+
+    except Exception as e:
+        logger.error(f"Error reading calibration: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+def _media_url_for(path):
+    """
+    A URL the browser can fetch for a media path named inside an item.
+
+    Routed through /media/proxy rather than /media so that a camera stream in a
+    format browsers cannot display -- 16-bit TIFF, HEIC -- still renders in the
+    verification panel. The proxy passes JPEG and PNG straight through, so this
+    costs nothing for the common case.
+    """
+    import re
+    import urllib.parse
+
+    if not path:
+        return None
+    if re.match(r'^(https?:)?//', str(path)) or str(path).startswith('data:'):
+        return str(path)
+    return '/media/proxy/' + urllib.parse.quote(str(path).lstrip('/'))
+
+
+# Per-(instance, schema, annotation-state) cache of critique passes. Keyed on a
+# hash of the annotations themselves rather than just the instance, so editing a
+# box invalidates its critique while re-opening an unchanged image does not
+# re-run 24 model calls.
+_CRITIQUE_CACHE: dict = {}
+_CRITIQUE_CACHE_LIMIT = 64
+
+
+def _find_scheme_by_name(schema_name: str):
+    """Return the annotation scheme dict with this name, or None."""
+    for scheme in config.get("annotation_schemes", []):
+        if scheme.get("name") == schema_name:
+            return scheme
+    return None
+
+
+def _scheme_label_names(scheme: dict) -> list:
+    """Label names for a scheme, whether declared as strings or dicts."""
+    names = []
+    for label in scheme.get("labels", []) or []:
+        if isinstance(label, dict):
+            name = label.get("name")
+        else:
+            name = label
+        if name:
+            names.append(str(name))
+    return names
+
+
+def _critique_image_reference(item_data, scheme: dict):
+    """Work out which field of an item holds the image being annotated.
+
+    ``source_field`` on the scheme wins, because a project that sets it has
+    said explicitly which field the canvas renders. Otherwise fall back to the
+    configured ``text_key`` and then to the usual field names -- the same order
+    the client uses to decide what to display, so the model is shown the image
+    the annotator is looking at rather than a different one from the same row.
+    """
+    if not isinstance(item_data, dict):
+        return str(item_data or "")
+
+    source_field = scheme.get("source_field")
+    if source_field and item_data.get(source_field):
+        return str(item_data[source_field])
+
+    text_key = config.get("item_properties", {}).get("text_key")
+    if text_key and item_data.get(text_key):
+        return str(item_data[text_key])
+
+    for field in ("image_url", "image", "img", "url", "path", "src", "text"):
+        value = item_data.get(field)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+@app.route('/api/track/propagate', methods=['POST'])
+def propagate_video_track():
+    """
+    Track one object forward from a prompted frame.
+
+    SAM 2 keeps a memory bank of what the object looked like on earlier frames
+    and conditions each new frame on it, which is what makes this different
+    from carrying a mask forward by re-prompting: the model can lose sight of
+    an object behind an occluder and pick it up again, and it says which
+    frames those were rather than guessing a mask for them.
+
+    Request JSON::
+
+        {"schema": "<video_annotation scheme name>",
+         "video": "<media path>",          # optional: defaults to the item
+         "points": [[x, y, 1], ...],       # ORIGINAL frame pixels
+         "start_frame": 0,
+         "frames": 30}
+
+    Responds with one entry per frame carrying a Potato RLE mask, the model's
+    own visibility score, and — when the frame budget cut the run short —
+    `truncated: true` with the numbers, because a short answer that reads as
+    complete is worse than a refusal.
+
+    Nothing here writes an annotation. The client shows the result for the
+    annotator to accept, exactly as it does for any other model output.
+    """
+    from potato import video_tracking
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    # SAM 2 tracking is model assistance: refused for the study's
+    # no-assistance comparison group, as every other assist route is.
+    _user = get_user_state(session['username'])
+    blind = _engine_blind_refusal(session['username'],
+                                  _user.get_current_instance_id() if _user else None)
+    if blind is not None:
+        return blind
+
+    data = request.get_json(silent=True) or {}
+    points = data.get("points")
+    if not isinstance(points, list) or not points:
+        return jsonify({"error": "points is required"}), 400
+    try:
+        parsed_points = [(float(p[0]), float(p[1]),
+                          int(p[2]) if len(p) > 2 else 1) for p in points]
+    except (TypeError, ValueError, IndexError):
+        return jsonify({"error": "points must be [[x, y, label], ...]"}), 400
+
+    media = data.get("video")
+    if not media:
+        return jsonify({"error": "video is required"}), 400
+
+    from pathlib import Path
+
+    from potato.media.paths import resolve_media_path
+    _, resolved = resolve_media_path(config, str(media), context="video")
+    if not resolved:
+        # The traversal guard refused it. Same answer as a missing file, on
+        # purpose: distinguishing them tells a prober which paths exist.
+        return jsonify({"error": "That video could not be found"}), 404
+    video_path = Path(resolved)
+    if not video_path.exists():
+        return jsonify({"error": "That video could not be found"}), 404
+
+    scheme = _find_scheme_by_name(data.get("schema")) if data.get("schema") else None
+    options = ((scheme or {}).get("propagation") or {}) if scheme else {}
+    max_frames = int(options.get("max_frames", video_tracking.DEFAULT_MAX_FRAMES))
+
+    payload = video_tracking.PropagationRequest(
+        video_path=video_path,
+        points=parsed_points,
+        start_frame=int(data.get("start_frame", 0) or 0),
+        frames=int(data.get("frames", 30) or 30),
+        fps=float(data["fps"]) if data.get("fps") else None,
+        max_frames=max_frames,
+    )
+
+    try:
+        result = video_tracking.propagate(payload)
+    except video_tracking.TrackingUnavailable as exc:
+        # 503 rather than 500: the service is fine, this capability is not
+        # installed, and the message says exactly what to run.
+        return jsonify({"error": str(exc), "available": False}), 503
+    except Exception as exc:  # noqa: BLE001 - surfaced, not swallowed
+        logger.exception("Video propagation failed")
+        return jsonify({"error": f"Propagation failed: {exc}"}), 500
+
+    return jsonify(result)
+
+
+@app.route('/api/critique_annotations', methods=['POST'])
+def critique_annotations():
+    """
+    Ask a vision model to review this user's annotations on the current image.
+
+    This is the check inter-annotator agreement cannot make. Agreement asks
+    whether two people drew the same shape, so it is silent when both are
+    confidently wrong and says nothing at all when there is only one annotator.
+    A model looking at each region independently answers "is the outlined thing
+    really a {label}, and does the outline fit?".
+
+    Request JSON::
+
+        {"schema": "<image_annotation scheme name>",
+         "objects": [...],          # optional: what is on the canvas right now
+         "instance_id": "..."}      # optional: defaults to the current item
+
+    Responds with the shape of :meth:`CritiqueResult.to_dict` -- per-region
+    verdicts, possibly-missed objects, and a summary carrying the caveat that
+    these are a model's opinions rather than ground truth.
+
+    Nothing here writes an annotation. A verdict is advice the annotator acts
+    on or dismisses; the server never edits their work on a model's say-so.
+    """
+    import hashlib
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    data = request.get_json(silent=True) or {}
+    username = session['username']
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    instance_id = data.get("instance_id")
+    if not instance_id:
+        index = user_state.get_current_instance_index()
+        ordering = getattr(user_state, 'instance_id_ordering', []) or []
+        if index is None or index < 0 or index >= len(ordering):
+            return jsonify({"error": "No current instance"}), 400
+        instance_id = ordering[index]
+    instance_id = str(instance_id)
+    # Before any other check, as on every AI route: whether the item is blind
+    # is the first thing a caller learns, not which schema exists.
+    blind = _engine_blind_refusal(username, instance_id)
+    if blind is not None:
+        return blind
+
+    schema_name = data.get("schema")
+    if not schema_name:
+        return jsonify({"error": "schema is required"}), 400
+
+    scheme = _find_scheme_by_name(schema_name)
+    if scheme is None or scheme.get("annotation_type") != "image_annotation":
+        return jsonify({
+            "error": f"No image_annotation schema named '{schema_name}'"}), 404
+
+    ai_support = scheme.get("ai_support") or {}
+    options = dict(ai_support.get("critique") or {})
+    if ai_support.get("enabled") is False or options.get("enabled") is False:
+        return jsonify({"error": "Critique is not enabled for this schema"}), 400
+
+    # Prefer the objects the client sent: the annotator expects a critique of
+    # what is on screen, and the last edit may not have been saved yet.
+    objects = data.get("objects")
+    if not isinstance(objects, list):
+        objects = []
+        labels = user_state.get_label_annotations(instance_id) or {}
+        for label_obj, value in labels.items():
+            if (getattr(label_obj, 'get_schema', None)
+                    and label_obj.get_schema() == schema_name
+                    and label_obj.get_name() == "_data"):
+                try:
+                    parsed = json.loads(value) if isinstance(value, str) else value
+                    if isinstance(parsed, list):
+                        objects = parsed
+                except (ValueError, TypeError):
+                    logger.warning("Stored annotations for %s/%s are not JSON",
+                                   instance_id, schema_name)
+                break
+
+    if not objects:
+        # Not an error: an image with nothing drawn on it is a normal state,
+        # and the missed-object pass is still worth running on it.
+        logger.debug("Critique on %s/%s has no regions to review",
+                     instance_id, schema_name)
+
+    ism = get_item_state_manager()
+    if not ism.has_item(instance_id):
+        return jsonify({"error": f"Unknown instance '{instance_id}'"}), 404
+    item_data = ism.get_item(instance_id).get_data()
+    image_reference = _critique_image_reference(item_data, scheme)
+
+    fingerprint = hashlib.sha256(
+        json.dumps([instance_id, schema_name, objects], sort_keys=True,
+                   default=str).encode("utf-8")).hexdigest()
+    cached = _CRITIQUE_CACHE.get(fingerprint)
+    if cached is not None:
+        payload = dict(cached)
+        payload["cached"] = True
+        return jsonify(payload)
+
+    ais = get_ai_cache_manager()
+    if ais is None:
+        return jsonify({"error": "AI support is not enabled for this project"}), 400
+
+    endpoint = ais._get_visual_endpoint()
+    if endpoint is None or not hasattr(endpoint, "query_with_image"):
+        return jsonify({
+            "error": "No vision-capable AI endpoint is configured. Critique "
+                     "needs a model that can see the image."}), 503
+
+    from potato.ai.critique import CritiqueError
+    from potato.ai.critique_service import CritiqueService
+
+    try:
+        service = CritiqueService(config, endpoint, options)
+        result = service.critique(
+            objects,
+            image_reference,
+            _scheme_label_names(scheme),
+            description=scheme.get("description", ""),
+            instance_id=instance_id,
+            schema=schema_name,
+        )
+    except CritiqueError as exc:
+        # A stated reason the annotator can act on -- missing Pillow, an image
+        # that will not load -- not a stack trace.
+        return jsonify({"error": str(exc)}), 422
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Critique failed for %s/%s: %s", instance_id, schema_name,
+                     exc, exc_info=True)
+        return jsonify({"error": "Critique failed"}), 500
+
+    payload = result.to_dict()
+    if len(_CRITIQUE_CACHE) >= _CRITIQUE_CACHE_LIMIT:
+        _CRITIQUE_CACHE.clear()
+    _CRITIQUE_CACHE[fingerprint] = payload
+    response = dict(payload)
+    response["cached"] = False
+    return jsonify(response)
+
 
 @app.route("/api/current_instance", methods=["GET"])
 def get_current_instance():
@@ -3860,6 +6785,10 @@ def get_current_instance():
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(None)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -3873,7 +6802,9 @@ def get_current_instance():
             logger.debug(f"User {username} not in annotation phase, no current instance")
             return jsonify({"error": "Not in annotation phase"}), 404
 
-        current_instance = user_state.get_current_instance()
+        # A session member's current item is theirs, within the team's items.
+        current_instance = (_collab_viewing_item(_collab) if _collab is not None
+                            else user_state.get_current_instance())
         if not current_instance:
             logger.error(f"No current instance for user: {username}")
             return jsonify({"error": "No current instance"}), 404
@@ -3882,12 +6813,29 @@ def get_current_instance():
         logger.debug(f"Current instance ID: {instance_id}")
 
         # Include raw data for schemas that need access to media URLs
-        raw_data = current_instance.get_data()
+        from potato.server_utils import text_to_image
+        from potato.labeling_engine.integration.hooks import strip_machine_fields
+        from potato.assist_holdout import strip_holdout_fields
+        raw_data = strip_holdout_fields(config, strip_machine_fields(
+            text_to_image.record_for_annotator(config, current_instance.get_data()),
+            username, instance_id), username, instance_id)
+        from potato.server_utils.schemas.cloze import strip_answer_fields
+        raw_data = strip_answer_fields(config, raw_data)
+        from potato.geo.scheme import screen_item_basemaps
+        raw_data = screen_item_basemaps(config, raw_data)
+        # {condition.<factor>} filled as on the page.
+        from potato.server_utils.phase_flow import conditions_for, fill_condition_data
+        raw_data = fill_condition_data(raw_data, conditions_for(user_state))
+        # private_keys and the pairwise order, as on the page.
+        raw_data = annotator_record(raw_data, user_state, username, instance_id)
 
         return jsonify({
             "instance_id": instance_id,
-            "current_index": user_state.get_current_instance_index(),
-            "total_instances": len(user_state.instance_id_ordering),
+            "current_index": (list(_collab.item_ids).index(instance_id)
+                              if _collab is not None and instance_id in _collab.item_ids
+                              else user_state.get_current_instance_index()),
+            "total_instances": (len(_collab.item_ids) if _collab is not None
+                                else len(user_state.instance_id_ordering)),
             "data": raw_data  # Include full instance data
         })
 
@@ -3910,6 +6858,10 @@ def get_instance_data():
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(None)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -3923,13 +6875,31 @@ def get_instance_data():
             logger.debug(f"User {username} not in annotation phase, no instance data")
             return jsonify({"error": "Not in annotation phase"}), 404
 
-        current_instance = user_state.get_current_instance()
+        # A session member's current item is theirs, within the team's items.
+        current_instance = (_collab_viewing_item(_collab) if _collab is not None
+                            else user_state.get_current_instance())
         if not current_instance:
             logger.error(f"No current instance for user: {username}")
             return jsonify({"error": "No current instance"}), 404
 
         # Get the raw data from the instance
-        raw_data = current_instance.get_data()
+        from potato.server_utils import text_to_image
+        from potato.labeling_engine.integration.hooks import strip_machine_fields
+        from potato.assist_holdout import strip_holdout_fields
+        raw_data = strip_holdout_fields(config, strip_machine_fields(
+            text_to_image.record_for_annotator(config, current_instance.get_data()),
+            username, current_instance.get_id()), username, current_instance.get_id())
+        from potato.server_utils.schemas.cloze import strip_answer_fields
+        raw_data = strip_answer_fields(config, raw_data)
+        from potato.geo.scheme import screen_item_basemaps
+        raw_data = screen_item_basemaps(config, raw_data)
+        from potato.server_utils.phase_flow import conditions_for, fill_condition_data
+        raw_data = fill_condition_data(raw_data, conditions_for(user_state))
+        # private_keys and the pairwise order, as on the page.
+        raw_data = annotator_record(raw_data, user_state, username,
+                                    current_instance.get_id())
+        raw_data = apply_conjoint_profiles(dict(raw_data), user_state, username,
+                                           current_instance.get_id())
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)
@@ -3963,7 +6933,22 @@ def get_span_data(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
+
+    # Item text is for participants who have reached the items: not before a
+    # screening page (a headphone check) is passed, and not after a screen-out.
+    _span_state = get_user_state(username)
+    if _span_state is not None:
+        from potato.server_utils.phase_flow import screened_out as _screened_out
+        if _screened_out(_span_state):
+            return jsonify({"error": "You have left this study."}), 403
+        if _span_state.get_phase() in (UserPhase.LOGIN, UserPhase.CONSENT,
+                                       UserPhase.PRESTUDY, UserPhase.INSTRUCTIONS):
+            return jsonify({"error": "Not in the annotation phase"}), 403
 
     # Get the original text for this instance
     try:
@@ -3982,7 +6967,7 @@ def get_span_data(instance_id):
             else:
                 logger.error(f"Instance not found with either original or decoded ID")
                 # Debug: list all available instance IDs
-                all_instance_ids = list(item_state_manager.instance_id_to_instance.keys())
+                all_instance_ids = item_state_manager.get_instance_ids()
                 logger.debug(f"Available instance IDs: {all_instance_ids[:5]}...")  # Show first 5
                 logger.debug(f"Total available instances: {len(all_instance_ids)}")
                 return jsonify({"error": "Instance not found"}), 404
@@ -3995,21 +6980,51 @@ def get_span_data(instance_id):
         original_text = item_data.get(text_key, instance.get_text()) if isinstance(item_data, dict) else instance.get_text()
         logger.debug(f"Original text (raw, text_key={text_key}): {str(original_text)[:100]}...")
 
-        # IMPORTANT: Normalize text the same way as flask_server.py template rendering
-        # This ensures span offsets calculated on normalized text match the API response
-        # 1. Strip HTML tags
-        import re as re_module
-        original_text = str(original_text)
-        normalized_text = re_module.sub(r'<[^>]+>', '', original_text)
-        # 2. Normalize whitespace (multiple spaces/newlines -> single space)
-        normalized_text = re_module.sub(r'\s+', ' ', normalized_text).strip()
+        # The text span offsets index: what the browser holds after the
+        # display normalizes and sanitizes it (span_text.instance_dom_text).
+        # A regex tag strip ate `< y and y >` in `x < y and y > z` and left
+        # `&amp;` five characters wide.
+        from potato.server_utils.span_text import instance_dom_text
+        displayed = get_displayed_text(original_text)
+        displayed = displayed if isinstance(displayed, str) else str(displayed)
+        # The page fills {condition.<factor>} and drops data-condition-only
+        # elements before the browser measures the text, so do the same here.
+        if _span_state is not None:
+            from potato.server_utils.phase_flow import apply_condition_markup, conditions_for
+            displayed = apply_condition_markup(displayed, conditions_for(_span_state))
+        normalized_text = instance_dom_text(displayed)
         logger.debug(f"Normalized text: {normalized_text[:100]}...")
+
+        # text_as_image: the response carries the text twice, as `text` and in
+        # each span's `text` slice. Blank both at the source.
+        from potato.server_utils import text_to_image
+        if text_to_image.hides_text(config):
+            normalized_text = ""
+            item_data = text_to_image.record_for_annotator(config, item_data)
     except Exception as e:
         logger.error(f"Error getting instance text: {e}")
         return jsonify({"error": f"Instance not found: {instance_id}"}), 404
 
     # Get span annotations (returns a list of SpanAnnotation objects)
     spans = get_span_annotations_for_user_on(username, instance_id)
+    from_prelabel = False
+    if not spans and not (_span_state is not None
+                          and _span_state.prelabels_resolved(instance_id)):
+        # The page marks up a span prelabel when the annotator has no spans
+        # here; hand the same spans to the span manager, or they are drawn
+        # but not editable, and Next saves none of them -- every other type
+        # saves its untouched prelabel as the annotator's answer. Not once
+        # they have taken the prelabels over: deleting every span is an answer.
+        try:
+            from potato.flask_server import (  # noqa: cross-import
+                _span_annotations_from_pre_annotations, visible_pre_annotations)
+            pre_data, _, _ = visible_pre_annotations(username, instance_id,
+                                                     instance)
+            spans = _span_annotations_from_pre_annotations(pre_data, config) or []
+            from_prelabel = bool(spans)
+        except Exception:  # noqa: BLE001 - a prelabel must not break the page
+            logger.debug("Could not read span prelabels", exc_info=True)
+            spans = []
     logger.debug(f"Found {len(spans)} spans")
 
     # Convert to frontend-friendly format
@@ -4056,9 +7071,21 @@ def get_span_data(instance_id):
                 None,
             )
             is_dialogue = field_cfg and field_cfg.get("type") == "dialogue"
+            is_document = field_cfg and field_cfg.get("type") == "document"
 
-            if is_dialogue and isinstance(field_data, list):
-                opts = field_cfg.get("display_options", {})
+            if is_document:
+                # Same contract as dialogue: the offsets index what the browser
+                # holds, so reconstruct that rather than a collapsed copy of it.
+                from potato.server_utils.displays.base import (
+                    document_dom_text, resolve_display_options)
+                payload = (field_data.get("rendered_html", "")
+                           if isinstance(field_data, dict) else field_data)
+                field_text = document_dom_text(
+                    payload, resolve_display_options(field_cfg))
+            elif is_dialogue and isinstance(field_data, list):
+                from potato.server_utils.displays.base import (
+                    resolve_display_options)
+                opts = resolve_display_options(field_cfg)
                 field_text = reconstruct_dialogue_dom_text(
                     field_data,
                     speaker_key=opts.get("speaker_key", "speaker"),
@@ -4067,12 +7094,12 @@ def get_span_data(instance_id):
                 )
             elif isinstance(field_data, list):
                 field_text = concatenate_dialogue_text(field_data)
-                field_text = re_module.sub(r'<[^>]+>', '', field_text)
-                field_text = re_module.sub(r'\s+', ' ', field_text).strip()
+                field_text = re.sub(r'<[^>]+>', '', field_text)
+                field_text = re.sub(r'\s+', ' ', field_text).strip()
             else:
                 field_text = str(field_data)
-                field_text = re_module.sub(r'<[^>]+>', '', field_text)
-                field_text = re_module.sub(r'\s+', ' ', field_text).strip()
+                field_text = re.sub(r'<[^>]+>', '', field_text)
+                field_text = re.sub(r'\s+', ' ', field_text).strip()
             span_source_text = field_text
 
         span_entry = {
@@ -4087,6 +7114,10 @@ def get_span_data(instance_id):
         }
         if span_target_field:
             span_entry['target_field'] = span_target_field
+        if from_prelabel:
+            # Not stored for this annotator yet: the span manager saves it on
+            # Next, or before it saves a span of their own.
+            span_entry['prelabel'] = True
 
         # Include additional_parts for discontinuous spans
         additional_parts = span.get_additional_parts() if hasattr(span, 'get_additional_parts') else getattr(span, 'additional_parts', [])
@@ -4103,11 +7134,20 @@ def get_span_data(instance_id):
             if kb_label:
                 span_entry['kb_label'] = kb_label
 
+        # Include format-specific coordinates (PDF page/bbox/anchor_kind) so the
+        # client can rebuild PDF anchors (text highlights + region boxes) on load.
+        format_coords = span.get_format_coords() if hasattr(span, 'get_format_coords') else getattr(span, 'format_coords', None)
+        if format_coords:
+            span_entry['format_coords'] = format_coords
+
         span_data.append(span_entry)
 
     response_data = {
         'instance_id': instance_id,
-        'text': normalized_text,  # Use normalized text matching template rendering
+        'text': normalized_text,
+        # `text` is exactly the rendered text the offsets index; the client
+        # uses it verbatim instead of stripping and collapsing it again.
+        'text_basis': 'dom',
         'spans': span_data
     }
 
@@ -4124,15 +7164,12 @@ def update_instance():
     Supports two formats:
     1. Frontend format: {"instance_id": "...", "annotations": {...}, "span_annotations": [...]}
     2. Backend format: {"instance_id": "...", "schema": "...", "state": [...], "type": "..."}
+
+    The work is done by ``_update_instance_core``; an installed interceptor
+    (see ``set_update_instance_interceptor``) may take the save first.
     """
-    import time
-    import datetime
-    from potato.annotation_history import AnnotationHistoryManager
-
-    start_time = time.time()
-
     logger.debug("=== UPDATEINSTANCE ROUTE START ===")
-    logger.debug(f"Session: {dict(session)}")
+    logger.debug("Session keys: %s", _logged_keys(dict(session)))
     logger.debug(f"Session username: {session.get('username', 'NOT_SET')}")
     logger.debug(f"Request content type: {request.content_type}")
     logger.debug(f"Request is JSON: {request.is_json}")
@@ -4140,140 +7177,513 @@ def update_instance():
 
     if 'username' not in session:
         logger.warning("Update instance without active session")
-        return jsonify({"status": "error", "message": "No active session"})
+        # HTTP status, not just a body. Every refusal here used to answer 200,
+        # and the page only checks `response.ok` -- so a save that the server
+        # threw away looked identical to one it stored. An annotator worked
+        # through a ten-scheme item for six minutes against a dropped session;
+        # the first sign was the login screen, and the work was gone.
+        return jsonify({"status": "error", "message": "No active session"}), 401
 
     if request.is_json:
-        logger.debug(f"Received JSON data: {request.json}")
-        raw_instance_id = request.json.get("instance_id")
-        if raw_instance_id is None or str(raw_instance_id).strip() == "":
-            logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
-            return jsonify({"status": "error", "message": "Missing instance_id"})
-        instance_id = str(raw_instance_id)  # Normalize to string
         username = session['username']
-        user_state = get_user_state(username)
-        if not user_state:
-            logger.error(f"User state not found for user: {username}")
-            return jsonify({"status": "error", "message": "User state not found"})
+        data = request.json
+        interceptor = _update_instance_interceptor
+        if interceptor is not None:
+            response = interceptor(username, data)
+            if response is not None:
+                return response
+        return _update_instance_core(username, get_user_state(username), data)
+    else:
+        logger.warning("Update instance called without JSON data")
+        return jsonify({"status": "error", "message": "JSON data required"})
 
-        # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
-        # They should be routed by the current user phase instead of assignment checks.
-        is_phase_page_update = instance_id == "__phase_page__"
 
-        # Guard: reject updates for instances not assigned to this user.
-        # Skip this for synthetic phase-page updates so non-annotation page autosaves
-        # do not get treated like dataset item writes.
-        if user_state.get_phase() == UserPhase.ANNOTATION and not is_phase_page_update:
-            assigned_ids = user_state.get_assigned_instance_ids()
-            if assigned_ids and instance_id not in assigned_ids:
-                logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
-                return jsonify({"status": "error", "message": "Instance not assigned to user"})
+def _update_instance_core(username, user_state, data, actor=None, collab=None,
+                          allow_unassigned=False):
+    """Store one ``/updateinstance`` payload for ``username``.
 
-        # If a synthetic phase-page save arrives while the backend still thinks the user
-        # is in annotation, acknowledge it without writing item state. This avoids a
-        # noisy warning/error path during end-of-annotation transitions.
-        if user_state.get_phase() == UserPhase.ANNOTATION and is_phase_page_update:
-            logger.info(
-                f"Ignoring synthetic phase-page update for user {username} while still in annotation phase"
+    The body of the route, taking the payload instead of reading the request,
+    so that a live collaborative session can run the same write for its team
+    user (``username``/``user_state``) on behalf of a member (``actor``).
+    ``collab`` is that session's context; it is None on an ordinary save, and
+    with it set, quality-control grading is skipped. ``allow_unassigned``
+    takes a save for an item not in ``username``'s queue: a member's own
+    answer to a team item in a blind-first session, which must not put the
+    item into their solo queue.
+
+    Called inside the request: request headers still feed the history
+    metadata.
+    """
+    import time
+    import datetime
+    from potato.annotation_history import AnnotationHistoryManager
+
+    start_time = time.time()
+
+    logger.debug("Received JSON keys: %s", _logged_keys(data))
+    raw_instance_id = data.get("instance_id")
+    if raw_instance_id is None or str(raw_instance_id).strip() == "":
+        logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
+        return jsonify({"status": "error", "message": "Missing instance_id"}), 400
+    instance_id = str(raw_instance_id)  # Normalize to string
+    if not user_state:
+        logger.error(f"User state not found for user: {username}")
+        return jsonify({"status": "error", "message": "User state not found"}), 401
+
+    # The person behind the request. On an ordinary save that is the owner of
+    # the annotations; on a live collaborative page the owner is the team and
+    # the actor is the member, and the guards about a *person* (screened out,
+    # blocked by attention checks, undeclared) are about the member.
+    actor = actor or username
+    actor_state = user_state if actor == username else get_user_state(actor)
+    if not actor_state:
+        logger.error(f"User state not found for user: {actor}")
+        return jsonify({"status": "error", "message": "User state not found"}), 401
+
+    # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
+    # They should be routed by the current user phase instead of assignment checks.
+    is_phase_page_update = instance_id == "__phase_page__"
+
+    # A participant an exit_when screened out has left the study; nothing
+    # they post afterwards is stored.
+    from potato.server_utils.phase_flow import screened_out as _screened_out
+    if _screened_out(actor_state):
+        return jsonify({"status": "error",
+                        "message": "You have left this study."}), 403
+
+    # A user already blocked by attention checks stores no more annotations.
+    # The save that crosses the threshold is still taken and answered with
+    # status "blocked" below; it is the ones after it that are refused.
+    if not is_phase_page_update and _qc_blocked(actor):
+        from potato.quality_control import get_quality_control_manager as _qc_manager
+        return jsonify({
+            "status": "blocked",
+            "message": _qc_manager().qc_config.attention_block_message,
+        }), 403
+
+    # machine_annotators.require_declaration: refuse dataset writes from a
+    # participant who is neither a declared machine nor a listed person.
+    #
+    # Enforced here rather than at login, and never from a request header.
+    # A header saying "I am a machine" is asserted by the caller, so
+    # honouring it would let anyone opt out of being counted as human --
+    # the opposite of the guarantee. Origin is declared by the study or it
+    # is not declared at all.
+    #
+    # Phase-page saves are exempt: consent and survey answers are not
+    # dataset annotations, and a rater that never reaches an item has
+    # nothing to contaminate.
+    if not is_phase_page_update:
+        _ma = config.get("machine_annotators") or {}
+        if _ma.get("enabled") and _ma.get("require_declaration"):
+            from potato.annotator_origin import (
+                parse_machine_annotators, undeclared_participant,
             )
-            return jsonify({"status": "ok", "message": "Ignored synthetic phase-page update"})
+            from potato.authentication import (
+                UserAuthenticator, _parse_authorized_users,
+            )
 
-        # Debug: Log user phase for debugging annotation storage issues
-        logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
-
-        # Track session
-        if not user_state.session_start_time:
-            user_state.start_session(session.get('session_id', str(uuid.uuid4())))
-
-        # Get client timestamp if provided
-        client_timestamp = None
-        if request.json.get("client_timestamp"):
             try:
-                client_timestamp = datetime.datetime.fromisoformat(request.json["client_timestamp"])
-            except ValueError:
-                logger.warning(f"Invalid client timestamp format: {request.json['client_timestamp']}")
+                _listed = list(UserAuthenticator.get_instance().authorized_users)
+            except (ValueError, AttributeError):
+                _listed = _parse_authorized_users(config.get("user_config") or {})
 
-        # Prepare metadata
-        metadata = {
-            "request_id": request.json.get("request_id"),
-            "user_agent": request.headers.get("User-Agent"),
-            "ip_address": request.remote_addr,
-            "content_type": request.content_type,
-            "request_size": len(request.get_data()) if request.get_data() else 0
-        }
-
-        # Capture whether this instance already had annotations BEFORE we mutate
-        # state, so the webhook below can correctly distinguish annotation.created
-        # from annotation.updated. F-032.
-        _had_prior_annotation = bool(
-            getattr(user_state, "instance_id_to_label_to_value", {}).get(instance_id)
-        )
-
-        # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
-        if "annotations" in request.json or "span_annotations" in request.json or "link_annotations" in request.json or "event_annotations" in request.json:
-            logger.debug("Processing frontend format (annotations, span_annotations)")
-
-            # Handle label annotations from frontend format
-            annotations = request.json.get("annotations", {})
-
-            # Guard against malformed payloads: `annotations` must be a mapping.
-            # A non-dict (e.g. a JSON string or list) would crash the .items()
-            # loop below with AttributeError → an unhandled HTTP 500 (F-046).
-            # Reject cleanly instead.
-            if not isinstance(annotations, dict):
+            if undeclared_participant(
+                    actor, parse_machine_annotators(config), _listed):
                 logger.warning(
-                    f"Rejected /updateinstance from {username}: 'annotations' is "
-                    f"{type(annotations).__name__}, expected object")
-                return jsonify({"status": "error",
-                                "message": "'annotations' must be an object"})
+                    "Refused an annotation from '%s': machine_annotators."
+                    "require_declaration is on and this participant is "
+                    "neither a declared machine rater nor a listed person. "
+                    "Declare it under machine_annotators.annotators, or add "
+                    "it to the human roster.", actor)
+                return jsonify({
+                    "status": "error",
+                    "message": (
+                        "This account is not declared for this study. Ask "
+                        "the administrator to add it to the annotator "
+                        "roster, or to declare it as a machine annotator."
+                    ),
+                }), 403
 
-            # Pre-clear stale labels for radio/multiselect schemas.
-            # The client always sends the COMPLETE current state, so any label
-            # not in the incoming set should be removed. Without this, deselected
-            # radio options or unchecked checkboxes persist as stale data.
-            _exclusive_types = {'radio', 'multiselect'}
-            _schema_type_cache = {}
-            for scheme in config.get('annotation_schemes', []):
-                _schema_type_cache[scheme.get('name')] = scheme.get('annotation_type')
+    # Guard: reject updates for instances not assigned to this user.
+    # Skip this for synthetic phase-page updates so non-annotation page autosaves
+    # do not get treated like dataset item writes.
+    if user_state.get_phase() == UserPhase.ANNOTATION and not is_phase_page_update:
+        assigned_ids = user_state.get_assigned_instance_ids()
+        if assigned_ids and instance_id not in assigned_ids and not allow_unassigned:
+            logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
+            return jsonify({"status": "error", "message": "Instance not assigned to user"}), 403
+        # Before the first assignment the check above does not apply, and
+        # a save to an id that is not in the dataset (the string "None",
+        # say) was stored and exported as a row (potato-skill).
+        if not assigned_ids and not get_item_state_manager().has_item(instance_id):
+            logger.warning(f"User {username} tried to update unknown instance {instance_id}")
+            return jsonify({"status": "error", "message": "No such instance"}), 404
 
-            # Collect which schemas appear in the incoming annotations
-            _incoming_schemas = set()
-            for key in annotations:
-                sep = ":::" if ":::" in key else (":" if ":" in key else None)
-                if sep:
-                    _incoming_schemas.add(key.split(sep, 1)[0])
+    # If a synthetic phase-page save arrives while the backend still thinks the user
+    # is in annotation, acknowledge it without writing item state. This avoids a
+    # noisy warning/error path during end-of-annotation transitions.
+    if user_state.get_phase() == UserPhase.ANNOTATION and is_phase_page_update:
+        logger.info(
+            f"Ignoring synthetic phase-page update for user {username} while still in annotation phase"
+        )
+        return jsonify({"status": "ok", "message": "Ignored synthetic phase-page update"})
 
-            # For each exclusive schema, remove all existing labels
-            if instance_id in user_state.instance_id_to_label_to_value:
-                for schema_name_to_clear in _incoming_schemas:
-                    if _schema_type_cache.get(schema_name_to_clear) in _exclusive_types:
-                        labels_to_remove = [
-                            lbl for lbl in user_state.instance_id_to_label_to_value[instance_id]
-                            if isinstance(lbl, Label) and lbl.get_schema() == schema_name_to_clear
-                        ]
-                        for lbl in labels_to_remove:
-                            del user_state.instance_id_to_label_to_value[instance_id][lbl]
+    # Debug: Log user phase for debugging annotation storage issues
+    logger.debug(f"User '{username}' phase: {user_state.get_phase()}, current_phase_and_page: {user_state.current_phase_and_page}")
 
-            for key, value in annotations.items():
-                if ":::" in key:
-                    # Use ::: separator for image/audio/video annotation data
-                    # e.g., "video_segments:::_data" -> schema="video_segments", label="_data"
-                    schema_name, label_name = key.split(":::", 1)
-                    label = Label(schema_name, label_name)
-                elif ":" in key:
-                    # Legacy format with single colon
-                    schema_name, label_name = key.split(":", 1)
-                    label = Label(schema_name, label_name)
-                else:
-                    logger.warning(f"Skipping annotation with no separator: {key}")
+    # Track session
+    if not user_state.session_start_time:
+        user_state.start_session(session.get('session_id', str(uuid.uuid4())))
+
+    # Get client timestamp if provided
+    client_timestamp = None
+    if data.get("client_timestamp"):
+        try:
+            client_timestamp = datetime.datetime.fromisoformat(data["client_timestamp"])
+        except ValueError:
+            logger.warning(f"Invalid client timestamp format: {data['client_timestamp']}")
+
+    # Prepare metadata
+    metadata = {
+        "request_id": data.get("request_id"),
+        "user_agent": request.headers.get("User-Agent"),
+        "ip_address": request.remote_addr,
+        "content_type": request.content_type,
+        "request_size": len(request.get_data()) if request.get_data() else 0
+    }
+
+    # Capture whether this instance already had annotations BEFORE we mutate
+    # state, so the webhook below can correctly distinguish annotation.created
+    # from annotation.updated. F-032.
+    _had_prior_annotation = bool(
+        getattr(user_state, "instance_id_to_label_to_value", {}).get(instance_id)
+    )
+
+    # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
+    if "annotations" in data or "span_annotations" in data or "link_annotations" in data or "event_annotations" in data:
+        logger.debug("Processing frontend format (annotations, span_annotations)")
+
+        # Handle label annotations from frontend format
+        annotations = data.get("annotations", {})
+
+        # Guard against malformed payloads: `annotations` must be a mapping.
+        # A non-dict (e.g. a JSON string or list) would crash the .items()
+        # loop below with AttributeError → an unhandled HTTP 500 (F-046).
+        # Reject cleanly instead.
+        if not isinstance(annotations, dict):
+            logger.warning(
+                f"Rejected /updateinstance from {username}: 'annotations' is "
+                f"{type(annotations).__name__}, expected object")
+            return jsonify({"status": "error",
+                            "message": "'annotations' must be an object"}), 400
+
+        # Refuse a payload whose every key is unreadable, before anything
+        # is cleared or recorded. Keys are `schema:::label` (or the legacy
+        # `schema:label`); a key with neither names no label, so it stored
+        # nothing while the route answered 200 -- and a caller who cannot
+        # read the server log had no way to tell. The browser always sends
+        # the right shape, so this only ever reached the MCP tools, the
+        # simulator and evaluation harnesses.
+        #
+        # Decided here rather than after the write loop so a refusal is a
+        # true no-op: the pre-clear below drops stale labels, and running
+        # it for a request we are about to reject would be a half-write.
+        #
+        # Phase pages are exempt. A consent or survey question posts
+        # `{"age_consent": "Yes"}` -- the schema name with the answer as
+        # the value, because a phase question has no label to name. That
+        # shape is correct there, and refusing it would break every
+        # consent, instruction and post-study page.
+        _unreadable = [key for key in annotations
+                       if ":::" not in key and ":" not in key]
+        if (annotations and not is_phase_page_update
+                and len(_unreadable) == len(annotations)):
+            shown = ", ".join(repr(k) for k in _unreadable[:5])
+            if len(_unreadable) > 5:
+                shown += f", and {len(_unreadable) - 5} more"
+            logger.warning(
+                "Rejected /updateinstance from %s: no annotation key named "
+                "a schema and a label (%s)", username, shown)
+            return jsonify({
+                "status": "error",
+                "message": ("No annotation was stored: every key must name "
+                            "a schema and a label as 'schema:::label'. "
+                            f"Got: {shown}")}), 400
+
+        # Pre-clear stale labels before re-writing. The client sends the COMPLETE
+        # current state for these schemas, so any label not in the incoming set
+        # should be removed.
+        # A multiselect with every box unticked sends no key at all, so it
+        # is named in `cleared_schemas`; without that the last box to be
+        # unticked could never be removed.
+        cleared = data.get("cleared_schemas") or []
+        cleared = {c for c in cleared if isinstance(c, str)} if isinstance(cleared, list) else set()
+        _preclear_exclusive_schemas(
+            user_state, username, instance_id,
+            _incoming_schema_names(annotations) | cleared, complete_set=True)
+
+        for key, value in annotations.items():
+            # "schema:label" from the page, "schema:::label" for the
+            # image/audio/video "_data" blobs; split_annotation_key reads
+            # both and uses the configured schema names to find where the
+            # schema ends.
+            parsed = split_annotation_key(key)
+            if parsed is None:
+                logger.warning(f"Skipping annotation with no separator: {key}")
+                continue
+            schema_name, label_name = parsed
+            label = Label(schema_name, label_name)
+
+            # An emptied text box or number field posts "". That is the
+            # absence of an answer: storing it made the item count as
+            # annotated with nothing in it.
+            if value == "" or value is None:
+                user_state.remove_label_annotation(instance_id, label)
+                continue
+
+            # Get old value for comparison. Go through the accessor rather than
+            # the dict: MysqlUserState has no instance_id_to_label_to_value.
+            old_value = (user_state.get_label_annotations(instance_id) or {}).get(label)
+
+            # Determine action type
+            action_type = "add_label" if old_value is None else "update_label"
+
+            # Create annotation action
+            action = AnnotationHistoryManager.create_action(
+                user_id=username,
+                instance_id=instance_id,
+                action_type=action_type,
+                schema_name=schema_name,
+                label_name=label_name,
+                old_value=old_value,
+                new_value=value,
+                session_id=user_state.current_session_id,
+                client_timestamp=client_timestamp,
+                metadata=metadata
+            )
+
+            # Add to history
+            user_state.add_annotation_action(action)
+
+            # Update annotation
+            user_state.add_label_annotation(instance_id, label, value)
+            logger.debug("Added label annotation: %s:%s", schema_name, label_name)
+
+        # Record human↔judge comparison for the alignment loop (inline mode).
+        _record_judge_comparison_if_enabled(username, instance_id)
+
+        # Handle span annotations from frontend format
+        span_annotations = data.get("span_annotations", [])
+        for span_data in span_annotations:
+            if isinstance(span_data, dict) and "schema" in span_data:
+                # Skip an entry that names no span: a display overlay (AI
+                # keyword highlights) read off the page carries schema and
+                # offsets of null. It used to raise here, after the labels
+                # were applied but before the save, so the request 500'd
+                # and the annotator could not move on.
+                try:
+                    int(span_data.get("start")), int(span_data.get("end"))
+                    bad = not span_data.get("schema") or not span_data.get("name")
+                except (TypeError, ValueError):
+                    bad = True
+                if bad:
+                    logger.warning("Ignoring span entry without schema, label or "
+                                   "offsets on %s: %r", instance_id, span_data)
                     continue
+                _warn_if_span_exceeds_text(instance_id, span_data)
+                # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
+                # etc). Previously dropped here, so PDF anchor geometry never
+                # persisted. anchor_kind/page are folded into the deterministic
+                # ID so a text span and a region anchor at the same char offsets
+                # (start==end==0 for regions) don't collide.
+                fc = span_data.get("format_coords") or {}
+                span_id = span_data.get("id") or span_data.get("span_id") or \
+                          (f"{span_data['schema']}_{span_data['name']}_"
+                           f"{fc.get('anchor_kind', '')}_{fc.get('page', '')}_"
+                           f"{span_data['start']}_{span_data['end']}")
+
+                span = SpanAnnotation(
+                    span_data["schema"],
+                    span_data["name"],
+                    span_data.get("title", span_data["name"]),
+                    int(span_data["start"]),
+                    int(span_data["end"]),
+                    id=span_id,
+                    target_field=span_data.get("target_field"),
+                    format_coords=span_data.get("format_coords"),
+                )
+                value = span_data.get("value")
+
+                if value is not None:
+                    # Get old value for comparison
+                    old_value = None
+                    if instance_id in user_state.instance_id_to_span_to_value:
+                        old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+
+                    # Determine action type
+                    action_type = "add_span" if old_value is None else "update_span"
+
+                    # Create annotation action
+                    action = AnnotationHistoryManager.create_action(
+                        user_id=username,
+                        instance_id=instance_id,
+                        action_type=action_type,
+                        schema_name=span_data["schema"],
+                        label_name=span_data["name"],
+                        old_value=old_value,
+                        new_value=value,
+                        span_data={
+                            "start": span_data["start"],
+                            "end": span_data["end"],
+                            "title": span_data.get("title", span_data["name"])
+                        },
+                        session_id=user_state.current_session_id,
+                        client_timestamp=client_timestamp,
+                        metadata=metadata
+                    )
+
+                    # Add to history
+                    user_state.add_annotation_action(action)
+
+                    # Update annotation
+                    user_state.add_span_annotation(instance_id, span, value)
+                    logger.debug(f"Added span annotation: {span_data}")
+                else:
+                    # value is None -> delete this span BY ID. PDF region
+                    # anchors are zero-length (start==end==0), so matching on
+                    # schema/name/offsets (as the nested-annotations path does)
+                    # would delete the wrong anchor. Match on the exact id and
+                    # cascade orphaned links/events, mirroring that path.
+                    spans_by_id = user_state.instance_id_to_span_to_value.get(instance_id, {})
+                    to_delete = [s for s in spans_by_id.keys() if s.get_id() == span_id]
+                    for s in to_delete:
+                        del user_state.instance_id_to_span_to_value[instance_id][s]
+                        if instance_id in user_state.instance_id_to_link_to_value:
+                            orphaned = [
+                                lid for lid, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                if span_id in link.get_span_ids()
+                            ]
+                            for lid in orphaned:
+                                del user_state.instance_id_to_link_to_value[instance_id][lid]
+                        logger.debug(f"Deleted span annotation by id: {span_id}")
+
+        # Handle link annotations from frontend format
+        link_annotations = data.get("link_annotations", [])
+        for link_data in link_annotations:
+            if isinstance(link_data, dict) and "schema" in link_data and "link_type" in link_data:
+                from potato.item_state_management import SpanLink
+                link = SpanLink(
+                    schema=link_data["schema"],
+                    link_type=link_data["link_type"],
+                    span_ids=link_data.get("span_ids", []),
+                    direction=link_data.get("direction", "undirected"),
+                    id=link_data.get("id"),
+                    properties=link_data.get("properties", {})
+                )
+
+                # Add or update the link annotation
+                user_state.add_link_annotation(instance_id, link)
+                logger.debug(f"Added link annotation: {link}")
+
+        # Handle event annotations from frontend format
+        event_annotations = data.get("event_annotations", [])
+        logger.debug(f"Processing {len(event_annotations)} event annotations")
+        for event_data in event_annotations:
+            logger.debug(f"Processing event data: {event_data}")
+            if isinstance(event_data, dict) and "schema" in event_data and "event_type" in event_data:
+                from potato.item_state_management import EventAnnotation
+
+                # Log the incoming ID
+                incoming_id = event_data.get("id")
+                logger.debug(f"Incoming event ID: {incoming_id}")
+
+                event = EventAnnotation(
+                    schema=event_data["schema"],
+                    event_type=event_data["event_type"],
+                    trigger_span_id=event_data.get("trigger_span_id", ""),
+                    arguments=event_data.get("arguments", []),
+                    id=incoming_id,
+                    properties=event_data.get("properties", {})
+                )
+
+                # Log the actual ID assigned
+                logger.debug(f"Event object ID after creation: {event.get_id()}")
+
+                # Add or update the event annotation
+                user_state.add_event_annotation(instance_id, event)
+
+                # Log current events count
+                current_events = user_state.get_event_annotations(instance_id)
+                logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
+                logger.debug(f"Current event IDs: {list(current_events.keys())}")
+
+        # A model's spans, links and events are offered until the
+        # annotator takes them over: by storing a link or event, or by
+        # moving on from a page that showed them, so that deleting every
+        # one of them is kept as "nothing here".
+        if (data.get("prelabels_reviewed") or link_annotations
+                or event_annotations):
+            user_state.resolve_prelabels(instance_id)
+
+    # Check if this is the backend format (schema, state, type)
+    elif "schema" in data and "state" in data and "type" in data:
+        logger.debug("Processing backend format (schema, state, type)")
+
+        schema_name = data.get("schema")
+        schema_state = data.get("state")
+        annotation_type = data.get("type")
+
+        if annotation_type == "span":
+            logger.debug(f"Processing span annotation state: {schema_state}")
+            user_state.resolve_prelabels(instance_id)
+            for sv in schema_state:
+                # Validate and correct negative offsets
+                start_offset = int(sv["start"])
+                end_offset = int(sv["end"])
+
+                # Correct negative offsets to 0
+                if start_offset < 0:
+                    start_offset = 0
+                    logger.warning(f"Corrected negative start offset {sv['start']} to 0")
+                if end_offset < 0:
+                    end_offset = 0
+                    logger.warning(f"Corrected negative end offset {sv['end']} to 0")
+
+                # Ensure end is not less than start
+                if end_offset < start_offset:
+                    end_offset = start_offset
+                    logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
+
+                # Get span_id or generate one if not provided
+                span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
+
+                # Get additional_parts for discontinuous spans
+                additional_parts = sv.get("additional_parts", [])
+
+                span = SpanAnnotation(
+                    schema_name,
+                    sv["name"],
+                    sv.get("title", sv["name"]),
+                    start_offset,
+                    end_offset,
+                    span_id,
+                    target_field=sv.get("target_field"),
+                    additional_parts=additional_parts
+                )
+
+                value = sv.get("value")
 
                 # Get old value for comparison
                 old_value = None
-                if instance_id in user_state.instance_id_to_label_to_value:
-                    old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
+                if instance_id in user_state.instance_id_to_span_to_value:
+                    old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
 
                 # Determine action type
-                action_type = "add_label" if old_value is None else "update_label"
+                if value is None:
+                    action_type = "delete_span"
+                else:
+                    action_type = "add_span" if old_value is None else "update_span"
 
                 # Create annotation action
                 action = AnnotationHistoryManager.create_action(
@@ -4281,7 +7691,98 @@ def update_instance():
                     instance_id=instance_id,
                     action_type=action_type,
                     schema_name=schema_name,
-                    label_name=label_name,
+                    label_name=sv["name"],
+                    old_value=old_value,
+                    new_value=value,
+                    span_data={
+                        "start": start_offset,
+                        "end": end_offset,
+                        "title": sv.get("title", sv["name"])
+                    },
+                    session_id=user_state.current_session_id,
+                    client_timestamp=client_timestamp,
+                    metadata=metadata
+                )
+
+                # Add to history
+                user_state.add_annotation_action(action)
+
+                # Handle span deletion vs creation/update
+                if value is None:
+                    # Delete the span - find and remove the matching span
+                    if instance_id in user_state.instance_id_to_span_to_value:
+                        # Find the span to delete by matching properties
+                        spans_to_delete = []
+                        requested_id = sv.get("span_id") or sv.get("id")
+                        for existing_span in user_state.instance_id_to_span_to_value[instance_id].keys():
+                            if requested_id:
+                                # The id names one span. Matching on label and
+                                # offsets also removed same-shaped spans in
+                                # other fields of a multi-field page.
+                                if existing_span.get_id() == requested_id:
+                                    spans_to_delete.append(existing_span)
+                            elif (existing_span.get_schema() == span.get_schema() and
+                                  existing_span.get_name() == span.get_name() and
+                                  existing_span.get_start() == span.get_start() and
+                                  existing_span.get_end() == span.get_end() and
+                                  (sv.get("target_field") is None or
+                                   existing_span.get_target_field() == sv.get("target_field"))):
+                                spans_to_delete.append(existing_span)
+
+                        for span_to_delete in spans_to_delete:
+                            del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
+                            logger.debug(f"Deleted span annotation: {span_to_delete}")
+
+                            # Clean up orphaned links and events referencing this span
+                            deleted_span_id = span_to_delete.get_id()
+                            if instance_id in user_state.instance_id_to_link_to_value:
+                                orphaned_links = [
+                                    link_id for link_id, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                    if deleted_span_id in link.get_span_ids()
+                                ]
+                                for link_id in orphaned_links:
+                                    del user_state.instance_id_to_link_to_value[instance_id][link_id]
+                                    logger.debug(f"Removed orphaned link {link_id} referencing deleted span {deleted_span_id}")
+                            if instance_id in user_state.instance_id_to_event_to_value:
+                                orphaned_events = [
+                                    evt_id for evt_id, evt in user_state.instance_id_to_event_to_value[instance_id].items()
+                                    if deleted_span_id in evt.get_all_span_ids()
+                                ]
+                                for evt_id in orphaned_events:
+                                    del user_state.instance_id_to_event_to_value[instance_id][evt_id]
+                                    logger.debug(f"Removed orphaned event {evt_id} referencing deleted span {deleted_span_id}")
+                else:
+                    # Add or update the span annotation
+                    user_state.add_span_annotation(instance_id, span, value)
+                    logger.debug("Added span annotation: %s", span)
+        elif annotation_type == "label":
+            # Legacy v1 template posts ONE input per request (base_template.html
+            # registerAnnotation), so this is not a complete-set payload: clearing
+            # a multiselect here would wipe the user's other checkboxes. Only
+            # single-select schemas are cleared.
+            _preclear_exclusive_schemas(
+                user_state, username, instance_id, {schema_name},
+                complete_set=False)
+
+            for sv in schema_state:
+                label = Label(schema_name, sv["name"])
+                value = sv["value"]
+
+                # Get old value for comparison. Go through the accessor rather than
+                # the dict: MysqlUserState has no instance_id_to_label_to_value.
+                old_value = (user_state.get_label_annotations(instance_id) or {}).get(label)
+
+                # Determine action type
+                action_type = "add_label" if old_value is None else "update_label"
+
+
+                # Create annotation action
+                action = AnnotationHistoryManager.create_action(
+                    user_id=username,
+                    instance_id=instance_id,
+                    action_type=action_type,
+                    schema_name=schema_name,
+                    label_name=sv["name"],
                     old_value=old_value,
                     new_value=value,
                     session_id=user_state.current_session_id,
@@ -4294,452 +7795,310 @@ def update_instance():
 
                 # Update annotation
                 user_state.add_label_annotation(instance_id, label, value)
-                logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value[:100]}..." if len(str(value)) > 100 else f"Added label annotation: {schema_name}:{label_name} = {value}")
+    else:
+        logger.warning("Unknown data format in /updateinstance")
+        return jsonify({"status": "error", "message": "Unknown data format"}), 400
 
-            # Handle span annotations from frontend format
-            span_annotations = request.json.get("span_annotations", [])
-            for span_data in span_annotations:
-                if isinstance(span_data, dict) and "schema" in span_data:
-                    # Use provided ID or generate deterministic one to preserve span identity
-                    span_id = span_data.get("id") or span_data.get("span_id") or \
-                              f"{span_data['schema']}_{span_data['name']}_{span_data['start']}_{span_data['end']}"
+    # Collect all annotations for this instance. Used by both QC validation
+    # and the webhook payload below — must be defined unconditionally, since
+    # webhooks can be enabled without quality control (otherwise the webhook
+    # emit block raises UnboundLocalError and every save 500s). F-030.
+    all_annotations = {}
+    #: schema -> the label the annotator settled on, for `final_annotation`.
+    final_by_schema = {}
+    if "annotations" in data:
+        all_annotations, final_by_schema = _qc_answer_payload(
+            data.get("annotations", {}))
+    elif "schema" in data:
+        schema_name = data.get("schema")
+        schema_state = data.get("state", [])
+        # Convert state list to dict for validation
+        for sv in schema_state:
+            if "value" in sv:
+                all_annotations[schema_name] = sv.get("value")
 
-                    span = SpanAnnotation(
-                        span_data["schema"],
-                        span_data["name"],
-                        span_data.get("title", span_data["name"]),
-                        int(span_data["start"]),
-                        int(span_data["end"]),
-                        id=span_id,
-                        target_field=span_data.get("target_field")
-                    )
-                    value = span_data.get("value")
+    # Quality control validation (attention checks and gold standards)
+    qc_manager = get_quality_control_manager()
+    qc_result = None
 
-                    if value is not None:
-                        # Get old value for comparison
-                        old_value = None
-                        if instance_id in user_state.instance_id_to_span_to_value:
-                            old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
+    # Stamp what was actually saved onto this instance's AI usage
+    # events. `final_annotation` is what the AI-usage subsystem exists to
+    # answer and was never assigned -- `suggestion_accepted` records the
+    # click, so an annotator who accepted a suggestion and then changed
+    # their mind before saving left a record saying they accepted it and
+    # nothing saying what they submitted.
+    if final_by_schema:
+        _bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+        if _bd is not None and hasattr(_bd, "record_final_annotations"):
+            _bd.record_final_annotations(final_by_schema)
+            # ...and what the saved answer did with each suggestion.
+            _bd.record_decisions(_chosen_labels(
+                data.get("annotations", {}),
+                {sc.get("name"): sc.get("annotation_type")
+                 for sc in config.get("annotation_schemes") or [] if isinstance(sc, dict)}))
 
-                        # Determine action type
-                        action_type = "add_span" if old_value is None else "update_span"
+    # A grid save carries the item's share of the page's active time; the
+    # item has no interaction events of its own (see grid-view.js).
+    # A timed trial's record (trial_timing): checked against the server's
+    # own clock, kept beside the labels, mirrored onto behavioural data.
+    trial_payload = data.get("trial")
+    if isinstance(trial_payload, dict) and not is_phase_page_update:
+        from potato import trial_timing as _tt
+        # The item's own data, so item_overrides (a per-item deadline,
+        # say) are the timing the record is checked against.
+        _tt_item = None
+        try:
+            _tt_ism = get_item_state_manager()
+            if _tt_ism.has_item(instance_id):
+                _tt_item = _tt_ism.get_item(instance_id).get_data()
+        except Exception:
+            _tt_item = None
+        _tt_cfg = _tt.client_config(config, _tt_item)
+        if _tt_cfg is not None:
+            _rec, _flags = _tt.validate_record(
+                trial_payload, _tt.served_at(user_state, instance_id), _tt_cfg)
+            if _rec is not None:
+                # The label the record claims must be the one this save stores.
+                if _rec.get("outcome") == "response" and _rec.get("label") is not None:
+                    _schema = _tt_cfg.get("schema")
+                    _saved = set()
+                    for _k, _v in (data.get("annotations") or {}).items():
+                        _parts = str(_k).replace(":::", ":").split(":", 1)
+                        if len(_parts) == 2 and _parts[0] == _schema and _v not in (None, "", False):
+                            _saved.add(_parts[1])
+                    if _rec["label"] not in _saved:
+                        _rec["flags"].append("label_not_saved")
+                        _flags = _rec["flags"]
+                _tt.store_record(user_state, instance_id, _rec)
+                if _flags:
+                    logger.info("Trial record for %s on %s flagged: %s",
+                                username, instance_id, _flags)
+                from potato.interaction_tracking import get_or_create_behavioral_data
+                _bd = get_or_create_behavioral_data(
+                    user_state.instance_id_to_behavioral_data, instance_id)
+                _bd.trial = _rec
 
-                        # Create annotation action
-                        action = AnnotationHistoryManager.create_action(
-                            user_id=username,
-                            instance_id=instance_id,
-                            action_type=action_type,
-                            schema_name=span_data["schema"],
-                            label_name=span_data["name"],
-                            old_value=old_value,
-                            new_value=value,
-                            span_data={
-                                "start": span_data["start"],
-                                "end": span_data["end"],
-                                "title": span_data.get("title", span_data["name"])
-                            },
-                            session_id=user_state.current_session_id,
-                            client_timestamp=client_timestamp,
-                            metadata=metadata
-                        )
+    grid_timing = data.get("grid_timing")
+    if (isinstance(grid_timing, dict) and data.get("source_view") == "grid"
+            and (config.get("grid_view") or {}).get("enabled")
+            and not is_phase_page_update):
+        from potato.interaction_tracking import get_or_create_behavioral_data
+        get_or_create_behavioral_data(
+            user_state.instance_id_to_behavioral_data, instance_id
+        ).record_bulk_time(grid_timing)
 
-                        # Add to history
-                        user_state.add_annotation_action(action)
+    # Consent, survey and other phase pages are not items: grading them
+    # as attention checks or gold, counting them toward check frequency,
+    # or pooling two people's "I agree" into an auto-promoted gold item
+    # (which every later participant was then scored against) is wrong.
+    # Quality control grades a person, and a collaborative save is the team's.
+    if qc_manager and not is_phase_page_update and collab is None:
+        # How long the annotator had the item on screen, as measured by the
+        # client. This used to be derived from `client_timestamp`, which is
+        # the moment the request was *sent* -- so the subtraction measured
+        # network latency, not reading time, and nothing on this path sent
+        # the field at all, which left `min_response_time` unreachable.
+        # Measured by the SERVER, from when it served the item. It used
+        # to be `response_time_seconds` out of this request body -- a
+        # number reported by the annotator's own client. Two annotators
+        # answering identically, milliseconds apart in a scripted loop,
+        # got opposite outcomes purely from what they claimed: 0.4s was
+        # blocked, 600s passed, and only the honest one appeared in the
+        # log. `min_response_time` exists to catch someone clicking
+        # through without reading, so asking them how long they took is
+        # the one thing it cannot do.
+        response_time = qc_manager.measured_response_time(
+            username, instance_id)
 
-                        # Update annotation
-                        user_state.add_span_annotation(instance_id, span, value)
-                        logger.debug(f"Added span annotation: {span_data}")
+        claimed = data.get("response_time_seconds")
+        if response_time is None:
+            # Not served by this process -- a restart between serve and
+            # save. It used to fail open in silence; an unmeasurable check
+            # is not a passed one, so it says so.
+            logger.warning(
+                "No server-side serve time for %s on %s, so "
+                "min_response_time cannot be checked for this answer.",
+                username, instance_id)
+        elif claimed is not None:
+            try:
+                claimed_seconds = float(claimed)
+            except (TypeError, ValueError):
+                claimed_seconds = None
+            # A large gap is not proof of anything, but it is the only
+            # signal that the two clocks disagree, and it costs a
+            # comparison.
+            if (claimed_seconds is not None
+                    and abs(claimed_seconds - response_time) > 30):
+                logger.warning(
+                    "%s reported %.1fs on %s; the server measured %.1fs. "
+                    "The server measurement is what min_response_time "
+                    "uses.", username, claimed_seconds, instance_id,
+                    response_time)
 
-            # Handle link annotations from frontend format
-            link_annotations = request.json.get("link_annotations", [])
-            for link_data in link_annotations:
-                if isinstance(link_data, dict) and "schema" in link_data and "link_type" in link_data:
-                    from potato.item_state_management import SpanLink
-                    link = SpanLink(
-                        schema=link_data["schema"],
-                        link_type=link_data["link_type"],
-                        span_ids=link_data.get("span_ids", []),
-                        direction=link_data.get("direction", "undirected"),
-                        id=link_data.get("id"),
-                        properties=link_data.get("properties", {})
-                    )
-
-                    # Add or update the link annotation
-                    user_state.add_link_annotation(instance_id, link)
-                    logger.debug(f"Added link annotation: {link}")
-
-            # Handle event annotations from frontend format
-            event_annotations = request.json.get("event_annotations", [])
-            logger.debug(f"Processing {len(event_annotations)} event annotations")
-            for event_data in event_annotations:
-                logger.debug(f"Processing event data: {event_data}")
-                if isinstance(event_data, dict) and "schema" in event_data and "event_type" in event_data:
-                    from potato.item_state_management import EventAnnotation
-
-                    # Log the incoming ID
-                    incoming_id = event_data.get("id")
-                    logger.debug(f"Incoming event ID: {incoming_id}")
-
-                    event = EventAnnotation(
-                        schema=event_data["schema"],
-                        event_type=event_data["event_type"],
-                        trigger_span_id=event_data.get("trigger_span_id", ""),
-                        arguments=event_data.get("arguments", []),
-                        id=incoming_id,
-                        properties=event_data.get("properties", {})
-                    )
-
-                    # Log the actual ID assigned
-                    logger.debug(f"Event object ID after creation: {event.get_id()}")
-
-                    # Add or update the event annotation
-                    user_state.add_event_annotation(instance_id, event)
-
-                    # Log current events count
-                    current_events = user_state.get_event_annotations(instance_id)
-                    logger.debug(f"Added event annotation. Total events for instance: {len(current_events)}")
-                    logger.debug(f"Current event IDs: {list(current_events.keys())}")
-
-        # Check if this is the backend format (schema, state, type)
-        elif "schema" in request.json and "state" in request.json and "type" in request.json:
-            logger.debug("Processing backend format (schema, state, type)")
-
-            schema_name = request.json.get("schema")
-            schema_state = request.json.get("state")
-            annotation_type = request.json.get("type")
-
-            if annotation_type == "span":
-                logger.debug(f"Processing span annotation state: {schema_state}")
-                for sv in schema_state:
-                    # Validate and correct negative offsets
-                    start_offset = int(sv["start"])
-                    end_offset = int(sv["end"])
-
-                    # Correct negative offsets to 0
-                    if start_offset < 0:
-                        start_offset = 0
-                        logger.warning(f"Corrected negative start offset {sv['start']} to 0")
-                    if end_offset < 0:
-                        end_offset = 0
-                        logger.warning(f"Corrected negative end offset {sv['end']} to 0")
-
-                    # Ensure end is not less than start
-                    if end_offset < start_offset:
-                        end_offset = start_offset
-                        logger.warning(f"Corrected end offset {sv['end']} to match start offset {start_offset}")
-
-                    # Get span_id or generate one if not provided
-                    span_id = sv.get("span_id") or sv.get("id") or f"{schema_name}_{sv['name']}_{start_offset}_{end_offset}"
-
-                    # Get additional_parts for discontinuous spans
-                    additional_parts = sv.get("additional_parts", [])
-
-                    span = SpanAnnotation(
-                        schema_name,
-                        sv["name"],
-                        sv.get("title", sv["name"]),
-                        start_offset,
-                        end_offset,
-                        span_id,
-                        target_field=sv.get("target_field"),
-                        additional_parts=additional_parts
-                    )
-
-                    value = sv.get("value")
-
-                    # Get old value for comparison
-                    old_value = None
-                    if instance_id in user_state.instance_id_to_span_to_value:
-                        old_value = user_state.instance_id_to_span_to_value[instance_id].get(span)
-
-                    # Determine action type
-                    if value is None:
-                        action_type = "delete_span"
-                    else:
-                        action_type = "add_span" if old_value is None else "update_span"
-
-                    # Create annotation action
-                    action = AnnotationHistoryManager.create_action(
-                        user_id=username,
-                        instance_id=instance_id,
-                        action_type=action_type,
-                        schema_name=schema_name,
-                        label_name=sv["name"],
-                        old_value=old_value,
-                        new_value=value,
-                        span_data={
-                            "start": start_offset,
-                            "end": end_offset,
-                            "title": sv.get("title", sv["name"])
-                        },
-                        session_id=user_state.current_session_id,
-                        client_timestamp=client_timestamp,
-                        metadata=metadata
-                    )
-
-                    # Add to history
-                    user_state.add_annotation_action(action)
-
-                    # Handle span deletion vs creation/update
-                    if value is None:
-                        # Delete the span - find and remove the matching span
-                        if instance_id in user_state.instance_id_to_span_to_value:
-                            # Find the span to delete by matching properties
-                            spans_to_delete = []
-                            for existing_span in user_state.instance_id_to_span_to_value[instance_id].keys():
-                                if (existing_span.get_schema() == span.get_schema() and
-                                    existing_span.get_name() == span.get_name() and
-                                    existing_span.get_start() == span.get_start() and
-                                    existing_span.get_end() == span.get_end()):
-                                    spans_to_delete.append(existing_span)
-
-                            for span_to_delete in spans_to_delete:
-                                del user_state.instance_id_to_span_to_value[instance_id][span_to_delete]
-                                logger.debug(f"Deleted span annotation: {span_to_delete}")
-
-                                # Clean up orphaned links and events referencing this span
-                                deleted_span_id = span_to_delete.get_id()
-                                if instance_id in user_state.instance_id_to_link_to_value:
-                                    orphaned_links = [
-                                        link_id for link_id, link in user_state.instance_id_to_link_to_value[instance_id].items()
-                                        if deleted_span_id in link.get_span_ids()
-                                    ]
-                                    for link_id in orphaned_links:
-                                        del user_state.instance_id_to_link_to_value[instance_id][link_id]
-                                        logger.debug(f"Removed orphaned link {link_id} referencing deleted span {deleted_span_id}")
-                                if instance_id in user_state.instance_id_to_event_to_value:
-                                    orphaned_events = [
-                                        evt_id for evt_id, evt in user_state.instance_id_to_event_to_value[instance_id].items()
-                                        if deleted_span_id in evt.get_all_span_ids()
-                                    ]
-                                    for evt_id in orphaned_events:
-                                        del user_state.instance_id_to_event_to_value[instance_id][evt_id]
-                                        logger.debug(f"Removed orphaned event {evt_id} referencing deleted span {deleted_span_id}")
-                    else:
-                        # Add or update the span annotation
-                        user_state.add_span_annotation(instance_id, span, value)
-                        logger.debug(f"Added span annotation: {span} with value: {value}")
-            elif annotation_type == "label":
-                for sv in schema_state:
-                    label = Label(schema_name, sv["name"])
-                    value = sv["value"]
-
-                    # Get old value for comparison
-                    old_value = None
-                    if instance_id in user_state.instance_id_to_label_to_value:
-                        old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
-
-                    # Determine action type
-                    action_type = "add_label" if old_value is None else "update_label"
-                
-                   
-                    # Create annotation action
-                    action = AnnotationHistoryManager.create_action(
-                        user_id=username,
-                        instance_id=instance_id,
-                        action_type=action_type,
-                        schema_name=schema_name,
-                        label_name=sv["name"],
-                        old_value=old_value,
-                        new_value=value,
-                        session_id=user_state.current_session_id,
-                        client_timestamp=client_timestamp,
-                        metadata=metadata
-                    )
-
-                    # Add to history
-                    user_state.add_annotation_action(action)
-
-                    # Update annotation
-                    user_state.add_label_annotation(instance_id, label, value)
+        # Check if this is an attention check. A timed trial that ran out
+        # (trial_timing) carries no answer to grade: it is neither a pass
+        # nor a failure, and stays visible as a timeout in trials.csv.
+        from potato.trial_timing import excuses_required_answer as _timed_out
+        _trial_rec = (getattr(user_state, "instance_id_to_trial", None) or {}).get(str(instance_id))
+        if _timed_out(_trial_rec):
+            attention_result = None
         else:
-            logger.warning("Unknown data format in /updateinstance")
-            return jsonify({"status": "error", "message": "Unknown data format"})
-
-        # Collect all annotations for this instance. Used by both QC validation
-        # and the webhook payload below — must be defined unconditionally, since
-        # webhooks can be enabled without quality control (otherwise the webhook
-        # emit block raises UnboundLocalError and every save 500s). F-030.
-        all_annotations = {}
-        if "annotations" in request.json:
-            for key, value in request.json.get("annotations", {}).items():
-                # Parse schema:label format
-                if ":" in key:
-                    schema_name, label_name = key.split(":", 1)
-                    all_annotations[schema_name] = value
-                else:
-                    all_annotations[key] = value
-        elif "schema" in request.json:
-            schema_name = request.json.get("schema")
-            schema_state = request.json.get("state", [])
-            # Convert state list to dict for validation
-            for sv in schema_state:
-                if "value" in sv:
-                    all_annotations[schema_name] = sv.get("value")
-
-        # Quality control validation (attention checks and gold standards)
-        qc_manager = get_quality_control_manager()
-        qc_result = None
-
-        if qc_manager:
-            # Calculate response time
-            response_time = None
-            if client_timestamp:
-                response_time = (datetime.datetime.now() - client_timestamp).total_seconds()
-
-            # Check if this is an attention check
             attention_result = qc_manager.validate_attention_response(
                 username, instance_id, all_annotations, response_time
             )
 
-            if attention_result is not None:
-                qc_result = {"type": "attention_check", **attention_result}
+        if attention_result is not None:
+            qc_result = {"type": "attention_check", **attention_result}
 
-                # Handle blocking
-                if attention_result.get("blocked"):
-                    logger.warning(f"User {username} blocked by attention check")
-                    reclaimed = _reclaim_blocked_user_assignments(
-                        username,
-                        user_state,
-                        current_instance_id=instance_id,
-                    )
+            # Handle blocking
+            if attention_result.get("blocked"):
+                logger.warning(f"User {username} blocked by attention check")
+                reclaimed = _reclaim_blocked_user_assignments(
+                    username,
+                    user_state,
+                    current_instance_id=instance_id,
+                )
 
-                    # Emit webhook for attention check failure
-                    from potato.webhooks import get_webhook_emitter
-                    from potato.webhooks.events import (
-                        build_attention_check_failed_payload,
+                # Emit webhook for attention check failure
+                from potato.webhooks import get_webhook_emitter
+                from potato.webhooks.events import (
+                    build_attention_check_failed_payload,
+                    QUALITY_ATTENTION_CHECK_FAILED,
+                )
+                _wh = get_webhook_emitter()
+                if _wh:
+                    _wh.emit(
                         QUALITY_ATTENTION_CHECK_FAILED,
+                        build_attention_check_failed_payload(
+                            user_id=username,
+                            instance_id=instance_id,
+                            message=attention_result.get("message"),
+                            blocked=True,
+                        ),
                     )
-                    _wh = get_webhook_emitter()
-                    if _wh:
-                        _wh.emit(
-                            QUALITY_ATTENTION_CHECK_FAILED,
-                            build_attention_check_failed_payload(
-                                user_id=username,
-                                instance_id=instance_id,
-                                message=attention_result.get("message"),
-                                blocked=True,
-                            ),
-                        )
 
-                    return jsonify({
-                        "status": "blocked",
-                        "message": attention_result.get("message", "You have been blocked."),
-                        "qc_result": qc_result,
-                        "reclaimed_assignments": reclaimed,
-                    })
-            else:
-                # Check if this is a gold standard
-                gold_result = qc_manager.validate_gold_response(
-                    username, instance_id, all_annotations
-                )
+                return jsonify({
+                    "status": "blocked",
+                    "message": attention_result.get("message", "You have been blocked."),
+                    "qc_result": qc_result,
+                    "reclaimed_assignments": reclaimed,
+                })
+        else:
+            # Check if this is a gold standard
+            gold_result = qc_manager.validate_gold_response(
+                username, instance_id, all_annotations
+            )
 
-                if gold_result is not None:
-                    qc_result = {"type": "gold_standard", **gold_result}
+            if gold_result is not None:
+                qc_result = {"type": "gold_standard", **gold_result}
 
-            # Record regular item for attention check frequency tracking
-            if not qc_manager.is_attention_check(instance_id) and not qc_manager.is_gold_standard(instance_id):
-                qc_manager.record_regular_item(username)
+        # Record regular item for attention check frequency tracking.
+        # An auto-promoted item is served as ordinary work, so it counts
+        # here; only the configured pool is injected and must not.
+        if (not qc_manager.is_attention_check(instance_id)
+                and not qc_manager.is_configured_gold_standard(instance_id)):
+            qc_manager.record_regular_item(username, instance_id)
 
-                # Track for gold standard auto-promotion
-                promotion_result = qc_manager.record_item_annotation(
-                    instance_id, username, all_annotations
-                )
-                if promotion_result and promotion_result.get("promoted"):
-                    logger.info(f"Item {instance_id} auto-promoted to gold standard")
+            # Track for gold standard auto-promotion
+            promotion_result = qc_manager.record_item_annotation(
+                instance_id, username, all_annotations,
+                origin=getattr(user_state, "origin", None),
+            )
+            if promotion_result and promotion_result.get("promoted"):
+                logger.info(f"Item {instance_id} auto-promoted to gold standard")
 
-        # Calculate processing time
-        processing_time_ms = int((time.time() - start_time) * 1000)
+    # Calculate processing time
+    processing_time_ms = int((time.time() - start_time) * 1000)
 
-        # Update the last action's processing time
-        if user_state.annotation_history:
-            user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
+    # Update the last action's processing time
+    if user_state.annotation_history:
+        user_state.annotation_history[-1].server_processing_time_ms = processing_time_ms
 
-        # Register annotator with item state manager for tracking
-        get_item_state_manager().register_annotator(instance_id, username)
+    # Both sides of the record, the save, and the labeling engine.
+    from potato.annotation_commit import finish_annotation_write
+    finish_annotation_write(user_state, instance_id, username)
+    logger.debug(f"User state saved for {username}")
 
-        # Save state
-        get_user_state_manager().save_user_state(user_state)
-        logger.debug(f"User state saved for {username}")
-
-        # Emit webhook events for annotation save
-        from potato.webhooks import get_webhook_emitter
-        from potato.webhooks.events import (
-            ANNOTATION_CREATED, ANNOTATION_UPDATED,
-            ITEM_FULLY_ANNOTATED,
-            build_annotation_payload, build_item_fully_annotated_payload,
+    # Emit webhook events for annotation save
+    from potato.webhooks import get_webhook_emitter
+    from potato.webhooks.events import (
+        ANNOTATION_CREATED, ANNOTATION_UPDATED,
+        ITEM_FULLY_ANNOTATED,
+        build_annotation_payload, build_item_fully_annotated_payload,
+    )
+    _wh = get_webhook_emitter()
+    if _wh:
+        _evt = ANNOTATION_UPDATED if _had_prior_annotation else ANNOTATION_CREATED
+        _wh.emit(
+            _evt,
+            build_annotation_payload(
+                event_type=_evt,
+                user_id=username,
+                instance_id=instance_id,
+                annotations=all_annotations,
+            ),
         )
-        _wh = get_webhook_emitter()
-        if _wh:
-            _evt = ANNOTATION_UPDATED if _had_prior_annotation else ANNOTATION_CREATED
+
+        # Check if item is now fully annotated. Use the canonical resolver
+        # for num_annotators_per_item (int or dict.default form); the prior
+        # code read annotation_task_name (a string) and always fell back to
+        # 3, ignoring the configured annotator count. F-031.
+        ism = get_item_state_manager()
+        annotators = ism.get_annotators_for_item(instance_id)
+        try:
+            from potato.server_utils.config_module import resolve_num_annotators_per_item
+            num_annotators = resolve_num_annotators_per_item(config)
+        except Exception:
+            num_annotators = config.get("num_annotators_per_item", 3)
+        if not isinstance(num_annotators, int) or num_annotators < 1:
+            num_annotators = 3
+        if len(annotators) >= num_annotators:
             _wh.emit(
-                _evt,
-                build_annotation_payload(
-                    event_type=_evt,
-                    user_id=username,
+                ITEM_FULLY_ANNOTATED,
+                build_item_fully_annotated_payload(
                     instance_id=instance_id,
-                    annotations=all_annotations,
+                    annotator_count=len(annotators),
+                    required_count=num_annotators,
                 ),
             )
 
-            # Check if item is now fully annotated. Use the canonical resolver
-            # for num_annotators_per_item (int or dict.default form); the prior
-            # code read annotation_task_name (a string) and always fell back to
-            # 3, ignoring the configured annotator count. F-031.
-            ism = get_item_state_manager()
-            annotators = ism.get_annotators_for_item(instance_id)
-            try:
-                from potato.server_utils.config_module import resolve_num_annotators_per_item
-                num_annotators = resolve_num_annotators_per_item(config)
-            except Exception:
-                num_annotators = config.get("num_annotators_per_item", 3)
-            if not isinstance(num_annotators, int) or num_annotators < 1:
-                num_annotators = 3
-            if len(annotators) >= num_annotators:
-                _wh.emit(
-                    ITEM_FULLY_ANNOTATED,
-                    build_item_fully_annotated_payload(
-                        instance_id=instance_id,
-                        annotator_count=len(annotators),
-                        required_count=num_annotators,
-                    ),
-                )
+        # Emit task.completed once, when this save annotates the user's LAST
+        # remaining assigned item. The documented event had a payload builder
+        # but zero emit sites. Fire-once is guarded by _had_prior_annotation:
+        # a re-save of an already-annotated item won't re-trigger it. F-033.
+        try:
+            assigned = set(user_state.get_assigned_instance_ids() or [])
+            if assigned and not _had_prior_annotation:
+                annotated = (
+                    set(getattr(user_state, "instance_id_to_label_to_value", {}).keys())
+                    | set(getattr(user_state, "instance_id_to_span_to_value", {}).keys())
+                ) & assigned
+                if assigned.issubset(annotated):
+                    from potato.webhooks.events import (
+                        TASK_COMPLETED, build_task_completed_payload,
+                    )
+                    _wh.emit(
+                        TASK_COMPLETED,
+                        build_task_completed_payload(
+                            user_id=username,
+                            total_annotations=len(annotated),
+                        ),
+                    )
+        except Exception as _e:
+            logger.debug(f"task.completed webhook check skipped: {_e}")
 
-            # Emit task.completed once, when this save annotates the user's LAST
-            # remaining assigned item. The documented event had a payload builder
-            # but zero emit sites. Fire-once is guarded by _had_prior_annotation:
-            # a re-save of an already-annotated item won't re-trigger it. F-033.
-            try:
-                assigned = set(user_state.get_assigned_instance_ids() or [])
-                if assigned and not _had_prior_annotation:
-                    annotated = (
-                        set(getattr(user_state, "instance_id_to_label_to_value", {}).keys())
-                        | set(getattr(user_state, "instance_id_to_span_to_value", {}).keys())
-                    ) & assigned
-                    if assigned.issubset(annotated):
-                        from potato.webhooks.events import (
-                            TASK_COMPLETED, build_task_completed_payload,
-                        )
-                        _wh.emit(
-                            TASK_COMPLETED,
-                            build_task_completed_payload(
-                                user_id=username,
-                                total_annotations=len(annotated),
-                            ),
-                        )
-            except Exception as _e:
-                logger.debug(f"task.completed webhook check skipped: {_e}")
+    # Trigger MACE competence estimation check
+    from potato.mace_manager import get_mace_manager
+    mace_mgr = get_mace_manager()
+    if mace_mgr and mace_mgr.mace_config.enabled:
+        total = mace_mgr.count_total_annotations()
+        mace_mgr.check_and_run(total)
 
-        # Trigger MACE competence estimation check
-        from potato.mace_manager import get_mace_manager
-        mace_mgr = get_mace_manager()
-        if mace_mgr and mace_mgr.mace_config.enabled:
-            total = mace_mgr.count_total_annotations()
-            mace_mgr.check_and_run(total)
-
-        # Trigger active-learning retraining check. When enough new annotations
-        # have accumulated, this queues a background train + reorder of the
-        # unlabeled pool; never allowed to break the save.
+    # Trigger active-learning retraining check. When enough new annotations
+    # have accumulated, this queues a background train + reorder of the
+    # unlabeled pool; never allowed to break the save. Match the startup
+    # gate so a disabled feature does not import sklearn on the first save.
+    if config.get('active_learning', {}).get('enabled', False):
         try:
             from potato.active_learning_manager import get_active_learning_manager
             al_mgr = get_active_learning_manager()
@@ -4748,44 +8107,77 @@ def update_instance():
         except Exception as e:
             logger.debug("Active learning trigger skipped: %s", e)
 
-        # Stamp this annotation with the codebook revision in effect so
-        # an instance labeled before later code additions can be softly
-        # flagged for review. No-op unless the project uses a codebook;
-        # never allowed to break the save.
-        try:
-            if not is_phase_page_update:
-                from potato.codebook.api import codebook_enabled
-                if codebook_enabled(config):
-                    from potato.codebook import record_annotation
-                    record_annotation(
-                        config.get("task_dir", "."),
-                        config.get("annotation_task_name") or "default",
-                        instance_id, username)
-        except Exception as e:
-            logger.warning(f"Codebook provenance stamp skipped: {e}")
+    # Same trigger point for the model-training subsystem's auto-retrain.
+    # Kept separate from active learning on purpose: one answers "what
+    # should this annotator see next", the other "what model do we have".
+    # Never allowed to break the save, and cheap enough for the request
+    # thread — the debounce check is a counter comparison, and the run
+    # itself happens in a subprocess.
+    try:
+        from potato.training.manager import get_training_manager
+        training_mgr = get_training_manager()
+        if training_mgr is not None:
+            training_mgr.maybe_auto_retrain()
+    except Exception as e:
+        logger.debug("Auto-retrain check skipped: %s", e)
 
-        # Get performance metrics for response
-        performance_metrics = user_state.get_performance_metrics()
+    # Stamp this annotation with the codebook revision in effect so
+    # an instance labeled before later code additions can be softly
+    # flagged for review. No-op unless the project uses a codebook;
+    # never allowed to break the save.
+    try:
+        if not is_phase_page_update:
+            from potato.codebook.api import codebook_enabled
+            if codebook_enabled(config):
+                from potato.codebook import record_annotation
+                record_annotation(
+                    config.get("task_dir", "."),
+                    config.get("annotation_task_name") or "default",
+                    instance_id, username)
+    except Exception as e:
+        logger.warning(f"Codebook provenance stamp skipped: {e}")
 
-        response_data = {
-            "status": "success",
-            "processing_time_ms": processing_time_ms,
-            "performance_metrics": performance_metrics
-        }
+    # Link the saved codes to their code ids. Merge, split and the
+    # review restamp all read these links; with nothing writing them, a
+    # merge re-pointed no codings. Never allowed to break the save.
+    try:
+        if not is_phase_page_update:
+            from potato.codebook.saved_labels import sync_saved_annotation
+            sync_saved_annotation(config, user_state, instance_id, username)
+    except Exception as e:
+        logger.warning(f"Codebook link sync skipped: {e}")
 
-        # Include quality control result if present
-        if qc_result:
-            response_data["qc_result"] = qc_result
+    # Get performance metrics for response
+    performance_metrics = user_state.get_performance_metrics()
 
-            # Add warning message if needed
-            if qc_result.get("warning"):
-                response_data["warning"] = True
-                response_data["warning_message"] = qc_result.get("message")
+    response_data = {
+        "status": "success",
+        "processing_time_ms": processing_time_ms,
+        "performance_metrics": performance_metrics
+    }
 
-        return jsonify(response_data)
-    else:
-        logger.warning("Update instance called without JSON data")
-        return jsonify({"status": "error", "message": "JSON data required"})
+    # Include quality control result if present
+    if qc_result:
+        response_data["qc_result"] = qc_result
+
+        # Add warning message if needed
+        if qc_result.get("warning"):
+            response_data["warning"] = True
+            response_data["warning_message"] = qc_result.get("message")
+
+    return jsonify(response_data)
+
+
+# A feature that owns some writes (a live collaborative session) installs
+# ``interceptor(username, payload) -> response or None`` here. None means
+# "not mine": the save goes through as an ordinary one.
+_update_instance_interceptor = None
+
+
+def set_update_instance_interceptor(interceptor):
+    """Install (or, with None, remove) the /updateinstance interceptor."""
+    global _update_instance_interceptor
+    _update_instance_interceptor = interceptor
 
 @app.route("/poststudy", methods=["GET", "POST"])
 def poststudy():
@@ -4808,9 +8200,12 @@ def poststudy():
 
     # If the user is returning information from the page
     if request.method == 'POST':
-        logger.debug(f'POSTSTUDY: POST: {request.form}')
+        logger.debug("POSTSTUDY: POST, fields: %s", sorted(request.form.keys()))
 
         # Advance the state and move to the appropriate next phase
+        refused = _refuse_unmet_phase_page(username, user_state)
+        if refused is not None:
+            return refused
         usm = get_user_state_manager()
         usm.advance_phase(session['username'])
 
@@ -4821,6 +8216,309 @@ def poststudy():
     else:
         logger.debug("GET <-- POSTSTUDY")
         return get_current_page_html(config, username)
+
+def _engine_assigns() -> bool:
+    """Whether the labeling engine is serving this study's annotators."""
+    from potato.labeling_engine.integration.hooks import get_engine
+    strategy = config.get("assignment_strategy")
+    if isinstance(strategy, dict):
+        strategy = strategy.get("name")
+    return str(strategy or "").lower() == "engine" and get_engine() is not None
+
+
+def _engine_no_work_page(username, user_state):
+    """The engine has nothing for this person now; it may later.
+
+    Under the engine an annotator who has caught up is not finished: the
+    planner opens new requests as items arrive, as contracts need more
+    labels, or as audits come due. Advancing them to the completion page made
+    that permanent -- a returning annotator saw "Thank You!" while 31 open
+    requests waited for someone. They stay in the annotation phase, and a
+    reload serves whatever has been opened since.
+
+    Unless nothing more will come for them (``finished_for_user``): their
+    per-annotator cap is reached, the human-label budget is spent, or every
+    item has its final label. Then the annotation phase ends as usual.
+    """
+    from potato.labeling_engine.integration.hooks import finished_for_user
+    done = finished_for_user(user_state)
+    if done is not None:
+        # Nothing more will come for this person: the normal end of the
+        # annotation phase (post-study, then the thank-you page or a crowd
+        # completion code), not a page telling them to come back forever.
+        logger.info("Labeling engine: %s is finished (%s)", username, done)
+        get_user_state_manager().advance_phase(username)
+        return redirect(url_for("home"))
+    reason, headline, explanation, advice = _diagnose_no_work(username, user_state)
+    return render_template(
+        "no_work_available.html",
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        no_work_reason=reason,
+        no_work_headline=headline,
+        no_work_explanation=explanation,
+    )
+
+
+def _held_items_wait_page(username, user_state):
+    """The no-work page for someone who would otherwise be finished while
+    items they could take are held by others under assignment_hold_minutes.
+
+    Moving unreached items out of an active annotator's queue meant that,
+    once they saved the item on screen, they had nothing left and were
+    advanced to done, the one person still working, with room for more.
+    When the holds lapse nobody was left to take the items. Returns None when
+    the setting is off or the user is finished.
+    """
+    ism = get_item_state_manager()
+    if not getattr(ism, "hold_seconds", None):
+        return None
+    cap = _configured_annotator_cap()
+    if not isinstance(cap, int) or cap < 0:
+        return None
+    quota = getattr(user_state, "max_assignments", -1)
+    if quota is not None and quota >= 0:
+        from potato.quality_control import count_dataset_items
+        if count_dataset_items(user_state.get_annotated_instance_ids()) >= quota:
+            return None
+    try:
+        pending = [iid for iid in ism.get_instance_ids()
+                   if len(ism.instance_annotators.get(iid, ())) < cap
+                   and not user_state.has_annotated(iid)
+                   and ism.instance_assignees.get(iid, set()) - {username}]
+    except Exception:
+        logger.debug("held-items check failed", exc_info=True)
+        return None
+    if not pending:
+        return None
+    reason, headline, explanation, advice = _diagnose_no_work(username, user_state)
+    logger.info("%s is waiting on %d held item(s): %s", username, len(pending), advice)
+    return render_template(
+        "no_work_available.html",
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        no_work_reason=reason, no_work_headline=headline,
+        no_work_explanation=explanation)
+
+
+def _diagnose_no_work(username, user_state):
+    """Why did assignment return nothing for this user?
+
+    Returns ``(reason, headline, explanation, admin_advice)`` -- the last
+    of which goes in the log, and the other three on the page.
+
+    The page used to state one cause unconditionally, and by the time
+    three unrelated causes had been driven to it (a used-up study, an
+    annotator outside every batch group, and a study where nobody is
+    qualified for any category) it named the first one every time. On
+    the latter two that is not merely unhelpful: the items are
+    unannotated and unsaturated, so "every item already has as many
+    annotators as it needs" is false, and the advice it gives -- add
+    data, raise the cap -- cannot help.
+
+    Checks run most-specific-first. Saturation is last because it is the
+    answer that is true when nothing more specific is.
+    """
+    from potato.item_state_management import get_item_state_manager
+    ism = get_item_state_manager()
+
+    if _engine_assigns():
+        return (
+            "engine_waiting",
+            "Nothing to label right now",
+            "There is nothing for you to label at the moment. More items will be "
+            "ready soon, so check back later.",
+            "The labeling engine has no open request this annotator can take. "
+            "`potato label status` shows what the contracts are waiting for.",
+        )
+
+    total_items = 0
+    try:
+        total_items = len(ism.get_instance_ids())
+    except Exception:
+        logger.debug("no-work diagnosis: item count unavailable", exc_info=True)
+
+    if total_items == 0:
+        return (
+            "no_data",
+            "This study has no items yet",
+            "There is nothing to annotate because no data has been "
+            "loaded. This is not about your account.",
+            "the study has no data loaded — check data_files, or the "
+            "watched directory if this study ingests data live",
+        )
+
+    quota = getattr(user_state, "max_assignments", -1)
+    if quota == 0:
+        return (
+            "zero_quota",
+            "Your account is set to zero items",
+            "This study gives your account a quota of zero items, so "
+            "nothing was assigned to you. Nothing has been recorded "
+            "against your account.",
+            f"{username} resolves to a per-annotator quota of 0 — check "
+            "per_annotator_quota (by_user, by_user_role, default) and "
+            "max_annotations_per_user",
+        )
+
+    strategy = str(getattr(ism, "assignment_strategy", "") or "")
+    strategy = strategy.rsplit(".", 1)[-1].lower()
+
+    if "batch" in strategy:
+        try:
+            group = ism.get_group_name_for_user(username)
+        except Exception:
+            group = None
+            logger.debug("no-work diagnosis: group lookup failed",
+                         exc_info=True)
+        if not group:
+            return (
+                "no_batch_group",
+                "You are not in an annotator group for this study",
+                "This study hands each item to a named group of "
+                "annotators, and your account is not in any of them, so "
+                "nothing was assigned to you. Nothing has been recorded "
+                "against your account.",
+                f"{username} is in no batch_assignment group — add them to "
+                "a group's `annotators` list (adding data or raising "
+                "num_annotators_per_item will not help)",
+            )
+
+    if "category" in strategy and not getattr(
+            ism, "dynamic_expertise_enabled", False):
+        qualified = set()
+        try:
+            qualified = set(user_state.get_qualified_categories() or ())
+        except Exception:
+            logger.debug("no-work diagnosis: qualification lookup failed",
+                         exc_info=True)
+        if not qualified:
+            return (
+                "no_qualified_category",
+                "You are not qualified for any category yet",
+                "This study serves each annotator only the categories "
+                "they have qualified for, and you have not qualified for "
+                "any, so nothing was assigned to you. Nothing has been "
+                "recorded against your account.",
+                f"{username} has no qualified categories — static "
+                "category_based assignment grants these only by passing a "
+                "training phase on categorized questions. Add training, or "
+                "set category_assignment.dynamic.enabled: true",
+            )
+
+    hold_seconds = getattr(ism, "hold_seconds", None)
+    if hold_seconds:
+        try:
+            cap = _configured_annotator_cap()
+            open_items = [iid for iid in ism.get_instance_ids()
+                          if not isinstance(cap, int) or cap < 0
+                          or len(ism.instance_annotators.get(iid, ())) < cap]
+        except Exception:
+            open_items = []
+            logger.debug("no-work diagnosis: hold check failed", exc_info=True)
+        if open_items:
+            minutes = f"{hold_seconds / 60:g}"
+            return (
+                "held",
+                "Every item is taken right now",
+                "Each remaining item is with another annotator who is working "
+                "on it. An item comes back if they stop working for "
+                f"{minutes} minutes, so try again later.",
+                f"{len(open_items)} item(s) still need annotations but are held "
+                f"by annotators active within assignment_hold_minutes={minutes} "
+                "— wait, add annotators later, or lower the setting",
+            )
+
+    return (
+        "saturated",
+        "There is no work left for you",
+        "Every item in this study already has as many annotators as it "
+        "needs, so nothing could be assigned to you. You have not "
+        "annotated anything, and nothing has been recorded against your "
+        "account.",
+        f"every item is at num_annotators_per_item="
+        f"{_configured_annotator_cap()} — raise it or add more data",
+    )
+
+
+def _configured_annotator_cap():
+    """The per-item annotator cap this study is running with, for the log.
+
+    Resolution lives in config_module (int form, dict `default`, the legacy
+    `max_annotations_per_item`, then unlimited); reading one spelling here
+    would have printed a number the server is not using.
+    """
+    try:
+        from potato.server_utils.config_module import resolve_num_annotators_per_item
+        cap = resolve_num_annotators_per_item(config)
+    except Exception:
+        return "unknown"
+    return "unlimited" if cap < 0 else cap
+
+
+def _finish_training(username, user_state, training_state, passing_criteria,
+                     training_config, total_questions):
+    """Decide the outcome once the last training question has been answered.
+
+    One decision for every way of reaching the end. The path through a
+    correct last answer used to skip `min_correct`, so with three questions
+    and `min_correct: 3`, wrong-right-right passed while right-right-wrong
+    did not.
+    """
+    correct = training_state.get_correct_answer_count()
+    min_correct = passing_criteria.get('min_correct', total_questions)
+    require_all = passing_criteria.get('require_all_correct', False)
+    if correct >= min_correct and (not require_all or correct >= total_questions):
+        training_state.set_passed(True)
+        logger.info(f'User {username} completed training with {correct} correct')
+        cat_config = config.get('category_assignment', {})
+        if cat_config.get('enabled', False):
+            qual_config = cat_config.get('qualification', {})
+            qualified = user_state.calculate_and_set_qualifications(
+                qual_config.get('threshold', 0.7), qual_config.get('min_questions', 1))
+            if qualified:
+                logger.info(f'User {username} qualified for categories: {qualified}')
+        get_user_state_manager().advance_phase(username)
+        return redirect(url_for("home"))
+
+    max_attempts = passing_criteria.get('max_attempts')
+    attempts_left = not max_attempts or training_state.rounds_started < max_attempts
+    if training_config.get('failure_action') == 'repeat_training' and attempts_left:
+        _restart_training(user_state, training_state)
+        training_state.set_feedback(
+            True, "You did not answer enough questions correctly. "
+            "The training starts again.", False, "warning")
+        return redirect(url_for("home"))
+
+    training_state.set_failed(True)
+    user_state.set_current_phase_and_page((UserPhase.DONE, None))
+    message = ("You did not answer all training questions correctly." if require_all
+               else "You did not meet the minimum correct answers requirement.")
+    return render_template("training_failed.html",
+                           message=message,
+                           correct_count=correct,
+                           total_questions=total_questions,
+                           min_correct=min_correct,
+                           annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+                           username=username)
+
+
+def _restart_training(user_state, training_state):
+    """Send an annotator back to the first training question.
+
+    Clears answers, correct counts, category scores and the fail flag. Mistake
+    counts carry over: `max_mistakes` ends the task whatever `failure_action`
+    says, and resetting it each round meant a retaking annotator could never
+    reach it.
+    """
+    training_state.completed_questions = {}
+    training_state.total_correct = 0
+    training_state.total_attempts = 0
+    training_state.rounds_started += 1
+    training_state.category_scores = {}
+    training_state.passed = False
+    training_state.failed = False
+    training_state.set_current_question_index(0)
+    user_state.clear_phase_page_annotations()
+
 
 @app.route("/done", methods=["GET", "POST"])
 def done():
@@ -4846,38 +8544,245 @@ def done():
         # If not in the done phase, redirect
         return home()
 
-    # Get completion code from config
-    completion_code = config.get("completion_code", "")
-
-    # Build Prolific redirect URL if completion code is set
-    prolific_redirect_url = None
+    # Someone removed by the training gate is in DONE, and DONE rendered as
+    # success: "You have completed the annotation task and your responses are
+    # saved." They completed nothing -- they failed qualification and never saw
+    # a real item. For a paid annotator that is the difference between "you did
+    # not qualify" and "you finished, expect payment", and the page below hands
+    # out a completion code and fires the crowd provider's completion.
+    #
+    # The right page already exists. The training route renders it, but the
+    # client POSTs to /annotate and then calls window.location.reload(), so the
+    # rendered body is discarded and the reload lands here. Deciding it from
+    # the persisted state rather than from a response body is what makes it
+    # actually reach the annotator.
     login_config = config.get('login', {})
     login_type = login_config.get('type', 'standard')
 
-    if completion_code and login_type in ['url_direct', 'prolific']:
-        # Build the Prolific completion URL (only if using Prolific-style URL argument)
-        url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
-        if url_argument in ['PROLIFIC_PID', 'prolific_pid']:
-            # Format: https://app.prolific.com/submissions/complete?cc=YOUR_CODE
-            prolific_redirect_url = f"https://app.prolific.com/submissions/complete?cc={completion_code}"
+    from potato.crowdsourcing import CompletionOutcome, ParticipantIdentity, get_crowd_provider
+    provider = get_crowd_provider()
+    if provider is None and login_type in ['url_direct', 'prolific']:
+        from potato.crowdsourcing import init_crowd_provider
+        provider = init_crowd_provider(config)
 
-    # Get MTurk submission parameters from session
-    mturk_submit_url = session.get('mturk_submit_to')
-    mturk_assignment_id = session.get('mturk_assignment_id')
+    training_state = user_state.get_training_state()
+    training_failed = training_state is not None and training_state.is_failed()
 
-    # Check for auto-redirect setting
+    # A participant an `exit_when` screened out did not complete the study
+    # either. Same handling as failing training: the platform's screen-out
+    # code with a provider, the author's message without one.
+    from potato.server_utils.phase_flow import screened_out as _screened_out
+    screen_out = _screened_out(user_state)
+
+    # Outside a crowd platform there is no code to hand out, so a blocked
+    # user is told why the task ended rather than shown the completion page.
+    if provider is None and _qc_blocked(username):
+        from potato.quality_control import get_quality_control_manager as _qc_manager
+        return render_template(
+            "error.html",
+            message=_qc_manager().qc_config.attention_block_message,
+            url_prefix=request.script_root), 403
+
+    if screen_out and provider is None:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning(f"Could not flush user state before screen-out page: {e}")
+        return render_template(
+            "screened_out.html",
+            message=(screen_out.get("message")
+                     or "You are not eligible for this study. Thank you for your time."),
+            annotation_task_name=config.get("annotation_task_name",
+                                            "Annotation Platform"))
+
+    if training_failed and provider is None:
+        logger.info(
+            "%s reached DONE by failing training; showing the qualification "
+            "page rather than the completion page.", username)
+        return render_template(
+            "training_failed.html",
+            message=("You did not pass the qualification questions, so the "
+                     "task did not start."),
+            total_mistakes=training_state.get_total_mistakes(),
+            max_mistakes=training_state.max_mistakes,
+            annotation_task_name=config.get("annotation_task_name",
+                                            "Annotation Platform"),
+            username=username)
+
+    # Get completion code from config
+    completion_code = config.get("completion_code", "")
+
+    # Legacy template variables are still passed alongside `action` so that
+    # customized done.html templates keep working for one release.
+    action = None
+    prolific_redirect_url = None
+    mturk_submit_url = None
+    mturk_assignment_id = None
     auto_redirect = config.get('auto_redirect_on_completion', False)
     auto_redirect_delay = config.get('auto_redirect_delay', 5000)  # milliseconds
+
+    # Flush the user's state to disk BEFORE rendering any completion action:
+    # an auto-redirect must never race the final save. For every study, not
+    # only crowd ones: nothing else saves the move to DONE, so after a restart
+    # a finished annotator was back in the annotation phase, and the events
+    # their last page sent on its way out were gone.
+    try:
+        get_user_state_manager().save_user_state(user_state)
+    except Exception as e:
+        logger.warning(f"Could not flush user state before completion: {e}")
+
+    if provider is not None:
+        extra = dict(session.get('crowd_extra') or {})
+        if session.get('mturk_assignment_id'):
+            extra.setdefault('assignmentId', session['mturk_assignment_id'])
+        if session.get('mturk_submit_to'):
+            extra.setdefault('turkSubmitTo', session['mturk_submit_to'])
+        identity = ParticipantIdentity(
+            worker_id=username,
+            session_id=session.get('crowd_session_id') or session.get('prolific_session_id'),
+            study_id=session.get('crowd_study_id') or session.get('prolific_study_id'),
+            extra=extra,
+        )
+
+        # Participants blocked by attention checks get the provider's
+        # failure/screen-out completion code instead of the success code
+        # Failing the training gate is a screen-out: the platform's
+        # screen-out code, never the success code.
+        outcome = (CompletionOutcome.SCREENED_OUT if (training_failed or screen_out)
+                   else CompletionOutcome.COMPLETED)
+        try:
+            from potato.quality_control import get_quality_control_manager
+            qc_manager = get_quality_control_manager()
+            if qc_manager is not None and qc_manager.is_user_blocked(username):
+                outcome = CompletionOutcome.FAILED_CHECKS
+        except Exception:
+            # Left at COMPLETED: a screen-out code given because of a bug costs
+            # a good worker their pay, while a wrong success code is still
+            # caught in the platform's review. Logged as an error so it is.
+            logger.error("Could not evaluate quality-control block state for %s; "
+                         "serving the success code. Review this submission.",
+                         username, exc_info=True)
+
+        try:
+            provider.on_completion(identity, outcome)
+        except Exception as e:
+            logger.warning(f"Crowd provider completion callback failed: {e}")
+
+        action = provider.completion_action(identity, outcome)
+        completion_code = action.code or completion_code
+        if action.kind == 'redirect':
+            prolific_redirect_url = action.redirect_url
+            auto_redirect = action.auto_redirect
+            auto_redirect_delay = action.auto_redirect_delay
+        elif action.kind == 'post_form':
+            mturk_submit_url = action.form_action
+            mturk_assignment_id = action.form_fields.get('assignmentId')
+
+    # A participant who did not finish (screened out, or failed training) is
+    # told so with the platform's code: done.html said "You have completed the
+    # annotation task" to them too, and the exit_when message went unshown.
+    ended_early = None
+    if provider is not None and screen_out:
+        ended_early = (screen_out.get("message")
+                       or "You are not eligible for this study. Thank you for your time.")
+    elif provider is not None and training_failed:
+        ended_early = ("You did not pass the qualification questions, so the task did "
+                       "not start. Thank you for your time.")
 
     # Show the completion page
     return render_template("done.html",
                           title=config.get("annotation_task_name", "Annotation Platform"),
+                          ended_early=ended_early,
+                          action=action,
                           completion_code=completion_code,
                           prolific_redirect_url=prolific_redirect_url,
                           mturk_submit_url=mturk_submit_url,
                           mturk_assignment_id=mturk_assignment_id,
                           auto_redirect=auto_redirect,
                           auto_redirect_delay=auto_redirect_delay)
+
+def _annotator_dashboard_config():
+    """Return the normalized annotator_dashboard config block.
+
+    Disabled (returns enabled=False) unless explicitly turned on. Accepts a
+    bare ``annotator_dashboard: true`` shorthand as well as a dict.
+    """
+    raw = config.get("annotator_dashboard", False)
+    if raw is True:
+        raw = {"enabled": True}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "show_project_progress": bool(raw.get("show_project_progress", True)),
+        "show_personal_progress": bool(raw.get("show_personal_progress", True)),
+        "show_active_annotators": bool(raw.get("show_active_annotators", False)),
+    }
+
+
+@app.route("/progress", methods=["GET"])
+def annotator_progress():
+    """
+    Read-only, opt-in progress dashboard for annotators.
+
+    Shows ONLY project-level aggregate progress and the requesting annotator's
+    own stats. Never exposes other annotators' identities, admin actions, or
+    configuration. Disabled by default (see annotator_dashboard config).
+    """
+    dash = _annotator_dashboard_config()
+    if not dash["enabled"]:
+        # Feature off: behave as if the route does not exist.
+        return home()
+
+    if 'username' not in session:
+        return home()
+
+    return render_template(
+        "annotator_dashboard.html",
+        title=config.get("annotation_task_name", "Annotation Platform"),
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        dashboard_config=dash,
+    )
+
+
+@app.route("/progress/api/summary", methods=["GET"])
+def annotator_progress_summary():
+    """JSON progress numbers for the annotator dashboard (read-only)."""
+    dash = _annotator_dashboard_config()
+    if not dash["enabled"]:
+        return jsonify({"error": "Not found"}), 404
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+
+    from potato.server_utils.progress_stats import (
+        compute_project_progress,
+        compute_personal_progress,
+    )
+
+    result = {}
+
+    if dash["show_project_progress"]:
+        project = compute_project_progress()
+        project_out = {
+            "total_items": project["total_items"],
+            "items_with_annotations": project["items_with_annotations"],
+            "completion_percentage": project["completion_percentage"],
+            "total_annotations": project["total_annotations"],
+        }
+        # active annotators is a COUNT only and separately gated
+        if dash["show_active_annotators"]:
+            project_out["active_annotators"] = project["active_annotators"]
+        result["project"] = project_out
+
+    if dash["show_personal_progress"]:
+        # Only ever the requesting user's own data.
+        result["personal"] = compute_personal_progress(username)
+
+    return jsonify(result)
+
 
 @app.route("/admin", methods=["GET"])
 def admin():
@@ -4895,28 +8800,111 @@ def admin():
 
     if not validate_admin_api_key(api_key):
         # Show API key entry form
+        from potato.server_utils.admin_key import admin_api_key_source
+        # A key that was presented and refused gets a 403. The key form
+        # submits by fetch() and checks response.ok, and the 200 this used to
+        # return sent a wrong key straight back to the empty form with no
+        # message: the "not recognized" branch could never run.
+        status = 403 if request.headers.get('X-API-Key') else 200
         return render_template("admin_login.html",
-                             title=config.get("annotation_task_name", "Admin Dashboard"))
+                             title=config.get("annotation_task_name", "Admin Dashboard"),
+                             key_source=admin_api_key_source(config)), status
 
     # Store API key in session for future requests
     session['admin_api_key'] = api_key
 
     # Check if embedding visualization is available
-    from potato.embedding_visualization import get_embedding_viz_manager
-    viz_manager = get_embedding_viz_manager()
+    # Read the manager only if the module is already loaded. Importing it
+    # pulls in umap at module level -- 12 s on the first dashboard load of a
+    # project that never enabled the feature, long enough that the key
+    # form's sign-in looked like it had silently failed. A project that did
+    # enable it imported the module at startup to build the manager.
+    import sys as _sys
+    _viz_module = _sys.modules.get("potato.embedding_visualization")
+    viz_manager = _viz_module.get_embedding_viz_manager() if _viz_module else None
     embedding_viz_enabled = viz_manager is not None and viz_manager.enabled
 
     # Get basic context for the dashboard
     context = {
         "annotation_task_name": config.get("annotation_task_name", "Annotation Platform"),
         "debug_mode": config.get("debug", False),
-        "admin_api_key": get_admin_api_key() or "",
+        # Only echoed back to a caller who already presented the correct key,
+        # which tells them nothing new. Under the debug bypass or an RBAC role
+        # the caller never supplied it, and emitting it there put the real key
+        # in HTML for anyone who could load this page -- in debug mode, anyone
+        # at all. The dashboard's XHRs work without it: validate_admin_api_key
+        # falls through to the debug and RBAC checks, which use the session.
+        "admin_api_key": (get_admin_api_key() or "") if _caller_presented_admin_key() else "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
+        "ai_influence_enabled": _ai_holdout_fraction() > 0,
         "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
+        "datasets_enabled": config.get("datasets", {}).get("enabled", False),
+        "judge_calibration_enabled": config.get("judge_calibration", {}).get("enabled", False),
+        "triage_enabled": config.get("triage", {}).get("enabled", False),
+        "automation_enabled": config.get("automation", {}).get("enabled", False),
+        "curation_enabled": config.get("curation", {}).get("enabled", False),
+        "arena_enabled": config.get("arena", {}).get("enabled", False),
+        # Publishing is always available to admins (no per-project config needed).
+        "publish_enabled": True,
     }
+    context["analysis_links"] = _admin_analysis_links()
+    context["adjudication_enabled"] = bool((config.get("adjudication") or {}).get("enabled"))
 
     return render_template("admin.html", **context)
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    """Forget the admin key this browser session presented.
+
+    The dashboard's Logout button used to GET /admin and reload it, which
+    left the key in the session: the admin was shown the dashboard again,
+    still signed in. Only the admin key is dropped -- an annotator login in
+    the same browser is not this button's business.
+    """
+    session.pop('admin_api_key', None)
+    return jsonify({"status": "logged_out"})
+
+
+def _admin_analysis_links():
+    """The researcher pages the dashboard links to, each only when it works.
+
+    These pages existed but nothing linked to them: a researcher had to know
+    the URL, and ``/admin/iaa`` then answered with JSON. A link that leads to
+    "not enabled" is worse than no link, so each one is gated on the same
+    condition its route checks.
+    """
+    from potato.review_workflow import review_enabled
+
+    schemes = config.get("annotation_schemes") or []
+    categorical = any(s.get("annotation_type") in ("radio", "multiselect", "multiple_choice",
+                                                  "select", "likert")
+                      for s in schemes if isinstance(s, dict))
+    links = [{
+        "href": "/admin/iaa",
+        "label": "Agreement (IAA)",
+        "title": "Inter-annotator agreement per schema, over items with 2+ annotators",
+    }]
+    if (config.get("adjudication") or {}).get("enabled"):
+        links.append({"href": "/adjudicate", "label": "Adjudication",
+                      "title": "Resolve items where annotators disagreed"})
+    if review_enabled(config):
+        links.append({"href": "/admin/review", "label": "Review board",
+                      "title": "Second-pass review of submitted annotations"})
+    if (config.get("triage") or {}).get("enabled"):
+        links.append({"href": "/admin/triage-queue", "label": "Triage queue",
+                      "title": "Remaining items ranked by their quality signal"})
+    if (config.get("judge_alignment") or {}).get("enabled"):
+        links.append({"href": "/admin/judge-alignment", "label": "Judge alignment",
+                      "title": "LLM judge versus human labels"})
+    if (config.get("labeling_engine") or {}).get("enabled"):
+        links.append({"href": "/admin/labeling-engine", "label": "Labeling engine",
+                      "title": "Machine labels, the people who check them, and what is certified"})
+    if categorical:
+        links.append({"href": "/admin/annotation-integrity", "label": "Annotation integrity",
+                      "title": "Per-annotator low-effort and LLM-copying signals"})
+    return links
 
 
 
@@ -5021,8 +9009,17 @@ def span_api_frontend():
 def test_span_colors():
     """
     Serve a test page for visually verifying span colors.
+
+    The template is a local scratch page -- .gitignore carries
+    potato/templates/test_*.html -- so it is absent from an installed release.
+    Without this guard the route answers every user with a 500.
     """
-    return render_template("test_span_colors.html")
+    from jinja2 import TemplateNotFound
+
+    try:
+        return render_template("test_span_colors.html")
+    except TemplateNotFound:
+        return ("Span colour test page is not available in this build.", 404)
 
 def normalize_color(color_value):
     """
@@ -5241,6 +9238,15 @@ def get_keyword_highlights(instance_id):
 
     username = session.get('username')
 
+    # Admin keywords point the annotator at an answer, so they are assistance:
+    # withheld, before any cache, from the study's no-assistance comparison
+    # group (ai_support.holdout) and from items the labeling engine has this
+    # person labeling blind. An empty list, not a refusal: the page simply
+    # shows no highlights.
+    from potato.assist_holdout import assist_withheld
+    if assist_withheld(config, username, decoded_instance_id):
+        return jsonify({"keywords": [], "instance_id": instance_id, "withheld": True})
+
     # Get user state for caching
     user_state = get_user_state(username) if username else None
 
@@ -5252,9 +9258,25 @@ def get_keyword_highlights(instance_id):
             cached_state = user_state.get_keyword_highlight_state(decoded_instance_id)
         if cached_state:
             logger.debug(f"Returning cached keyword highlights for {instance_id}")
+            # A state cached before target_field existed carries none, so stamp
+            # it here too -- otherwise the second visit to an item renders
+            # nothing on a multi-field page while the first one worked.
+            cached_field = (config.get("item_properties", {}) or {}).get(
+                "text_key", "text")
+            cached_keywords = cached_state.get("highlights", []) or []
+            for keyword in cached_keywords:
+                if isinstance(keyword, dict):
+                    keyword.setdefault("target_field", cached_field)
             return jsonify({
-                "keywords": cached_state.get("highlights", []),
+                "keywords": cached_keywords,
                 "instance_id": instance_id,
+                "target_field": cached_field,
+                # Derived from what is cached, so the cached and fresh
+                # responses carry the same keys -- a caller should not have to
+                # know which branch answered it.
+                "fields_scanned": sorted({
+                    k.get("target_field", cached_field)
+                    for k in cached_keywords if isinstance(k, dict)}),
                 "from_cache": True
             })
 
@@ -5287,8 +9309,14 @@ def get_keyword_highlights(instance_id):
                 logger.error(f"Instance not found: {instance_id}")
                 return jsonify({"error": "Instance not found"}), 404
 
-        original_text = instance.get_text()
-        logger.debug(f"Instance text length: {len(original_text)}")
+        # Every field an annotator can draw a span on, not just text_key.
+        # The scan used to read `instance.get_text()` alone, so on a page with
+        # two span targets -- a conversation and a summary line -- an author who
+        # configured keyword highlighting got it on the summary and none on the
+        # conversation, with nothing to say the other field was never looked at.
+        keyword_fields = _keyword_scan_fields(instance)
+        logger.debug("Scanning %d field(s) for keywords: %s",
+                     len(keyword_fields), [f for f, _ in keyword_fields])
 
     except Exception as e:
         logger.error(f"Error getting instance text: {e}")
@@ -5296,7 +9324,8 @@ def get_keyword_highlights(instance_id):
 
     # Find all keyword matches in the text
     keywords = []
-    seen_spans = set()  # Track (start, end) to avoid duplicate overlapping matches
+    # (field, start, end): the same offsets in two fields are two matches.
+    seen_spans = set()
 
     # Track color assignments for keyword labels (schema -> label -> color)
     keyword_color_counter = 0
@@ -5307,13 +9336,14 @@ def get_keyword_highlights(instance_id):
         schema = pattern_info['schema']
         pattern_str = pattern_info['pattern']
 
-        for match in regex.finditer(original_text):
+        for field_name, field_text in keyword_fields:
+          for match in regex.finditer(field_text):
             start = match.start()
             end = match.end()
             matched_text = match.group()
 
             # Skip if we already have a match at this exact position
-            span_key = (start, end)
+            span_key = (field_name, start, end)
             if span_key in seen_spans:
                 continue
 
@@ -5349,17 +9379,22 @@ def get_keyword_highlights(instance_id):
                 "reasoning": f"Keyword: {pattern_str} → {label}",
                 "schema": schema,
                 "color": rgba_color,
+                "target_field": field_name,
                 "type": "keyword"
             })
 
-    # Generate random word highlights (distractors)
+    # Generate random word highlights (distractors) against the primary field.
     random_highlights = []
-    if random_word_prob > 0:
+    if random_word_prob > 0 and keyword_fields:
+        primary_field, primary_text = keyword_fields[0]
+        taken = {(s, e) for f, s, e in seen_spans if f == primary_field}
         random_highlights = generate_random_word_highlights(
-            original_text, rng, random_word_prob,
+            primary_text, rng, random_word_prob,
             random_word_label, random_word_schema,
-            seen_spans
+            taken
         )
+        for highlight in random_highlights:
+            highlight.setdefault("target_field", primary_field)
         keywords.extend(random_highlights)
 
     # Sort by start position
@@ -5381,11 +9416,78 @@ def get_keyword_highlights(instance_id):
 
     logger.debug("=== GET_KEYWORD_HIGHLIGHTS END ===")
 
+    primary_field = keyword_fields[0][0] if keyword_fields else (
+        (config.get("item_properties", {}) or {}).get("text_key", "text"))
+    for keyword in keywords:
+        keyword.setdefault("target_field", primary_field)
+
     return jsonify({
         "keywords": keywords,
         "instance_id": instance_id,
+        "target_field": primary_field,
+        "fields_scanned": [name for name, _ in keyword_fields],
         "from_cache": False
     })
+
+
+def _keyword_scan_fields(instance):
+    """(field_name, text) for every field keyword highlighting should scan.
+
+    Highlights are drawn as overlays anchored to a field's own offsets, and the
+    renderer can now draw on any field -- so the scan should cover any field the
+    annotator can see a span on, not just `item_properties.text_key`.
+
+    A `dialogue` field is scanned as its RENDERED text, because that is what its
+    offsets index; `reconstruct_dialogue_dom_text` is the same server half of
+    the contract `/api/spans` and the exporter use.
+
+    The text_key field comes first, so it stays the default target for anything
+    that has no field of its own (the distractor highlights).
+    """
+    from potato.server_utils.displays.base import (
+        concatenate_dialogue_text,
+        reconstruct_dialogue_dom_text,
+        resolve_display_options,
+    )
+
+    item_data = instance.get_data()
+    if not isinstance(item_data, dict):
+        text = instance.get_text()
+        return [("text", text)] if isinstance(text, str) and text else []
+
+    text_key = (config.get("item_properties", {}) or {}).get("text_key", "text")
+    display_fields = (config.get("instance_display", {}) or {}).get("fields", []) or []
+
+    wanted = []
+    if text_key:
+        wanted.append((text_key, {}))
+    for entry in display_fields:
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        # Only fields an annotator can mark. A caption or an id rendered beside
+        # the text is not somewhere a keyword overlay can be drawn.
+        if not key or key == text_key or not entry.get("span_target"):
+            continue
+        wanted.append((key, entry))
+
+    scanned = []
+    for key, entry in wanted:
+        value = item_data.get(key)
+        if isinstance(value, str) and value:
+            scanned.append((key, value))
+        elif isinstance(value, list) and value:
+            options = resolve_display_options(entry)
+            if entry.get("type") == "dialogue":
+                scanned.append((key, reconstruct_dialogue_dom_text(
+                    value,
+                    speaker_key=options.get("speaker_key", "speaker"),
+                    text_key=options.get("text_key", "text"),
+                    show_turn_numbers=options.get("show_turn_numbers", False),
+                )))
+            else:
+                scanned.append((key, concatenate_dialogue_text(value)))
+    return scanned
 
 
 def generate_random_word_highlights(text: str, rng, probability: float,
@@ -5466,6 +9568,76 @@ def generate_random_word_highlights(text: str, rng, probability: float,
 # Behavioral Tracking API Endpoints
 # =============================================================================
 
+def _tracked_in_current_phase(block_name, user_state, instance_id=None):
+    """False when ``<block_name>.phases`` leaves out the phase a post came from.
+
+    The page already omits the tracker there; this catches a page rendered
+    before the phase changed. One exception: after annotation, a post for one
+    of the annotator's items is the final flush of the last item, which
+    arrives after "next" moved the annotator on. It counts as annotation, or
+    that item's data would be lost. Before annotation an item id gets no such
+    exception (items are assigned at registration, before consent). An
+    unknown phase counts as untracked when ``phases`` is set, since the key
+    exists to keep data out.
+    """
+    from potato.server_utils.config_module import tracker_active_in_phase
+    try:
+        phase, page = user_state.get_current_phase_and_page()
+    except Exception:
+        phase, page = None, None
+    try:
+        if (phase in (UserPhase.POSTSTUDY, UserPhase.DONE) and instance_id
+                and instance_id in user_state.get_assigned_instance_ids()):
+            phase, page = UserPhase.ANNOTATION, "annotation"
+    except Exception:
+        pass
+    return tracker_active_in_phase(config, block_name, phase, page)
+
+
+def _interaction_batch_error(data):
+    """Validate the entire batch before creating or changing a user's bucket."""
+    def finite_number(value):
+        if type(value) not in (int, float):
+            return False
+        try:
+            return math.isfinite(value)
+        except OverflowError:
+            # JSON integers are unbounded; timing arithmetic uses floats.
+            return False
+
+    # The id keys the behavioral bucket; a list or object would be str()'d
+    # into a new bucket named after its repr.
+    instance_id = data.get('instance_id')
+    if instance_id is not None and (
+            isinstance(instance_id, bool) or not isinstance(instance_id, (str, int))):
+        return "'instance_id' must be a string"
+
+    events = data.get('events', [])
+    if not isinstance(events, list):
+        return "'events' must be a list of objects"
+    for event in events:
+        if not isinstance(event, dict):
+            return "'events' must be a list of objects"
+        for key in ('event_type', 'target'):
+            if key in event and not isinstance(event[key], str):
+                return f"Event '{key}' must be a string"
+        if not isinstance(event.get('metadata', {}), dict):
+            return "Event 'metadata' must be an object"
+        for key in ('timestamp', 'client_timestamp'):
+            value = event.get(key)
+            if value is not None and (not finite_number(value) or value < 0):
+                return f"Event '{key}' must be a finite non-negative number"
+
+    focus_time = data.get('focus_time', {})
+    if not isinstance(focus_time, dict):
+        return "'focus_time' must be an object"
+    if any(not finite_number(value) or value < 0 for value in focus_time.values()):
+        return "Focus durations must be finite non-negative numbers"
+    if 'scroll_depth' in data and not finite_number(data['scroll_depth']):
+        return "'scroll_depth' must be a finite number"
+    return None
+
+
 @app.route("/api/track_interactions", methods=["POST"])
 def track_interactions():
     """
@@ -5480,29 +9652,83 @@ def track_interactions():
     }
     """
     import time as time_module
-    from potato.interaction_tracking import get_or_create_behavioral_data
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id)
 
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
     username = session['username']
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
+    if not isinstance(data, dict) or not data:
+        return jsonify({"error": "Expected a non-empty JSON object"}), 400
+    error = _interaction_batch_error(data)
+    if error:
+        return jsonify({"error": error}), 400
 
-    instance_id = data.get('instance_id')
-    events = data.get('events', [])
-
+    # interaction_tracking.enabled: false is enforced here, not only in the
+    # browser (a page rendered before the switch may still post the full
+    # stream). What survives is what time-per-item needs -- item loads, saves,
+    # navigation and content-free activity marks -- so active_time_ms() and the
+    # throughput, adjudication and dashboard timings built on it stay non-zero.
+    # Outside interaction_tracking.phases an item is treated the same way, and
+    # a phase page (consent, surveys) keeps nothing: time per item is measured
+    # on items only, and the key exists to record nothing before consent.
+    from potato.server_utils.config_module import get_interaction_tracking_config
+    from potato.interaction_tracking import PHASE_PAGE_SENTINEL, TIMING_EVENT_TYPES
     user_state = get_user_state(username)
     if not user_state:
         return jsonify({"error": "User state not found"}), 404
+    in_phase = _tracked_in_current_phase(
+        "interaction_tracking", user_state, data.get('instance_id'))
+    if not in_phase and normalize_instance_id(data.get('instance_id')) == PHASE_PAGE_SENTINEL:
+        return jsonify({"status": "phase_not_tracked", "events_recorded": 0})
+    tracking_on = (get_interaction_tracking_config(config).get("enabled", True)
+                   and in_phase)
+    if not tracking_on:
+        kept = []
+        for event in data.get('events') or []:
+            if not isinstance(event, dict) or event.get('event_type') not in TIMING_EVENT_TYPES:
+                continue
+            event = dict(event)
+            if event['event_type'] == 'activity':
+                event['target'] = ''
+                event['metadata'] = {}
+            kept.append(event)
+        data = {'instance_id': data.get('instance_id'), 'events': kept}
+
+    # Unnormalized, a phase page's null id created a second behavioral-data
+    # bucket keyed "null" beside the real "__phase_page__" one, and the
+    # navigation events landed in it.
+    instance_id = normalize_instance_id(data.get('instance_id'))
+    events = data.get('events', [])
 
     # Get or create behavioral data for this instance
     bd = get_or_create_behavioral_data(
         user_state.instance_id_to_behavioral_data,
         instance_id
     )
+
+    # Mirror the option order this annotator was shown onto the behavioural
+    # record, so every consumer that reads behavioural data gets it without
+    # having to know about a second store. The authoritative copy is
+    # user_state.instance_id_to_presentation_order, written at render time;
+    # this is the first point afterwards at which a BehavioralData object
+    # exists to mirror it onto.
+    shown_orders = user_state.get_presentation_order(instance_id) \
+        if hasattr(user_state, "get_presentation_order") else {}
+    if shown_orders and hasattr(bd, "presentation_order"):
+        bd.presentation_order = dict(shown_orders)
+
+    # Same mirror, same reason, for the room an answer was produced in. A
+    # member who opens a room item in the ordinary annotation UI afterwards
+    # gets a behavioural bucket created here, after the room already wrote its
+    # provenance; without this the bucket would say nothing about the room.
+    room_prov = user_state.get_room_provenance(instance_id) \
+        if hasattr(user_state, "get_room_provenance") else {}
+    if room_prov and hasattr(bd, "room_provenance"):
+        bd.room_provenance = dict(room_prov)
 
     # Record server timestamp for each event
     server_timestamp = time_module.time()
@@ -5528,6 +9754,9 @@ def track_interactions():
                 metadata=event.get('metadata', {}),
             ))
 
+    # Time on this instance, from its own events. Nothing else sets it.
+    bd.refresh_total_time()
+
     # Update focus time if provided
     focus_time = data.get('focus_time', {})
     for element, time_ms in focus_time.items():
@@ -5538,7 +9767,10 @@ def track_interactions():
 
     # Update scroll depth
     if 'scroll_depth' in data:
-        scroll_depth = data['scroll_depth']
+        # scrollTop has subpixel precision while scrollHeight is rounded;
+        # browser overscroll can also cross either edge. Keep valid events
+        # and focus time, but store this observational percentage in range.
+        scroll_depth = max(0, min(100, data['scroll_depth']))
         if hasattr(bd, 'update_scroll_depth'):
             bd.update_scroll_depth(scroll_depth)
         elif hasattr(bd, 'scroll_depth_max'):
@@ -5562,7 +9794,8 @@ def track_ai_usage():
     }
     """
     import time as time_module
-    from potato.interaction_tracking import get_or_create_behavioral_data, AIUsageEvent
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id, AIUsageEvent)
 
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
@@ -5573,11 +9806,13 @@ def track_ai_usage():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    instance_id = data.get('instance_id')
+    # Same phase-page case as track_annotation_change: AI assistance offered on
+    # a training or survey page has a null instance id and was dropped.
+    instance_id = normalize_instance_id(data.get('instance_id'))
     schema_name = data.get('schema_name')
     event_type = data.get('event_type')  # 'request', 'response', 'accept', 'reject'
 
-    if not instance_id or not schema_name or not event_type:
+    if not schema_name or not event_type:
         return jsonify({"error": "Missing required fields"}), 400
 
     user_state = get_user_state(username)
@@ -5620,6 +9855,7 @@ def track_ai_usage():
     elif event_type in ('accept', 'reject'):
         accepted_value = data.get('accepted_value') if event_type == 'accept' else None
         # Update the most recent AI event for this schema
+        matched = False
         if hasattr(bd, 'ai_usage'):
             for ai_event in reversed(bd.ai_usage):
                 event_schema = ai_event.schema_name if hasattr(ai_event, 'schema_name') else ai_event.get('schema_name')
@@ -5627,11 +9863,41 @@ def track_ai_usage():
                 if event_schema == schema_name and event_response:
                     if hasattr(ai_event, 'suggestion_accepted'):
                         ai_event.suggestion_accepted = accepted_value
+                        ai_event.accept_clicked = event_type == 'accept'
                         ai_event.time_to_decision_ms = int((timestamp - ai_event.response_timestamp) * 1000)
                     else:
                         ai_event['suggestion_accepted'] = accepted_value
+                        ai_event['accept_clicked'] = event_type == 'accept'
                         ai_event['time_to_decision_ms'] = int((timestamp - ai_event['response_timestamp']) * 1000)
+                    matched = True
                     break
+
+            if not matched:
+                # An accept with no open request used to be dropped and
+                # answered `{"status": "ok"}` -- identical to the answer a
+                # complete sequence gets. The browser saw success and the
+                # researcher got a dataset where some annotators appear never
+                # to have used the assistant. A reload between request and
+                # accept, an expired session, or a client that only reports
+                # decisions all produce that gap.
+                #
+                # The acceptance is recorded rather than refused, because it
+                # happened. `response_timestamp` stays None, so
+                # `time_to_decision_ms` is absent rather than invented, and
+                # `reconstructed` says the request half was never seen.
+                logger.warning(
+                    "AI %s for schema %r on %s had no open request; recording "
+                    "it without one.", event_type, schema_name, instance_id)
+                event = AIUsageEvent(
+                    request_timestamp=timestamp,
+                    schema_name=schema_name,
+                    suggestion_accepted=accepted_value,
+                    accept_clicked=event_type == 'accept',
+                )
+                event.reconstructed = True
+                bd.ai_usage.append(event)
+                return jsonify({"status": "ok", "event_type": event_type,
+                                "reconstructed": True})
 
     return jsonify({"status": "ok", "event_type": event_type})
 
@@ -5653,7 +9919,8 @@ def track_annotation_change():
     }
     """
     import time as time_module
-    from potato.interaction_tracking import get_or_create_behavioral_data, AnnotationChange
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id, AnnotationChange)
 
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
@@ -5668,7 +9935,14 @@ def track_annotation_change():
     schema_name = data.get('schema_name')
     action = data.get('action')
 
-    if not instance_id or not schema_name or not action:
+    # Phase pages (consent, instructions, training, prestudy/poststudy surveys)
+    # have no instance id, so every change made on one arrived with instance_id
+    # null and was rejected by the guard below. The phase-stamping block further
+    # down exists specifically to record which phase a change happened in, and it
+    # was unreachable for the only pages it was written for.
+    instance_id = normalize_instance_id(instance_id)
+
+    if not schema_name or not action:
         return jsonify({"error": "Missing required fields"}), 400
 
     user_state = get_user_state(username)
@@ -5681,21 +9955,603 @@ def track_annotation_change():
         instance_id
     )
 
+    # Stamp the phase/page server-side. Behavioral data is bucketed by instance id and
+    # every non-annotation page posts the same "__phase_page__" sentinel, so without
+    # this the trail cannot say whether a change happened in the prestudy, the training
+    # or the poststudy.
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        _phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        _phase_name, _page = None, None
+
     # Create annotation change record
     change = AnnotationChange(
         timestamp=time_module.time(),
         schema_name=schema_name,
         label_name=data.get('label_name'),
+        old_label=data.get('old_label'),
         action=action,
         old_value=data.get('old_value'),
         new_value=data.get('new_value'),
         source=data.get('source', 'user'),
+        phase=_phase_name,
+        page=_page,
     )
 
     if hasattr(bd, 'annotation_changes'):
         bd.annotation_changes.append(change)
 
     return jsonify({"status": "ok"})
+
+
+def _keystroke_config():
+    """The project's `keystroke_logging` block, with defaults applied.
+
+    Returns a dict that is always safe to index; `enabled` is False when the
+    feature was never configured.
+    """
+    from potato.server_utils.config_module import get_keystroke_logging_config
+    return get_keystroke_logging_config(config)
+
+
+@app.route("/api/track_typing", methods=["POST"])
+def track_typing():
+    """
+    Receive completed typing sessions from the keystroke tracker.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "sessions": [{
+            "schema_name": "...", "label_name": "...", "instance_id": "...",
+            "started_at": <epoch s>, "ended_at": <epoch s>,
+            "final_chars": int, "virtual_keyboard": bool,
+            "events": [{"t_ms", "input_type", "key_class", "pos", "delta", "meta"}]
+        }]
+    }
+
+    Each session is summarized server-side rather than trusting a client-computed
+    summary, so a metric added later can be recomputed from the stored streams and
+    so the numbers cannot be forged by a modified client.
+    """
+    from potato.interaction_tracking import get_or_create_behavioral_data
+    from potato import typing_detect, typing_store
+    from potato.typing_dynamics import TypingEvent, merge_summaries, summarize
+
+    # Authentication is checked before the feature flag: an unauthenticated
+    # caller gets 401 whether or not this project happens to have keystroke
+    # logging switched on.
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    ks_config = _keystroke_config()
+    if not ks_config.get("enabled") or ks_config.get("fidelity") == "off":
+        # Answer 200 rather than an error: a stale page may still be posting
+        # after the feature was switched off, and that is not a client fault.
+        return jsonify({"status": "disabled", "sessions_recorded": 0})
+
+    username = session['username']
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # A page rendered before the phase changed (a cached page, an old tab) can
+    # still post. 200, not an error, so the tracker does not retry.
+    if not _tracked_in_current_phase("keystroke_logging", user_state,
+                                     data.get("instance_id")):
+        return jsonify({"status": "phase_not_tracked", "sessions_recorded": 0})
+
+    sessions = data.get('sessions') or []
+    if not isinstance(sessions, list):
+        return jsonify({"error": "'sessions' must be a list"}), 400
+
+    # Same reasoning as track_annotation_change: behavioral data is bucketed by
+    # instance id and every non-annotation page shares the "__phase_page__"
+    # sentinel, so the phase/page must be stamped here or the trail cannot say
+    # which survey a typing session belongs to.
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        phase_name, _page = None, None
+
+    task_dir = config.get("task_dir") or "."
+    project = config.get("annotation_task_name") or "potato"
+    fidelity = ks_config.get("fidelity", "events")
+    store_events = bool(ks_config.get("store_events", True)) and fidelity == "events"
+    thresholds = dict(ks_config.get("detection", {}).get("thresholds") or {})
+    detection_on = ks_config.get("detection", {}).get("enabled", True)
+
+    # Project-calibrated thresholds override the built-in defaults but lose to an
+    # explicit config override, which is the most specific statement of intent.
+    if detection_on and ks_config.get("detection", {}).get("calibrate"):
+        try:
+            fitted = typing_store.load_calibration(task_dir, project)
+            for key, value in fitted.items():
+                thresholds.setdefault(key, value)
+        except Exception as e:
+            logger.warning("Could not load typing calibration: %s", e)
+
+    recorded = 0
+    # Sessions on the same field are merged before being written to the user
+    # state, so that leaving a field and coming back reads as one response
+    # rather than several suspiciously short ones.
+    by_field = {}
+
+    for raw in sessions:
+        if not isinstance(raw, dict):
+            continue
+        schema_name = raw.get('schema_name')
+        label_name = raw.get('label_name')
+        if not schema_name or not label_name:
+            continue
+
+        # Phase pages (training, prestudy/poststudy surveys) have no instance id
+        # — the annotation template leaves it empty — so free-text answers there
+        # arrive with instance_id null. Bucket them under the same
+        # "__phase_page__" sentinel the rest of the behavioral system uses rather
+        # than dropping them; `phase` and `page` are stamped below, which is what
+        # actually identifies them.
+        instance_id = str(raw.get('instance_id') or data.get('instance_id') or '')
+        if not instance_id or instance_id in ('null', 'None', 'undefined'):
+            instance_id = '__phase_page__'
+
+        events = [
+            TypingEvent.from_dict(e)
+            for e in (raw.get('events') or []) if isinstance(e, dict)
+        ]
+        if not events:
+            continue
+
+        summary = summarize(
+            events,
+            schema_name=schema_name,
+            label_name=label_name,
+            final_chars=raw.get('final_chars'),
+            pause_thresholds_ms=ks_config.get('pause_thresholds_ms'),
+            virtual_keyboard=bool(raw.get('virtual_keyboard')),
+        )
+
+        verdict = typing_detect.evaluate(summary, thresholds=thresholds) \
+            if detection_on else None
+
+        try:
+            typing_store.record_session(
+                task_dir,
+                project=project,
+                user_id=username,
+                instance_id=instance_id,
+                schema_name=schema_name,
+                label_name=label_name,
+                summary=summary,
+                events=events if store_events else None,
+                started_at=raw.get('started_at'),
+                ended_at=raw.get('ended_at'),
+                phase=phase_name,
+                page=_page,
+                fidelity=fidelity,
+                flags=verdict.to_dict() if verdict else None,
+            )
+            recorded += 1
+        except Exception as e:
+            logger.error("Failed to store typing session: %s", e, exc_info=True)
+            continue
+
+        by_field.setdefault((instance_id, schema_name, label_name), []).append(
+            (summary, verdict))
+
+    # Mirror the compact sketch into the user state so it travels with the
+    # annotation through export and the admin dashboard. The raw streams stay in
+    # SQLite: user_state.json is rewritten in full on every save.
+    for (instance_id, schema_name, label_name), entries in by_field.items():
+        bd = get_or_create_behavioral_data(
+            user_state.instance_id_to_behavioral_data, instance_id)
+        if not hasattr(bd, 'set_typing_summary'):
+            continue
+
+        existing = (bd.typing_summaries or {}).get(f"{schema_name}:::{label_name}")
+        summaries = [s for s, _ in entries]
+        if existing:
+            from potato.typing_dynamics import TypingSummary
+            summaries.insert(0, TypingSummary.from_dict(existing))
+
+        merged = merge_summaries(summaries)
+        if merged is None:
+            continue
+        payload = merged.to_dict()
+        if detection_on:
+            # Re-evaluate against the merged view: a paste that looks dominant
+            # within one short session may be a small fraction of the whole
+            # response once the other sessions on the field are counted.
+            payload['verdict'] = typing_detect.evaluate(
+                merged, thresholds=thresholds).to_dict()
+        bd.set_typing_summary(schema_name, label_name, payload)
+
+    # Unlike the other track_* handlers, this one persists. A typing session can
+    # end without any annotation save (the annotator types, then navigates away),
+    # so waiting for /updateinstance to flush would lose it.
+    if recorded:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning("Could not persist user state after typing flush: %s", e)
+
+    return jsonify({"status": "ok", "sessions_recorded": recorded})
+
+
+def _annotation_telemetry_config():
+    """The project's `annotation_telemetry` block, with defaults applied.
+
+    Returns a dict that is always safe to index; `enabled` is False when the
+    feature was never configured.
+    """
+    from potato.server_utils.config_module import get_annotation_telemetry_config
+    return get_annotation_telemetry_config(config)
+
+
+@app.route("/api/track_annotation_telemetry", methods=["POST"])
+def track_annotation_telemetry():
+    """
+    Receive completed drawing sessions from the annotation telemetry tracker.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "sessions": [{
+            "schema_name": "...", "instance_id": "...",
+            "started_at": <epoch s>, "ended_at": <epoch s>,
+            "events": [{"t_ms", "action", "shape", "value", "meta"}]
+        }]
+    }
+
+    Each session is summarized server-side rather than trusting a client-computed
+    summary — the same reasoning as /api/track_typing. AI-accept latency in
+    particular is derived here by pairing suggest/accept ids, so it cannot be
+    inflated by a modified client.
+    """
+    from potato.interaction_tracking import get_or_create_behavioral_data
+    from potato import annotation_telemetry as telemetry
+    from potato import annotation_telemetry_store as telemetry_store
+
+    # Authentication is checked before the feature flag: an unauthenticated
+    # caller gets 401 whether or not this project happens to have telemetry
+    # switched on.
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    at_config = _annotation_telemetry_config()
+    if not at_config.get("enabled") or at_config.get("fidelity") == "off":
+        # Answer 200 rather than an error: a stale page may still be posting
+        # after the feature was switched off, and that is not a client fault.
+        return jsonify({"status": "disabled", "sessions_recorded": 0})
+
+    username = session['username']
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # Same as track_typing: drop a post from outside annotation_telemetry.phases.
+    if not _tracked_in_current_phase("annotation_telemetry", user_state,
+                                     data.get("instance_id")):
+        return jsonify({"status": "phase_not_tracked", "sessions_recorded": 0})
+
+    sessions = data.get('sessions') or []
+    if not isinstance(sessions, list):
+        return jsonify({"error": "'sessions' must be a list"}), 400
+
+    # Same reasoning as track_typing: behavioral data is bucketed by instance id
+    # and every non-annotation page shares the "__phase_page__" sentinel, so the
+    # phase/page must be stamped here or the trail cannot say which training
+    # item a drawing session belongs to.
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        phase_name, _page = None, None
+
+    task_dir = config.get("task_dir") or "."
+    project = config.get("annotation_task_name") or "potato"
+    fidelity = at_config.get("fidelity", "events")
+    store_events = bool(at_config.get("store_events", True)) and fidelity == "events"
+    idle_ms = int(at_config.get("idle_ms") or telemetry.DEFAULT_IDLE_MS)
+    thresholds = dict(at_config.get("detection", {}).get("thresholds") or {})
+    detection_on = at_config.get("detection", {}).get("enabled", True)
+
+    include = set(at_config.get("include_schemas") or [])
+    exclude = set(at_config.get("exclude_schemas") or [])
+
+    # Project-calibrated thresholds override the built-in defaults but lose to
+    # an explicit config override, which is the most specific statement of
+    # intent.
+    if detection_on and at_config.get("detection", {}).get("calibrate"):
+        try:
+            fitted = telemetry_store.load_calibration(task_dir, project)
+            for key, value in fitted.items():
+                thresholds.setdefault(key, value)
+        except Exception as e:
+            logger.warning("Could not load telemetry calibration: %s", e)
+
+    recorded = 0
+    # Sessions on the same schema are merged before being written to the user
+    # state, so leaving an image and coming back reads as one piece of work
+    # rather than several suspiciously short ones.
+    by_schema = {}
+
+    for raw in sessions:
+        if not isinstance(raw, dict):
+            continue
+        schema_name = raw.get('schema_name')
+        if not schema_name:
+            continue
+        # The client filters too, but a stale page carries the old config, so
+        # the server enforces scope rather than trusting it.
+        if schema_name in exclude or (include and schema_name not in include):
+            continue
+
+        # Phase pages (training items) have no instance id — the annotation
+        # template leaves it empty — so sessions there arrive with instance_id
+        # null. Bucket them under the same "__phase_page__" sentinel the rest of
+        # the behavioral system uses rather than dropping them; `phase` and
+        # `page` are stamped below, which is what actually identifies them.
+        instance_id = str(raw.get('instance_id') or data.get('instance_id') or '')
+        if not instance_id or instance_id in ('null', 'None', 'undefined'):
+            instance_id = '__phase_page__'
+
+        events = [
+            telemetry.TelemetryEvent.from_dict(e)
+            for e in (raw.get('events') or []) if isinstance(e, dict)
+        ]
+        if not events:
+            continue
+        # Enforced here rather than on the client so one vocabulary stays
+        # authoritative, and so a stale page cannot reintroduce the noise.
+        if not telemetry.has_substance(events):
+            continue
+
+        summary = telemetry.summarize(
+            events,
+            schema_name=schema_name,
+            instance_id=instance_id,
+            idle_ms=idle_ms,
+        )
+
+        verdict = telemetry.evaluate(summary, thresholds=thresholds) \
+            if detection_on else None
+
+        try:
+            telemetry_store.record_session(
+                task_dir,
+                project=project,
+                user_id=username,
+                instance_id=instance_id,
+                schema_name=schema_name,
+                summary=summary,
+                events=events if store_events else None,
+                started_at=raw.get('started_at'),
+                ended_at=raw.get('ended_at'),
+                phase=phase_name,
+                page=_page,
+                fidelity=fidelity,
+                flags=verdict.to_dict() if verdict else None,
+            )
+            recorded += 1
+        except Exception as e:
+            logger.error("Failed to store telemetry session: %s", e, exc_info=True)
+            continue
+
+        by_schema.setdefault((instance_id, schema_name), []).append(summary)
+
+    # Mirror the compact sketch into the user state so it travels with the
+    # annotation through export and the admin dashboard. The raw streams stay in
+    # SQLite: user_state.json is rewritten in full on every save.
+    for (instance_id, schema_name), entries in by_schema.items():
+        bd = get_or_create_behavioral_data(
+            user_state.instance_id_to_behavioral_data, instance_id)
+        if not hasattr(bd, 'set_annotation_telemetry'):
+            continue
+
+        existing = (bd.annotation_telemetry or {}).get(schema_name)
+        summaries = list(entries)
+        if existing:
+            summaries.insert(0, telemetry.TelemetrySummary.from_dict(existing))
+
+        merged = telemetry.merge_summaries(summaries)
+        if merged is None:
+            continue
+        payload = merged.to_dict()
+        if detection_on:
+            # Re-evaluate against the merged view: five fast accepts within one
+            # short session may be a small fraction of the whole item's work
+            # once the other sessions on it are counted.
+            payload['verdict'] = telemetry.evaluate(
+                merged, thresholds=thresholds).to_dict()
+        bd.set_annotation_telemetry(schema_name, payload)
+
+    # Same reasoning as track_typing: a drawing session can end without any
+    # annotation save, so waiting for /updateinstance to flush would lose it.
+    if recorded:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning(
+                "Could not persist user state after telemetry flush: %s", e)
+
+    return jsonify({"status": "ok", "sessions_recorded": recorded})
+
+
+@app.route("/api/track_authenticity", methods=["POST"])
+def track_authenticity():
+    """
+    Receive an authenticity-paradata snapshot for one view of an item.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",          # null on phase pages
+        "view_id": "...",              # random per item view, [A-Za-z0-9_-]{1,64}
+        "snapshot": {...},             # running totals; see potato/authenticity.py
+        "tracker_version": 1
+    }
+
+    The snapshot replaces the previous one for the same view, so a retried post
+    cannot double-count. Unknown fields are dropped and values clamped before
+    anything is stored; the verdict is computed here, never on the client.
+    """
+    import time as time_module
+    from potato import authenticity
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id)
+    from potato.server_utils.config_module import get_authenticity_config
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    au_config = get_authenticity_config(config)
+    if not au_config.get("enabled"):
+        return jsonify({"status": "disabled"})
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "No data provided"}), 400
+    view_id = data.get("view_id")
+    if not authenticity.valid_view_id(view_id):
+        return jsonify({"error": "Invalid view_id"}), 400
+    snapshot = authenticity.sanitize_snapshot(data.get("snapshot"))
+    if not snapshot:
+        return jsonify({"error": "Empty snapshot"}), 400
+
+    user_state = get_user_state(session['username'])
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    # Before the instance check, so a stale consent page gets a 200 and stops,
+    # not a 403. Nothing is stored and no write is scheduled.
+    if not _tracked_in_current_phase("authenticity", user_state,
+                                     data.get("instance_id")):
+        return jsonify({"status": "phase_not_tracked", "persisted": False})
+
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        phase_name, _page = None, None
+
+    # Only this annotator's items and the phase-page bucket. Any other id would
+    # be stored, counted and scored in the admin rollups as an item the
+    # annotator worked on (potato-skill audit 93). During annotation that is
+    # refused like /updateinstance refuses it; on other pages (training,
+    # surveys, the moment after the last item) it folds into the phase-page
+    # bucket, which is stamped with the phase and page.
+    from potato.interaction_tracking import PHASE_PAGE_SENTINEL
+    instance_id = normalize_instance_id(data.get('instance_id'))
+    if instance_id != PHASE_PAGE_SENTINEL:
+        assigned_ids = user_state.get_assigned_instance_ids()
+        known = (instance_id in assigned_ids if assigned_ids
+                 else get_item_state_manager().has_item(instance_id))
+        if not known:
+            if phase_name == "annotation":
+                return jsonify({"error": "Instance not assigned to user"}), 403
+            instance_id = PHASE_PAGE_SENTINEL
+    bd = get_or_create_behavioral_data(
+        user_state.instance_id_to_behavioral_data, instance_id)
+    if not hasattr(bd, 'authenticity'):
+        return jsonify({"error": "Behavioral data unavailable"}), 500
+
+    detection = au_config.get("detection", {}) or {}
+    now = time_module.time()
+    previous = bd.authenticity or {}
+    flags_before = authenticity.flag_names(previous)
+    bd.authenticity = authenticity.record_view(
+        previous, view_id, snapshot,
+        now=now,
+        phase=phase_name,
+        page=str(_page) if _page is not None else None,
+        thresholds=dict(detection.get("thresholds") or {}),
+        detection=detection.get("enabled", True),
+    )
+
+    # Same reasoning as track_typing: the annotator may leave without saving
+    # again, and the most informative post (leaving the page) is often the last.
+    # But this route is posted every few seconds while anything changes, and a
+    # save rewrites the whole of user_state.json, so ordinary posts stay in
+    # memory and are written at most once a minute (authenticity.py), or with
+    # the next annotation save. The last post of a view (item change, leaving
+    # the page) and one that changes the flags are written straight away.
+    urgent = (data.get("final") is True
+              or authenticity.flag_names(bd.authenticity) != flags_before)
+    persisted = authenticity.persist_throttle.should_persist(
+        session['username'], now=now, urgent=urgent)
+    if persisted:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning("Could not persist user state after authenticity flush: %s", e)
+
+    return jsonify({"status": "ok", "persisted": persisted})
+
+
+@app.route("/admin/api/authenticity", methods=["GET"])
+def admin_api_authenticity():
+    """
+    Per-annotator authenticity rollup (page leaves, item copies, external
+    pastes, automation). Admin-only. ``enabled: False`` when the feature is off.
+    Also available as the ``authenticity`` key of /admin/api/behavioral_analytics.
+    """
+    result = admin_dashboard.get_authenticity_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/api/annotation_telemetry/<instance_id>", methods=["GET"])
+def get_annotation_telemetry(instance_id):
+    """Drawing-dynamics summaries for one instance, for the current user."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_state = get_user_state(session['username'])
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+    summaries = {}
+    if bd is not None:
+        if hasattr(bd, 'annotation_telemetry'):
+            summaries = bd.annotation_telemetry or {}
+        elif isinstance(bd, dict):
+            summaries = bd.get('annotation_telemetry', {})
+
+    return jsonify({"instance_id": instance_id,
+                    "annotation_telemetry": summaries})
+
+
+@app.route("/api/typing_summary/<instance_id>", methods=["GET"])
+def get_typing_summary(instance_id):
+    """Typing-dynamics summaries for one instance, for the current user."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_state = get_user_state(session['username'])
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+    summaries = {}
+    if bd is not None:
+        if hasattr(bd, 'typing_summaries'):
+            summaries = bd.typing_summaries or {}
+        elif isinstance(bd, dict):
+            summaries = bd.get('typing_summaries', {})
+
+    return jsonify({"instance_id": instance_id, "typing_summaries": summaries})
 
 
 @app.route("/api/behavioral_data/<instance_id>", methods=["GET"])
@@ -5787,6 +10643,12 @@ def get_annotation_schemas():
                     continue
                 schema_info.setdefault(key, value)
 
+            # A cloze passage carries its answer key inline; participants can
+            # call this route, so the key is masked.
+            if schema_type == 'cloze' and isinstance(schema_info.get('text'), str):
+                from potato.server_utils.schemas.cloze import public_text
+                schema_info['text'] = public_text(schema_info['text'])
+
             return schema_info
 
         # If dict (new style), iterate items
@@ -5817,6 +10679,10 @@ def clear_span_annotations(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id, write=True)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -5866,6 +10732,29 @@ def clear_span_annotations(instance_id):
         logger.debug(f"=== CLEAR_SPAN_ANNOTATIONS END ===")
 
 
+def _structure_prelabels(username, user_state, instance_id, which):
+    """A model's links or events on this item, as prelabels, while the
+    annotator has no spans and no links or events of their own here: the
+    same rule as span prelabels, whose ids these refer to."""
+    if (user_state.get_span_annotations(instance_id)
+            or user_state.prelabels_resolved(instance_id)):
+        return []
+    try:
+        from potato.flask_server import visible_pre_annotations  # noqa: cross-import
+        from potato.server_utils import link_prelabels
+        item = get_item_state_manager().get_item(instance_id)
+        if item is None:
+            return []
+        pre_data, _, _ = visible_pre_annotations(username, instance_id, item)
+        text = item.get_text() or ""
+        if which == "links":
+            return link_prelabels.predicted_links(pre_data, config, text)
+        return link_prelabels.predicted_events(pre_data, config, text)
+    except Exception:  # noqa: BLE001 - a prelabel must not break the page
+        logger.debug("Could not read %s prelabels", which, exc_info=True)
+        return []
+
+
 @app.route("/api/links/<instance_id>")
 def get_link_annotations(instance_id):
     """
@@ -5882,6 +10771,10 @@ def get_link_annotations(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -5900,6 +10793,9 @@ def get_link_annotations(instance_id):
         links_data = []
         for link_id, link in links.items():
             links_data.append(link.to_dict())
+        if not links_data:
+            links_data = _structure_prelabels(username, user_state, instance_id,
+                                              "links")
 
         logger.debug(f"Found {len(links_data)} link annotations for instance {instance_id}")
 
@@ -5937,6 +10833,10 @@ def delete_link_annotation(instance_id, link_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id, write=True)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -5952,6 +10852,7 @@ def delete_link_annotation(instance_id, link_id):
         success = user_state.remove_link_annotation(instance_id, link_id)
 
         if success:
+            user_state.resolve_prelabels(instance_id)
             logger.debug(f"Deleted link annotation: {link_id} from instance {instance_id}")
             return jsonify({
                 "status": "success",
@@ -5992,6 +10893,10 @@ def get_event_annotations(instance_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -6018,6 +10923,9 @@ def get_event_annotations(instance_id):
             events_data.append(event_dict)
             logger.debug(f"  Event ID: {event_id}, data: {event_dict}")
 
+        if not events_data:
+            events_data = _structure_prelabels(username, user_state, instance_id,
+                                               "events")
         logger.debug(f"Found {len(events_data)} event annotations for instance {instance_id}")
         logger.debug(f"Event IDs in storage: {list(events.keys())}")
 
@@ -6055,6 +10963,10 @@ def delete_event_annotation(instance_id, event_id):
         return jsonify({"error": "No active session"}), 401
 
     username = session['username']
+    # On a live session page this is the team's answer (potato/collab).
+    username, _collab, _refusal = _annotation_owner(instance_id, write=True)
+    if _refusal is not None:
+        return _refusal
     logger.debug(f"Username: {username}")
 
     try:
@@ -6075,6 +10987,7 @@ def delete_event_annotation(instance_id, event_id):
         success = user_state.remove_event_annotation(instance_id, event_id)
 
         if success:
+            user_state.resolve_prelabels(instance_id)
             logger.debug(f"Deleted event annotation: {event_id} from instance {instance_id}")
             return jsonify({
                 "status": "success",
@@ -6293,6 +11206,10 @@ def entity_linking_update_span():
             if field_val is not None and (not isinstance(field_val, str) or len(field_val) > MAX_FIELD_LEN):
                 return jsonify({"error": f"Invalid {field_name}"}), 400
 
+        # On a live session page this is the team's answer (potato/collab).
+        username, _collab, _refusal = _annotation_owner(str(instance_id), write=True)
+        if _refusal is not None:
+            return _refusal
         user_state = get_user_state(username)
         if not user_state:
             return jsonify({"error": "User state not found"}), 404
@@ -6394,6 +11311,7 @@ def get_waveform_data(cache_key):
 
 
 @app.route("/api/waveform/generate", methods=["POST"])
+@media_login_required
 def generate_waveform():
     """
     Generate waveform data for an audio file.
@@ -6463,6 +11381,7 @@ def generate_waveform():
 
 
 @app.route("/api/video/metadata", methods=["POST"])
+@media_login_required
 def get_video_metadata():
     """
     Get metadata for a video file.
@@ -6511,6 +11430,7 @@ def get_video_metadata():
 
 
 @app.route("/api/video/waveform/generate", methods=["POST"])
+@media_login_required
 def generate_video_waveform():
     """
     Generate waveform data from a video file's audio track.
@@ -6534,25 +11454,42 @@ def generate_video_waveform():
         video_url = data['video_url']
         logger.debug(f"Video URL for waveform: {video_url}")
 
-        # Try to generate waveform using the existing WaveformService
+        # Use the initialised service. Building a new one per request gave
+        # every call its own `WaveformService initialized:` line and a
+        # `waveform_cache` path relative to whatever the process CWD happened
+        # to be, so two requests could disagree about where the cache lives.
         try:
-            from potato.server_utils.waveform_service import WaveformService
-            waveform_service = WaveformService()
+            from potato.server_utils.waveform_service import (
+                WaveformService, get_waveform_service,
+            )
 
-            # Generate waveform from video (will extract audio track)
-            result = waveform_service.generate_waveform(video_url)
+            waveform_service = get_waveform_service()
+            if waveform_service is None:
+                waveform_service = WaveformService(
+                    cache_dir=config.get("waveform_cache_dir", "waveform_cache"),
+                    task_dir=config.get("task_dir", "."),
+                )
 
-            if result.get('status') == 'ready':
-                return jsonify({
-                    "status": "ready",
-                    "waveform_url": result.get('waveform_url'),
-                    "cache_key": result.get('cache_key')
-                })
-            else:
-                return jsonify({
-                    "status": result.get('status', 'pending'),
-                    "message": result.get('message', 'Waveform generation in progress')
-                })
+            # `generate_waveform` never existed on WaveformService, so this
+            # route answered 500 for every request in every format -- including
+            # a video with a real audio track, which is the case it exists for.
+            # The method that does the work is `get_waveform_url`; audiowaveform
+            # reads the audio track out of a video container directly.
+            waveform_url = waveform_service.get_waveform_url(video_url)
+
+            if waveform_url:
+                return jsonify({"status": "ready", "waveform_url": waveform_url})
+
+            # No waveform: either audiowaveform is absent or the file has no
+            # readable audio track. Both are ordinary, and the client can draw
+            # its own -- so this is a 200 with a reason, not a failure.
+            return jsonify({
+                "status": "unavailable",
+                "message": ("No waveform could be generated for this video. "
+                            "Either audiowaveform is not installed or the file "
+                            "has no readable audio track."),
+                "use_client_fallback": True,
+            })
 
         except ImportError:
             logger.warning("WaveformService not available for video waveform generation")
@@ -6563,83 +11500,85 @@ def generate_video_waveform():
             })
 
     except Exception as e:
-        logger.error(f"Error generating video waveform: {e}")
-        return jsonify({
-            "error": str(e),
-            "use_client_fallback": True
-        }), 500
+        # A 500 carrying `use_client_fallback: True` reads as a routine
+        # degradation on the client, which is how a route that had never
+        # worked went unnoticed. The status code is the failure; the body says
+        # what broke.
+        logger.exception("Error generating video waveform")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
     finally:
         logger.debug("=== GENERATE_VIDEO_WAVEFORM END ===")
 
 
 @app.route("/api/audio/proxy")
+@media_login_required
 def audio_proxy():
     """
-    Proxy endpoint for fetching external audio files with Range request support.
+    Proxy an external audio file so the browser can read it for waveform
+    generation without tripping CORS. Supports Range requests for seeking.
 
-    This endpoint fetches audio files from external URLs and returns them
-    with proper headers, bypassing CORS restrictions that prevent the browser
-    from directly accessing external audio files for waveform generation.
-
-    Supports HTTP Range requests to enable seeking in audio files.
+    The URL comes from the caller, so it goes through the SSRF guard: this
+    endpoint used to accept any http(s) URL without authentication and return
+    the body, which made the server a reader for anything it could reach,
+    including cloud metadata and loopback-bound admin interfaces.
 
     Query parameters:
         url: The external audio URL to fetch
-
-    Returns:
-        The audio file with appropriate Content-Type header
     """
+    from potato.server_utils.url_guard import (
+        URLNotAllowed, fetch, read_capped, DEFAULT_MAX_BYTES,
+    )
     import requests as req
 
     audio_url = request.args.get('url')
     if not audio_url:
         return jsonify({"error": "Missing url parameter"}), 400
 
-    # Validate URL (basic security check)
-    if not audio_url.startswith(('http://', 'https://')):
-        return jsonify({"error": "Invalid URL - must be http or https"}), 400
+    headers = {}
+    if 'Range' in request.headers:
+        headers['Range'] = request.headers['Range']
 
     try:
-        # Forward any Range header from the client to the upstream server
-        headers = {}
-        if 'Range' in request.headers:
-            headers['Range'] = request.headers['Range']
-
-        # Fetch the audio file
-        response = req.get(audio_url, headers=headers, stream=True, timeout=30)
-        response.raise_for_status()
-
-        # Get content type from response or default to audio/mpeg
-        content_type = response.headers.get('Content-Type', 'audio/mpeg')
-        content_length = response.headers.get('Content-Length')
-
-        # Create response with the audio data
-        flask_response = make_response(response.content)
-        flask_response.headers['Content-Type'] = content_type
-        flask_response.headers['Access-Control-Allow-Origin'] = '*'
-        flask_response.headers['Cache-Control'] = 'public, max-age=3600'
-
-        # Add headers to support Range requests (seeking)
-        flask_response.headers['Accept-Ranges'] = 'bytes'
-
-        if content_length:
-            flask_response.headers['Content-Length'] = content_length
-
-        # If the upstream returned a 206 Partial Content, pass that through
-        if response.status_code == 206:
-            flask_response.status_code = 206
-            if 'Content-Range' in response.headers:
-                flask_response.headers['Content-Range'] = response.headers['Content-Range']
-
-        return flask_response
-
+        response = fetch(
+            audio_url, headers=headers, timeout=30,
+            allowlist=_media_url_allowlist(),
+        )
+    except URLNotAllowed as e:
+        logger.warning("Blocked audio proxy request to %s: %s", audio_url, e)
+        return jsonify({"error": "URL not allowed"}), 403
     except req.exceptions.Timeout:
-        logger.error(f"Timeout fetching audio: {audio_url}")
+        logger.error("Timeout fetching audio: %s", audio_url)
         return jsonify({"error": "Request timed out"}), 504
     except req.exceptions.RequestException as e:
-        logger.error(f"Error fetching audio {audio_url}: {e}")
+        logger.error("Error fetching audio %s: %s", audio_url, e)
         return jsonify({"error": "Failed to fetch audio"}), 502
+
+    try:
+        body = read_capped(response, DEFAULT_MAX_BYTES)
+    except URLNotAllowed as e:
+        logger.warning("Audio proxy response too large for %s: %s", audio_url, e)
+        return jsonify({"error": "Response too large"}), 502
+    finally:
+        response.close()
+
+    content_type = response.headers.get('Content-Type', 'audio/mpeg')
+
+    flask_response = make_response(body)
+    flask_response.headers['Content-Type'] = content_type
+    # No Access-Control-Allow-Origin: every caller is the annotation page on
+    # this same origin, and the wildcard let any site read proxied content
+    # through a logged-in user's browser.
+    flask_response.headers['Cache-Control'] = 'private, max-age=3600'
+    flask_response.headers['Accept-Ranges'] = 'bytes'
+    flask_response.headers['Content-Length'] = str(len(body))
+
+    if response.status_code == 206:
+        flask_response.status_code = 206
+        if 'Content-Range' in response.headers:
+            flask_response.headers['Content-Range'] = response.headers['Content-Range']
+
+    return flask_response
 
 
 @app.route("/api/ai_assistant", methods=["GET"])
@@ -6658,17 +11597,33 @@ def ai_assistant():
         logger.debug("[AI Assistant] Failed to parse annotation ID")
         return jsonify({"html": "", "error": None})
 
+    username = session['username']
+    # annotation_id is positional within the schemes this user sees, so resolve
+    # against the user's cohort schemes (falls back to the global list).
+    try:
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        _user_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+    except Exception:
+        _user_schemes = config.get("annotation_schemes", [])
+
     # Check if annotation_id is valid
-    if annotation_id < 0 or annotation_id >= len(config.get("annotation_schemes", [])):
+    if annotation_id < 0 or annotation_id >= len(_user_schemes):
         logger.debug(f"[AI Assistant] annotation_id {annotation_id} out of range")
         return jsonify({"html": "", "error": None})
 
-    username = session['username']
     user_state = get_user_state(username)
-    instance = user_state.get_current_instance_index()
-    annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+    # The item is addressed by id; `special_include` is keyed by page number,
+    # so the position goes along separately. They coincide only under
+    # `fixed_order`.
+    instance = user_state.get_current_instance_id()
+    page_index = user_state.get_current_instance_index()
+    annotation_type = _user_schemes[annotation_id]["annotation_type"]
+    blind = _engine_blind_refusal(username, instance)
+    if blind is not None:
+        return blind
 
-    result = generate_ai_help_html(instance, annotation_id, annotation_type)
+    result = generate_ai_help_html(instance, annotation_id, annotation_type,
+                                   page_index=page_index)
     logger.debug(f"[AI Assistant] Result for instance={instance}, annotation_id={annotation_id}, type={annotation_type}: '{result[:100] if result else 'empty'}...'")
     return result
 
@@ -6679,7 +11634,7 @@ def admin_reset_password():
     Requires X-API-Key header. Takes JSON body with username and new_password.
     """
     api_key = request.headers.get('X-API-Key')
-    if not validate_admin_api_key(api_key):
+    if not validate_admin_api_key(api_key, permission="manage_users"):
         return jsonify({"error": "Unauthorized - valid API key required"}), 403
 
     data = request.get_json()
@@ -6695,6 +11650,9 @@ def admin_reset_password():
     user_authenticator = UserAuthenticator.get_instance()
     if not user_authenticator.is_valid_username(username):
         return jsonify({"error": f"User '{username}' does not exist"}), 404
+    if not user_authenticator.has_settable_password(username):
+        return jsonify({"error": f"'{username}' signs in through SSO; its "
+                                 f"password is managed by the identity provider"}), 409
 
     if user_authenticator.update_password(username, new_password):
         user_authenticator.save_user_config()
@@ -6710,7 +11668,7 @@ def admin_create_reset_token():
     Returns the reset link and token.
     """
     api_key = request.headers.get('X-API-Key')
-    if not validate_admin_api_key(api_key):
+    if not validate_admin_api_key(api_key, permission="manage_users"):
         return jsonify({"error": "Unauthorized - valid API key required"}), 403
 
     data = request.get_json()
@@ -6724,6 +11682,10 @@ def admin_create_reset_token():
         return jsonify({"error": "username is required"}), 400
 
     user_authenticator = UserAuthenticator.get_instance()
+    if (user_authenticator.is_valid_username(username)
+            and not user_authenticator.has_settable_password(username)):
+        return jsonify({"error": f"'{username}' signs in through SSO; its "
+                                 f"password is managed by the identity provider"}), 409
     token = user_authenticator.create_reset_token(username, ttl_hours=ttl_hours)
 
     if token is None:
@@ -6741,34 +11703,33 @@ def admin_create_reset_token():
 def forgot_password():
     """Self-service forgot password page.
 
+    Potato does not send email, so there is no channel that proves the
+    requester owns the account. The page therefore never creates or shows a
+    reset token: it tells the annotator to ask an administrator, who can issue
+    a link with ``POST /admin/create_reset_token`` or reset the password with
+    ``potato reset-password``.
+
     GET: Show the forgot password form.
-    POST: Generate a reset token and display the reset link.
+    POST: Show the same instructions for any username.
     """
     if request.method == "GET":
         return render_template("forgot_password.html",
                              title=config.get("annotation_task_name", "Annotation Platform"))
 
     username = request.form.get("username", "").strip()
-    # Always show success to prevent user enumeration
     if not username:
         return render_template("forgot_password.html",
                              title=config.get("annotation_task_name", "Annotation Platform"),
                              error="Please enter your username.")
 
-    user_authenticator = UserAuthenticator.get_instance()
-    token = user_authenticator.create_reset_token(username)
-
-    if token:
-        reset_link = f"{request.host_url.rstrip('/')}/reset/{token}"
-        return render_template("forgot_password.html",
-                             title=config.get("annotation_task_name", "Annotation Platform"),
-                             reset_link=reset_link,
-                             success=True)
-    else:
-        # Show same success message to prevent enumeration
-        return render_template("forgot_password.html",
-                             title=config.get("annotation_task_name", "Annotation Platform"),
-                             success=True)
+    # Same response whether or not the user exists, to prevent enumeration.
+    # No token is created here: a link handed to whoever typed the username
+    # would let anyone reset any account.
+    logger.info("Password reset requested via /forgot-password; "
+                "an administrator must issue the reset link")
+    return render_template("forgot_password.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"),
+                         success=True)
 
 
 def reset_password_with_token(token):
@@ -6807,6 +11768,15 @@ def reset_password_with_token(token):
                              token=token,
                              error="Passwords do not match.")
 
+    # A link that cannot work is refused before it is spent.
+    pending = user_authenticator.validate_reset_token(token)
+    if pending and not user_authenticator.has_settable_password(pending):
+        return render_template("reset_password.html",
+                             title=config.get("annotation_task_name", "Annotation Platform"),
+                             error="This account signs in through single sign-on, so its "
+                                   "password cannot be reset here.",
+                             token_invalid=True)
+
     # Consume token (single-use)
     username = user_authenticator.consume_reset_token(token)
     if not username:
@@ -6827,6 +11797,48 @@ def reset_password_with_token(token):
                              error="Failed to reset password. Please try again.")
 
 
+
+def _warn_if_span_exceeds_text(instance_id, span_data):
+    """Log a span whose ``end`` runs past the field it indexes.
+
+    Offsets arrive from the browser and are read back in Python, and the two
+    count characters differently: a DOM Range counts UTF-16 code units, so one
+    emoji costs two, while ``len()`` counts code points. When those spaces
+    disagree the corruption is silent -- the exporter slices the shifted range
+    and writes out neighbouring characters -- and the one observable symptom is
+    an ``end`` past the end of the string. Say so rather than storing it
+    quietly; the span itself is kept, because refusing it would discard an
+    annotator's work over an offset the server cannot re-derive.
+    """
+    try:
+        end = int(span_data.get("end"))
+    except (TypeError, ValueError):
+        return
+    try:
+        item = get_item_state_manager().find_item(str(instance_id))
+    except Exception:  # noqa: BLE001 - a diagnostic must never break a save
+        return
+    # `get_data()`, not `.data`: Item exposes its payload through the accessor,
+    # and `__getattr__` resolves unknown names against the data dict itself, so
+    # `getattr(item, "data", None)` returns None for every item that has no
+    # field literally called "data" -- which is all of them.
+    data = item.get_data() if item is not None else None
+    if not isinstance(data, dict):
+        return
+    field = span_data.get("target_field") or (
+        (config.get("item_properties", {}) or {}).get("text_key", "text"))
+    source = data.get(field)
+    if not isinstance(source, str) or end <= len(source):
+        return
+    logger.warning(
+        "Span on %s (%s:%s) ends at %d but field %r is only %d characters. "
+        "The stored offsets index text that does not exist; anything slicing "
+        "them -- exports, span IAA, adjudication -- will read the wrong "
+        "characters.",
+        instance_id, span_data.get("schema"), span_data.get("name"),
+        end, field, len(source))
+
+
 def configure_routes(flask_app, app_config):
     """
     Initialize the Flask routes with the given Flask app instance
@@ -6843,24 +11855,125 @@ def configure_routes(flask_app, app_config):
     config = app_config
 
     # Set up session configuration
-    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
-    if config.get("persist_sessions", False):
-        secret_key = config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY")
-        if not secret_key:
-            raise ValueError(
-                "persist_sessions is enabled but no secret_key is configured. "
-                "Set 'secret_key' in your config file or POTATO_SECRET_KEY environment variable."
-            )
-        app.secret_key = secret_key
-    else:
-        # Generate a random secret key to ensure sessions don't persist between restarts
-        import secrets
-        app.secret_key = secrets.token_hex(32)
+    from potato.server_utils.session_config import configure_session
+    configure_session(app, config)
 
-    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
+    # Content-hashed static URLs + immutable caching for them. Here rather than
+    # in configure_app so the in-process test harness gets it too.
+    from potato.server_utils.static_assets import register_static_asset_caching
+    register_static_asset_caching(app)
+
+    # Dataset publishing blueprint. Registered here (not only in configure_app) so
+    # it exists on both the live server and the in-process test harness, which build
+    # the app through configure_routes but not configure_app.
+    try:
+        from potato.publish.manager import (get_publish_manager,
+                                             init_publish_manager)
+        from potato.publish.routes import publish_bp
+        if get_publish_manager() is None:
+            init_publish_manager(config)
+        if "publish" not in app.blueprints:
+            app.register_blueprint(publish_bp)
+    except Exception as e:
+        logger.warning("Could not register dataset-publishing blueprint: %s", e)
 
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
+    if not getattr(app, "_potato_media_nosniff", False):
+        app._potato_media_nosniff = True
+        app.after_request(_media_nosniff)
+    # Transcoding proxy for formats no browser displays (TIFF, HEIC, RAW,
+    # ProRes, MKV). Imported here rather than at module scope so a server with
+    # neither Pillow nor ffmpeg starts exactly as fast as before.
+    try:
+        from potato.media.routes import register_media_routes
+        register_media_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register media proxy routes: %s", e)
+    # Embodied episode manifests. Imported here for the same reason: the
+    # readers pull pyarrow / h5py lazily and a server annotating text must not
+    # pay for either at boot.
+    try:
+        from potato.episodes.routes import register_episode_routes
+        register_episode_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register episode routes: %s", e)
+    # World-model rollout sets. No optional dependency of its own, but it is
+    # registered alongside the other media-shaped routes so the whole family
+    # is in one place.
+    try:
+        from potato.rollouts.routes import register_rollout_routes
+        register_rollout_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register rollout routes: %s", e)
+    # Runtime phase pages (`type: jspsych`, `type: osweb`, ...), and the
+    # large browser libraries installed with `potato vendor fetch`.
+    try:
+        from potato.runtimes.routes import register_runtime_routes
+        register_runtime_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register runtime phase routes: %s", e)
+    try:
+        from potato.vendoring.routes import register_vendor_routes
+        register_vendor_routes(app)
+    except Exception as e:
+        logger.warning("Could not register fetched-vendor routes: %s", e)
+    # Listening tests (MUSHRA, ACR, ABX, ...): trial plans and blinded audio.
+    try:
+        from potato.listening.routes import register_listening_routes
+        register_listening_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register listening-test routes: %s", e)
+    # time_series display: decimated signal windows and interval_label pre-annotations.
+    try:
+        from potato.science.signal_routes import register_signal_routes
+        register_signal_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register signal routes: %s", e)
+    # Spectrum display: zoomed-in points and region integrals.
+    try:
+        from potato.science.spectrum_routes import register_spectrum_routes
+        register_spectrum_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register spectrum routes: %s", e)
+    # Multichannel microscopy: composited tiles, label rasters, cell tables.
+    try:
+        from potato.science.microscopy_routes import register_microscopy_routes
+        register_microscopy_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register microscopy routes: %s", e)
+    # FITS cutouts (fits_cutout display): cached PNGs.
+    try:
+        from potato.science.astro import register_astro_routes
+        register_astro_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register FITS cutout routes: %s", e)
+    # Grounding evaluation: the current item's referring expressions.
+    try:
+        from potato.grounding.routes import register_grounding_routes
+        register_grounding_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register grounding routes: %s", e)
+    # Ontology-backed labels: term search (file or proxied OLS4).
+    try:
+        from potato.ontology.routes import register_ontology_routes
+        register_ontology_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register ontology routes: %s", e)
+    # Scheduled sessions (waves, experience sampling, Delphi) and their
+    # notification thread, started here so both serving paths get it.
+    try:
+        from potato.scheduling.routes import register_scheduling_routes
+        register_scheduling_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register scheduling routes: %s", e)
+    try:
+        # KaTeX settings for every page built on the base template (both
+        # render paths); see potato/math_rendering.py.
+        from potato.math_rendering import register_math_context
+        register_math_context(app)
+    except Exception as e:
+        logger.warning("Could not register math rendering: %s", e)
     app.add_url_rule(
         "/screenshots/<path:filepath>",
         "serve_trace_screenshot",
@@ -6879,14 +11992,30 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/prestudy", "prestudy", prestudy, methods=["GET", "POST"])
     app.add_url_rule("/training", "training", training, methods=["GET", "POST"])
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
+    app.add_url_rule("/annotate/grid", "annotate_grid", annotate_grid, methods=["GET"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
     app.add_url_rule("/get_annotations", "get_annotations", get_annotations, methods=["GET"])
+    # A bare @app.route decorator is not enough: the live server serves the app
+    # built by create_app(), so anything not registered here 404s under
+    # `potato start`.
+    app.add_url_rule("/api/image_annotations/previous",
+                     "get_previous_image_annotations",
+                     get_previous_image_annotations, methods=["GET"])
+    app.add_url_rule("/api/calibration", "get_item_calibration",
+                     get_item_calibration, methods=["GET"])
+    app.add_url_rule("/api/critique_annotations", "critique_annotations",
+                     critique_annotations, methods=["POST"])
+    app.add_url_rule("/api/track/propagate", "propagate_video_track",
+                     propagate_video_track, methods=["POST"])
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
+    app.add_url_rule("/progress", "annotator_progress", annotator_progress, methods=["GET"])
+    app.add_url_rule("/progress/api/summary", "annotator_progress_summary", annotator_progress_summary, methods=["GET"])
 
     app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
+    app.add_url_rule("/api/prm/prelabel", "prm_prelabel", prm_prelabel, methods=["GET"])
 
     # Option highlighting API routes
     app.add_url_rule("/api/option_highlights/config", "get_option_highlighting_config", get_option_highlighting_config, methods=["GET"])
@@ -6924,6 +12053,9 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
+    app.add_url_rule("/plugin-static/<plugin>/<path:filepath>", "serve_plugin_static",
+                     serve_plugin_static, methods=["GET"])
+    app.add_url_rule("/health", "health", health, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
     app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])
     app.add_url_rule("/admin/all_instances", "admin_all_instances", admin_all_instances, methods=["GET"])
@@ -6954,6 +12086,37 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/api/iaa_summary", "admin_api_iaa_summary", admin_api_iaa_summary, methods=["GET"])
+    app.add_url_rule("/admin/api/alt-test", "admin_api_alt_test", admin_api_alt_test, methods=["GET"])
+    app.add_url_rule("/admin/logout", "admin_logout", admin_logout, methods=["POST"])
+    app.add_url_rule("/admin/iaa/drift", "admin_iaa_drift", admin_iaa_drift,
+                     methods=["GET"])
+    app.add_url_rule("/admin/calibration", "admin_calibration",
+                     admin_calibration, methods=["GET"])
+    app.add_url_rule("/admin/calibration/start", "admin_calibration_start",
+                     admin_calibration_start, methods=["POST"])
+    app.add_url_rule("/admin/api/agent_rollup", "admin_api_agent_rollup", admin_api_agent_rollup, methods=["GET"])
+    app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
+    app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
+    app.add_url_rule("/admin/api/induce-metrics", "admin_induce_metrics", admin_induce_metrics, methods=["GET"])
+    app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
+    app.add_url_rule("/admin/labeling-engine", "admin_labeling_engine", admin_labeling_engine, methods=["GET"])
+    app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
+    app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])
+    app.add_url_rule("/admin/api/judge-position-bias", "admin_judge_position_bias",
+                     admin_judge_position_bias, methods=["POST"])
+    app.add_url_rule("/admin/api/ai-cost", "admin_ai_cost", admin_ai_cost,
+                     methods=["GET"])
+    app.add_url_rule("/admin/model-review", "admin_model_review",
+                     admin_model_review, methods=["GET"])
+    app.add_url_rule("/api/model-review/verdict", "model_review_verdict",
+                     model_review_verdict, methods=["POST"])
+    app.add_url_rule("/admin/active-learning/stats",
+                     "admin_active_learning_stats",
+                     admin_active_learning_stats, methods=["GET"])
+    app.add_url_rule("/admin/api/rollout/judge-batch", "admin_rollout_judge_batch", admin_rollout_judge_batch, methods=["POST"])
+    app.add_url_rule("/admin/api/rollout/alignment", "admin_rollout_alignment", admin_rollout_alignment, methods=["GET"])
+    app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])
     app.add_url_rule("/admin/api/step_agreement", "admin_api_step_agreement", admin_api_step_agreement, methods=["GET"])
     app.add_url_rule("/admin/api/step_quality", "admin_api_step_quality", admin_api_step_quality, methods=["GET"])
     app.add_url_rule("/api/waveform/<cache_key>", "get_waveform_data", get_waveform_data, methods=["GET"])
@@ -6964,6 +12127,9 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/data_sources/<source_id>/load_more", "admin_api_data_sources_load_more", admin_api_data_sources_load_more, methods=["POST"])
     app.add_url_rule("/admin/api/data_sources/<source_id>/refresh", "admin_api_data_sources_refresh", admin_api_data_sources_refresh, methods=["POST"])
     app.add_url_rule("/admin/api/cache/clear", "admin_api_cache_clear", admin_api_cache_clear, methods=["POST"])
+    app.add_url_rule("/admin/api/data_sources/live", "admin_api_live_ingestion_status", admin_api_live_ingestion_status, methods=["GET"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/live", "admin_api_live_ingestion_source_status", admin_api_live_ingestion_source_status, methods=["GET"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/live/poll", "admin_api_live_ingestion_poll", admin_api_live_ingestion_poll, methods=["POST"])
     app.add_url_rule("/admin/api/webhooks", "admin_api_webhooks", admin_api_webhooks, methods=["GET"])
     app.add_url_rule("/admin/api/webhooks/test", "admin_api_webhooks_test", admin_api_webhooks_test, methods=["POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
@@ -6984,11 +12150,26 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/code_cooccurrence", "admin_api_code_cooccurrence", admin_api_code_cooccurrence, methods=["GET"])
     app.add_url_rule("/admin/api/code_crosstab", "admin_api_code_crosstab", admin_api_code_crosstab, methods=["GET"])
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
+    app.add_url_rule("/admin/api/expertise", "admin_api_expertise", admin_api_expertise, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
+    app.add_url_rule("/admin/api/ai_influence", "admin_api_ai_influence", admin_api_ai_influence, methods=["GET"])
+    app.add_url_rule("/admin/api/snapshots", "admin_api_snapshots", admin_api_snapshots, methods=["GET"])
+    app.add_url_rule("/admin/api/snapshots", "admin_api_create_snapshot", admin_api_create_snapshot, methods=["POST"])
+    app.add_url_rule("/admin/api/trace_writeback", "admin_api_trace_writeback", admin_api_trace_writeback, methods=["GET"])
+    app.add_url_rule("/admin/api/memo_issues", "admin_api_memo_issues", admin_api_memo_issues, methods=["GET"])
+    app.add_url_rule("/admin/api/throughput", "admin_api_throughput", admin_api_throughput, methods=["GET"])
+    app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
+    app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])
     app.add_url_rule("/api/track_ai_usage", "track_ai_usage", track_ai_usage, methods=["POST"])
     app.add_url_rule("/api/track_annotation_change", "track_annotation_change", track_annotation_change, methods=["POST"])
     app.add_url_rule("/api/behavioral_data/<instance_id>", "get_behavioral_data", get_behavioral_data, methods=["GET"])
+    app.add_url_rule("/api/track_typing", "track_typing", track_typing, methods=["POST"])
+    app.add_url_rule("/api/typing_summary/<instance_id>", "get_typing_summary", get_typing_summary, methods=["GET"])
+    app.add_url_rule("/api/track_annotation_telemetry", "track_annotation_telemetry", track_annotation_telemetry, methods=["POST"])
+    app.add_url_rule("/api/annotation_telemetry/<instance_id>", "get_annotation_telemetry", get_annotation_telemetry, methods=["GET"])
+    app.add_url_rule("/api/track_authenticity", "track_authenticity", track_authenticity, methods=["POST"])
+    app.add_url_rule("/admin/api/authenticity", "admin_api_authenticity", admin_api_authenticity, methods=["GET"])
 
     # Adjudication routes
     app.add_url_rule("/adjudicate", "adjudicate", adjudicate, methods=["GET"])
@@ -7023,6 +12204,8 @@ def configure_routes(flask_app, app_config):
     # Export admin API routes
     app.add_url_rule("/admin/api/export/formats", "admin_api_export_formats", admin_api_export_formats, methods=["GET"])
     app.add_url_rule("/admin/api/export", "admin_api_export", admin_api_export, methods=["POST"])
+    app.add_url_rule("/admin/api/data/manifest", "admin_api_data_manifest", admin_api_data_manifest, methods=["GET"])
+    app.add_url_rule("/admin/api/data/archive", "admin_api_data_archive", admin_api_data_archive, methods=["GET"])
 
     # Agent chat routes (interactive agent testing)
     app.add_url_rule("/agent_chat/send", "agent_chat_send", agent_chat_send, methods=["POST"])
@@ -7032,6 +12215,10 @@ def configure_routes(flask_app, app_config):
     # OAuth SSO routes
     app.add_url_rule("/auth/login/<provider>", "oauth_login", oauth_login, methods=["GET"])
     app.add_url_rule("/auth/callback/<provider>", "oauth_callback", oauth_callback, methods=["GET"])
+    app.add_url_rule("/saml/login", "saml_login", saml_login, methods=["GET"])
+    app.add_url_rule("/saml/acs", "saml_acs", saml_acs, methods=["POST"])
+    app.add_url_rule("/saml/metadata", "saml_metadata", saml_metadata, methods=["GET"])
+    app.add_url_rule("/saml/sls", "saml_sls", saml_sls, methods=["GET"])
 
     # Chat support API routes
     app.add_url_rule("/api/chat/send", "chat_send", chat_send, methods=["POST"])
@@ -7039,6 +12226,22 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/chat/config", "chat_config", chat_config, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
+
+    # Register crowd-platform admin API blueprint if not already registered
+    if 'crowd_admin' not in app.blueprints:
+        try:
+            from potato.crowdsourcing.admin_api import crowd_admin_bp
+            app.register_blueprint(crowd_admin_bp)
+        except ImportError:
+            pass
+
+    # Register Prolific webhook receiver (HMAC-authenticated, no session)
+    if 'crowd_webhooks' not in app.blueprints:
+        try:
+            from potato.crowdsourcing.webhooks import crowd_webhooks_bp
+            app.register_blueprint(crowd_webhooks_bp)
+        except ImportError:
+            pass
 
     # Register Solo Mode blueprint if not already registered
     if 'solo_mode' not in app.blueprints:
@@ -7080,6 +12283,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register the Codebook full-page document view (separate blueprint so
+    # it serves /codebook at the site root, not under /api).
+    if 'codebook_page' not in app.blueprints:
+        try:
+            from potato.codebook.page import codebook_page_bp
+            app.register_blueprint(codebook_page_bp)
+        except ImportError:
+            pass
+
     # Register universal Cases blueprint if not already registered
     if 'cases' not in app.blueprints:
         try:
@@ -7088,9 +12300,216 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Sessions blueprint (session-level scoring) if not already registered
+    if 'sessions' not in app.blueprints:
+        try:
+            from potato.sessions.api import sessions_bp
+            app.register_blueprint(sessions_bp)
+        except ImportError:
+            pass
+
+    # Register Review Workflow blueprint (reviewer routing + kanban) if not
+    # already registered
+    if 'review_workflow' not in app.blueprints:
+        try:
+            from potato.review_workflow import review_bp
+            app.register_blueprint(review_bp)
+        except ImportError:
+            pass
+
+    # Register the labeling engine's REST API if not already registered
+    if 'labeling_engine' not in app.blueprints:
+        try:
+            from potato.labeling_engine.api.routes import engine_bp
+            app.register_blueprint(engine_bp)
+        except ImportError:
+            pass
+
+    # Register Judge Calibration blueprint if not already registered
+    if 'judge_calibration' not in app.blueprints:
+        try:
+            from potato.judge_calibration.routes import judge_calibration_bp
+            app.register_blueprint(judge_calibration_bp)
+        except ImportError:
+            pass
+
+    # Register Boundary Lab blueprint (counterfactual boundary probing) if not
+    # already registered
+    if 'boundary' not in app.blueprints:
+        try:
+            from potato.boundary.routes import boundary_bp
+            app.register_blueprint(boundary_bp)
+        except ImportError:
+            pass
+
+    # Register Truth Serum blueprint (surprisingly-popular scoring) if not
+    # already registered
+    if 'truth_serum' not in app.blueprints:
+        try:
+            from potato.truth_serum.routes import truth_serum_bp
+            app.register_blueprint(truth_serum_bp)
+        except ImportError:
+            pass
+
+    # Register Think-Aloud blueprint (voice rationales, rule-based labels) if
+    # not already registered
+    if 'thinkaloud' not in app.blueprints:
+        try:
+            from potato.thinkaloud.routes import thinkaloud_bp
+            app.register_blueprint(thinkaloud_bp)
+        except ImportError:
+            pass
+
+    # Register Pocket Mode blueprint (mobile-first annotation PWA) if not
+    # already registered
+    if 'pocket' not in app.blueprints:
+        try:
+            from potato.pocket.routes import pocket_bp
+            app.register_blueprint(pocket_bp)
+        except ImportError:
+            pass
+
+    # Register Psychometrics blueprint (live IRT: labels with error bars,
+    # adaptive routing, study designer) if not already registered
+    if 'psychometrics' not in app.blueprints:
+        try:
+            from potato.psychometrics.routes import psychometrics_bp
+            app.register_blueprint(psychometrics_bp)
+        except ImportError:
+            pass
+
+    # Live collaborative sessions (/collab). Its after-request hooks log the
+    # writes made through the item data routes on a session page.
+    if 'collab' not in app.blueprints:
+        try:
+            from potato.collab.routes import collab_bp
+            app.register_blueprint(collab_bp)
+        except ImportError:
+            pass
+
+    # Register Multiplayer Rooms blueprint (norming sessions, adjudication
+    # huddles, shadowing) if not already registered
+    if 'rooms' not in app.blueprints:
+        try:
+            from potato.rooms.routes import rooms_bp
+            app.register_blueprint(rooms_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================
+
+def _resolve_adjudicated_geometry(adj_mgr, instance_id, label_decisions):
+    """
+    Replace ``{adopted_annotations: [{annotator, idx}]}`` with real geometry.
+
+    The adjudication UI can only send references — it does not hold the
+    annotators' full annotation blobs. Resolving them here, once, means the
+    stored decision is in the same client-contract shape every exporter reads,
+    so an adjudicated image exports like any other.
+
+    Anything that is not a geometry adoption passes through untouched.
+    """
+    from potato.server_utils import annotation_values
+
+    if not isinstance(label_decisions, dict) or not label_decisions:
+        return label_decisions
+
+    needs_resolving = {
+        schema: value for schema, value in label_decisions.items()
+        if isinstance(value, dict) and value.get("adopted_annotations")
+    }
+    if not needs_resolving:
+        return label_decisions
+
+    schemes = {s.get("name"): s
+               for s in (config.get("annotation_schemes") or [])
+               if isinstance(s, dict)}
+
+    # Per-user stored values for this instance, keyed by schema.
+    per_schema_by_user = {}
+    try:
+        user_manager = get_user_state_manager()
+        for user_id in user_manager.get_all_users():
+            state = user_manager.get_user_state(user_id)
+            if not state:
+                continue
+            labels = state.get_label_annotations(instance_id) or {}
+            for label_obj, value in labels.items():
+                schema_name = getattr(label_obj, "get_schema", lambda: None)()
+                if schema_name in needs_resolving:
+                    per_schema_by_user.setdefault(schema_name, {})[user_id] = value
+    except Exception as exc:
+        logger.error("Could not load annotations to resolve adjudication: %s", exc)
+        return label_decisions
+
+    # Under blind adjudication the UI was handed aliases, so that is what the
+    # picks come back as. Without turning them back the adopted boxes resolve
+    # against nothing and the adjudicator's choices are dropped from the
+    # stored decision -- with only a warning in the log.
+    aliases = {}
+    if adj_mgr and not adj_mgr.adj_config.show_annotator_names:
+        item = adj_mgr.get_item(instance_id)
+        if item:
+            aliases = annotator_aliases(instance_id, item.annotations)
+
+    resolved = dict(label_decisions)
+    for schema, value in needs_resolving.items():
+        scheme = schemes.get(schema)
+        picks = value.get("adopted_annotations") or []
+        if aliases:
+            picks = [
+                {**pick, "annotator": unblind_user_id(pick.get("annotator"),
+                                                      aliases)}
+                if isinstance(pick, dict) else pick
+                for pick in picks
+            ]
+        objects = annotation_values.resolve_adopted(
+            scheme, picks, per_schema_by_user.get(schema, {}))
+        if objects:
+            # Stored exactly as the client writes it: a JSON array under _data.
+            resolved[schema] = {"_data": json.dumps(objects)}
+        else:
+            logger.warning(
+                "Adjudication for %s/%s adopted annotations that could not be "
+                "resolved; keeping the raw decision", instance_id, schema)
+
+    return resolved
+
+
+def _adjudication_policy_error(adj_mgr, data):
+    """The reason this submission is refused, or None.
+
+    An override is a decision that does not match what the annotators agreed
+    on -- it is exactly the case a reader will later want the reasoning for,
+    so `require_notes_on_override` refuses one without notes rather than
+    publishing it unexplained.
+    """
+    if not adj_mgr or not getattr(adj_mgr, "adj_config", None):
+        return None
+    cfg = adj_mgr.adj_config
+
+    source = data.get("source")
+    is_override = False
+    if isinstance(source, str):
+        is_override = source == "override"
+    elif isinstance(source, dict):
+        is_override = "override" in {str(v) for v in source.values()}
+
+    if getattr(cfg, "require_notes_on_override", False) and is_override:
+        if not str(data.get("notes") or "").strip():
+            return ("This decision overrides the annotators, and the task is "
+                    "configured to require a note explaining why "
+                    "(require_notes_on_override).")
+
+    if getattr(cfg, "require_confidence", False):
+        if not str(data.get("confidence") or "").strip():
+            return ("A confidence value is required for this task "
+                    "(require_confidence).")
+
+    return None
+
 
 def _check_adjudicator_auth():
     """Check if current user is an authorized adjudicator.
@@ -7106,10 +12525,60 @@ def _check_adjudicator_auth():
     if not adj_mgr or not adj_mgr.adj_config.enabled:
         return False, username, (jsonify({"error": "Adjudication not enabled"}), 404)
 
-    if not adj_mgr.is_adjudicator(username):
+    if not _is_authorized_adjudicator(username, adj_mgr):
         return False, username, (jsonify({"error": "Not authorized as adjudicator"}), 403)
 
     return True, username, None
+
+
+def _is_authorized_adjudicator(username, adj_mgr):
+    """True if the user may adjudicate: legacy allow-list OR RBAC permission.
+
+    Keeps ``adjudicator_users`` working while letting role-based adjudicators
+    (and the shared-key superuser) through.
+    """
+    if adj_mgr and adj_mgr.is_adjudicator(username):
+        return True
+    from potato.server_utils.rbac import get_rbac_manager, Permission
+    return get_rbac_manager().check(Permission.ADJUDICATE, request, session)
+
+
+def _adjudication_display_html(item_data):
+    """The item as the annotators saw it, when the project configures a display.
+
+    Without this the panel dumped every string field of the raw item as
+    ``key: value`` -- so an adjudicator saw the abstract twice (once as
+    ``abstract`` and again as the internal ``displayed_text``), saw fields the
+    project never meant to show, and did not see the image at all. Deciding the
+    same question on a different presentation of the item is the problem;
+    ``instance_display`` is the project's own answer to what the item looks
+    like, so use it.
+
+    Returns None when the project has no ``instance_display``, leaving the
+    existing fallback in place.
+    """
+    if not isinstance(item_data, dict) or not item_data:
+        return None
+    if not config.get("instance_display"):
+        return None
+    try:
+        from potato.server_utils.instance_display import (
+            get_instance_display_renderer)
+        renderer = get_instance_display_renderer(config)
+        if not getattr(renderer, "has_instance_display", False):
+            return None
+        return renderer.render(item_data)
+    except Exception as e:
+        logger.warning("Could not render instance_display for adjudication: %s", e)
+        return None
+
+
+#: Item fields the server writes for its own use. Showing them in the
+#: adjudication panel duplicates content the display already carries and leaks
+#: internals into a reviewer-facing view.
+_ADJUDICATION_INTERNAL_FIELDS = frozenset({
+    "displayed_text", "_data", "context_id",
+})
 
 
 @app.route('/adjudicate', methods=['GET'])
@@ -7123,11 +12592,14 @@ def adjudicate():
     if not adj_mgr or not adj_mgr.adj_config.enabled:
         return redirect(url_for('home'))
 
-    if not adj_mgr.is_adjudicator(username):
+    if not _is_authorized_adjudicator(username, adj_mgr):
         return redirect(url_for('home'))
 
-    # Get annotation schemes for form rendering
-    annotation_schemes = config.get('annotation_schemes', [])
+    # Get annotation schemes for form rendering. Adjudicators review every
+    # cohort, so they see the union of all cohort scheme sets (falls back to the
+    # global annotation_schemes when per-cohort schemas are not configured).
+    from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+    annotation_schemes = get_cohort_scheme_resolver().union_of_all_schemes()
 
     return render_template(
         'adjudication.html',
@@ -7162,10 +12634,38 @@ def adjudicate_api_queue():
         filter_status=filter_status,
     )
 
-    return jsonify({
-        "items": [item.to_dict() for item in items],
-        "total": len(items),
-    })
+    payload = []
+    for item in items:
+        item_dict = item.to_dict()
+        if not adj_mgr.adj_config.show_annotator_names:
+            item_dict = blind_item_dict(
+                item_dict,
+                annotator_aliases(item.instance_id, item.annotations))
+        # One line of the item, so an adjudicator can triage the queue
+        # without opening every entry -- it listed bare ids.
+        item_dict["text_preview"] = _adjudication_text_preview(
+            adj_mgr.get_item_text(item.instance_id))
+        payload.append(item_dict)
+
+    return jsonify({"items": payload, "total": len(payload)})
+
+
+def _adjudication_text_preview(text, limit=120):
+    """Plain one-line preview of an item's text for the queue sidebar.
+
+    Instance text may be HTML (dialogue, custom displays) or a media URL;
+    tags are stripped and whitespace collapsed, and the result is escaped
+    client-side, so nothing here is trusted as markup.
+    """
+    import html as _html
+
+    if not isinstance(text, str):
+        return ""
+    plain = re.sub(r"<[^>]+>", " ", text)
+    plain = _html.unescape(re.sub(r"\s+", " ", plain)).strip()
+    if len(plain) > limit:
+        plain = plain[:limit - 1].rstrip() + "\u2026"
+    return plain
 
 
 @app.route('/adjudicate/api/item/<instance_id>', methods=['GET'])
@@ -7195,14 +12695,22 @@ def adjudicate_api_item(instance_id):
             user_id, instance_id
         )
 
+    item_dict = item.to_dict()
+    if not adj_mgr.adj_config.show_annotator_names:
+        aliases = annotator_aliases(instance_id, item.annotations)
+        item_dict = blind_item_dict(item_dict, aliases)
+        annotator_signals = blind_annotator_signals(annotator_signals, aliases)
+
     similar_items = []
     if adj_mgr.adj_config.similarity_enabled:
         similar_items = adj_mgr.get_similar_items(instance_id)
 
     return jsonify({
-        "item": item.to_dict(),
+        "item": item_dict,
         "item_text": item_text,
         "item_data": item_data,
+        "item_display_html": _adjudication_display_html(item_data),
+        "item_internal_fields": sorted(_ADJUDICATION_INTERNAL_FIELDS),
         "decision": decision.to_dict() if decision else None,
         "annotator_signals": annotator_signals,
         "similar_items": similar_items,
@@ -7541,7 +13049,14 @@ def admin_api_embedding_viz_data():
         return jsonify({
             "points": points_json,
             "labels": data.labels,
-            "label_colors": data.label_colors,
+            # label_colors is keyed by label, with None standing for "unannotated".
+            # Flask sorts dict keys before serialising, and comparing None to a str
+            # raises TypeError, so the whole response 500'd as soon as any instance
+            # was unlabelled — i.e. always, on a fresh task. JSON has no null key in
+            # any case, and the client already looks this up as the string "null"
+            # (embedding-viz.js: label_colors[point.label] with point.label === null).
+            "label_colors": {("null" if k is None else k): v
+                             for k, v in data.label_colors.items()},
             "stats": data.stats
         })
 
@@ -7768,6 +13283,108 @@ def admin_api_data_sources_refresh(source_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/admin/api/data_sources/live', methods=['GET'])
+def admin_api_live_ingestion_status():
+    """
+    Report polling status and ingestion statistics for every live source.
+
+    Returns:
+        JSON with a status object per live-ingestion worker
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    if not manager.has_live_sources():
+        return jsonify({
+            "enabled": False,
+            "message": "No live-ingestion sources configured"
+        })
+
+    return jsonify({
+        "enabled": True,
+        "sources": manager.get_live_ingestion_status(),
+    })
+
+
+@app.route('/admin/api/data_sources/<source_id>/live', methods=['GET'])
+def admin_api_live_ingestion_source_status(source_id):
+    """
+    Report polling status and statistics for one live source.
+
+    Args:
+        source_id: The source identifier
+
+    Returns:
+        JSON status for that worker
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    status = manager.get_live_ingestion_status(source_id)
+    if status is None:
+        if manager.get_source(source_id) is None:
+            return jsonify({"error": f"Unknown source: {source_id}"}), 404
+        return jsonify({
+            "error": f"Source '{source_id}' does not have live_ingestion enabled"
+        }), 400
+
+    return jsonify(status)
+
+
+@app.route('/admin/api/data_sources/<source_id>/live/poll', methods=['POST'])
+def admin_api_live_ingestion_poll(source_id):
+    """
+    Run one poll immediately, without waiting for the next interval.
+
+    Useful after a source has been repaired, or to confirm connectivity
+    without reading the log.
+
+    Args:
+        source_id: The source identifier
+
+    Returns:
+        JSON with the counts from this single poll
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    try:
+        result = manager.poll_source_now(source_id)
+        return jsonify({
+            "status": "success",
+            "source_id": source_id,
+            **result,
+        })
+    except ValueError as e:
+        if manager.get_source(source_id) is None:
+            return jsonify({"error": f"Unknown source: {source_id}"}), 404
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Forced live poll failed for {source_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/admin/api/cache/clear', methods=['POST'])
 def admin_api_cache_clear():
     """
@@ -7850,6 +13467,66 @@ def admin_api_export_formats():
     return jsonify({"formats": formats})
 
 
+def _archive_paths():
+    """Absolute (output_dir, task_dir) for the running task."""
+    task_dir = os.path.abspath(config.get("task_dir") or ".")
+    output_dir = config.get("output_annotation_dir") or "annotation_output"
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.join(task_dir, output_dir)
+    return os.path.abspath(output_dir), task_dir
+
+
+@app.route('/admin/api/data/manifest', methods=['GET'])
+def admin_api_data_manifest():
+    """What a data archive would contain, and how large it would be.
+
+    Lets `potato deploy pull` report a size before downloading, and gives it
+    something to check the result against.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.server_utils.data_archive import archive_manifest
+
+    output_dir, task_dir = _archive_paths()
+    payload = archive_manifest(output_dir, task_dir)
+    payload["task_name"] = config.get("annotation_task_name") or "potato"
+    return jsonify(payload)
+
+
+@app.route('/admin/api/data/archive', methods=['GET'])
+def admin_api_data_archive():
+    """Download everything collected, as a gzipped tar.
+
+    The transport of last resort, and the only one on a host without SSH — a
+    Space, a Render service, anything serverless. Those are also the hosts whose
+    filesystem does not survive a restart, so this is not a convenience.
+
+    Streamed rather than assembled in memory: a study with media produces an
+    archive larger than a small container's RAM, and building it there would
+    kill the server being backed up.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.server_utils.data_archive import archive_filename, stream_archive
+
+    output_dir, task_dir = _archive_paths()
+    task_name = config.get("annotation_task_name") or "potato"
+    filename = archive_filename(task_name)
+
+    logger.info("Serving a data archive of %s to an admin API caller", output_dir)
+    response = Response(stream_archive(output_dir, task_dir, config=config),
+                        mimetype="application/gzip")
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    # The content is generated per request and must never be cached by a proxy:
+    # it is a complete copy of the study's data.
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route('/admin/api/export', methods=['POST'])
 def admin_api_export():
     """Run an export in the requested format and return the result."""
@@ -7914,14 +13591,33 @@ def adjudicate_api_submit():
         if not instance_id:
             return jsonify({"error": "instance_id is required"}), 400
 
+        # `require_notes_on_override` and `require_confidence` were enforced
+        # only in the browser. An override with empty notes returned
+        # {"status": "ok"} and reached both export files, and a submission
+        # with no confidence key at all was published as "medium" -- a value
+        # researchers filter on, recorded as though it had been chosen.
+        policy_error = _adjudication_policy_error(adj_mgr, data)
+        if policy_error:
+            return jsonify({"error": policy_error}), 400
+
+        # Resolve any {annotator, idx} picks into real annotation objects
+        # BEFORE storing. The adjudication UI records geometry decisions as
+        # references; stored that way the adjudicated result is unusable — no
+        # CV exporter can read it, and the reference dangles if the annotator's
+        # own work later changes.
+        label_decisions = _resolve_adjudicated_geometry(
+            adj_mgr, str(instance_id), data.get('label_decisions', {}))
+
         decision = AdjudicationDecision(
             instance_id=str(instance_id),
             adjudicator_id=username,
             timestamp=datetime.datetime.now().isoformat(),
-            label_decisions=data.get('label_decisions', {}),
+            label_decisions=label_decisions,
             span_decisions=data.get('span_decisions', []),
             source=data.get('source', {}),
-            confidence=data.get('confidence', 'medium'),
+            # Absent stays absent. A default here is indistinguishable in
+            # the export from a considered choice.
+            confidence=data.get('confidence') or '',
             notes=data.get('notes', ''),
             error_taxonomy=data.get('error_taxonomy', []),
             guideline_update_flag=data.get('guideline_update_flag', False),
@@ -7988,6 +13684,8 @@ def adjudicate_api_next():
         "item": item.to_dict(),
         "item_text": item_text,
         "item_data": item_data,
+        "item_display_html": _adjudication_display_html(item_data),
+        "item_internal_fields": sorted(_ADJUDICATION_INTERNAL_FIELDS),
     })
 
 
@@ -8026,6 +13724,10 @@ def chat_send():
         current_instance = user_state.get_current_instance()
         if current_instance:
             instance_id = current_instance.get_id()
+
+    blind = _engine_blind_refusal(username, instance_id)
+    if blind is not None:
+        return blind
 
     # Get instance text for context
     instance_text = ""
@@ -8145,10 +13847,21 @@ def chat_config():
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
+    """Stop the development server.
+
+    This shipped with no authentication of any kind. Under gunicorn it is inert
+    (werkzeug.server.shutdown is absent, so it 500s), but under `potato start`
+    -- which is how nearly every task is run -- an unauthenticated POST from
+    anyone who could reach the port stopped the server.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({'error': 'Admin authentication required'}), 403
+
     func = request.environ.get('werkzeug.server.shutdown')
     if func is None:
         return jsonify({'error': 'Not running with the Werkzeug Server'}), 500
-    logger.info('Shutting down server via /shutdown')
+    logger.info('Shutting down server via /shutdown (authorized)')
     func()
     return jsonify({'status': 'Server shutting down...'})
 

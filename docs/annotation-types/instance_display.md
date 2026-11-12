@@ -1,10 +1,10 @@
 # Instance Display Configuration
 
-Instance display is a feature that separates **what content to show annotators** from **what annotations to collect**. This allows you to display any combination of content types (images, videos, audio, text) alongside any annotation schemes (radio buttons, checkboxes, spans, etc.).
+Instance display separates **what content to show annotators** from **what annotations to collect**, so any combination of content types (images, videos, audio, text) can sit alongside any annotation schemes (radio buttons, checkboxes, spans, and the rest).
 
 ## Why Use Instance Display?
 
-Previously, if you wanted to show an image with radio buttons for classification, you had to add an `image_annotation` schema with `min_annotations: 0` just to display the image. This was confusing and semantically incorrect.
+To show an image and classify it with radio buttons, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on an image, not for displaying one.
 
 With `instance_display`, you can explicitly configure what content to display:
 
@@ -51,6 +51,19 @@ instance_display:
     gap: "20px"
 ```
 
+A display's own options may also be written at the field's top level, which is
+how `describe_display_type` lists them:
+
+```yaml
+    - key: "image_url"
+      type: "image"
+      max_width: 600
+      zoomable: true
+```
+
+Only options the display declares are read this way, so an unrelated key is
+still ignored. When an option appears in both places, `display_options` wins.
+
 ## Supported Display Types
 
 | Type | Description | Span Target |
@@ -58,18 +71,78 @@ instance_display:
 | `text` | Plain text content | Yes |
 | `html` | Sanitized HTML content | No |
 | `image` | Image display with zoom | No |
+| `image_region` | One rectangle of a larger image (a text line, a word, a figure), cropped in the browser; see [Digital humanities](../guides/digital-humanities.md) | No |
 | `video` | Video player | No |
 | `audio` | Audio player | No |
+| `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
+| `gallery` | Scrollable gallery with captions. Images, plus video for URLs ending in `.mp4`, `.m4v`, `.webm`, `.ogv` or `.mov` (played with controls) | No |
+| `protein_structure` | **Protein structure** (mmCIF, BinaryCIF, PDB) in 3Dmol.js or Mol*: cartoon, pLDDT colouring, residue selection by click or residue table; see [Protein structures](science/protein_structures.md) | No |
+| `genome_locus` | **Genome locus** in igv.js: indexed FASTA, BAM/CRAM, VCF, BED/GFF3, bigWig from the media directory; see [Genome loci](science/genome_loci.md) | No |
+| `molecule` | **Molecule** from a SMILES string or molfile (OpenChemLib, or RDKit.js after `potato vendor fetch rdkit`): atom selection by click or atom list, fixed atom highlights; see [Chemical structures](science/chemical_structures.md) | No |
+| `spectrum` | **Spectrum** (NMR, IR, MS) in Plotly from JCAMP-DX, mzML or CSV, with zoom, peak picking and integration; see [Spectra](science/spectra.md) | No |
+| `fits_cutout` | **FITS cutouts**: one image, or science / reference / difference side by side, with an RA/Dec readout and a light curve; see [Astronomical images](science/astronomy.md) | No |
+| `time_series` | **Multi-channel signal** (EDF/EDF+, BDF, WFDB, CSV, Parquet) in uPlot: lanes or one axis, zoom, pan, an overview strip; labelled with `interval_label`; see [Time series](science/time_series.md) | No |
+| `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
+| `conversation_tree` | Conversation tree with collapsible branching nodes | No |
+| `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |
+| `interactive_chat` | Interactive agent chat with post-interaction trace display; needs an `agent_proxy` block, see [Interactive Agent Chat](../agent-evaluation/interactive_chat.md) | Yes |
 | `pairwise` | Side-by-side comparison | No |
 | `code` | Syntax-highlighted source code | Yes |
 | `spreadsheet` | Tabular data (Excel/CSV) | Yes (row/cell) |
 | `document` | Rich documents (Word, Markdown, HTML) | Yes |
 | `pdf` | PDF documents with page controls | Yes |
+| `agent_trace` | Agent trace as vertical step cards (Thought/Action/Observation) | No |
+| `coding_trace` | Coding agent trace with diffs, terminal blocks, file tree | Yes |
+| `eval_trace` | One trace split into three panes: reasoning \| function calls \| final answer | Yes |
+| `cot_trace` | Long chain-of-thought trace: step cards with a sticky progress rail for process-reward verification | No |
+| `web_agent_trace` | Web agent trace with screenshots, SVG click/scroll overlays, step navigation | No |
+| `live_agent` | Live AI agent viewer with real-time screenshots and intervention controls | No |
+| `live_coding_agent` | Live coding agent viewer with real-time streaming and intervention controls | No |
 
-For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide.
+For speech and dialogue over audio, see [Audio Dialogue](multimedia/audio_dialogue.md) and [Transcript Format Support](multimedia/transcript_formats.md). For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide. For agent-trace displays (`agent_trace`, `coding_trace`, `eval_trace`, `cot_trace`, `web_agent_trace`, `live_agent`, `live_coding_agent`), see the [Agent Evaluation](../agent-evaluation/agent_traces.md) guides — `eval_trace` has its own [three-pane eval guide](../agent-evaluation/eval_trace.md).
 
 ## Display Type Options
+
+The sections below cover the options authors reach for most often. They are not
+the whole set — `pdf` alone takes twenty-two. The registry is the complete list,
+and it is generated from the renderers, so it cannot fall behind them:
+
+```python
+from potato.server_utils.displays.registry import display_registry
+
+for display in display_registry.list_displays():
+    print(display["name"], sorted(display["optional_fields"]))
+```
+
+An option name Potato does not recognise is now a configuration error rather
+than a silently ignored key, and the message suggests the nearest real one:
+
+```
+instance_display.fields[0].display_options.speeker_key is not an option for
+display type 'multi_agent_discussion', so it would be ignored silently.
+Did you mean 'speaker_key'? Accepted options: ...
+```
+
+That check found four dead keys in Potato's own example configs, so it is worth
+running `potato validate` over an existing project after upgrading.
+
+### Options every display type takes
+
+Three options belong to the resizable container Potato wraps around each field
+rather than to any one renderer, so they work on every display type:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `resizable` | `true` | Wrap the field in a container the annotator can drag to resize. Set `false` to leave the field at its natural height. |
+| `max_height` | none | How tall the field may grow before it scrolls inside itself. Unset, the stylesheet caps the field at `80vh`. Either way, a "Show all" button appears below the field while its content overflows, and lifts the cap until pressed again. |
+| `min_height` | `100` | How short it may be dragged. |
+
+Lengths accept a number or a CSS length: `400`, `"400px"`, `"50vh"` and
+`"calc(100vh - 200px)"` all work. A bare number means pixels.
+
+`resizable: false` is worth knowing about for a short field — a one-line label
+in a drag handle looks like a mistake.
 
 ### Text Display
 
@@ -78,10 +151,14 @@ For detailed configuration of document formats (`code`, `spreadsheet`, `document
   type: "text"
   label: "Document"
   display_options:
-    collapsible: false        # Make content collapsible
-    max_height: 400           # Max height in pixels before scrolling
-    preserve_whitespace: true # Preserve line breaks and spacing
+    collapsible: false           # Make content collapsible
+    collapsed_by_default: false  # Start collapsed (needs collapsible)
+    max_height: 400              # Max height in pixels before scrolling
+    preserve_whitespace: true    # Preserve line breaks and spacing
 ```
+
+`collapsed_by_default` keeps a long case file out of the way until the annotator
+asks for it, rather than pushing the questions down the page on every item.
 
 ### Image Display
 
@@ -125,7 +202,40 @@ For detailed configuration of document formats (`code`, `spreadsheet`, `document
     show_waveform: false      # Show waveform visualization
 ```
 
+### Audio Dialogue Display
+
+For a **diarized transcript played against its audio** — podcasts, interviews, meetings,
+call-center recordings — use `audio_dialogue` rather than `audio` or `dialogue`. Turns
+render as colored speaker bubbles; each has a ▶ that plays just that turn, and a sticky
+transport bar plays the whole recording while highlighting and auto-scrolling the active
+turn. Undiarized turns can be assigned a speaker by the annotator.
+
+```yaml
+- key: "conversation"
+  type: "audio_dialogue"
+  label: "Transcript"
+  span_target: true              # enable span highlighting inside turns
+  display_options:
+    speakers:
+      - {id: host,  name: Host,  color: "#7c3aed", side: left}
+      - {id: guest, name: Guest, color: "#059669", side: right}
+```
+
+The transcript may be inline, or a path to a sidecar file in any of
+[21 supported formats](multimedia/transcript_formats.md) — Whisper, WhisperX, cloud ASR,
+SRT/WebVTT, YouTube captions, TextGrid/EAF:
+
+```json
+{"id": "int_001",
+ "conversation": {"audio": "media/int_001.mp3", "transcript": "media/int_001.srt"}}
+```
+
+See [Audio Dialogue](multimedia/audio_dialogue.md) for every option, per-turn ratings,
+cross-turn linking, and speaker assignment.
+
 ### Dialogue Display
+
+For text-only conversations with no audio:
 
 ```yaml
 - key: "conversation"
@@ -135,7 +245,12 @@ For detailed configuration of document formats (`code`, `spreadsheet`, `document
     alternating_shading: true    # Alternate background colors
     speaker_extraction: true     # Extract "Speaker:" from text
     show_turn_numbers: false     # Show turn numbers
+    max_height: 600              # Cap the height and scroll inside it
 ```
+
+A long agent trace otherwise pushes the annotation form off the bottom of the
+page. `max_height` scrolls the container rather than clipping it, and takes a
+number of pixels or any CSS length.
 
 Data format for dialogue (each line in JSONL file):
 ```json
@@ -147,6 +262,41 @@ Or with structured data:
 {"id": "conv_001", "conversation": [{"speaker": "Alice", "text": "Hello there!"}, {"speaker": "Bob", "text": "Hi, how are you?"}]}
 ```
 
+#### Threaded conversations
+
+When each turn names the turn it replies to, `dialogue` renders the reply
+structure — nesting depth is derived from `reply_to`, so nothing has to
+precompute it:
+
+```yaml
+- key: "thread"
+  type: "dialogue"
+  label: "Discussion"
+  display_options:
+    indent_replies: true         # indent by reply depth
+    max_indent_depth: 6          # cap the visual indent
+    show_reply_lines: true       # vertical thread guides
+    show_timestamps: true        # per-turn times
+    timestamp_format: relative   # relative | absolute | epoch
+    turn_meta_fields: [score]    # per-turn metadata chips
+    meta_key: meta               # where that metadata lives
+    depth_key: depth             # explicit depth, when the data has one
+    reply_to_key: reply_to       # where the parent reference lives
+```
+
+```json
+{"id": "t1", "thread": [
+  {"id": "m1", "speaker": "ana", "text": "Anyone tried the new API?"},
+  {"id": "m2", "speaker": "ben", "text": "Yes, works fine.", "reply_to": "m1"},
+  {"id": "m3", "speaker": "cy", "text": "Not for me.", "reply_to": "m2"}
+]}
+```
+
+The indentation, timestamps, and chips are drawn as CSS pseudo-element content,
+so they do not affect span offsets. See
+[Dialogue Annotation](structured/dialogue_annotation.md) for the full guide and
+[ConvoKit](../integrations/convokit.md) for importing conversational corpora.
+
 ### Pairwise Display
 
 ```yaml
@@ -154,7 +304,7 @@ Or with structured data:
   type: "pairwise"
   label: "Compare Options"
   display_options:
-    cell_width: "50%"           # Width of each cell
+    cell_width: "auto"          # Cell width; "auto" splits the row evenly
     show_labels: true           # Show A/B labels
     labels: ["Option A", "Option B"]  # Custom labels
     vertical_on_mobile: true    # Stack vertically on mobile
@@ -240,6 +390,10 @@ annotation_schemes:
     tools: [bbox]
     labels: [person, car]
 ```
+
+Name it when there is more than one image field, or when the field the scheme
+should draw on is not the one it would otherwise find. With a single image
+field, `image_annotation` picks it up on its own.
 
 ## Example: Image Classification
 

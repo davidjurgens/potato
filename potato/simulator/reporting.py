@@ -1,7 +1,7 @@
 """
 Reporting and export functionality for simulation results.
 
-This module provides the SimulationReporter class for exporting
+The SimulationReporter class for exporting
 simulation results in various formats.
 """
 

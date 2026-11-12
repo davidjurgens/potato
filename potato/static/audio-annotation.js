@@ -21,6 +21,34 @@ function audioDebugLog(...args) {
 }
 
 /**
+ * The accent as an "r, g, b" triple, read from the --primary token so the
+ * waveform (painted on a canvas, where CSS variables do not reach) follows the
+ * palette instead of carrying its own blue.
+ */
+function audioAccentRgb() {
+    try {
+        const raw = getComputedStyle(document.documentElement)
+            .getPropertyValue('--primary').trim();
+        const m = /^#([0-9a-f]{6})$/i.exec(raw);
+        if (m) {
+            const n = parseInt(m[1], 16);
+            return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+        }
+    } catch (e) { /* no computed style: use the default below */ }
+    return '110, 86, 207';
+}
+
+/** A CSS custom property's value, or `fallback` when it is unset. */
+function audioToken(name, fallback) {
+    try {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+/**
  * Color maps for spectrogram visualization
  * Each color map is an array of RGB arrays for gradient interpolation
  */
@@ -493,6 +521,31 @@ class SpectrogramRenderer {
 // Export SpectrogramRenderer
 window.SpectrogramRenderer = SpectrogramRenderer;
 
+/**
+ * Who put a segment on the timeline: the same keys and meaning as the image
+ * widget's (image-annotation.js). A model's segment arrived with `source`,
+ * `ai_model` and `confidence`, and the save kept only id, times and label,
+ * so an accepted model segment was stored as if an annotator had drawn it.
+ */
+const SEGMENT_PROVENANCE_KEYS = ['source', 'ai_model', 'confidence', 'edited',
+                                 'carried_over', 'import_format'];
+
+function copySegmentProvenance(target, src) {
+    for (const key of SEGMENT_PROVENANCE_KEYS) {
+        if (src && src[key] !== undefined) {
+            target[key] = src[key];
+        }
+    }
+    return target;
+}
+
+/** A segment someone else proposed, changed by the annotator. */
+function markSegmentEdited(segment) {
+    if (segment.source && segment.source !== 'human') {
+        segment.edited = true;
+    }
+}
+
 class AudioAnnotationManager {
     /**
      * Create an AudioAnnotationManager instance.
@@ -531,6 +584,10 @@ class AudioAnnotationManager {
         this.activeLabelColor = null;
         this.isPlaying = false;
         this.segmentCounter = 0;
+        // Ids unique to this page: a counter alone restarts at 1 on every
+        // load, so a page reopened over segment_1..N, or a teammate's page in
+        // a live session, would mint an id that is already taken.
+        this.idNonce = Math.random().toString(36).slice(2, 8);
 
         // Spectrogram renderer
         this.spectrogramRenderer = null;
@@ -622,6 +679,8 @@ class AudioAnnotationManager {
             ? { dataUri: { arraybuffer: waveformUrl } }
             : { webAudio: { audioContext: new (window.AudioContext || window.webkitAudioContext)() } };
 
+        const accent = audioAccentRgb();
+
         // Peaks.js options
         const peaksOptions = {
             containers: {
@@ -639,24 +698,24 @@ class AudioAnnotationManager {
             segmentOptions: {
                 markers: true,
                 overlay: true,
-                startMarkerColor: '#4a90d9',
-                endMarkerColor: '#4a90d9',
-                waveformColor: 'rgba(74, 144, 217, 0.4)'
+                startMarkerColor: `rgb(${accent})`,
+                endMarkerColor: `rgb(${accent})`,
+                waveformColor: `rgba(${accent}, 0.4)`
             },
             zoomview: {
                 container: this.waveformEl,
-                waveformColor: 'rgba(74, 144, 217, 0.7)',
-                playedWaveformColor: 'rgba(74, 144, 217, 1.0)',
-                axisGridlineColor: '#ccc',
-                axisLabelColor: '#666',
+                waveformColor: `rgba(${accent}, 0.55)`,
+                playedWaveformColor: `rgba(${accent}, 1.0)`,
+                axisGridlineColor: audioToken('--border', 'rgb(228, 228, 231)'),
+                axisLabelColor: audioToken('--muted-foreground', 'rgb(113, 113, 122)'),
                 fontFamily: 'inherit',
                 fontSize: 11,
                 fontStyle: 'normal'
             },
             overview: {
                 container: this.overviewEl,
-                waveformColor: 'rgba(74, 144, 217, 0.5)',
-                playedWaveformColor: 'rgba(74, 144, 217, 0.8)',
+                waveformColor: `rgba(${accent}, 0.4)`,
+                playedWaveformColor: `rgba(${accent}, 0.8)`,
                 highlightColor: 'rgba(255, 255, 255, 0.5)',
                 highlightOffset: 1
             }
@@ -689,12 +748,122 @@ class AudioAnnotationManager {
 
         } catch (error) {
             console.error('Failed to initialize Peaks.js:', error);
-            this._showError('Failed to load audio waveform. Please try refreshing the page.');
+            // Say what actually failed. The old message ("Please try
+            // refreshing the page") blamed a transient fault for a file that
+            // was missing or unreachable, so a refresh never helped.
+            const reason = await this._describeLoadFailure(audioUrl);
+            this.showLoadFailure(reason);
             // Still resolve the promise but with false
             this.isReady = false;
             if (this._resolveReady) {
                 this._resolveReady(false);
             }
+        }
+    }
+
+    /**
+     * Find out why the audio did not load, without guessing.
+     *
+     * A media element reports one opaque code for "404", "502" and "this
+     * codec is unsupported" alike, so ask the server directly first. Only
+     * when it answered with the file does a media error mean the format.
+     *
+     * @param {string} audioUrl
+     * @returns {Promise<string>} one sentence naming the failure
+     */
+    async _describeLoadFailure(audioUrl) {
+        let outcome = 'unknown';  // 'ok' | 'unreachable' | 'unknown' | "HTTP ..."
+        if (audioUrl && typeof fetch === 'function') {
+            try {
+                const response = await fetch(audioUrl, {headers: {Range: 'bytes=0-0'}});
+                outcome = response.ok
+                    ? 'ok'
+                    : `HTTP ${response.status}${response.statusText ? ' ' + response.statusText : ''}`;
+                try { if (response.body) response.body.cancel(); } catch (e) { /* ignore */ }
+            } catch (e) {
+                // A network failure, or a cross-origin answer this page is not
+                // allowed to read. Either way the cause is not known here.
+                outcome = 'unreachable';
+            }
+        }
+        const code = this.audioEl && this.audioEl.error ? this.audioEl.error.code : null;
+
+        if (outcome.startsWith('HTTP')) {
+            return `The audio file could not be loaded: the server answered ${outcome}.`;
+        }
+        if (outcome === 'ok' && (code === 4 || code === 3)) {
+            return 'The audio file was downloaded, but this browser cannot play its format.';
+        }
+        if (outcome === 'unreachable') {
+            return 'The audio file could not be reached from this browser.';
+        }
+        return 'The audio file could not be loaded.';
+    }
+
+    /**
+     * Wire the Help button: toggles the usage panel and remembers the choice
+     * per schema, so the panel stays out of the way once it has been read.
+     * Storage can be missing or throw (private windows); the toggle still
+     * works, it just forgets.
+     */
+    setupHelpToggle() {
+        if (!this.container) return;
+        const btn = this.container.querySelector('.help-toggle-btn');
+        const panel = this.container.querySelector('.help-panel');
+        if (!btn || !panel) return;
+        const key = `potato.audioHelp.${this.config.schemaName || 'audio'}`;
+        const apply = (open) => {
+            panel.classList.toggle('collapsed', !open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+        let open = true;
+        try {
+            const stored = localStorage.getItem(key);
+            if (stored !== null) open = stored === 'open';
+        } catch (e) { /* no storage: default to open */ }
+        apply(open);
+        btn.addEventListener('click', () => {
+            open = panel.classList.contains('collapsed');
+            apply(open);
+            try { localStorage.setItem(key, open ? 'open' : 'closed'); } catch (e) { /* best effort */ }
+        });
+    }
+
+    /**
+     * Put a load failure where the annotator is looking -- in the waveform
+     * pane -- and switch off the controls that cannot work without audio.
+     *
+     * Before, the message went to the page-wide status line (unstyled, above
+     * the instructions, gone after three seconds) while the play, zoom and
+     * segment buttons stayed live over two empty grey boxes.
+     *
+     * @param {string} reason - what failed, from _describeLoadFailure()
+     */
+    showLoadFailure(reason) {
+        this.loadFailed = true;
+        console.error(reason);
+        if (this.container) {
+            this.container.classList.add('audio-load-failed');
+            this.container.querySelectorAll(
+                '.playback-btn, .zoom-btn, .segment-btn, .playback-rate-select'
+            ).forEach(el => { el.disabled = true; });
+        }
+        if (this.waveformEl) {
+            let box = this.waveformEl.querySelector('.audio-load-error');
+            if (!box) {
+                box = document.createElement('div');
+                box.className = 'audio-load-error';
+                box.setAttribute('role', 'alert');
+                this.waveformEl.appendChild(box);
+            }
+            box.textContent = '';
+            const strong = document.createElement('strong');
+            strong.textContent = reason;
+            box.appendChild(strong);
+            const next = document.createElement('span');
+            next.textContent = ' The other questions on this page still work, '
+                + 'and Next moves on to the following item.';
+            box.appendChild(next);
         }
     }
 
@@ -844,139 +1013,50 @@ class AudioAnnotationManager {
     }
 
     /**
-     * Set up click-and-drag selection on the waveform
+     * Set up right-click-drag selection on both the zoomview and overview.
+     *
+     * - Zoomview: precise selection within the visible window, with edge
+     *   auto-scroll so a drag can extend past the visible edge.
+     * - Overview: coarse selection across the whole clip, so any part of the
+     *   audio is annotatable without first zooming to it.
+     *
+     * Left-click stays with Peaks.js for seeking / navigation on both views.
+     * Uses the shared attachPeaksRangeSelection helper (peaks-range-select.js).
      */
     _setupDragSelection() {
-        if (!this.waveformEl || !this.peaks) return;
+        if (!this.peaks) return;
+        if (typeof window.attachPeaksRangeSelection !== 'function') {
+            console.warn('peaks-range-select.js not loaded; drag selection unavailable');
+            return;
+        }
 
-        let isDragging = false;
-        let dragStartTime = null;
-        let dragPreviewSegment = null;
+        // Clean up any prior attachments (e.g. after reload)
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+        }
+        this._rangeSelectDetach = [];
 
-        const getTimeFromMouseEvent = (event) => {
-            const view = this.peaks.views.getView('zoomview');
-            if (!view) return null;
-
-            const rect = this.waveformEl.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const duration = this.peaks.player.getDuration();
-
-            // Get the visible time range from the view
-            const startTime = view.getStartTime();
-            const endTime = view.getEndTime();
-            const visibleDuration = endTime - startTime;
-
-            // Calculate time based on x position within the visible range
-            const time = startTime + (x / rect.width) * visibleDuration;
-            return Math.max(0, Math.min(time, duration));
+        const onCreate = (start, end) => {
+            audioDebugLog('Creating segment from right-click drag', { start, end });
+            this.createSegment(start, end);
         };
 
-        const createPreviewSegment = (startTime, endTime) => {
-            // Remove existing preview
-            if (dragPreviewSegment) {
-                try {
-                    this.peaks.segments.removeById(dragPreviewSegment.id);
-                } catch (e) {}
-            }
-
-            // Create a preview segment with a distinct style
-            const start = Math.min(startTime, endTime);
-            const end = Math.max(startTime, endTime);
-
-            if (end - start < 0.01) return null; // Too small to show
-
-            dragPreviewSegment = this.peaks.segments.add({
-                id: 'drag-preview-' + Date.now(),
-                startTime: start,
-                endTime: end,
-                color: 'rgba(100, 100, 255, 0.3)',
-                editable: false
-            });
-
-            return dragPreviewSegment;
-        };
-
-        const removePreviewSegment = () => {
-            if (dragPreviewSegment) {
-                try {
-                    this.peaks.segments.removeById(dragPreviewSegment.id);
-                } catch (e) {}
-                dragPreviewSegment = null;
-            }
-        };
-
-        // Mouse down handler for starting drag-to-annotate
-        // RIGHT-CLICK (button 2) is used for span creation
-        // LEFT-CLICK (button 0) is left for Peaks.js navigation/seeking
-        const handleMouseDown = (event) => {
-            // Only handle right-click for span creation
-            if (event.button !== 2) return;
-
-            // Get the time at the click position
-            const clickTime = getTimeFromMouseEvent(event);
-            if (clickTime === null) return;
-
-            audioDebugLog('Right-click drag start for annotation', { clickTime });
-
-            isDragging = true;
-            dragStartTime = clickTime;
-
-            // Prevent context menu and default behavior
-            event.preventDefault();
-            event.stopPropagation();
-        };
-
-        // Prevent context menu on the waveform (since we use right-click for annotation)
-        this.waveformEl.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            return false;
-        });
-
-        // Register mousedown handler
-        this.waveformEl.addEventListener('mousedown', handleMouseDown);
-
-        // Mouse move handler - update preview (only when right-click dragging)
-        const handleMouseMove = (event) => {
-            if (!isDragging || dragStartTime === null) return;
-
-            const currentTime = getTimeFromMouseEvent(event);
-            if (currentTime === null) return;
-
-            createPreviewSegment(dragStartTime, currentTime);
-        };
-
-        this.waveformEl.addEventListener('mousemove', handleMouseMove);
-
-        // Mouse up - finish drag and create segment
-        const finishDrag = (event) => {
-            if (!isDragging || dragStartTime === null) return;
-
-            const endTime = getTimeFromMouseEvent(event);
-            removePreviewSegment();
-
-            if (endTime !== null) {
-                const start = Math.min(dragStartTime, endTime);
-                const end = Math.max(dragStartTime, endTime);
-
-                // Only create segment if it's at least 0.1 seconds
-                if (end - start >= 0.1) {
-                    audioDebugLog('Creating segment from right-click drag', { start, end });
-                    this.createSegment(start, end);
-                }
-            }
-
-            isDragging = false;
-            dragStartTime = null;
-        };
-
-        this.waveformEl.addEventListener('mouseup', finishDrag);
-
-        // Also handle mouse leaving the waveform area
-        this.waveformEl.addEventListener('mouseleave', (event) => {
-            if (isDragging) {
-                finishDrag(event);
-            }
-        });
+        if (this.waveformEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.waveformEl, 'zoomview', {
+                    onCreate,
+                    edgeScroll: true,
+                })
+            );
+        }
+        if (this.overviewEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.overviewEl, 'overview', {
+                    onCreate,
+                    fullDuration: true,
+                })
+            );
+        }
     }
 
     /**
@@ -990,6 +1070,11 @@ class AudioAnnotationManager {
      * Handle keyboard events
      */
     _handleKeydown(event) {
+        // Nothing to play, zoom or segment once the audio failed to load.
+        if (this.loadFailed) {
+            return;
+        }
+
         // Don't handle if focus is in an input/textarea
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
             return;
@@ -1063,27 +1148,27 @@ class AudioAnnotationManager {
                 this.zoomToFit();
                 break;
 
-            default:
-                // Check for label shortcuts (1-9)
-                if (/^[1-9]$/.test(key)) {
-                    const labels = this.config.labels || [];
-                    const labelIndex = parseInt(key) - 1;
-                    if (labelIndex < labels.length) {
-                        const label = labels[labelIndex];
-                        this.setActiveLabel(label.name, label.color);
-                        // Update UI button
-                        this._updateLabelButtons(label.name);
-                    }
+            default: {
+                // Label shortcuts. A label's key_value wins; otherwise 1-9
+                // pick a label by position, unless some label sets that digit.
+                // (Positional digits used to win, so `key_value: "2"` on the
+                // first label picked the second; a numeric or uppercase
+                // key_value never matched.)
+                if (event.ctrlKey || event.metaKey || event.altKey) break;
+                const labels = this.config.labels || [];
+                const keyOf = (l) => (l.key_value != null && l.key_value !== '')
+                    ? String(l.key_value).toLowerCase() : null;
+                let label = labels.find(l => keyOf(l) === key);
+                if (!label && /^[1-9]$/.test(key) && !labels.some(l => keyOf(l) === key)) {
+                    label = labels[parseInt(key, 10) - 1];
                 }
-                // Check for custom label key_values
-                else if (this.config.labels) {
-                    const matchingLabel = this.config.labels.find(l => l.key_value === key);
-                    if (matchingLabel) {
-                        this.setActiveLabel(matchingLabel.name, matchingLabel.color);
-                        this._updateLabelButtons(matchingLabel.name);
-                    }
+                if (label) {
+                    event.preventDefault();
+                    this.setActiveLabel(label.name, label.color);
+                    this._updateLabelButtons(label.name);
                 }
                 break;
+            }
         }
     }
 
@@ -1155,30 +1240,69 @@ class AudioAnnotationManager {
     /**
      * Zoom in on waveform
      */
-    zoomIn() {
+    /**
+     * Halve or double the visible window, keeping its centre.
+     *
+     * Expressed in SECONDS, read back off the view, because that is the only
+     * account of the current zoom this Peaks build will give us:
+     *
+     *   - `view.getZoom()` does not exist. `getZoom` lives on the zoom
+     *     CONTROLLER (`peaks.zoom`), and calling it on the view threw
+     *     "view.getZoom is not a function" on every click of both buttons --
+     *     which is what made them dead.
+     *   - `peaks.zoom.zoomIn()` does exist, but it walks the `zoomLevels`
+     *     array from an index the view never updates. The widget opens fitted
+     *     to the whole clip while the controller still believes it is at
+     *     index 0 (the most magnified level), so the first "zoom in" is a
+     *     no-op and the second jumps.
+     *
+     * `getStartTime`/`getEndTime`/`setZoom({seconds})`/`setStartTime` are all
+     * public on the view and all reflect what is actually on screen.
+     *
+     * @param {number} factor <1 magnifies, >1 widens.
+     */
+    _zoomByFactor(factor) {
         if (!this.peaks) return;
         const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            view.setZoom({ scale: 'auto' });
-            const currentZoom = view.getZoom();
-            view.setZoom({ scale: Math.max(256, currentZoom / 2) });
-            // Update spectrogram to match
-            this._updateSpectrogramView();
+        if (!view || typeof view.getStartTime !== 'function') return;
+
+        const start = view.getStartTime();
+        const current = view.getEndTime() - start;
+        if (!isFinite(current) || current <= 0) return;
+
+        const duration = this.peaks.player ? this.peaks.player.getDuration() : 0;
+        // A window below a tenth of a second is past any useful precision and
+        // renders as a blank stripe.
+        let next = current * factor;
+        if (isFinite(duration) && duration > 0) next = Math.min(next, duration);
+        next = Math.max(next, 0.1);
+        if (Math.abs(next - current) < 1e-6) return;
+
+        const centre = start + current / 2;
+        view.setZoom({ seconds: next });
+        if (typeof view.setStartTime === 'function') {
+            const span = (isFinite(duration) && duration > 0) ? duration : next;
+            const maxStart = Math.max(0, span - next);
+            view.setStartTime(Math.min(Math.max(0, centre - next / 2), maxStart));
         }
     }
 
     /**
-     * Zoom out on waveform
+     * Zoom in on waveform.
+     */
+    zoomIn() {
+        this._zoomByFactor(0.5);
+        // Update spectrogram to match
+        this._updateSpectrogramView();
+    }
+
+    /**
+     * Zoom out on waveform.
      */
     zoomOut() {
-        if (!this.peaks) return;
-        const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            const currentZoom = view.getZoom();
-            view.setZoom({ scale: Math.min(4096, currentZoom * 2) });
-            // Update spectrogram to match
-            this._updateSpectrogramView();
-        }
+        this._zoomByFactor(2);
+        // Update spectrogram to match
+        this._updateSpectrogramView();
     }
 
     /**
@@ -1268,13 +1392,15 @@ class AudioAnnotationManager {
     createSegment(startTime, endTime, label = null, color = null, id = null) {
         if (!this.peaks) return null;
 
-        // Check max segments
-        if (this.config.maxSegments && this.segments.length >= this.config.maxSegments) {
+        // Check max segments (a teammate's answer being shown is not a new
+        // segment of this annotator's)
+        if (!this._restoring && this.config.maxSegments
+                && this.segments.length >= this.config.maxSegments) {
             this._updateStatus(`Maximum ${this.config.maxSegments} segments allowed`);
             return null;
         }
 
-        const segmentId = id || `segment_${++this.segmentCounter}`;
+        const segmentId = id || `segment_${this.idNonce}_${++this.segmentCounter}`;
         const segmentLabel = label || this.activeLabel || 'unlabeled';
         const segmentColor = color || this.activeLabelColor || '#4ECDC4';
 
@@ -1298,13 +1424,15 @@ class AudioAnnotationManager {
         };
         this.segments.push(segmentData);
 
-        // Update UI
-        this._updateSegmentList();
-        this._updateSegmentCount();
-        this._saveData();
+        // Update UI (once, after the whole answer, when restoring)
+        if (!this._restoring) {
+            this._updateSegmentList();
+            this._updateSegmentCount();
+            this._saveData();
 
-        // Select the new segment
-        this.selectSegment(segmentId);
+            // Select the new segment
+            this.selectSegment(segmentId);
+        }
 
         audioDebugLog('Created segment:', segmentData);
         return segmentData;
@@ -1394,6 +1522,9 @@ class AudioAnnotationManager {
         // Update our tracking
         const segmentData = this.segments.find(s => s.id === segmentId);
         if (segmentData) {
+            if (segmentData.label !== label) {
+                markSegmentEdited(segmentData);
+            }
             segmentData.label = label;
             if (color) segmentData.color = color;
         }
@@ -1419,6 +1550,10 @@ class AudioAnnotationManager {
         const segmentData = this.segments.find(s => s.id === segment.id);
 
         if (segmentData) {
+            if (segmentData.startTime !== segment.startTime
+                    || segmentData.endTime !== segment.endTime) {
+                markSegmentEdited(segmentData);
+            }
             segmentData.startTime = segment.startTime;
             segmentData.endTime = segment.endTime;
         }
@@ -1585,14 +1720,33 @@ class AudioAnnotationManager {
         const contentEl = this.questionsEl.querySelector('.segment-questions-content');
         if (!contentEl) return;
 
-        // Generate form for segment questions
-        let html = `<p class="segment-questions-header">Annotating: ${this._escapeHtml(segmentData.label)} (${this._formatTime(segmentData.startTime)} - ${this._formatTime(segmentData.endTime)})</p>`;
+        const header = document.createElement('p');
+        header.className = 'segment-questions-header';
+        header.textContent = `Annotating: ${segmentData.label} `
+            + `(${this._formatTime(segmentData.startTime)} - ${this._formatTime(segmentData.endTime)})`;
 
-        // TODO: Generate actual form fields based on segmentSchemes
-        // For now, show placeholder
-        html += '<p class="segment-questions-placeholder">Segment annotation questions will appear here.</p>';
+        contentEl.innerHTML = '';
+        contentEl.appendChild(header);
 
-        contentEl.innerHTML = html;
+        // The fields themselves come from the hidden <template> the server
+        // rendered from `segment_schemes`. This used to be a TODO above a
+        // placeholder paragraph, so every segment was stored with an empty
+        // `annotations` object no matter what the config asked for.
+        const fields = document.createElement('div');
+        fields.className = 'segment-questions-fields';
+        contentEl.appendChild(fields);
+
+        const rendered = window.SegmentQuestions && window.SegmentQuestions.render({
+            schemaName: this.config.schemaName,
+            container: fields,
+            segment: segmentData,
+            onChange: () => this._saveData(),
+        });
+
+        if (!rendered) {
+            fields.innerHTML = '<p class="segment-questions-placeholder">'
+                + 'No segment questions are configured for this schema.</p>';
+        }
     }
 
     /**
@@ -1635,20 +1789,46 @@ class AudioAnnotationManager {
      * Save segment data to hidden input
      */
     _saveData() {
-        if (!this.inputEl) return;
+        if (!this.inputEl || this._restoring) return;
+        this._declareCompleteness();
 
-        const data = {
-            segments: this.segments.map(s => ({
-                id: s.id,
-                start_time: s.startTime,
-                end_time: s.endTime,
-                label: s.label,
-                annotations: s.annotations || {}
-            }))
-        };
+        const data = this.serialize();
 
         this.inputEl.value = JSON.stringify(data);
+        // Assigning `.value` fires nothing, so without this the shared autosave
+        // in annotation.js never learns the segments changed and the work
+        // reaches the server only when the annotator navigates.
+        this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         audioDebugLog('Saved audio annotation data:', data);
+    }
+
+
+    /**
+     * Say what is still missing, in the annotator's terms.
+     *
+     * `min_segments` reached the browser as `minSegments` and was read by
+     * nobody: a scheme declaring `min_segments: 2` was satisfied by one
+     * segment, and by the hidden input merely being non-empty. The form-level
+     * `data-incomplete-reason` is the contract validateRequiredFields reads
+     * for composite widgets (see agent_scorecard), so this is where the count
+     * belongs. Unlabelled segments count too -- a segment with no label is a
+     * region of time nobody classified.
+     */
+    _declareCompleteness() {
+        const form = this.inputEl && this.inputEl.closest('.annotation-form');
+        if (!form) return;
+        const need = parseInt(this.config.minSegments, 10) || 0;
+        const have = this.segments.length;
+        const bits = [];
+        if (need && have < need) {
+            bits.push(`${have} of ${need} segments marked`);
+        }
+        const unlabelled = this.segments.filter(s => !s.label).length;
+        if (unlabelled) {
+            bits.push(`${unlabelled} segment${unlabelled === 1 ? '' : 's'} with no label`);
+        }
+        if (bits.length) form.setAttribute('data-incomplete-reason', bits.join('; '));
+        else form.removeAttribute('data-incomplete-reason');
     }
 
     /**
@@ -1674,12 +1854,74 @@ class AudioAnnotationManager {
                     if (segmentData && seg.annotations) {
                         segmentData.annotations = seg.annotations;
                     }
+                    if (segmentData) {
+                        copySegmentProvenance(segmentData, seg);
+                    }
+                }
+                // createSegment saved each segment before its answers and
+                // provenance were restored, so the input held the last (or
+                // only) segment without them, and an untouched prelabel was
+                // stored that way. Save once more, with everything restored.
+                if (data.segments.length) {
+                    this._saveData();
                 }
                 audioDebugLog('Loaded existing annotations:', data.segments.length, 'segments');
             }
         } catch (e) {
             console.warn('Failed to load existing annotations:', e);
         }
+    }
+
+    /**
+     * Show a teammate's answer (a live session) in place of this page's.
+     *
+     * Replaces every segment, with its per-segment answers and provenance,
+     * without saving: the answer shown is already the team's. Keeps the
+     * selected segment when it is still there. ``value`` is the stored JSON,
+     * or null for no answer.
+     */
+    applyRemoteAnswer(value) {
+        let segments = [];
+        if (value) {
+            try {
+                const data = JSON.parse(value);
+                segments = data && Array.isArray(data.segments) ? data.segments : [];
+            } catch (e) {
+                return false;
+            }
+        }
+        if (this.inputEl) this.inputEl.value = value || '';
+        // Not drawn yet: the first load reads the input just set.
+        if (!this.peaks) return true;
+
+        const keep = this.activeSegmentId;
+        this._restoring = true;
+        try {
+            this.segments.forEach((s) => {
+                try { this.peaks.segments.removeById(s.id); } catch (e) { /* gone */ }
+            });
+            this.segments = [];
+            for (const seg of segments) {
+                const created = this.createSegment(seg.start_time, seg.end_time, seg.label,
+                                                   this._getLabelColor(seg.label), seg.id);
+                if (!created) continue;
+                if (seg.annotations) created.annotations = seg.annotations;
+                copySegmentProvenance(created, seg);
+            }
+        } finally {
+            this._restoring = false;
+        }
+        this._declareCompleteness();
+        this._updateSegmentList();
+        this._updateSegmentCount();
+        if (keep && this.segments.some((s) => s.id === keep)) {
+            this.selectSegment(keep);
+        } else {
+            this.activeSegmentId = null;
+            if (typeof this._hideQuestionsPanel === 'function') this._hideQuestionsPanel();
+            this._updateDeleteButton();
+        }
+        return true;
     }
 
     /**
@@ -1697,13 +1939,13 @@ class AudioAnnotationManager {
      */
     serialize() {
         return {
-            segments: this.segments.map(s => ({
+            segments: this.segments.map(s => copySegmentProvenance({
                 id: s.id,
                 start_time: s.startTime,
                 end_time: s.endTime,
                 label: s.label,
                 annotations: s.annotations || {}
-            }))
+            }, s))
         };
     }
 
@@ -1723,13 +1965,19 @@ class AudioAnnotationManager {
 
         // Load segments
         for (const seg of data.segments) {
-            this.createSegment(
+            const created = this.createSegment(
                 seg.start_time,
                 seg.end_time,
                 seg.label,
                 this._getLabelColor(seg.label),
                 seg.id
             );
+            if (created) {
+                copySegmentProvenance(created, seg);
+            }
+        }
+        if (data.segments.length) {
+            this._saveData();
         }
     }
 
@@ -1761,6 +2009,12 @@ class AudioAnnotationManager {
         // Remove keyboard listener
         document.removeEventListener('keydown', this._handleKeydown);
 
+        // Detach range-selection (zoomview + overview) window listeners
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+            this._rangeSelectDetach = [];
+        }
+
         // Destroy Peaks.js
         if (this.peaks) {
             this.peaks.destroy();
@@ -1779,3 +2033,16 @@ class AudioAnnotationManager {
 
 // Export for use
 window.AudioAnnotationManager = AudioAnnotationManager;
+
+// Live sessions (collab.js): show a teammate's segments without a reload.
+window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+window.potatoCollabWidgets.audio_annotation = {
+    apply(ctx) {
+        const scope = ctx.form || document;
+        const box = scope.querySelector('.audio-annotation-container')
+            || document.querySelector(`.audio-annotation-container[data-schema="${ctx.schema}"]`);
+        const manager = box && box.audioAnnotationManager;
+        if (!manager || typeof manager.applyRemoteAnswer !== 'function') return false;
+        return manager.applyRemoteAnswer(ctx.value);
+    },
+};

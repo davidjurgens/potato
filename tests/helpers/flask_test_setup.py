@@ -9,6 +9,7 @@ import sys
 import time
 import tempfile
 import json
+import warnings
 import yaml
 import threading
 import requests
@@ -43,8 +44,17 @@ def clear_all_global_state():
     # otherwise, making a mode-disabled server report enabled.
     for _mode_mod, _clear_fn in (
         ("potato.qda_mode", "clear_qda_mode_manager"),
+        ("potato.collab", "clear_collab_manager"),
         ("potato.solo_mode", "clear_solo_mode_manager"),
         ("potato.search", "clear_search"),
+        # RBAC + per-cohort schema resolver: their lazy singletons would
+        # otherwise carry a prior in-process server's (possibly no-cohort /
+        # no-rbac) config into the next server.
+        ("potato.server_utils.rbac", "clear_rbac_manager"),
+        ("potato.server_utils.cohort_schemes", "clear_cohort_scheme_resolver"),
+        # Authenticity write buffer: keyed by username, so a second server's
+        # "user" would otherwise inherit the first one's last-write time.
+        ("potato.authenticity", "clear_persist_throttle"),
     ):
         try:
             import importlib
@@ -117,6 +127,15 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Data source manager (also stops any live ingestion poll threads, which
+    # would otherwise outlive the test and keep writing into the next one's
+    # item pool)
+    try:
+        from potato.data_sources import clear_data_source_manager
+        clear_data_source_manager()
+    except ImportError:
+        pass
+
     # MACE manager
     try:
         from potato.mace_manager import clear_mace_manager
@@ -138,6 +157,16 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Cohort scheme resolver: built lazily from the config of the first
+    # server that asks, then kept, so a later server in the same process saw
+    # the earlier server's cohorts (test_cohort_schemes_routes after any
+    # other server test).
+    try:
+        from potato.server_utils.cohort_schemes import clear_cohort_scheme_resolver
+        clear_cohort_scheme_resolver()
+    except ImportError:
+        pass
+
     # User authenticator singleton
     try:
         import potato.authentication as auth_module
@@ -146,7 +175,29 @@ def clear_all_global_state():
         pass
 
 class FlaskTestServer:
-    """A test server that can be started and stopped for integration tests."""
+    """A test server that can be started and stopped for integration tests.
+
+    **One at a time.** The server runs in a thread inside the pytest process,
+    not as a subprocess, so every instance shares the same process-wide
+    singletons — `get_item_state_manager()`, `get_user_state_manager()` and the
+    config module. Starting a second server while a first is still serving
+    silently rebinds all three to the second project, and from that moment both
+    ports answer with the second project's data.
+
+    That is not hypothetical. A dashboard test that started an "annotators
+    agree" project and an "annotators disagree" project, then compared the two
+    rendered reports, got byte-identical pages: both showed the disagreeing
+    numbers, while the JSON fetched from each server at its own setup time was
+    correct. The bug was in the test, and nothing in the harness said so.
+
+    Sequence them instead — start, use, `stop_server()`, then start the next.
+    Overlap is detected at `start_server()` and reported; set
+    `POTATO_STRICT_TEST_SERVERS=1` to turn that report into a failure.
+    """
+
+    #: Every instance currently serving, so an overlap can be named rather than
+    #: silently producing wrong data.
+    _live: "list[FlaskTestServer]" = []
 
     def __init__(self, app_factory=None, config=None, debug=False, port=None, config_file=None, test_data_file=None):
         # Support both old and new constructor patterns
@@ -173,7 +224,7 @@ class FlaskTestServer:
 
             # Update port to match the actual port being used
             config_data['port'] = self.port
-            config_data['host'] = '0.0.0.0'
+            config_data['host'] = '127.0.0.1'
 
             # Inject a known admin API key if not already set
             if 'admin_api_key' not in config_data:
@@ -195,8 +246,6 @@ class FlaskTestServer:
                 config['persist_sessions'] = False
 
                 # Add missing required config keys if not present
-                if 'output_annotation_format' not in config:
-                    config['output_annotation_format'] = 'jsonl'
                 if 'site_dir' not in config:
                     config['site_dir'] = 'output'
                 if 'alert_time_each_instance' not in config:
@@ -208,7 +257,7 @@ class FlaskTestServer:
                 if 'port' not in config:
                     config['port'] = self.port
                 if 'host' not in config:
-                    config['host'] = '0.0.0.0'
+                    config['host'] = '127.0.0.1'
                 if 'session_lifetime_days' not in config:
                     config['session_lifetime_days'] = 2
                 if 'secret_key' not in config:
@@ -234,7 +283,7 @@ class FlaskTestServer:
                     config_data['random_seed'] = 1234
                 config_data['require_password'] = False
                 config_data['port'] = self.port
-                config_data['host'] = '0.0.0.0'
+                config_data['host'] = '127.0.0.1'
                 if 'session_lifetime_days' not in config_data:
                     config_data['session_lifetime_days'] = 2
                 if 'secret_key' not in config_data:
@@ -334,8 +383,41 @@ class FlaskTestServer:
         """Alias for start() method for backward compatibility."""
         return self._start_server(config_dir)
 
+    def _warn_if_another_server_is_live(self):
+        """Name an overlap rather than letting it corrupt the results.
+
+        See the class docstring: two live servers share one set of singletons,
+        and the newer one wins for both.
+        """
+        # Only servers still holding a WSGI server count. A test that lets its
+        # server fall out of scope without calling stop_server() leaves an
+        # entry behind, and counting those turned a real signal into 1039
+        # errors across the suite — a guard that cries wolf is worse than none.
+        for stale in [s for s in FlaskTestServer._live
+                      if getattr(s, "_wsgi_server", None) is None]:
+            FlaskTestServer._live.remove(stale)
+
+        others = [s for s in FlaskTestServer._live if s is not self]
+        if not others:
+            return
+        detail = ", ".join(
+            f"port {s.port} ({getattr(s, 'temp_config_file', None) or 'config'})"
+            for s in others)
+        message = (
+            f"FlaskTestServer on port {self.port} is starting while "
+            f"{len(others)} other server(s) are still serving: {detail}. "
+            f"They share this process's item/user state and config singletons, "
+            f"so BOTH ports will now answer with THIS project's data. "
+            f"Stop the previous server before starting this one.")
+        if os.environ.get("POTATO_STRICT_TEST_SERVERS") == "1":
+            raise RuntimeError(message)
+        warnings.warn(message, RuntimeWarning, stacklevel=3)
+
     def _start_server(self, config_dir=None):
         """Internal method to start the Flask server in a separate thread."""
+        self._warn_if_another_server_is_live()
+        if self not in FlaskTestServer._live:
+            FlaskTestServer._live.append(self)
         # Handle config_dir parameter for backward compatibility
         if config_dir is not None:
             # This is the old pattern - we need to handle config file creation
@@ -346,7 +428,7 @@ class FlaskTestServer:
                 simple_config = {
                     "debug": self.debug,
                     "port": self.port,
-                    "host": "0.0.0.0",
+                    "host": "127.0.0.1",
                     "task_dir": config_dir,
                     "output_annotation_dir": os.path.join(config_dir, "output"),
                     "data_files": [],
@@ -388,6 +470,13 @@ class FlaskTestServer:
                     clear_item_state_manager()
                     clear_config()
                     reset_span_counter()
+                    try:
+                        # Built from whichever config asked first; a unit
+                        # test or an earlier server leaves its cohorts behind.
+                        from potato.server_utils.cohort_schemes import clear_cohort_scheme_resolver
+                        clear_cohort_scheme_resolver()
+                    except ImportError:
+                        pass
                     try:
                         from potato.adjudication import clear_adjudication_manager
                         clear_adjudication_manager()
@@ -438,7 +527,7 @@ class FlaskTestServer:
                 if 'require_password' not in config:
                     config['require_password'] = False
                 config['port'] = self.port
-                config['host'] = '0.0.0.0'
+                config['host'] = '127.0.0.1'
                 config['session_lifetime_days'] = 2
                 config['secret_key'] = 'test-secret-key'
 
@@ -519,6 +608,11 @@ class FlaskTestServer:
                 # Clear any existing managers (for testing)
                 clear_user_state_manager()
                 clear_item_state_manager()
+                try:
+                    from potato.server_utils.cohort_schemes import clear_cohort_scheme_resolver
+                    clear_cohort_scheme_resolver()
+                except ImportError:
+                    pass
                 # Clear ICL labeler if it exists
                 try:
                     from potato.ai.icl_labeler import clear_icl_labeler
@@ -572,6 +666,42 @@ class FlaskTestServer:
                     except Exception as e:
                         print(f"Warning: Failed to initialize ICL labeler: {e}")
 
+                # Start live database ingestion pollers (same as
+                # flask_server.configure_app does on the real server path).
+                # Must come after load_all_data(), which creates the
+                # DataSourceManager and performs the catch-up read.
+                try:
+                    from potato.flask_server import _has_live_ingestion_source
+                    if _has_live_ingestion_source(config):
+                        from potato.data_sources import get_data_source_manager
+                        manager = get_data_source_manager()
+                        if manager is not None:
+                            started = manager.start_live_ingestion()
+                            print(f"[DEBUG] Started {started} live ingestion worker(s)")
+                except Exception as e:
+                    print(f"[DEBUG] Error starting live ingestion: {e}")
+
+                # Initialize quality control manager if any QC feature is on.
+                # This mirrors flask_server._initialize_from_config(); without
+                # it get_quality_control_manager() returns None here, so
+                # attention checks, gold standards and pre-annotations all
+                # silently do nothing in server tests while working live.
+                qc_enabled = (
+                    config.get('attention_checks', {}).get('enabled', False) or
+                    config.get('gold_standards', {}).get('enabled', False) or
+                    config.get('pre_annotation', {}).get('enabled', False)
+                )
+                if qc_enabled:
+                    try:
+                        from potato.quality_control import init_quality_control_manager
+                        qc_task_dir = config.get(
+                            'task_dir',
+                            os.path.dirname(config.get('config_file', '')))
+                        init_quality_control_manager(config, qc_task_dir)
+                        print("[DEBUG] Quality control manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing quality control manager: {e}")
+
                 # Initialize adjudication manager if configured
                 if config.get('adjudication', {}).get('enabled', False):
                     try:
@@ -605,6 +735,85 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Boundary Lab manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale probes.
+                try:
+                    from potato.boundary import init_boundary_manager, clear_boundary_manager
+                    clear_boundary_manager()
+                    if config.get('boundary_probing', {}).get('enabled', False):
+                        init_boundary_manager(config)
+                        print("[DEBUG] Boundary Lab manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Boundary Lab manager: {e}")
+                # Reset + (re)initialize Truth Serum manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale predictions.
+                try:
+                    from potato.truth_serum import init_truth_serum_manager, clear_truth_serum_manager
+                    clear_truth_serum_manager()
+                    if config.get('truth_serum', {}).get('enabled', False):
+                        init_truth_serum_manager(config)
+                        print("[DEBUG] Truth Serum manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Truth Serum manager: {e}")
+                # Reset + (re)initialize Think-Aloud manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale transcripts.
+                try:
+                    from potato.thinkaloud import init_thinkaloud_manager, clear_thinkaloud_manager
+                    clear_thinkaloud_manager()
+                    if config.get('thinkaloud', {}).get('enabled', False):
+                        init_thinkaloud_manager(config)
+                        print("[DEBUG] Think-Aloud manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Think-Aloud manager: {e}")
+                # Reset + (re)initialize Psychometrics manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale model fits.
+                try:
+                    from potato.psychometrics import init_psychometrics_manager, clear_psychometrics_manager
+                    clear_psychometrics_manager()
+                    if config.get('psychometrics', {}).get('enabled', False):
+                        init_psychometrics_manager(config)
+                        print("[DEBUG] Psychometrics manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Psychometrics manager: {e}")
+                # Reset + (re)initialize Rooms manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale rooms.
+                try:
+                    from potato.rooms import init_rooms_manager, clear_rooms_manager
+                    clear_rooms_manager()
+                    if config.get('rooms', {}).get('enabled', False):
+                        init_rooms_manager(config)
+                        print("[DEBUG] Rooms manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Rooms manager: {e}")
+                # Live collaborative sessions: cleared unconditionally for the
+                # same reason, and because a leaked manager keeps its
+                # /updateinstance interceptor and assignment exclusions.
+                try:
+                    from potato.collab import init_collab_manager, clear_collab_manager
+                    clear_collab_manager()
+                    if (config.get('collab') or {}).get('enabled', False):
+                        init_collab_manager(config)
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing collab manager: {e}")
+                # Reset + (re)initialize Pocket Mode config holder. The clear
+                # runs unconditionally so a leaked config from a prior
+                # in-process test server cannot enable /pocket unexpectedly.
+                try:
+                    from potato.pocket.routes import init_pocket, clear_pocket
+                    from potato.pocket.devices import clear_device_tracker
+                    clear_pocket()
+                    clear_device_tracker()  # lazy singleton pins output dir
+                    if config.get('pocket', {}).get('enabled', False):
+                        init_pocket(config)
+                        print("[DEBUG] Pocket Mode initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Pocket Mode: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.
@@ -626,6 +835,40 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Judge Calibration manager (clear
+                # unconditionally so a leaked singleton can't make a disabled
+                # server report enabled).
+                try:
+                    from potato.judge_calibration import clear_judge_calibration_manager
+                    clear_judge_calibration_manager()
+                except Exception:
+                    pass
+                if config.get('judge_calibration', {}).get('enabled', False):
+                    try:
+                        from potato.judge_calibration import init_judge_calibration_manager
+                        jc_manager = init_judge_calibration_manager(config)
+                        if jc_manager:
+                            print("[DEBUG] Judge Calibration manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing Judge Calibration manager: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                # Reset + (re)initialize the labeling engine (clear always,
+                # so a leaked engine from a prior in-process server cannot
+                # answer for this one).
+                try:
+                    from potato.labeling_engine.integration.hooks import (
+                        clear_engine, init_engine)
+                    clear_engine()
+                    if (config.get('labeling_engine') or {}).get('enabled', False):
+                        init_engine(config)
+                        print("[DEBUG] Labeling engine initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing labeling engine: {e}")
+                    import traceback
+                    traceback.print_exc()
+
                 # Codebook ICL-sync listener (parity with the real init
                 # paths; keeps ICL prompts on the current codebook set).
                 try:
@@ -643,6 +886,21 @@ class FlaskTestServer:
                     init_cases_from_config(config)
                 except Exception as e:
                     print(f"[DEBUG] Cases auto-detect skipped: {e}")
+
+                # Group traces into sessions (no-op unless sessions enabled).
+                try:
+                    from potato.sessions import init_sessions_from_config
+                    init_sessions_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Sessions auto-detect skipped: {e}")
+
+                # Enroll instances onto the review board (no-op unless
+                # review_workflow enabled).
+                try:
+                    from potato.review_workflow import init_review_workflow_from_config
+                    init_review_workflow_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Review workflow init skipped: {e}")
 
                 # Build the universal search index (no-op if disabled)
                 try:
@@ -708,22 +966,12 @@ class FlaskTestServer:
                 @app.context_processor
                 def inject_template_context():
                     from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
-                    ui_lang_defaults = {
-                        'next_button': 'Next',
-                        'previous_button': 'Previous',
-                        'labeled_badge': 'Labeled',
-                        'not_labeled_badge': 'Not labeled',
-                        'submit_button': 'Submit',
-                        'progress_label': 'Progress',
-                        'go_button': 'Go',
-                        'logout': 'Logout',
-                        'loading': 'Loading annotation interface...',
-                        'error_heading': 'Error',
-                        'retry_button': 'Retry',
-                        'adjudicate': 'Adjudicate',
-                    }
-                    ui_lang_config = config.get('ui_language', {})
-                    ui_lang = {**ui_lang_defaults, **ui_lang_config}
+                    # Use the same shared English defaults as production so the
+                    # test harness renders the full ui_lang key set.
+                    from potato.server_utils.i18n import UI_LANG_DEFAULTS, resolve_ui_language
+                    from potato.plugins import plugin_assets
+                    from potato.server_utils.theme import resolve_ui_theme
+                    ui_lang = resolve_ui_language(config.get('ui_language'), UI_LANG_DEFAULTS)
                     return {
                         'ui_debug': is_ui_debug_enabled(),
                         'server_debug': is_server_debug_enabled(),
@@ -731,6 +979,8 @@ class FlaskTestServer:
                         'debug_phase': config.get('debug_phase'),
                         'annotation_task_name': config.get('annotation_task_name', 'Annotation Task'),
                         'ui_lang': ui_lang,
+                        'ui_theme': resolve_ui_theme(config),
+                        'plugin_assets': plugin_assets(config.get('plugins')),
                     }
 
                 # Configure routes
@@ -771,6 +1021,99 @@ class FlaskTestServer:
                     except ImportError:
                         pass
 
+                # Register datasets/experiments blueprint if configured
+                if config.get("datasets", {}).get("enabled", False):
+                    try:
+                        from potato.eval_datasets import init_datasets_manager
+                        from potato.eval_datasets.routes import datasets_bp
+                        from potato.eval_datasets.eval_admin import eval_admin_bp
+                        init_datasets_manager(config)
+                        if 'datasets' not in app.blueprints:
+                            app.register_blueprint(datasets_bp)
+                        if 'eval_admin' not in app.blueprints:
+                            app.register_blueprint(eval_admin_bp)
+                    except ImportError:
+                        pass
+
+                # Register automation-rules blueprint if configured. Clear any
+                # prior singleton first so each test server gets fresh rules and
+                # we don't leak the previous worker thread.
+                if config.get("automation", {}).get("enabled", False):
+                    try:
+                        from potato.automation import (
+                            init_automation_manager, clear_automation_manager)
+                        from potato.automation.routes import automation_bp
+                        clear_automation_manager()
+                        init_automation_manager(config)
+                        if 'automation' not in app.blueprints:
+                            app.register_blueprint(automation_bp)
+                    except ImportError:
+                        pass
+
+                # Register semantic-curation blueprint if configured
+                if config.get("curation", {}).get("enabled", False):
+                    try:
+                        from potato.curation import init_curation_manager, clear_curation_manager
+                        from potato.curation.routes import curation_bp
+                        clear_curation_manager()
+                        init_curation_manager(config)
+                        if 'curation' not in app.blueprints:
+                            app.register_blueprint(curation_bp)
+                    except ImportError:
+                        pass
+
+                # Register the model-training blueprint if configured.
+                # This harness hand-builds its app and never calls
+                # configure_app(), so a blueprint wired only in flask_server
+                # silently does not exist in server tests.
+                if config.get("model_training", {}).get("enabled", False):
+                    try:
+                        from potato.training.manager import (
+                            clear_training_manager, init_training_manager)
+                        from potato.training.protocol import training_api_bp
+                        from potato.training.routes import training_bp
+                        clear_training_manager()
+                        init_training_manager(config)
+                        if 'training' not in app.blueprints:
+                            app.register_blueprint(training_bp)
+                        if 'training_api' not in app.blueprints:
+                            app.register_blueprint(training_api_bp)
+                    except ImportError:
+                        pass
+
+                # Register multi-model arena blueprint if configured
+                if config.get("arena", {}).get("enabled", False):
+                    try:
+                        from potato.arena import init_arena_manager, clear_arena_manager
+                        from potato.arena.routes import arena_bp
+                        clear_arena_manager()
+                        init_arena_manager(config)
+                        if 'arena' not in app.blueprints:
+                            app.register_blueprint(arena_bp)
+                    except ImportError:
+                        pass
+
+                # Register cross-document event-registry / corpus-map blueprints
+                if (config.get("event_template", {}).get("enabled", False)
+                        or config.get("corpus_map", {}).get("enabled", False)):
+                    from potato.event_registry import (
+                        init_event_registry_manager, clear_event_registry_manager,
+                    )
+                    from potato.event_registry.routes import event_registry_bp
+                    clear_event_registry_manager()
+                    init_event_registry_manager(config)
+                    if 'event_registry' not in app.blueprints:
+                        app.register_blueprint(event_registry_bp)
+                if config.get("corpus_map", {}).get("enabled", False):
+                    from potato.corpus_map import (
+                        init_corpus_map_manager, clear_corpus_map_manager,
+                    )
+                    from potato.corpus_map.routes import corpus_map_bp
+                    clear_corpus_map_manager()
+                    init_corpus_map_manager(config)
+                    if 'corpus_map' not in app.blueprints:
+                        app.register_blueprint(corpus_map_bp)
+
                 # Initialize OAuth with Flask app if using OAuth authentication
                 auth_method = config.get("authentication", {}).get("method", "in_memory")
                 if auth_method == "oauth":
@@ -788,9 +1131,29 @@ class FlaskTestServer:
                     from flask import send_from_directory
                     return send_from_directory(test_data_dir, filename)
 
+                @app.route('/test-video/<path:filename>')
+                def serve_test_video(filename):
+                    """Serve test video files from the tests/data directory."""
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
+                @app.route('/test-image/<path:filename>')
+                def serve_test_image(filename):
+                    """Serve test images from the tests/data directory.
+
+                    Image-annotation tests need a real image over HTTP: a
+                    data: URI cannot be used, because sanitize_html blocks the
+                    `data:` scheme outright (it is an XSS vector), so the URL
+                    never survives into the rendered instance text.
+                    """
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
                 # Use make_server instead of app.run() for proper shutdown support
                 from werkzeug.serving import make_server
-                self._wsgi_server = make_server('0.0.0.0', self.port, app, threaded=True)
+                # Loopback only: a test server is for this machine, and the
+                # debug admin bypass applies only on a loopback bind.
+                self._wsgi_server = make_server('127.0.0.1', self.port, app, threaded=True)
                 self._wsgi_server.serve_forever()
             except Exception as e:
                 print(f"Error starting server: {e}")
@@ -939,7 +1302,7 @@ class FlaskTestServer:
             # Fall back to API endpoint
             response = self.session.get(
                 f"{self.base_url}/admin/user_state/{username}",
-                headers={"X-API-Key": "admin_api_key"},
+                headers={"X-API-Key": self.resolve_admin_key()},
                 timeout=5
             )
 
@@ -961,6 +1324,9 @@ class FlaskTestServer:
 
     def stop_server(self):
         """Stop the Flask server."""
+        if self in FlaskTestServer._live:
+            FlaskTestServer._live.remove(self)
+
         # Shutdown the WSGI server if it exists
         if hasattr(self, '_wsgi_server') and self._wsgi_server is not None:
             try:
@@ -1000,22 +1366,45 @@ class FlaskTestServer:
         """Property to maintain compatibility with existing tests."""
         return None  # The app is not directly accessible in this implementation
 
+    def resolve_admin_key(self) -> str:
+        """The key the server will actually accept.
+
+        `self.admin_api_key` is stamped into the config when the server starts,
+        so it is the answer nearly always. The fallback asks the same resolver
+        the request handler uses (config, then POTATO_ADMIN_API_KEY, then the
+        generated `{task_dir}/admin_api_key.txt`) for a server handed a config
+        that already named a key.
+
+        This exists because `get()` and `post()` used to send the literal
+        string ``admin_api_key`` instead of either -- a value no server has
+        ever issued. It went unnoticed because the endpoints under test did
+        not check.
+        """
+        key = getattr(self, "admin_api_key", None)
+        if key:
+            return key
+        try:
+            from potato.server_utils.admin_key import get_admin_api_key
+            from potato.server_utils.config_module import config
+            return get_admin_api_key(config) or ""
+        except Exception:
+            return ""
+
+    def _with_admin_key(self, path: str, kwargs: dict) -> dict:
+        if path.startswith('/admin/'):
+            headers = dict(kwargs.get('headers') or {})
+            headers.setdefault('X-API-Key', self.resolve_admin_key())
+            kwargs['headers'] = headers
+        return kwargs
+
     def get(self, path: str, **kwargs) -> requests.Response:
         """Make a GET request to the server using the session."""
-        # Add admin API key for admin endpoints
-        if path.startswith('/admin/'):
-            headers = kwargs.get('headers', {})
-            headers['X-API-Key'] = 'admin_api_key'
-            kwargs['headers'] = headers
+        kwargs = self._with_admin_key(path, kwargs)
         return self.session.get(f"{self.base_url}{path}", **kwargs)
 
     def post(self, path: str, **kwargs) -> requests.Response:
         """Make a POST request to the server using the session."""
-        # Add admin API key for admin endpoints
-        if path.startswith('/admin/'):
-            headers = kwargs.get('headers', {})
-            headers['X-API-Key'] = 'admin_api_key'
-            kwargs['headers'] = headers
+        kwargs = self._with_admin_key(path, kwargs)
         return self.session.post(f"{self.base_url}{path}", **kwargs)
 
 

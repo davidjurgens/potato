@@ -10,7 +10,7 @@
   "domains": ["attitudes", "authoritarianism"],
   "scoring": {
     "method": "sum",
-    "reverse_items": [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22],
+    "reverse_items": [2, 4, 6, 7, 9, 11, 13, 16, 17, 19, 22],
     "range": [22, 198]
   },
   "instructions": "This survey is part of an investigation of general public opinion concerning a variety of social issues. You will probably find that you agree with some of the statements, and disagree with others, to varying extents. Please indicate your reaction to each statement by selecting a number from 1 to 9.",

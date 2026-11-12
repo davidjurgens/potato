@@ -98,6 +98,35 @@ class VisualDetectionFormat(BaseModel):
     detections: List[Detection]
 
 
+class SegmentationMask(BaseModel):
+    """One pixel-level mask, in the RLE shape the client and exporters share.
+
+    `rle` is Potato's own run-length form -- {"counts": [...], "size": [h, w]}
+    -- deliberately NOT a base64 PNG or a polygon. It is what
+    `cv_utils.normalize_annotation_object` already reads, so an accepted mask
+    reaches every exporter with no conversion step to get wrong.
+    """
+    #: Must match a label in the schema config, or the accept path rejects it.
+    label: str
+    #: {"counts": [int, ...], "size": [height, width]}
+    rle: dict
+    confidence: Optional[float] = None
+
+
+class VisualSegmentationFormat(BaseModel):
+    """Segmentation results for an image.
+
+    Example output:
+    {
+        "masks": [
+            {"label": "road", "rle": {"counts": [0, 120, 45], "size": [480, 640]},
+             "confidence": 0.94}
+        ]
+    }
+    """
+    masks: List[SegmentationMask]
+
+
 class VisualClassificationFormat(BaseModel):
     """Classification result for an image or region.
 
@@ -198,6 +227,55 @@ class VideoTrackingSuggestionFormat(BaseModel):
     tracks: List[ObjectTrack]
 
 
+class AnnotationCritiqueFormat(BaseModel):
+    """A vision model's verdict on ONE annotated region.
+
+    This is a judge output, not an annotation: nothing here becomes geometry.
+    The model is shown a crop with the annotator's own outline drawn on it and
+    asked whether the outlined thing matches its label and whether the outline
+    fits. See :mod:`potato.ai.critique` for the parsing and confidence gating
+    -- every field here is treated as advisory and re-validated, because open
+    models return verdict strings and labels outside the allowed vocabulary
+    often enough that trusting the schema alone would manufacture findings.
+
+    Example output:
+    {
+        "verdict": "wrong_label",
+        "suggested_label": "dog",
+        "boundary": "tight",
+        "confidence": 0.82,
+        "rationale": "The outlined animal has a long snout and floppy ears."
+    }
+    """
+    verdict: str
+    suggested_label: Optional[str] = None
+    boundary: Optional[str] = None
+    confidence: float = 0.0
+    rationale: Optional[str] = None
+
+
+class MissedObjectEntry(BaseModel):
+    """One object the model believes was left unannotated.
+
+    ``bbox`` is normalized and approximate. Vision-language models localize
+    poorly, so this is a hint about where to look, never an acceptable
+    annotation -- accepting it would put a guessed coordinate in the dataset.
+    """
+    label: str
+    bbox: Optional[BoundingBox] = None
+    confidence: float = 0.0
+    rationale: Optional[str] = None
+
+
+class MissedObjectsFormat(BaseModel):
+    """Whole-image "what did the annotator miss?" result.
+
+    An empty list is the expected answer for careful work, and the prompt says
+    so -- without that, models pad the list to look useful.
+    """
+    missed: List[MissedObjectEntry]
+
+
 class FrameDetections(BaseModel):
     """Detections for a single video frame."""
     frame_index: int
@@ -210,6 +288,33 @@ class MultiFrameDetectionFormat(BaseModel):
     Used when running detection on sampled video frames.
     """
     frames: List[FrameDetections]
+
+
+class RolloutBreakFormat(BaseModel):
+    """Where a generated rollout stops being physically coherent.
+
+    A judge output, not an annotation. ``break_tile`` is a 1-based index into
+    the numbered contact sheet the model was shown, and **0 means no break was
+    found** -- an answer the prompt asks for explicitly, because a model given
+    only "which frame is wrong" will always name one.
+
+    Every field is re-validated in :mod:`potato.ai.rollout_judge`: open models
+    return the tile as a string, name a tile that is not on the sheet, and pick
+    categories outside the taxonomy often enough that trusting the declared
+    schema would turn a parsing failure into a finding.
+
+    Example output:
+    {
+        "break_tile": 7,
+        "violation_type": "interpenetration",
+        "confidence": 0.71,
+        "rationale": "The hand passes through the mug rather than gripping it."
+    }
+    """
+    break_tile: int
+    violation_type: Optional[str] = None
+    confidence: float = 0.0
+    rationale: Optional[str] = None
 
 
 # ============================================================================
@@ -248,11 +353,19 @@ CLASS_REGISTRY = {
 
     # Visual annotation formats - Image
     "visual_detection": VisualDetectionFormat,
+    "visual_segmentation": VisualSegmentationFormat,
     "visual_classification": VisualClassificationFormat,
+
+    # Judge formats -- these critique annotations rather than producing them
+    "annotation_critique": AnnotationCritiqueFormat,
+    "missed_objects": MissedObjectsFormat,
 
     # Visual annotation formats - Video
     "video_scene_detection": VideoSceneDetectionFormat,
     "video_keyframe_detection": VideoKeyframeDetectionFormat,
     "video_tracking_suggestion": VideoTrackingSuggestionFormat,
     "multi_frame_detection": MultiFrameDetectionFormat,
+
+    # World-model rollout evaluation
+    "rollout_break": RolloutBreakFormat,
 }

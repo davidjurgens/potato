@@ -1,0 +1,6 @@
+[
+  {"id": "phantom_dicom", "volume": "phantom_dicom", "rtstruct": "phantom_rtstruct.dcm",
+   "text": "Synthetic CT phantom (DICOM series), with the lesion outlined in an RTSTRUCT"},
+  {"id": "phantom_nifti", "volume": "phantom.nii.gz",
+   "text": "The same phantom as NIfTI"}
+]

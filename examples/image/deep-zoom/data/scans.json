@@ -1,0 +1,6 @@
+[
+  {"id": "survey_01", "image": "survey.png",
+   "note": "Aerial survey tile 01. Mark every structure."},
+  {"id": "survey_02", "image": "survey.png",
+   "note": "Aerial survey tile 02. Mark every structure."}
+]

@@ -137,6 +137,7 @@
 
         // Load any existing annotations
         loadExistingAnnotations(container, fieldKey);
+        registerCollabApplier(fieldKey);
     }
 
     /**
@@ -955,6 +956,86 @@
     }
 
     /**
+     * Replace this display's boxes with what its hidden input holds now, and
+     * redraw. A teammate's answer in a live session arrives this way
+     * (collab.js has written it to the input). Unlike loadExistingAnnotations
+     * it drops what is there first, so the boxes equal the input exactly and
+     * an empty input clears them. Nothing is saved: no change event, no
+     * data-modified. The page shown stays; the selection follows its box id;
+     * a drag in progress is dropped. False when the input is not a list.
+     */
+    function reloadFromInput(container) {
+        const fieldKey = container.getAttribute('data-field-key');
+        const input = getDataInput(container);
+        let list = [];
+        if (input && input.value) {
+            try {
+                list = JSON.parse(input.value);
+            } catch (e) {
+                return false;
+            }
+            if (!Array.isArray(list)) return false;
+        }
+        const old = boundingBoxes[fieldKey] || {};
+        const ownsSelection = !!selectedBox && Object.values(old).some(
+            (boxes) => (boxes || []).indexOf(selectedBox) >= 0);
+        const keepId = ownsSelection ? selectedBox.id : null;
+        const pages = {};
+        list.forEach((box) => {
+            if (!box || typeof box !== 'object') return;
+            const page = box.page || 1;
+            (pages[page] = pages[page] || []).push(box);
+        });
+        boundingBoxes[fieldKey] = pages;
+        if (ownsSelection) {
+            selectedBox = null;
+            if (keepId) {
+                Object.values(pages).forEach((boxes) => boxes.forEach((box) => {
+                    if (box.id === keepId) selectedBox = box;
+                }));
+            }
+        }
+        if (currentContainer === container) {
+            isDrawing = false;
+            isResizing = false;
+            resizeHandle = null;
+            drawStart = null;
+            resizeStart = null;
+        }
+        redrawCanvas(container);
+        updateBoxCounts(container);
+        return true;
+    }
+
+    /** The bbox display for a field key, or null. */
+    function containerFor(fieldKey) {
+        return Array.from(document.querySelectorAll('.pdf-display[data-annotation-mode="bounding_box"]'))
+            .find((el) => el.getAttribute('data-field-key') === fieldKey) || null;
+    }
+
+    /**
+     * Live collaborative sessions. These boxes belong to a display, not a
+     * scheme: there is no form with data-schema-name / data-annotation-type
+     * for collab.js to find, so its per-scheme hook (potatoCollabAppliers,
+     * keyed by the hidden input's name, the field key) is how it reaches
+     * them. Not registered over a scheme of the same name.
+     */
+    function registerCollabApplier(fieldKey) {
+        if (!fieldKey) return;
+        window.potatoCollabAppliers = window.potatoCollabAppliers || {};
+        if (window.potatoCollabAppliers[fieldKey]) return;
+        const scheme = Array.from(document.querySelectorAll('form[data-schema-name]'))
+            .some((form) => form.getAttribute('data-schema-name') === fieldKey);
+        if (scheme) return;
+        const applier = function () {
+            const container = containerFor(fieldKey);
+            return container ? reloadFromInput(container) : false;
+        };
+        applier.pdfBoundingBox = true;
+        window.potatoCollabAppliers[fieldKey] = applier;
+    }
+
+    /**
      * Trigger a custom event for bounding box actions. Also persists boxes to
      * the hidden input (runs on every box mutation).
      */
@@ -1029,7 +1110,21 @@
         syncCanvasSize: syncCanvasSize,
         goToPage: goToPage,
         deleteSelected: function(container) { deleteSelectedBox(container); },
-        setMode: setMode
+        setMode: setMode,
+        /** Redraw a display (element or field key) from its hidden input. */
+        reload: function(target) {
+            const container = typeof target === 'string' ? containerFor(target) : target;
+            return container ? reloadFromInput(container) : false;
+        }
+    };
+
+    // For a collab.js that finds a display by type (see registerCollabApplier).
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets.pdf_bounding_box = {
+        apply(ctx) {
+            const container = containerFor(ctx.schema);
+            return container ? reloadFromInput(container) : false;
+        }
     };
 
     // Auto-initialize on DOM ready

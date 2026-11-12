@@ -1,7 +1,7 @@
 """
 Identifier Utilities for Schema Generation
 
-This module provides centralized functions for generating consistent identifiers
+Centralized functions for generating consistent identifiers
 and validating schema configurations across all annotation schema types.
 """
 
@@ -44,7 +44,8 @@ def validate_schema_config(annotation_scheme: dict) -> bool:
     # Validate labels if present
     if "labels" in annotation_scheme:
         labels = annotation_scheme["labels"]
-        if not labels:
+        # An ontology-backed scheme (label_source) may have no fixed labels.
+        if not labels and not annotation_scheme.get("label_source"):
             raise ValueError("Labels list cannot be empty")
 
         # Check for duplicate labels
@@ -172,16 +173,67 @@ def humanize_label(text: str) -> str:
     return " ".join(out)
 
 
+def bad_text_label_content(annotation_scheme: dict) -> str:
+    """The escape-hatch option's visible text, or "" when there is none.
+
+    Two spellings are accepted, because the documented one is not the obvious
+    one:
+
+        bad_text_label: Nothing quotable                 # shorthand
+        bad_text_label: {label_content: Nothing quotable}
+
+    Only the second used to render. The first is what a config author writes
+    after reading a one-line "Optional configuration for invalid text option"
+    in the reference, and it produced a scheme with one fewer option than
+    asked for, no warning at boot, and a clean `validate --strict`.
+
+    A dict without `label_content` is a mistake worth naming rather than
+    silently dropping, so it logs.
+    """
+    raw = annotation_scheme.get("bad_text_label")
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, Mapping):
+        content = raw.get("label_content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        logger.warning(
+            "bad_text_label on %r has no 'label_content', so no escape-hatch "
+            "option was rendered. Write either `bad_text_label: <text>` or "
+            "`bad_text_label: {label_content: <text>}`.",
+            annotation_scheme.get("name", "?"))
+        return ""
+    logger.warning(
+        "bad_text_label on %r must be a string or an object with "
+        "'label_content', not %s; no option was rendered.",
+        annotation_scheme.get("name", "?"), type(raw).__name__)
+    return ""
+
+
 def display_label_text(label_data: Any, annotation_scheme: dict) -> str:
     """Resolve the *visible* text for a label.
 
-    Precedence: explicit ``displayed_label`` on a dict label  >
-    humanized name (default, when ``humanize_labels`` is not disabled) >
-    raw name. Stored value is unaffected by this function.
+    Precedence: ``displayed_label`` > ``text`` > ``label`` > humanized name
+    (default, when ``humanize_labels`` is not disabled) > raw name. The
+    stored value is unaffected by this function.
+
+    Three spellings because three already existed in the wild and only the
+    first was read:
+
+    * ``displayed_label`` -- what the code has always honored.
+    * ``text`` -- what ``docs/configuration/config_reference.md`` documents
+      as "Display text shown to annotators". A config following the docs
+      verbatim rendered the humanized *name* instead.
+    * ``label`` -- what the bundled survey instruments use, in 1688 options
+      across 30 files. Annotators saw "less_hs" and "not_strong_dem" rather
+      than "Less than high school" and "Not very strong Democrat".
     """
     if isinstance(label_data, Mapping):
-        if label_data.get("displayed_label"):
-            return str(label_data["displayed_label"])
+        for display_key in ("displayed_label", "text", "label"):
+            if label_data.get(display_key):
+                return str(label_data[display_key])
         name = label_data.get("name", "")
     else:
         name = label_data
@@ -209,15 +261,29 @@ def safe_generate_layout(annotation_scheme: dict, layout_function: callable, *ar
         return layout_function(annotation_scheme, *args, **kwargs)
 
     except Exception as e:
+        # A generator is NOT a validation surface. Everything raised below this
+        # line is caught, logged and replaced with an error card on the page --
+        # so `potato validate --strict` still reports "OK", and a study ships
+        # with one question replaced by a red box. That is the right behaviour
+        # for the page (one broken scheme must not take the whole task down),
+        # and it is why a check placed in a generator fails open.
+        #
+        # Config-level refusals belong in `config_module.validate_*`, which is
+        # the only surface `validate` reads. Three separate checks this week
+        # existed somewhere that could not refuse: an inverted `number` range
+        # here, `require_fully_annotated` read by nothing at top level, and
+        # `min_response_time` measured by the client. If a config should be
+        # rejected, reject it in config_module; raise here only for what cannot
+        # be known until render time.
         schema_name = annotation_scheme.get('name', 'unknown')
         logger.error(f"Failed to generate layout for schema '{schema_name}': {e}")
 
         # Return error HTML instead of crashing
         error_html = f"""
-        <div class="annotation-error" style="border: 2px solid #ff0000; padding: 10px; margin: 10px 0; background-color: #fff5f5;">
+        <div class="annotation-error" style="border: 2px solid #ff0000; padding: 10px; margin: 10px 0; background-color: light-dark(#fff5f5, #2c0d0d);">
             <h4 style="color: #ff0000; margin: 0 0 10px 0;">Error Generating Annotation Form</h4>
-            <p style="margin: 0; color: #666;">Schema: {escape_html_content(schema_name)}</p>
-            <p style="margin: 5px 0 0 0; color: #333;">{escape_html_content(str(e))}</p>
+            <p style="margin: 0; color: light-dark(#666, #c2c2c2);">Schema: {escape_html_content(schema_name)}</p>
+            <p style="margin: 5px 0 0 0; color: light-dark(#333, #d1d1d1);">{escape_html_content(str(e))}</p>
         </div>
         """
         return error_html, []

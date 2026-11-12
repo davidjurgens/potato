@@ -1,0 +1,39 @@
+[
+  {
+    "id": "traj_001",
+    "task_description": "Find the current weather in San Francisco and report the temperature.",
+    "steps": [
+      {"thought": "I should look up the current weather.", "action": "web_search(queyr='San Francisco weather')"},
+      {"thought": "Open the first result.", "action": "open_url(results[0])"},
+      {"thought": "Read the temperature from the page.", "action": "extract_text('.temp')"}
+    ],
+    "final_answer": "It is sunny."
+  },
+  {
+    "id": "traj_002",
+    "task_description": "Add 17 and 25 and tell the user the result.",
+    "steps": [
+      {"thought": "I need to add the two numbers. 17 + 25 = 32.", "action": "compute('17 + 25')"},
+      {"thought": "Report the answer.", "action": "send_message('The result is 32.')"}
+    ],
+    "final_answer": "The result is 32."
+  },
+  {
+    "id": "traj_003",
+    "task_description": "Book a meeting room for 3 people tomorrow at 2pm.",
+    "steps": [
+      {"thought": "Search for available rooms.", "action": "search_rooms(capacity=2, time='2pm tomorrow')"},
+      {"thought": "Book the first available room.", "action": "book_room(rooms[0])"}
+    ],
+    "final_answer": "Booked a room for 2 people at 2pm tomorrow."
+  },
+  {
+    "id": "traj_004",
+    "task_description": "Summarize the attached article in one sentence.",
+    "steps": [
+      {"thought": "Read the article.", "action": "read_file('article.txt')"},
+      {"thought": "Produce a summary.", "action": "summarize(article_text)"}
+    ],
+    "final_answer": "The article is about stuff."
+  }
+]

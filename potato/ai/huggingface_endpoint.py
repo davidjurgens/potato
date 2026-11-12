@@ -1,8 +1,10 @@
 """
 Hugging Face AI endpoint implementation.
 
-This module provides integration with Hugging Face's Inference API for LLM inference.
+Integration with Hugging Face's Inference API for LLM inference.
 """
+
+from typing import Dict, List
 
 from huggingface_hub import InferenceClient
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
@@ -30,7 +32,7 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
         """Get the default Hugging Face model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: dict) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to Hugging Face and return the response.
 
@@ -44,11 +46,9 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
             AIEndpointRequestError: If the request fails
         """
         try:
-            response = self.client.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format= {
+            kwargs = {}
+            if output_format is not None and hasattr(output_format, "model_json_schema"):
+                kwargs["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
                         "name": "output_format",
@@ -56,7 +56,34 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
                         "strict": True,
                     }
                 }
+            response = self.client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                **kwargs,
             )
+            self._warn_if_truncated(
+                self._stop_reason(response.choices[0], "finish_reason"))
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"Hugging Face request failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn chat to Hugging Face using the chat-completion API.
+
+        The base class flattens the chat and calls query(prompt), which this
+        class cannot answer without an output_format, so every chat message
+        failed before a request was sent.
+        """
+        try:
+            response = self.client.chat_completion(
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+            )
+            self._warn_if_truncated(
+                self._stop_reason(response.choices[0], "finish_reason"),
+                where="chat reply")
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            raise AIEndpointRequestError(f"Hugging Face chat request failed: {e}")

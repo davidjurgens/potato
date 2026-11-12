@@ -23,7 +23,9 @@ import json
 from typing import List, Dict, Tuple, Any
 from .identifier_utils import (
     safe_generate_layout,
-    escape_html_content
+    escape_html_content,
+    generate_validation_attribute,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,27 @@ DEFAULT_COLORS = [
 
 # Valid annotation modes
 VALID_MODES = ["segment", "frame", "keyframe", "tracking", "combined"]
+# The cases tracking-interpolation.js switches on.
+TRACKING_INTERPOLATIONS = ("linear", "cubic", "constant")
+
+#: Single-character keys video-annotation.js takes on `document`, in every mode.
+#: A label shortcut elsewhere on the page that uses one of them never fires.
+VIEWER_KEYS = {
+    " ": "play/pause", ",": "previous frame", ".": "next frame",
+    "[": "selection start", "]": "selection end", "k": "mark keyframe",
+    "c": "classify frame", "+": "zoom in", "=": "zoom in", "-": "zoom out",
+    "0": "zoom to fit",
+}
+#: Added by tracking-ui.js in tracking and combined mode.
+TRACKING_KEYS = {"t": "new track", "<": "previous keyframe", ">": "next keyframe"}
+
+
+def page_keys(annotation_scheme: Dict[str, Any]) -> List[str]:
+    """The keys this scheme's player handles anywhere on the page."""
+    keys = list(VIEWER_KEYS)
+    if annotation_scheme.get("mode", "segment") in ("tracking", "combined"):
+        keys += list(TRACKING_KEYS)
+    return keys
 
 
 def generate_video_annotation_layout(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tuple[str, str]]]:
@@ -121,12 +144,45 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
     show_timecode = annotation_scheme.get('show_timecode', True)
     video_fps = annotation_scheme.get('video_fps', 30)
 
+    # tracking_options was declared and documented but never reached the page:
+    # interpolation was hard-coded to linear and auto-advance was never applied.
+    tracking_options = annotation_scheme.get('tracking_options') or {}
+    if not isinstance(tracking_options, dict):
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options must be a mapping")
+    unknown = set(tracking_options) - {'interpolation', 'auto_advance_frames'}
+    if unknown:
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options: unknown key(s) "
+            f"{sorted(unknown)}; expected interpolation and auto_advance_frames")
+    interpolation = tracking_options.get('interpolation', 'linear')
+    if interpolation not in TRACKING_INTERPOLATIONS:
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options.interpolation must be "
+            f"one of {list(TRACKING_INTERPOLATIONS)} (got {interpolation!r})")
+    auto_advance_frames = tracking_options.get('auto_advance_frames', 0)
+    if (isinstance(auto_advance_frames, bool) or not isinstance(auto_advance_frames, int)
+            or auto_advance_frames < 0):
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].tracking_options.auto_advance_frames "
+            f"must be a whole number of frames, 0 or more (got {auto_advance_frames!r})")
+
     # AI support configuration
     ai_support = annotation_scheme.get("ai_support", {})
     ai_enabled = ai_support.get("enabled", False)
 
     # source_field: Links this annotation schema to a display field from instance_display
     source_field = annotation_scheme.get("source_field", "")
+
+    # Per-track attributes (occlusion, truncation, ...), tracking modes only.
+    from .object_attributes import normalize_attributes
+    attributes = normalize_attributes(
+        annotation_scheme.get("attributes"), [label["name"] for label in labels],
+        f"annotation_schemes[{schema_name}]", keyframes=True)
+    if attributes and mode not in ("tracking", "combined"):
+        raise ValueError(
+            f"annotation_schemes[{schema_name}].attributes: attributes belong to object "
+            f"tracks, so they need mode 'tracking' or 'combined' (got {mode!r})")
 
     # Build config object for JavaScript
     js_config = {
@@ -143,9 +199,12 @@ def _generate_video_annotation_layout_internal(annotation_scheme: Dict[str, Any]
         "frameStepping": frame_stepping,
         "showTimecode": show_timecode,
         "videoFps": video_fps,
+        "interpolation": interpolation,
+        "autoAdvanceFrames": auto_advance_frames,
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
         "sourceField": source_field,
+        "attributes": attributes,
     }
 
     # Generate HTML
@@ -201,9 +260,23 @@ def _generate_html(
     """
     Generate the HTML for the video annotation interface.
     """
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     escaped_name = escape_html_content(schema_name)
+    validation = generate_validation_attribute(annotation_scheme)
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
+    from .object_attributes import panel_html
+    attribute_panel = panel_html(escaped_name, js_config.get("attributes") or [], "track")
+
+    # Per-segment question forms. See audio_annotation for the same wiring;
+    # video had not even a placeholder, so `segmentSchemes` was inert.
+    from potato.server_utils.schemas.segment_questions import (
+        render_segment_question_template)
+    segment_questions_template, _ = render_segment_question_template(
+        js_config.get('segmentSchemes') or [], schema_name)
+
     timeline_height = js_config.get('timelineHeight', 70)
     overview_height = js_config.get('overviewHeight', 40)
 
@@ -269,12 +342,22 @@ def _generate_html(
                 <button type="button" class="tracking-btn" data-action="create-track" title="Create a new object track (T)">+ Track</button>
                 <button type="button" class="tracking-btn delete-btn" data-action="delete-track" title="Delete selected track" disabled>Delete Track</button>
                 <select class="interpolation-select" title="Interpolation method between keyframes">
-                    <option value="linear">Linear</option>
-                    <option value="cubic">Cubic (smooth)</option>
-                    <option value="constant">Constant (hold)</option>
+                    <option value="linear"__SEL_linear__>Linear</option>
+                    <option value="cubic"__SEL_cubic__>Cubic (smooth)</option>
+                    <option value="constant"__SEL_constant__>Constant (hold)</option>
                 </select>
+                <button type="button" class="tracking-btn tracking-propagate-btn"
+                        data-action="propagate"
+                        title="Track this object through the following frames">Track forward</button>
+                <span class="tracking-propagate-status" role="status"
+                      aria-live="polite" aria-atomic="true"></span>
             </div>
         '''
+    # The selector opens on tracking_options.interpolation, which new tracks use.
+    for method in TRACKING_INTERPOLATIONS:
+        mode_controls_html = mode_controls_html.replace(
+            f"__SEL_{method}__",
+            " selected" if method == js_config.get("interpolation") else "")
 
     # Generate timecode display
     timecode_html = ""
@@ -291,7 +374,8 @@ def _generate_html(
     source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form video-annotation" action="javascript:void(0)"{source_field_attr}>
+    <form id="{escaped_name}" class="annotation-form video-annotation" action="javascript:void(0)" data-annotation-type="video_annotation" data-schema-name="{escaped_name}" {layout_attrs}
+          data-schema-name="{escaped_name}"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 
@@ -308,9 +392,9 @@ def _generate_html(
                 </div>
 
                 <!-- Instructions panel (collapsible) -->
-                <details class="video-instructions" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 0.375rem; font-size: 0.8rem;">
-                    <summary style="cursor: pointer; font-weight: 600; color: #0369a1;">How to annotate video segments (click to expand)</summary>
-                    <div style="margin-top: 0.5rem; color: #475569; line-height: 1.5;">
+                <details class="video-instructions" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: light-dark(#f0f9ff, #0e212f); border: 1px solid light-dark(#bae6fd, #305669); border-radius: 0.375rem; font-size: 0.8rem;">
+                    <summary style="cursor: pointer; font-weight: 600; color: light-dark(#0369a1, #9bd1ef);">How to annotate video segments (click to expand)</summary>
+                    <div style="margin-top: 0.5rem; color: light-dark(#475569, #bac1cb); line-height: 1.5;">
                         <p style="margin: 0.25rem 0;"><strong>To create a segment:</strong></p>
                         <ol style="margin: 0.25rem 0 0.5rem 1.25rem; padding: 0;">
                             <li>Select a label (colored buttons below)</li>
@@ -371,7 +455,9 @@ def _generate_html(
 
                 <!-- Timeline (Peaks.js) -->
                 <div class="timeline-wrapper">
+                    <div class="zoomview-label" style="font-size: 0.85em; color: light-dark(#666, #c2c2c2); margin-bottom: 4px;">Timeline <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
                     <div id="zoomview-{escaped_name}" class="timeline-container" style="height: {timeline_height}px;"></div>
+                    <div class="overview-label" style="font-size: 0.85em; color: light-dark(#666, #c2c2c2); margin: 8px 0 4px;">Full Video Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
                     <div id="overview-{escaped_name}" class="overview-container" style="height: {overview_height}px;"></div>
                 </div>
 
@@ -386,22 +472,32 @@ def _generate_html(
                     <h4>Segment Details</h4>
                     <div class="segment-questions-content"></div>
                 </div>
+                {segment_questions_template}
 
                 <!-- Tracking panel (for tracking mode) -->
                 <div id="tracking-panel-{escaped_name}" class="tracking-panel" style="display: {'block' if mode in ['tracking', 'combined'] else 'none'};">
                     <h4>Object Tracks</h4>
-                    <div class="tracking-instructions" style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">
+                    <div class="tracking-instructions" style="font-size: 0.8rem; color: light-dark(#666, #c2c2c2); margin-bottom: 0.5rem;">
                         Click "+ Track" to create a track, then draw bounding boxes on the video. Boxes are interpolated between keyframes.
                     </div>
                     <div class="tracking-track-list"></div>
+                    {attribute_panel}
                 </div>
 
                 <!-- Hidden input for storing annotation data -->
                 <!-- autocomplete="off" prevents Firefox from restoring old values on reload -->
+                <!-- `validation` is what puts this schema in front of
+                     validateRequiredFields at all. Without it
+                     `label_requirement.required: true` was inert on this
+                     scheme, and `min_segments` -- which does reach the browser
+                     -- had nothing to report a shortfall to. The manager sets
+                     `data-incomplete-reason` on the form above; that is where
+                     "1 of 2 segments marked" comes from. -->
                 <input type="hidden"
                        name="{escaped_name}"
                        id="input-{escaped_name}"
                        class="annotation-data-input"
+                       validation="{validation}"
                        autocomplete="off"
                        value="">
 
@@ -473,6 +569,20 @@ def _generate_html(
                             }}
                         }}
 
+                        // Method 1b: the item's own field, read straight off
+                        // the page. Method 1 needs an `instance_display` block
+                        // to have emitted a `.video-container[data-field-key]`;
+                        // this is what makes `source_field` work on its own,
+                        // and it comes before the "any video on the page"
+                        // steps because a named field is an explicit choice.
+                        if (!videoUrl && config.sourceField
+                                && window.potatoInstanceField) {{
+                            videoUrl = window.potatoInstanceField(config.sourceField);
+                            if (videoUrl) {{
+                                console.log('[VideoAnnotation DEBUG] Found video via instance data:', videoUrl);
+                            }}
+                        }}
+
                         // Method 2: Find any video element with data-source-url
                         if (!videoUrl) {{
                             var anyVideo = document.querySelector('video[data-source-url]');
@@ -512,7 +622,7 @@ def _generate_html(
                             console.error('[VideoAnnotation ERROR] Could not find video URL!');
                             // Show visible error message
                             var errorDiv = document.createElement('div');
-                            errorDiv.style.cssText = 'background: #fee2e2; border: 2px solid #ef4444; color: #dc2626; padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
+                            errorDiv.style.cssText = 'background: light-dark(#fee2e2, #341111); border: 2px solid #ef4444; color: light-dark(#dc2626, #e3a1a1); padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
                             errorDiv.innerHTML = '<strong>Video URL not found!</strong><br>Check browser console for details.';
                             container.insertBefore(errorDiv, container.firstChild);
                         }} else {{
@@ -527,7 +637,7 @@ def _generate_html(
                         if (!videoElement) {{
                             console.error('[VideoAnnotation ERROR] Video element not found!');
                             var errorDiv = document.createElement('div');
-                            errorDiv.style.cssText = 'background: #fee2e2; border: 2px solid #ef4444; color: #dc2626; padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
+                            errorDiv.style.cssText = 'background: light-dark(#fee2e2, #341111); border: 2px solid #ef4444; color: light-dark(#dc2626, #e3a1a1); padding: 1rem; margin: 1rem 0; border-radius: 0.5rem;';
                             errorDiv.innerHTML = '<strong>Video element not found!</strong><br>Expected element with ID: ' + videoId;
                             container.insertBefore(errorDiv, container.firstChild);
                             return;
@@ -643,10 +753,16 @@ def _generate_html(
                                     canvas: trackingCanvas,
                                     video: videoEl,
                                     annotationManager: manager,
+                                    // Every change to the tracks is saved with the annotation.
+                                    onChange: function() {{ manager._saveData(); }},
+                                    attributePanel: container.querySelector('.object-attribute-panel'),
+                                    form: container.closest('.annotation-form'),
                                     config: {{
                                         videoFps: config.videoFps || 30,
-                                        interpolation: 'linear',
-                                        autoAdvanceFrames: config.autoAdvanceFrames || 5
+                                        interpolation: config.interpolation || 'linear',
+                                        autoAdvanceFrames: config.autoAdvanceFrames || 0,
+                                        attributes: config.attributes || [],
+                                        schemaName: config.schemaName
                                     }}
                                 }});
 
@@ -655,9 +771,22 @@ def _generate_html(
 
                                 // Sync canvas size with video
                                 function syncTrackingCanvasSize() {{
-                                    // Use clientWidth/clientHeight for display size
-                                    var w = videoEl.clientWidth || videoEl.offsetWidth || 640;
-                                    var h = videoEl.clientHeight || videoEl.offsetHeight || 360;
+                                    // The backing store has to match the
+                                    // canvas's OWN displayed box, not the
+                                    // video's.
+                                    //
+                                    // The stylesheet insets the overlay by
+                                    // 45px to clear the native video controls,
+                                    // so sizing the backing to the video's
+                                    // height made a 400-tall buffer display in
+                                    // a 355-tall box: everything drawn on it,
+                                    // including boxes drawn by hand, appeared
+                                    // squashed by 11% and sat above the object
+                                    // it belonged to.
+                                    var w = trackingCanvas.clientWidth
+                                        || videoEl.clientWidth || videoEl.offsetWidth || 640;
+                                    var h = trackingCanvas.clientHeight
+                                        || videoEl.clientHeight || videoEl.offsetHeight || 360;
                                     if (w > 0 && h > 0) {{
                                         trackingCanvas.width = w;
                                         trackingCanvas.height = h;
@@ -698,6 +827,18 @@ def _generate_html(
                                                     this.disabled = true;
                                                 }}
                                             }}
+                                        }} else if (action === 'propagate') {{
+                                            // Disabled for the duration: the
+                                            // request takes seconds per frame,
+                                            // and a second press would start a
+                                            // second run over the same frames.
+                                            var button = this;
+                                            button.disabled = true;
+                                            Promise.resolve(
+                                                trackingManager.propagateForward()
+                                            ).finally(function() {{
+                                                button.disabled = false;
+                                            }});
                                         }}
                                     }});
                                 }});
@@ -712,18 +853,14 @@ def _generate_html(
                                     }});
                                 }}
 
-                                // Extend manager's save method to include tracking data
-                                var originalSave = manager.save ? manager.save.bind(manager) : null;
-                                manager.save = function() {{
-                                    var data = originalSave ? originalSave() : {{}};
-                                    data.tracks = trackingManager.getTrackingData();
-                                    return data;
-                                }};
-
-                                // Load existing tracking data if available
-                                var existingData = manager.getAnnotationData ? manager.getAnnotationData() : null;
-                                if (existingData && existingData.tracks) {{
-                                    trackingManager.loadTrackingData(existingData.tracks);
+                                // Tracks the item was saved with. This used to
+                                // override a save() nothing called and read a
+                                // getAnnotationData() that does not exist, so
+                                // tracks were neither saved nor restored.
+                                if (manager.loadedTracks) {{
+                                    trackingManager.loadTrackingData(manager.loadedTracks);
+                                }} else {{
+                                    trackingManager._renderAttributePanel(true);
                                 }}
 
                                 console.log('[VideoAnnotation] TrackingUIManager initialized successfully');
@@ -732,6 +869,21 @@ def _generate_html(
                             }}
                         }} else if (trackingMode === 'tracking' || trackingMode === 'combined') {{
                             console.warn('[VideoAnnotation] TrackingUIManager not loaded, tracking features unavailable');
+                        }}
+
+                        // Per-class show/hide, shared with image annotation.
+                        // A timeline of stacked segments is as unreadable as an
+                        // image of stacked boxes; the shared manager owns the
+                        // state and this only applies it to the timeline.
+                        if (typeof LabelVisibilityManager !== 'undefined') {{
+                            manager.labelVisibility = new LabelVisibilityManager({{
+                                schemaName: config.schemaName || '{escaped_name}',
+                                projectKey: (window.config || {{}}).annotation_task_name,
+                                container: container,
+                                onChange: function(hidden) {{
+                                    manager.applyLabelVisibility(hidden);
+                                }},
+                            }});
                         }}
 
                         // Set default label

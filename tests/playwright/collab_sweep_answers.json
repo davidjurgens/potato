@@ -1,0 +1,500 @@
+{
+  "agent_interaction_graph": {
+    "__expect": [
+      "Researcher"
+    ],
+    "graph:::graph": "{\"critical_nodes\": [\"Researcher\"], \"edges\": {\"Planner->Researcher\": \"problematic\"}}"
+  },
+  "agent_scorecard": {
+    "scorecard:::scorecard": "{\"agents\": {\"Researcher\": {\"role fidelity\": 4}}, \"team\": {\"efficiency\": 5}}"
+  },
+  "audio_annotation": {
+    "audio_segmentation:::_data": "{\"segments\": [{\"id\": \"t1\", \"start_time\": 1.0, \"end_time\": 4.5, \"label\": \"music\", \"annotations\": {}}]}"
+  },
+  "belief_elicitation": {
+    "forecast:::forecast": "{\"report\": 20}"
+  },
+  "chemical_structure": {
+    "__expect": [
+      "C9H8O4"
+    ],
+    "corrected:::corrected": "{\"molfile\": \"\\nOCL MolfileCreator  2D\\n\\n  0  0  0  0  0  0              0 V3000\\nM  V30 BEGIN CTAB\\nM  V30 COUNTS 13 13 0 0 0\\nM  V30 BEGIN ATOM\\nM  V30 1 C 2.598 2.2499 0 0\\nM  V30 2 C 1.299 1.4999 0 0\\nM  V30 3 O 0 2.25 0 0\\nM  V30 4 O 1.299 0 0 0\\nM  V30 5 C 0 -0.75 0 0\\nM  V30 6 C -1.299 0 0 0\\nM  V30 7 C -2.598 -0.7499 0 0\\nM  V30 8 C -2.598 -2.2499 0 0\\nM  V30 9 C -1.299 -2.9999 0 0\\nM  V30 10 C 0 -2.2499 0 0\\nM  V30 11 C 1.299 -3 0 0\\nM  V30 12 O 1.299 -4.5 0 0\\nM  V30 13 O 2.598 -2.25 0 0\\nM  V30 END ATOM\\nM  V30 BEGIN BOND\\nM  V30 1 1 1 2\\nM  V30 2 2 2 3\\nM  V30 3 1 2 4\\nM  V30 4 1 4 5\\nM  V30 5 2 5 6\\nM  V30 6 1 6 7\\nM  V30 7 2 7 8\\nM  V30 8 1 8 9\\nM  V30 9 2 9 10\\nM  V30 10 1 5 10\\nM  V30 11 1 10 11\\nM  V30 12 2 11 12\\nM  V30 13 1 11 13\\nM  V30 END BOND\\nM  V30 END CTAB\\nM  END\\n\", \"smiles\": \"CC(Oc1ccccc1C(O)=O)=O\", \"idcode\": \"dklB@@QmR[fUxUZBBF@@\", \"formula\": \"C9H8O4\", \"problems\": [], \"toolkits\": {\"openchemlib\": \"9.25.0\"}, \"changed\": true}"
+  },
+  "code_review": {
+    "__expect": [
+      "Admin bypass still present"
+    ],
+    "review:::review": "{\"verdict\": \"request_changes\", \"comments\": [{\"id\": \"c_t_1\", \"category\": \"security\", \"file\": \"src/auth/login.py\", \"line\": 10, \"text\": \"Admin bypass still present\"}], \"file_ratings\": {}}"
+  },
+  "consensus_tracking": {
+    "debate_moves:::debate_moves": "[{\"turn\": 1, \"act\": \"claim\", \"agent_id\": \"pro\"}, {\"turn\": 2, \"act\": \"rebuttal\", \"agent_id\": \"con\", \"ref\": 1}]"
+  },
+  "ego_network": {
+    "__expect": [
+      "Mara",
+      "Theo"
+    ],
+    "described_network:::described_network": "{\"alters\": [{\"id\": \"a1\", \"name\": \"Mara\", \"named_in\": [\"mentioned\"]}, {\"id\": \"a2\", \"name\": \"Theo\", \"named_in\": [\"mentioned\"]}], \"attributes\": {\"a1\": {\"role\": \"family\"}, \"a2\": {\"role\": \"friend\"}}, \"ties\": [], \"positions\": {}, \"census\": {}, \"tie_attributes\": {}}"
+  },
+  "emergent_behavior": {
+    "emergent:::emergent": "{\"groupthink\": {\"turns\": [0, 2], \"note\": \"theirs\"}}"
+  },
+  "episode_annotation": {
+    "episode_review:::_data": "{\"phases\": [{\"id\": \"phase_test_1\", \"start\": 0.5, \"end\": 2.0, \"label\": \"reach\"}, {\"id\": \"phase_test_2\", \"start\": 2.0, \"end\": 3.5, \"label\": \"grasp\"}], \"reward\": [{\"t\": 1.0, \"value\": 0.2}, {\"t\": 3.0, \"value\": 0.6}], \"outcome\": {\"result\": \"failure\", \"cause\": \"collision\"}, \"instructions\": []}"
+  },
+  "failure_attribution": {
+    "__expect": [
+      "ignored refundable constraint"
+    ],
+    "attribution:::attribution": "{\"responsible_agent\": \"Planner\", \"decisive_step\": 2, \"reason\": \"ignored refundable constraint\"}"
+  },
+  "geo_annotation": {
+    "__expect": [
+      "Coast talk"
+    ],
+    "dialect_areas:::dialect_areas": "{\"type\": \"FeatureCollection\", \"features\": [{\"type\": \"Feature\", \"id\": \"f1_test01\", \"properties\": {\"label\": \"Very different\", \"tool\": \"polygon\", \"text\": \"Coast talk\"}, \"geometry\": {\"type\": \"Polygon\", \"coordinates\": [[[-29.0, -37.5], [-27.5, -37.5], [-27.5, -38.5], [-29.0, -38.5], [-29.0, -37.5]]]}}]}",
+    "home:::home": "{\"type\": \"FeatureCollection\", \"features\": [{\"type\": \"Feature\", \"id\": \"f1_test02\", \"properties\": {\"label\": \"Where you grew up\", \"tool\": \"point\"}, \"geometry\": {\"type\": \"Point\", \"coordinates\": [-28.3, -38.2]}}]}",
+    "province_speech:::province_speech": "{\"type\": \"FeatureCollection\", \"features\": [{\"type\": \"Feature\", \"geometry\": null, \"properties\": {\"region\": \"harrowmere\", \"region_name\": \"Harrowmere\", \"label\": \"Sounds like home\"}}, {\"type\": \"Feature\", \"geometry\": null, \"properties\": {\"region\": \"saltreach\", \"region_name\": \"Saltreach\", \"label\": \"Sounds different\"}}]}"
+  },
+  "grounding_eval": {
+    "grounding:::_data": "{\"regions\": {\"a1\": [{\"type\": \"bbox\", \"label\": \"referent\", \"color\": \"#6e56cf\", \"coordinates\": {\"x\": 0.1, \"y\": 0.3, \"width\": 0.2, \"height\": 0.25}}], \"a2\": [{\"type\": \"bbox\", \"label\": \"referent\", \"color\": \"#6e56cf\", \"coordinates\": {\"x\": 0.6, \"y\": 0.3, \"width\": 0.2, \"height\": 0.25}}]}, \"absent\": [\"a4\"], \"verdicts\": {}}"
+  },
+  "gui_trajectory": {
+    "gui_review:::gui_review": "[{\"index\": 1, \"step\": 1, \"verdict\": \"hallucinated\", \"notes\": \"theirs\"}]"
+  },
+  "handoff_review": {
+    "handoffs:::handoffs": "[{\"index\": 1, \"step\": 2, \"from\": \"Researcher\", \"to\": \"Planner\", \"flags\": [\"info_loss\"], \"quality\": 2}]"
+  },
+  "image_annotation": {
+    "objects:::_data": "[{\"id\": \"t1\", \"type\": \"bbox\", \"label\": \"block\", \"color\": \"#d6604d\", \"coordinates\": {\"x\": 0.1, \"y\": 0.15, \"width\": 0.3, \"height\": 0.25}}]"
+  },
+  "interlinear_gloss": {
+    "__expect": [
+      "love-3SG.PRS",
+      "maiden-NOM"
+    ],
+    "igt:::igt": "{\"words\": [{\"word\": \"Puella\", \"morphemes\": \"puell-a\", \"gloss\": \"maiden-NOM\", \"pos\": \"noun\", \"notes\": \"\"}, {\"word\": \"rosam\", \"morphemes\": \"ros-am\", \"gloss\": \"rose-ACC\", \"pos\": \"noun\", \"notes\": \"\"}, {\"word\": \"amat.\", \"morphemes\": \"ama-t\", \"gloss\": \"love-3SG.PRS\", \"pos\": \"verb\", \"notes\": \"\"}], \"translation\": \"The maiden loves a rose.\"}"
+  },
+  "interval_label": {
+    "segments:::segments": "{\"intervals\": [{\"id\": \"iv_t_1\", \"start\": 12.0, \"end\": 18.5, \"label\": \"spindle\", \"channel\": null}], \"events\": [{\"id\": \"ev_t_2\", \"time\": 40.0, \"label\": \"arousal\", \"channel\": null}]}"
+  },
+  "listening_test": {
+    "quality:::quality": "{\"ratings\": {\"s1\": 40}, \"played\": []}"
+  },
+  "microscopy": {
+    "cells:::cells": "{\"image\": {\"width\": 256, \"height\": 256}, \"rois\": [{\"id\": \"roi_test_1\", \"type\": \"bbox\", \"label\": \"damaged\", \"color\": \"#e8590c\", \"z\": 1, \"t\": 0, \"coordinates\": {\"x\": 0.1, \"y\": 0.15, \"width\": 0.25, \"height\": 0.2}}], \"cells\": [{\"id\": \"cell_3\", \"label_id\": 3, \"class\": \"marker positive\", \"z\": 1, \"t\": 0}], \"label_image\": \"cells\"}"
+  },
+  "multi_document_event": {
+    "__requests": [
+      {
+        "json": {
+          "doc_id": "doc_01",
+          "title": "Sweep: harbour closure"
+        },
+        "method": "POST",
+        "path": "/corpus/api/event"
+      }
+    ],
+    "events:::events": "[\"evt_seed_thailand_flood\", \"$0.id\"]"
+  },
+  "multimodal_reasoning": {
+    "reasoning_review:::reasoning_review": "[{\"index\": 2, \"step\": 2, \"type\": \"text\", \"verdict\": \"visual_hallucination\", \"notes\": \"theirs\"}]"
+  },
+  "peak_picking": {
+    "__expect": [
+      "CH3CO"
+    ],
+    "peaks:::peaks": "{\"viewer\": \"spectrum\", \"items\": [{\"kind\": \"peak\", \"x\": 2.05, \"y\": 10, \"source\": \"manual\", \"fields\": {\"assignment\": \"CH3CO\", \"multiplicity\": \"s\"}}, {\"kind\": \"peak\", \"x\": 4.12, \"y\": 5, \"source\": \"manual\", \"fields\": {\"assignment\": \"OCH2\", \"multiplicity\": \"q\"}}, {\"kind\": \"region\", \"from\": 1.2, \"to\": 1.32, \"integral\": 3.0, \"fields\": {\"protons\": \"3\"}}], \"rejected\": []}"
+  },
+  "process_reward": {
+    "step_rewards:::step_rewards": "{\"mode\": \"first_error\", \"steps\": [{\"index\": 1, \"reward\": 1, \"source\": \"human\", \"verified\": true}, {\"index\": 2, \"reward\": -1, \"source\": \"human\", \"verified\": true}, {\"index\": 3, \"reward\": -1, \"source\": \"human\", \"verified\": true}, {\"index\": 4, \"reward\": -1, \"source\": \"human\", \"verified\": true}]}"
+  },
+  "region_caption": {
+    "__expect": [
+      "a red mug with a chipped handle"
+    ],
+    "captions:::_data": "{\"captions\": [{\"region\": {\"id\": \"r_t_1\", \"type\": \"bbox\", \"label\": \"object\", \"color\": \"#6e56cf\", \"coordinates\": {\"x\": 0.25, \"y\": 0.25, \"width\": 0.25, \"height\": 0.25}}, \"caption\": \"a red mug with a chipped handle\"}]}",
+    "region:::_data": "[{\"id\": \"r_t_1\", \"type\": \"bbox\", \"label\": \"object\", \"color\": \"#6e56cf\", \"coordinates\": {\"x\": 0.25, \"y\": 0.25, \"width\": 0.25, \"height\": 0.25}}]"
+  },
+  "rollout_evaluation": {
+    "rollout_review:::_data": "{\"violations\": [{\"id\": \"viol_test_1\", \"stream\": \"gen_a\", \"t\": 2.4, \"type\": \"interpenetration\", \"severity\": 2, \"note\": \"balls overlap\"}], \"clean\": [\"real\"], \"preference\": {\"winner\": \"gen_b\", \"confidence\": \"2\", \"rubric\": {\"physics\": 4, \"fidelity\": 3}}, \"counterfactual\": {\"verdict\": \"\", \"t\": null, \"note\": \"\"}}"
+  },
+  "spatial_annotation": {
+    "objects:::_data": "[{\"id\": \"pc_test_1\", \"type\": \"cuboid_3d\", \"label\": \"car\", \"color\": \"#FF6B6B\", \"coordinates\": {\"center\": [10.0, 0.0, -0.9], \"size\": [4.2, 1.8, 1.6], \"rotation\": [0, 0, 0, 1]}, \"attributes\": {\"occluded\": \"partly\", \"truncated\": false}}]"
+  },
+  "spectrogram_annotation": {
+    "calls:::_data": "[{\"id\": \"box_t_1\", \"start_s\": 2.0, \"end_s\": 2.7, \"low_hz\": 4000.0, \"high_hz\": 5000.0, \"label\": \"downsweep\", \"source\": \"human\"}]"
+  },
+  "speech_transcript": {
+    "__expect": [
+      "what's the weather like today"
+    ],
+    "speech_errors:::speech_errors": "[{\"index\": 0, \"start\": 0.0, \"end\": 1.6, \"errors\": [\"asr_error\"], \"correction\": \"what's the weather like today\"}]"
+  },
+  "table_grid": {
+    "structure:::structure": "{\"rows\": 3, \"cols\": 3, \"cells\": {\"0,0\": \"col_header\", \"0,1\": \"col_header\", \"0,2\": \"col_header\", \"2,2\": \"empty\"}}"
+  },
+  "temporal_grounding": {
+    "grounding:::grounding": "{\"events\": {\"0\": {\"start\": 3.5, \"end\": 6.0}}}"
+  },
+  "tiered_annotation": {
+    "__expect": [
+      "Nod"
+    ],
+    "linguistic_tiers:::_data": "{\"annotations\": {\"utterance\": [{\"id\": \"ann_t_1\", \"tier\": \"utterance\", \"start_time\": 1000, \"end_time\": 4000, \"label\": \"Speaker_A\", \"color\": \"#4ECDC4\", \"parent_id\": null, \"value\": \"\"}], \"gesture\": [{\"id\": \"ann_t_2\", \"tier\": \"gesture\", \"start_time\": 2000, \"end_time\": 2500, \"label\": \"Nod\", \"color\": \"#87CEEB\", \"parent_id\": null, \"value\": \"\"}]}}"
+  },
+  "tool_call_review": {
+    "__expect": [
+      "restaurant is empty"
+    ],
+    "tool_review:::tool_review": "[{\"index\": 1, \"step\": 2, \"tool\": \"book_table\", \"verdict\": \"wrong_args\", \"notes\": \"restaurant is empty\"}]"
+  },
+  "tool_contention": {
+    "contention:::contention": "{\"contentions\": {\"0\": \"race_condition\"}}"
+  },
+  "tree_annotation": {
+    "response_quality:::node_annotations": "{\"r1\": {\"response_quality_node\": \"4\"}}",
+    "response_quality:::selected_path": "[\"root\", \"r1\"]"
+  },
+  "triad_test": {
+    "__expect": [
+      "orange"
+    ],
+    "triads:::triads": "{\"design\": \"steiner\", \"triads\": [[\"apple\", \"orange\", \"pear\", null], [\"grape\", \"lime\", \"orange\", \"grape\"], [\"apple\", \"mango\", \"grape\", \"grape\"], [\"cherry\", \"lemon\", \"apple\", null], [\"grape\", \"cherry\", \"banana\", null], [\"banana\", \"lemon\", \"orange\", null], [\"mango\", \"lemon\", \"lime\", null], [\"pear\", \"cherry\", \"lime\", null], [\"cherry\", \"mango\", \"orange\", null], [\"banana\", \"pear\", \"mango\", null], [\"grape\", \"pear\", \"lemon\", null], [\"banana\", \"apple\", \"lime\", null]]}"
+  },
+  "triage": {
+    "data_quality:::decision": "accept"
+  },
+  "video_annotation": {
+    "tracks:::_data": "{\"video_metadata\": {\"duration\": 4, \"fps\": 12, \"width\": 0, \"height\": 0, \"frameCount\": 0}, \"segments\": [], \"frame_annotations\": {}, \"keyframes\": [], \"tracking\": {}, \"tracks\": {\"track_t1\": {\"id\": \"track_t1\", \"label\": \"disc\", \"color\": \"#d1495b\", \"interpolation\": \"linear\", \"keyframes\": {\"0\": {\"frame\": 0, \"bbox\": {\"x\": 40, \"y\": 40, \"width\": 60, \"height\": 60}}, \"6\": {\"frame\": 6, \"bbox\": {\"x\": 80, \"y\": 40, \"width\": 60, \"height\": 60}}}}}}"
+  },
+  "voice_interaction": {
+    "turn_taking:::turn_taking": "{\"overlaps\": {\"0\": \"agent_should_respond\"}, \"rating\": 4}"
+  },
+  "volume_annotation": {
+    "ct_segmentation:::_data": "{\"volume\": \"phantom_dicom\", \"shape\": [96, 80, 48], \"labels\": [\"Lesion\", \"Bone\"], \"masks\": {\"Bone\": {\"24\": [2910, 11, 85, 11, 85, 11, 85, 11, 85, 11, 85, 11, 85, 11, 85, 11, 85, 11, 85, 11, 85, 11, 3799]}}, \"shapes\": [{\"id\": \"vol_test_1\", \"label\": \"Lesion\", \"axis\": \"axial\", \"index\": 24, \"type\": \"box\", \"points\": [[50, 20, 24], [70, 35, 24]]}]}"
+  },
+  "radio": {
+    "__expect": [
+      "tacos:true"
+    ],
+    "favorite_color:::tacos": "tacos"
+  },
+  "multiselect": {
+    "__expect": [
+      "maize:true",
+      "green:true"
+    ],
+    "favorite_color:::maize": "maize",
+    "favorite_color:::green": "green"
+  },
+  "likert": {
+    "__expect": [
+      "4:true"
+    ],
+    "awesomeness:::4": "4"
+  },
+  "slider": {
+    "__expect": [
+      "73"
+    ],
+    "awesomeness:::slider": "73"
+  },
+  "text": {
+    "__expect": [
+      "misses the second paragraph",
+      "Weather report for Tuesday"
+    ],
+    "long_answer:::Provide detailed feedback:": "The summary misses the second paragraph entirely.",
+    "short_answer:::Enter a brief summary:": "Weather report for Tuesday"
+  },
+  "select": {
+    "__expect": [
+      "=review"
+    ],
+    "dropdown_choice:::select-one": "review"
+  },
+  "number": {
+    "__expect": [
+      "347"
+    ],
+    "numeric_input:::number": "347"
+  },
+  "ranking": {
+    "__expect": [
+      "1 Response C"
+    ],
+    "response_quality:::rank_order": "Response C,Response A,Response D,Response B"
+  },
+  "hierarchical_multiselect": {
+    "__expect": [
+      "Genetics:true",
+      "Artificial Intelligence:true"
+    ],
+    "topic_hierarchy:::selected_labels": "Genetics,Artificial Intelligence"
+  },
+  "pairwise": {
+    "__expect": [],
+    "preference:::selection": "B"
+  },
+  "bws": {
+    "__expect": [],
+    "sentiment_bws:::best": "B",
+    "sentiment_bws:::worst": "D"
+  },
+  "text_edit": {
+    "__expect": [
+      "to regulate internet corporations"
+    ],
+    "post_edit:::post_edit": "{\"edited_text\":\"The government passed a new law yesterday to regulate internet corporations.\",\"original_text\":\"The government has yesterday a new law for the regulation of the internet corporations passed.\",\"edit_distance_chars\":34,\"edit_distance_words\":9}"
+  },
+  "extractive_qa": {
+    "__expect": [
+      "Selected answer: 1887 to 1889"
+    ],
+    "answer_span:::answer_span": "{\"answer_text\": \"1887 to 1889\", \"start\": 112, \"end\": 124, \"unanswerable\": false}"
+  },
+  "error_span": {
+    "__expect": [
+      "Fluency/Register"
+    ],
+    "mqm_errors:::mqm_errors": "{\"errors\": [{\"start\": 100, \"end\": 112, \"text\": \"irregardless\", \"type\": \"Fluency\", \"subtype\": \"Register\", \"severity\": \"Minor\"}], \"score\": 99}"
+  },
+  "trajectory_eval": {
+    "__expect": [
+      "Clicked an ad instead of the forecast"
+    ],
+    "step_evaluation:::step_evaluation": "{\"steps\": [{\"step_index\": 0, \"correctness\": \"correct\"}, {\"step_index\": 1, \"correctness\": \"incorrect\", \"error_type\": \"execution\", \"error_subtype\": \"wrong_args\", \"severity\": \"major\", \"rationale\": \"Clicked an ad instead of the forecast\"}, {\"step_index\": 2, \"correctness\": \"correct\"}, {\"step_index\": 3, \"correctness\": \"correct\"}], \"score\": 95, \"score_complete\": true}"
+  },
+  "trajectory_edit": {
+    "__expect": [
+      "query='San Francisco weather'",
+      "61°F and sunny"
+    ],
+    "corrected_trajectory:::corrected_trajectory": "{\"steps\": [{\"step_index\": 0, \"field\": \"action\", \"original_text\": \"web_search(queyr='San Francisco weather')\", \"edited_text\": \"web_search(query='San Francisco weather')\", \"edited\": true, \"edit_distance_chars\": 2, \"edit_distance_words\": 1, \"reason\": \"\"}], \"final_answer\": {\"original_text\": \"It is sunny.\", \"edited_text\": \"It is 61\\u00b0F and sunny in San Francisco.\", \"edited\": true, \"edit_distance_chars\": 27, \"edit_distance_words\": 5}, \"n_steps_edited\": 2, \"total_edit_distance\": 29}"
+  },
+  "price_list": {
+    "__expect": [
+      "10 of 10 decisions made",
+      "You switch to Option B at decision 5"
+    ],
+    "risk_pref:::risk_pref": "{\"choices\": [\"A\", \"A\", \"A\", \"A\", \"B\", \"B\", \"B\", \"B\", \"B\", \"B\"], \"switches\": 1, \"multiple_switching\": false}"
+  },
+  "bdm": {
+    "__expect": [
+      "Your bid: $7.25"
+    ],
+    "wtp:::wtp": "{\"bid\": 7.25}"
+  },
+  "free_list": {
+    "__expect": [
+      "mango",
+      "kiwi"
+    ],
+    "fruits:::fruits": "{\"items\": [\"mango\", \"kiwi\"], \"timings_ms\": [1000, 2000], \"elapsed_ms\": 2000, \"time_up\": false, \"started\": true}"
+  },
+  "viewer_selection": {
+    "__expect": [
+      "HIS 8, chain A",
+      "2 selected"
+    ],
+    "binding_site:::binding_site": "{\"viewer\": \"protein_structure\", \"items\": [{\"chain\": \"A\", \"resi\": 8, \"resn\": \"HIS\", \"label\": \"zinc ligand\"}, {\"chain\": \"A\", \"resi\": 14, \"resn\": \"HIS\", \"label\": \"zinc ligand\"}]}"
+  },
+  "turn_level": {
+    "__expect": [
+      "(2/2 turns)",
+      "(1/3 turns)"
+    ],
+    "turn_errors:::_data": "{\"v\": 1, \"schema_type\": \"multiselect\", \"turns\": {\"t1\": {\"values\": [\"hallucination\"], \"speaker\": \"Assistant\", \"step_type\": \"thought\"}, \"t8\": {\"values\": [\"ignored_context\", \"contradiction\"], \"speaker\": \"Assistant\", \"step_type\": \"observation\"}}}",
+    "action_quality:::_data": "{\"v\": 1, \"schema_type\": \"likert\", \"turns\": {\"t2\": {\"value\": 4, \"speaker\": \"Agent (Action)\", \"step_type\": \"action\"}}}",
+    "tool_verdict:::_data": "{\"v\": 1, \"schema_type\": \"radio\", \"turns\": {\"t4\": {\"value\": \"wrong_args\", \"speaker\": \"Agent (Action)\", \"step_type\": \"action\"}}}"
+  },
+  "pdf_bounding_box": {
+    "__expect": [
+      "Boxes on page: 2",
+      "Total boxes: 2"
+    ],
+    "pdf_content:::_data": "[{\"id\": \"bbox_sweep_1\", \"page\": 1, \"bbox\": [0.05, 0.04, 0.6, 0.08], \"label\": \"HEADER\", \"created_at\": \"2026-11-11T00:00:00Z\"}, {\"id\": \"bbox_sweep_2\", \"page\": 1, \"bbox\": [0.1, 0.45, 0.7, 0.25], \"label\": \"TABLE\", \"created_at\": \"2026-11-11T00:00:00Z\"}]"
+  },
+  "document_bounding_box": {
+    "__expect": [
+      "Boxes: 3"
+    ],
+    "document_content:::_data": "[{\"id\": \"bbox_sweep_1\", \"bbox\": [0.03, 0.02, 0.7, 0.07], \"label\": \"TITLE\", \"created_at\": \"2026-11-11T00:00:00Z\"}, {\"id\": \"bbox_sweep_2\", \"bbox\": [0.03, 0.12, 0.9, 0.18], \"label\": \"PARAGRAPH\", \"created_at\": \"2026-11-11T00:00:00Z\"}, {\"id\": \"bbox_sweep_3\", \"bbox\": [0.05, 0.4, 0.6, 0.15], \"label\": \"LIST\", \"created_at\": \"2026-11-11T00:00:00Z\"}]"
+  },
+  "span": {
+    "__spans": [
+      {
+        "schema": "certainty",
+        "name": "certain",
+        "start": 0,
+        "end": 7,
+        "title": "Aliquam",
+        "value": true,
+        "id": "sw_span_1"
+      },
+      {
+        "schema": "certainty",
+        "name": "uncertain",
+        "start": 8,
+        "end": 17,
+        "title": "eius modi",
+        "value": true,
+        "id": "sw_span_2"
+      }
+    ],
+    "__expect": []
+  },
+  "span_link": {
+    "__spans": [
+      {
+        "schema": "entities",
+        "name": "PERSON",
+        "start": 0,
+        "end": 10,
+        "title": "John Smith",
+        "value": true,
+        "id": "sw_p1"
+      },
+      {
+        "schema": "entities",
+        "name": "ORGANIZATION",
+        "start": 20,
+        "end": 26,
+        "title": "Google",
+        "value": true,
+        "id": "sw_o1"
+      }
+    ],
+    "__links": [
+      {
+        "schema": "relations",
+        "link_type": "WORKS_FOR",
+        "span_ids": [
+          "sw_p1",
+          "sw_o1"
+        ],
+        "direction": "directed",
+        "id": "sw_link_1"
+      }
+    ],
+    "__expect": [
+      "WORKS_FOR → PERSON → ORGANIZATION"
+    ]
+  },
+  "coreference": {
+    "__spans": [
+      {
+        "schema": "mentions",
+        "name": "PERSON",
+        "start": 0,
+        "end": 10,
+        "title": "John Smith",
+        "value": true,
+        "id": "sw_m1"
+      },
+      {
+        "schema": "mentions",
+        "name": "PERSON",
+        "start": 30,
+        "end": 32,
+        "title": "He",
+        "value": true,
+        "id": "sw_m2"
+      }
+    ],
+    "__links": [
+      {
+        "schema": "coref_chains",
+        "link_type": "PERSON",
+        "span_ids": [
+          "sw_m1",
+          "sw_m2"
+        ],
+        "direction": "undirected",
+        "id": "chain_1",
+        "properties": {
+          "color": "#3b82f6"
+        }
+      }
+    ],
+    "__expect": [
+      "PERSON (2)",
+      "John Smith"
+    ]
+  },
+  "event_annotation": {
+    "__spans": [
+      {
+        "schema": "entities",
+        "name": "PERSON",
+        "start": 0,
+        "end": 10,
+        "title": "John Smith",
+        "value": true,
+        "id": "sw_e_p"
+      },
+      {
+        "schema": "entities",
+        "name": "EVENT_TRIGGER",
+        "start": 11,
+        "end": 19,
+        "title": "attacked",
+        "value": true,
+        "id": "sw_e_t"
+      },
+      {
+        "schema": "entities",
+        "name": "LOCATION",
+        "start": 24,
+        "end": 43,
+        "title": "government building",
+        "value": true,
+        "id": "sw_e_l"
+      },
+      {
+        "schema": "entities",
+        "name": "WEAPON",
+        "start": 51,
+        "end": 56,
+        "title": "rifle",
+        "value": true,
+        "id": "sw_e_w"
+      }
+    ],
+    "__events": [
+      {
+        "schema": "events",
+        "event_type": "ATTACK",
+        "trigger_span_id": "sw_e_t",
+        "arguments": [
+          {
+            "role": "attacker",
+            "span_id": "sw_e_p",
+            "text": "John Smith"
+          },
+          {
+            "role": "target",
+            "span_id": "sw_e_l",
+            "text": "government building"
+          },
+          {
+            "role": "weapon",
+            "span_id": "sw_e_w",
+            "text": "rifle"
+          }
+        ],
+        "id": "sw_event_1",
+        "properties": {
+          "color": "#dc2626",
+          "trigger_text": "attacked",
+          "trigger_label": "EVENT_TRIGGER"
+        }
+      }
+    ],
+    "__expect": [
+      "attacked",
+      "government building"
+    ]
+  }
+}

@@ -240,7 +240,7 @@ class TestSuspiciousActivityDetection(unittest.TestCase):
         self.assertEqual(analysis["suspicious_actions"], [])
         self.assertEqual(analysis["fast_actions_count"], 0)
         self.assertEqual(analysis["burst_actions_count"], 0)
-        self.assertEqual(analysis["suspicious_score"], 0)
+        self.assertIsNone(analysis["suspicious_score"])
 
     def test_suspicious_activity_fast_actions(self):
         """Test detection of suspiciously fast actions."""
@@ -248,9 +248,9 @@ class TestSuspiciousActivityDetection(unittest.TestCase):
         for i in range(5):
             action = AnnotationAction(
                 action_id=f"fast-action-{i}",
-                timestamp=self.base_time + datetime.timedelta(seconds=i),
+                timestamp=self.base_time + datetime.timedelta(seconds=i * 0.3),
                 user_id="test_user",
-                instance_id="test_instance",
+                instance_id=f"item_{i}",
                 action_type="add_label",
                 schema_name="sentiment",
                 label_name="positive",
@@ -276,9 +276,9 @@ class TestSuspiciousActivityDetection(unittest.TestCase):
         for i in range(20):  # Many actions
             action = AnnotationAction(
                 action_id=f"burst-action-{i}",
-                timestamp=self.base_time + datetime.timedelta(seconds=i//2),  # 2 actions per second
+                timestamp=self.base_time + datetime.timedelta(seconds=i),  # 1s per item
                 user_id="test_user",
-                instance_id="test_instance",
+                instance_id=f"item_{i}",
                 action_type="add_label",
                 schema_name="sentiment",
                 label_name="positive",
@@ -303,9 +303,9 @@ class TestSuspiciousActivityDetection(unittest.TestCase):
         for i in range(5):
             action = AnnotationAction(
                 action_id=f"normal-action-{i}",
-                timestamp=self.base_time + datetime.timedelta(minutes=i),  # 1 action per minute
+                timestamp=self.base_time + datetime.timedelta(minutes=i),  # 1 item per minute
                 user_id="test_user",
-                instance_id="test_instance",
+                instance_id=f"item_{i}",
                 action_type="add_label",
                 schema_name="sentiment",
                 label_name="positive",

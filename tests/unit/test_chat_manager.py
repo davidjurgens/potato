@@ -190,6 +190,15 @@ class TestChatManagerUnit:
         assert "pos, neg" in prompt
         assert "Hello world" in prompt
 
+    def test_system_prompt_names_dict_labels(self):
+        """Dict labels went into the prompt as their Python repr."""
+        from potato.chat_manager import ChatManager
+        mgr = ChatManager({"annotation_schemes": [
+            {"name": "sent", "labels": [{"name": "pos", "color": "#0a0"}, "neg"]}]})
+        prompt = mgr.build_system_prompt("Hello world", "inst_1")
+        assert "sent: pos, neg" in prompt
+        assert "color" not in prompt and "{" not in mgr.annotation_labels
+
     def test_build_system_prompt_custom_template(self):
         from potato.chat_manager import ChatManager
         mgr = ChatManager({

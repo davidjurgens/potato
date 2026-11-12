@@ -1,0 +1,503 @@
+# Point Cloud Annotation (3D)
+
+Oriented 3D boxes, points, polylines and per-point segments on lidar and
+photogrammetry data, rendered in the browser with three.js.
+
+```yaml
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: objects
+    description: "Put a 3D box around every vehicle and pedestrian."
+    source_field: point_cloud
+    tools: [cuboid_3d, point_3d]
+    labels:
+      - {name: car, color: "#FF6B6B", key_value: "1"}
+      - {name: pedestrian, color: "#FFD93D", key_value: "2"}
+    color_mode: height
+    point_size: 2.0
+    max_points: 400000
+```
+
+Runnable examples: `examples/spatial/kitti-cuboids/` (single scans) and
+`examples/spatial/lidar-sequence/` (a sequence, see [Sequences](#sequences)).
+
+## Formats
+
+Point clouds are read **server-side** and converted into one compact binary the
+browser understands. The alternative — parsing each format in JavaScript —
+would mean four parsers, four sets of endianness and record-layout bugs, and
+re-parsing a two-million-point scan on every page load.
+
+| Format | Read | Notes |
+|---|---|---|
+| KITTI velodyne `.bin` | ✅ | Raw `float32` x, y, z, intensity, no header |
+| PCD | ✅ | `ascii`, `binary`, and `binary_compressed` (LZF) |
+| PLY | ✅ | `ascii`, `binary_little_endian`, `binary_big_endian` |
+| LAS | ✅ | 1.0–1.4, point record formats 0–3 and 6–8 |
+| `.xyz` / `.pts` | ✅ | `x y z [r g b]` per line |
+| LAZ | ❌ | Compressed LAS. Convert first: `laszip -i scan.laz -o scan.las` |
+
+Colour is read where a format carries it (PLY, LAS formats 2/3/7/8, `.xyz`);
+intensity is read from KITTI, PCD and LAS. LAS colour is 16-bit by the spec,
+but some writers store 8-bit values; the depth is decided once for the whole
+file.
+
+Positions are sent to the browser as 32-bit floats, which hold about seven
+significant digits. A cloud in projected map coordinates (UTM northings run to
+millions of metres) would lose its centimetres that way, so when any
+coordinate is beyond 10 km from zero, Potato subtracts an origin, rounded to
+whole metres, before the conversion. This applies to LAS, PLY, PCD and `.xyz` files; KITTI files
+are already 32-bit. The viewer adds the origin back to everything it saves, so
+stored annotations, exports and the coordinates shown in the status line are
+all in the file's own frame. You don't need to re-centre the file yourself.
+
+### Options
+
+| Option | Default | What it does |
+|---|---|---|
+| `source_field` | `point_cloud` | Item field holding the cloud path |
+| `calibration_field` | `calibration` | Item field holding the camera rig; turns on the [2D verification panels](calibration.md) |
+| `tools` | — | Any of `cuboid_3d`, `point_3d`, `polyline_3d`, `segment_3d` |
+| `color_mode` | `height` | `height`, `intensity`, `rgb`, `uniform` |
+| `point_size` | `1.5` | Rendered point size in pixels |
+| `max_points` | `500000` | Decimation cap (see below) |
+| `default_box_height` | `1.7` | Height a new box starts at, in metres |
+| `fit_box_height` | `true` | Snap a new box's vertical extent to the points inside its footprint |
+| `brush_size` | `10` | Starting brush radius for [painting points](#painting-points), in screen pixels (2 to 80) |
+| `min_annotations` / `max_annotations` | — | Completion rules |
+| `attributes` | — | Typed fields for each box or point (occlusion, ...), edited in a panel under the viewer for the selected object. See [Per-Object Attributes](../multimedia/object_attributes.md) |
+
+`color_mode: rgb` needs a file that carries colour, and `intensity` needs one
+that carries intensity. When the data is absent the viewer falls back to height
+**and says so** in the status line, rather than silently rendering something
+that looks like the mode you asked for.
+
+Colour ramps are normalized against the 2nd and 98th percentile rather than
+min/max, because a single stray return from a reflective surface otherwise
+compresses everything else into one colour and the cloud renders as a flat
+sheet.
+
+## Large clouds: detail where the camera is looking
+
+By default the cloud is served as an **octree**, and the viewer loads density
+where you are looking rather than a thin sample of everywhere.
+
+That distinction is the difference between a usable viewer and a decorative
+one. Uniform thinning of a 20-million-point aerial scan to 500,000 points is
+2.5% density *everywhere*: the whole scene is visible and nothing in it is
+annotatable, because the car you are boxing is now nine returns. Raising the cap
+does not help — WebGL will allocate the buffer and then render at 3 fps, which
+reads as a broken page.
+
+The structure is additive, so the union of what is loaded is always a
+uniform-density sampling of the whole scene. A partially loaded cloud looks
+*coarse*, never *incomplete* — a viewer that renders half-loaded data as missing
+geometry teaches annotators to distrust it.
+
+The status line under the viewport says what is on screen:
+
+> Showing 412,000 of 2,100,000 points. More detail loads as you zoom in.
+
+| Option | Default | Effect |
+|---|---|---|
+| `lod` | `true`, or `false` when `tools` includes `segment_3d` | Octree loading. `false` falls back to one uniformly thinned buffer. |
+| `point_budget` | 2,000,000 | Points held at once. Lower it for weak GPUs. |
+| `min_screen_size` | 120 | Projected pixels below which a node is not fetched. Lower means more detail and more requests. |
+| `max_loaded_nodes` | 512 | Cache size before least-recently-visible nodes are released. |
+| `max_points` | 500,000 | **Only used when `lod: false`.** |
+
+The octree is built once per file and cached, so the first request for a very
+large scan is slow and every later one is not.
+
+### With `lod: false`
+
+Anything above `max_points` is reduced by **uniform stride** — every Nth point —
+not truncated. A lidar file is written in scan order, so keeping the first N
+points keeps one contiguous slice of the sweep and drops the rest of the scene,
+which looks like a sensor failure rather than a decimation.
+
+### Per-point labels stay stable
+
+`segment_3d` stores **point indices**, and those indices are into the source
+file, not into whatever subset the viewer has loaded. Every served buffer
+carries an index channel to make that true.
+
+This was a real defect rather than a hypothetical one. `max_points` is a schema
+option, so lowering it — exactly what you do when a machine struggles — changed
+the stride and silently re-pointed every stored per-point segment at different
+points. Nothing errored; the labels just moved. If you have `segment_3d`
+annotations from before this change and the `max_points` value has been edited
+since, they are suspect.
+
+## Controls
+
+| Action | Result |
+|---|---|
+| Left-drag *(no tool armed)* | Orbit |
+| Alt + left-drag *(painting)* | Orbit |
+| Right-drag | Pan |
+| Scroll | Zoom |
+| `c` then left-drag | Draw a 3D box footprint on the ground |
+| `k` then click | Place a point |
+| `n` | Polyline |
+| `g` then left-drag | [Paint points](#painting-points); Shift + drag erases |
+| `-` / `=` *(painting)* | Smaller / larger brush |
+| `q` / `e` | Rotate the selected box (Shift for 1° steps) |
+| `Delete` | Remove the selected box |
+| `Escape` | Deselect |
+| click *(no tool armed)* | Select the nearest annotation |
+| class button or its key, with an annotation you selected | Change its class (in a sequence, the whole track's). The box just drawn is not changed: picking a class then sets the next box's |
+| `h` / `Shift+H` | Hide the armed class / solo it |
+
+Per-class show/hide is the same feature image and video annotation have — the
+schema renders the same label-button markup deliberately, so it works with no
+extra configuration.
+
+### Drawing a box
+
+Drag out the **footprint** on the ground plane. The ground is estimated from
+the cloud's own `z` values rather than assumed to be zero — a roof-mounted
+lidar reports the road at about −1.7 m, so a box drawn on `z = 0` floats above
+the whole scene.
+
+The box's **height is then fitted to the points inside the footprint**. Height
+is the dimension a footprint drag cannot express and the one annotators judge
+worst in a perspective view of a sparse cloud, and the returns answer it
+exactly. A footprint containing only road is left at the drawn height rather
+than collapsed onto the tarmac — the annotator drew around something the lidar
+did not see, and fitting to nothing would be fabricating a measurement.
+
+Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
+the world frame, so the key always turns it the same way on screen.
+
+## Painting points
+
+`segment_3d` labels individual points, the way SemanticKITTI labels every point
+of a scan with a class. Each class you paint is stored as one `segment_3d`
+object holding the indices of its points.
+
+```yaml
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: semantics
+    description: "Give every point a class."
+    source_field: point_cloud
+    tools: [segment_3d]
+    labels:
+      - {name: road, color: "#FF00FF", key_value: "1"}
+      - {name: sidewalk, color: "#4B004B", key_value: "2"}
+      - {name: car, color: "#6496F5", key_value: "3"}
+      - {name: moving-car, color: "#FA5050", key_value: "4"}
+      - {name: vegetation, color: "#00AF00", key_value: "5"}
+    brush_size: 12
+```
+
+Press `g` or click **Paint points**, pick a class, and drag over the cloud.
+
+- **Brush** labels every point within the brush radius of the cursor. The
+  circle under the pointer shows the radius. Change it with the slider, with
+  `-` and `=`, or set its starting value with `brush_size`.
+- **Lasso** labels every point inside the outline you draw, when you release
+  the mouse. `Escape` abandons a stroke before release.
+- **Erase**, or Shift held during a stroke, removes the class from the points
+  instead.
+- **Alt + drag** orbits while painting. Right-drag pans and the wheel zooms as
+  usual.
+
+The brush works in screen space: it labels every point under the cursor
+whatever its depth, so the points behind the object you aim at are labelled
+too. Orbit until the object is clear of what lies behind it, or hide the
+classes you have finished.
+
+A point has one class. Painting it again moves it to the new class, and erasing
+it leaves it unlabelled. Painted points take their class colour in the cloud.
+
+Hide a class you have finished, with the eye on its class button or `h` with
+the class armed, and no brush, lasso or eraser stroke changes its points until
+you show it again. Its points also disappear from the view. Arming a hidden
+class and painting with it does nothing except a warning in the status line.
+
+The saved answer holds one object per class:
+
+```json
+{"type": "segment_3d", "label": "road", "color": "#FF00FF",
+ "indices": [0, 1, 4, 7, 12]}
+```
+
+The indices are sorted and refer to points in the source file. `,` and `.` step
+through the segments along with any boxes and report how many points each
+holds. `Delete` removes the selected class from every point. With no tool
+armed, choosing another class for a selected segment moves its points to that
+class, and merges them into that class's segment if it already has one. A
+segment from a model or an import that a person repaints is saved with
+`edited: true`, as a moved box is.
+
+Painting labels only the points in the browser. A scheme with `segment_3d`
+therefore loads the whole cloud rather than an octree, unless it sets
+`lod: true`. That whole cloud is still capped at `max_points`, 500,000 by
+default; a SemanticKITTI scan has about 120,000 points. When the cap applies,
+or under `lod: true`, the status line says how many points painting can reach
+when you arm the tool. Raise `max_points` above the cloud's size to paint all
+of it.
+
+Painting has no per-point attributes. To separate moving from parked cars, as
+SemanticKITTI does, use two classes such as `car` and `moving-car`. In a
+[sequence](#sequences), each frame's painting is stored on that frame and is
+not carried between frames.
+
+## Sequences
+
+An item whose cloud field holds a **list** of clouds is a sequence, one cloud
+per frame, and objects are tracked through it:
+
+```json
+{"id": "drive_0001",
+ "point_cloud": ["frames/drive_0001/000000.bin", "frames/drive_0001/000001.bin"],
+ "calibration": {"file": "calib/drive_0001.txt"}}
+```
+
+`{"frames": [...]}` works too. Nothing changes in the scheme's config. The
+viewer shows a frame bar under the cloud, and the camera stays where you put it
+as you change frames.
+
+| Action | Result |
+|---|---|
+| `[` / `]`, the bar's buttons, or the slider | Previous / next frame |
+| `f` or **Copy to next frame** | Copy the selected object to the next frame as a keyframe, and go there |
+| `Delete` | Remove the selected object's keyframe on this frame |
+| **Delete track** | Remove the selected object from every frame |
+
+Each object you draw starts a **track**. Boxes are stored only at
+**keyframes**, the frames where you drew or changed them. On the frames
+between two keyframes the box is interpolated (position and size linearly,
+rotation along the shortest arc) and drawn with dashed edges; points are drawn
+hollow. Moving, resizing or rotating an interpolated box makes it a keyframe on
+that frame. Before a track's first keyframe and after its last, the object is
+absent, so carry it forward with `f` while it is in view.
+
+An interpolated box has nothing stored on its frame, so `Delete` on it explains
+that rather than removing anything: delete one of its keyframes, or the whole
+track. Deleting a keyframe between two others leaves the box interpolated there.
+
+The class and [attributes](../multimedia/object_attributes.md) belong to the
+track: changing them on any frame changes them on every keyframe, without
+adding one. An attribute marked `per_keyframe: true` is the exception: its
+value is set from the current frame until the next keyframe that changes it,
+and changing it on an interpolated frame makes that frame a keyframe. Polylines and painted points are not interpolated; they appear only
+on the frames they were drawn on.
+
+Each saved object carries `frame` (from 0) and `track_id`:
+
+```json
+[{"type": "cuboid_3d", "label": "car", "frame": 0, "track_id": "t1",
+  "attributes": {"occluded": "none"},
+  "coordinates": {"center": [9.95, -1.02, -0.95], "size": [4.8, 2.5, 1.6],
+                  "rotation": [0, 0, 0, 1]}},
+ {"type": "cuboid_3d", "label": "car", "frame": 3, "track_id": "t1", ...}]
+```
+
+Agreement on a sequence is scored frame by frame, using the interpolated
+boxes, so two annotators' boxes on different frames are never compared. The
+report's `n_frames` counts the (item, frame) pairs that anyone annotated.
+Attribute agreement matches whole tracks, by how much they overlap in time
+multiplied by their mean 3D overlap.
+
+Frame-by-frame matching cannot see an identity error: two annotators who box
+the same objects on every frame but swap two tracks' ids where the objects
+cross score 1.0. The report's `identity` group adds the tracking measures,
+computed between each pair of annotators with boxes matched at 3D IoU 0.25:
+
+| Measure | Meaning |
+|---|---|
+| `identity.mota` | 1 − (misses + extra boxes + ID switches) / object-frames. Can go below 0 |
+| `identity.idf1` | The share of object-frames kept under the best one-to-one pairing of the two annotators' tracks |
+| `identity.id_switches` | How often a track's matched partner changed |
+
+Neither annotator is ground truth, so MOTA and ID switches are counted with
+each one as the reference and pooled (`id_switches` is per direction). An
+annotator who drew nothing on a sequence another annotator tracked makes that
+pair's MOTA −1: every object-frame is a miss one way and an extra box the
+other. Classes
+are not compared here; the frame-level report covers them. Video tracks get
+the same group, with 2D boxes matched at IoU 0.5; see
+[video annotation](../multimedia/video_annotation.md).
+
+The labeling engine compares a model's sequence answer with a person's the same
+way, frame by frame.
+
+The `kitti_3d` export writes a sequence as KITTI tracking labels, with a line
+on every frame of each track and each box's 2D projection in the camera image;
+see
+[3D labels](../../data-export/format_matrix.md#kitti-3d-labels).
+
+When a frame has loaded, the viewer fetches the next frame, the previous one
+and the one after next in the background, and keeps the last few in memory, so
+stepping through a sequence does not wait on the network. With an octree cloud
+it fetches each neighbour's coarse first level; finer detail still loads as
+the camera moves.
+
+### Importing KITTI tracking labels
+
+`potato import` reads the KITTI tracking benchmark's layout:
+
+```
+training/
+  label_02/0000.txt          frame track_id type truncated occluded alpha bbox h w l x y z ry
+  velodyne/0000/000000.bin   one scan per frame
+  calib/0000.txt
+```
+
+```bash
+potato import -i ./training -o lidar-project --schema-name objects
+python potato/flask_server.py start lidar-project/config.yaml -p 8000
+```
+
+Each sequence becomes one item: its scans in `point_cloud`, its calibration in
+`calibration`, and its labels as pre-annotations that every annotator starts
+from. The labels are in the camera frame, so each box goes through the
+sequence's calibration into the lidar frame, the reverse of the `kitti_3d`
+export. A sequence without a calibration file is skipped with a warning, and
+so is one with a scan missing from the middle: Potato numbers frames by scan
+position and KITTI by file name, and a gap would shift every later frame.
+Every labelled frame becomes a keyframe. `truncated` and `occluded` become
+attributes of the same names, which the export reads back. `DontCare` rows
+mark regions KITTI leaves out of evaluation; they are left out and counted. A
+track that disappears and comes back under the same id is interpolated across
+the gap, and the import reports how many such gaps there are.
+
+The config's `media_directory` points at the dataset folder, so the scans are
+served from where they are. Keep the project and the dataset in place, or edit
+that path.
+
+## The slab views
+
+Under the viewport are three orthographic panels — **top** (X-Y), **front**
+(Y-Z) and **side** (X-Z) — each showing a slab of the scene a couple of metres
+thick, centred on whatever is selected.
+
+They are there because a perspective view is systematically misleading in one
+direction: the projection compresses the extent along the view axis, so boxes
+placed by eye come out short in depth, and the error is invisible from the
+camera that drew them. In a slab a metre is a metre in both screen directions,
+and the returns behind a face are not hidden by the ones in front of it.
+
+| Action | Result |
+|---|---|
+| Drag inside the box | Move it in that plane |
+| Drag an edge | Move **that face**, leaving the opposite one fixed |
+| Scroll | Thicken or thin the slab |
+
+Dragging one edge deliberately does *not* resize symmetrically: the point of a
+slab is aligning one boundary against the returns behind it, and a symmetric
+resize would move the far face away from wherever you had just put it.
+
+### From the keyboard
+
+Tab to a panel and the same three actions are available without a pointer. This
+is not a courtesy: the panels exist *because* placing a box by eye in
+perspective is imprecise in depth, so "adjust it in the 3D view instead" would
+hand a keyboard user exactly the imprecision the panels remove.
+
+| Key | Result |
+|---|---|
+| `,` / `.` | Previous / next annotation — how you select an existing box without a mouse |
+| Arrow | Move the selected box 10 cm in that direction, within the focused plane |
+| `Shift` + arrow | Move the face **on that side** 5 cm outward |
+| `Alt` + arrow | Move that same face 5 cm inward |
+| `[` / `]` | Thin or thicken the slab |
+
+The arrow names the *face*, not the direction of travel — a scheme where it
+named the direction would leave two of the four faces unreachable. Each press
+is its own undo step, unlike a drag, which undoes as one.
+
+Every edit is announced to a screen reader with the box's new size and centre,
+since the panels themselves are pixels. The status line under the viewport is
+deliberately *not* a live region: level-of-detail loading rewrites it several
+times a second while the camera moves.
+
+The panels centre and scale themselves on the selection, so selecting a
+pedestrian does not leave them four pixels wide in a view framed for the street.
+With nothing selected they follow the camera target.
+
+| Option | Default | Effect |
+|---|---|---|
+| `mpr` | on when `cuboid_3d` is a tool | Show the panels. |
+| `slab_thickness` | `2.0` | Metres of depth each slab shows. The wheel changes it live. |
+
+A **tilted** box — one with pitch or roll, not just yaw — is edited through its
+axis-aligned envelope here, which is an approximation rather than a frame-exact
+edit. That is stated rather than hidden: use the perspective view and `q`/`e`
+for a rotated box, and the slabs for its extent.
+
+## Coordinates are metres, not fractions
+
+This is the one thing to get right when moving from 2D.
+
+Image annotations are normalized to `[0, 1]` against the image. Spatial ones are
+**absolute metres in the sensor frame**, because there is no extent to normalize
+against — a lidar sweep has no "width" the way a photograph does.
+
+For a cloud in map coordinates, that frame is the map's: a box on a UTM survey
+is stored with its UTM centre, even though the viewer draws it relative to a
+local origin (see [Formats](#formats)).
+
+```json
+{"type": "cuboid_3d", "label": "car", "color": "#FF6B6B",
+ "coordinates": {"center": [12.0, 1.5, -0.9],
+                 "size": [4.3, 1.8, 1.6],
+                 "rotation": [0.0, 0.0, 0.025, 0.9997]}}
+```
+
+| Type | Stored as |
+|---|---|
+| `cuboid_3d` | `{center: [x,y,z], size: [l,w,h], rotation: [qx,qy,qz,qw]}` |
+| `point_3d` | `[x, y, z]` |
+| `polyline_3d` | `[[x,y,z], ...]` |
+| `segment_3d` | `indices: [i, ...]` into the source file |
+
+`segment_3d` stores **point indices**, not coordinates: per-point labels over a
+million-point cloud would otherwise be larger than the cloud itself. The
+indices refer to the source file, so they stay valid whatever subset the viewer
+loads (see [Per-point labels stay stable](#per-point-labels-stay-stable)).
+
+### Rotation is a quaternion, not a yaw angle
+
+KITTI stores a single yaw, and matching it would be simpler. nuScenes stores
+quaternions, and any dataset with pitch or roll — drone, handheld, indoor scan,
+anything that is not a car on a flat road — needs them. Storing yaw alone would
+make those datasets unrepresentable, and the loss would be **silent**: a tilted
+box would be written back flat with no warning.
+
+So storage keeps the full rotation and format-specific exporters convert at
+their own boundary, which is where a format's limitation belongs.
+
+## Troubleshooting
+
+**"No point cloud for this item"** — the field named by `source_field` is empty,
+or its value does not end in a recognised extension. The viewer checks the
+extension before fetching, so a text-only item does not produce a request for
+the sentence it contains.
+
+**"…needs laszip to read"** — LAZ is compressed LAS. Convert with
+`laszip -i scan.laz -o scan.las`.
+
+**"is not a multiple of 16"** — a `.bin` file read as a KITTI scan must be
+`float32` x, y, z, intensity per point. This is the only integrity check the
+format allows, since it has no header; without it, any binary file read as KITTI
+yields a confident cloud of noise.
+
+**"3D viewer unavailable: three.js did not load"** — three.js is vendored, not
+CDN-loaded, and is gated on this schema being present. Check that the schema is
+`spatial_annotation` and that `potato/static/vendor/three-0.160.0.min.js`
+exists.
+
+**The cloud is there but nothing is visible** — check `color_mode`. A cloud with
+no colour rendered in `rgb` mode falls back to height, but a viewport zoomed
+inside the cloud looks empty either way; scroll out.
+
+## Related documentation
+
+- [Calibration and 2D Verification](calibration.md) — project boxes into the camera images
+- [Image Annotation](../multimedia/image_annotation.md) — the 2D equivalent
+- [Media Ingest](../multimedia/media_ingest.md) — formats browsers cannot display
+- [Geometry Agreement](../../advanced/geometry_agreement.md) — agreement over shapes

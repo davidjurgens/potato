@@ -360,9 +360,15 @@ class TestUnassignedInstanceRejection:
                 },
                 timeout=5,
             )
-            assert resp.status_code == 200  # endpoint returns JSON, not HTTP error
+            # 403, not 200. The endpoint used to answer 200 with an error
+            # body for every refusal, and the annotation page checks
+            # `response.ok` before it reads the body -- so a save the server
+            # rejected as tampering looked to the page exactly like one it
+            # stored.
+            assert resp.status_code in (200, 403)
             body = resp.json()
             if body.get("status") == "error" and "not assigned" in body.get("message", ""):
+                assert resp.status_code == 403
                 unassigned_attempted = True
                 break
 
@@ -386,7 +392,7 @@ class TestUnassignedInstanceRejection:
             },
             timeout=5,
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         body = resp.json()
         assert body.get("status") == "error"
         assert "instance_id" in body.get("message", "").lower()

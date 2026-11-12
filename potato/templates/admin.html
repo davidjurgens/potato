@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
   <head>
     <meta charset="UTF-8" />
+    <script type="text/javascript">{% include '_url_prefix.js' %}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ annotation_task_name }} - Admin Dashboard</title>
+    <title>{{ annotation_task_name }} - {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
@@ -13,56 +14,118 @@
       href="{{ url_for('static', filename='admin.css') }}"
     />
   </head>
-  <body>
+  <body class="admin-body">
     <div class="admin-container">
-      <!-- Header -->
-      <header class="admin-header">
-        <h1>📊 {{ annotation_task_name }} - Admin Dashboard</h1>
-        <div class="header-actions">
-          <span class="status-badge status-active">Admin Mode</span>
-          <button
-            onclick="logout()"
-            class="shadcn-button shadcn-button-outline"
-          >
-            Logout
-          </button>
+      <!-- Header: the same purple bar as the annotation and adjudication
+           pages, so the three surfaces read as one tool. -->
+      <nav class="potato-navbar admin-navbar" role="navigation" aria-label="Admin">
+        <div class="navbar-inner">
+          <div class="navbar-brand">
+            <span class="task-name" title="{{ annotation_task_name }} — {{ ui_lang.admin_page_title|default('Admin Dashboard') }}">{{ annotation_task_name }} — {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</span>
+          </div>
+          <div class="navbar-end" style="margin-left: auto;">
+            <div class="user-pill">
+              <span class="username">{{ ui_lang.admin_mode_badge|default('Admin Mode') }}</span>
+              <a href="#" onclick="logout(); return false;" class="logout-btn">{{ ui_lang.logout|default('Logout') }}</a>
+            </div>
+          </div>
         </div>
-      </header>
+      </nav>
+
+      <!-- Secondary navigation. The analysis pages existed but nothing
+           linked to them; each link is rendered only when its route works. -->
+      <nav class="admin-subnav" aria-label="Admin pages">
+        <div class="admin-subnav-inner">
+          {% if analysis_links %}
+          <div class="admin-subnav-group" data-group="analysis">
+            <span class="admin-subnav-heading">Analysis</span>
+            {% for link in analysis_links %}
+            <a href="{{ url_prefix }}{{ link.href }}" class="admin-subnav-link" title="{{ link.title }}">{{ link.label }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="admin-subnav-group" data-group="tools">
+            <span class="admin-subnav-heading">Tools</span>
+            {% if datasets_enabled %}
+            <a href="{{ url_for('datasets.admin') }}" class="admin-subnav-link"
+               title="Versioned eval datasets &amp; experiment runs">{{ ui_lang.admin_tab_datasets|default('Datasets &amp; Experiments') }}</a>
+            {% endif %}
+            {% if judge_calibration_enabled %}
+            <a href="{{ url_for('judge_calibration.admin') }}" class="admin-subnav-link"
+               title="LLM-as-judge calibration">Judge Calibration</a>
+            {% endif %}
+            {% if automation_enabled %}
+            <a href="{{ url_for('automation.admin_page') }}" class="admin-subnav-link"
+               title="Filter→sample→action rules over incoming items">Automation</a>
+            {% endif %}
+            {% if curation_enabled %}
+            <a href="{{ url_for('curation.catalog_page') }}" class="admin-subnav-link"
+               title="Semantic search &amp; dynamic slices over items">Catalog</a>
+            {% endif %}
+            {% if arena_enabled %}
+            <a href="{{ url_for('arena.arena_page') }}" class="admin-subnav-link"
+               title="Compare N models side by side on one prompt">Arena</a>
+            {% endif %}
+            {% if publish_enabled %}
+            <a href="{{ url_for('publish.publish_page') }}" class="admin-subnav-link"
+               title="Package &amp; publish this dataset to HuggingFace, Zenodo, or a downloadable archive">Publish Dataset</a>
+            {% endif %}
+          </div>
+        </div>
+      </nav>
 
       <!-- Main Content -->
       <main class="admin-main">
         <!-- Tab Navigation -->
-        <div class="admin-tabs">
-          <div class="admin-tab active" data-tab="overview">Overview</div>
-          <div class="admin-tab" data-tab="annotators">Annotators</div>
-          <div class="admin-tab" data-tab="instances">Instances</div>
-          <div class="admin-tab" data-tab="questions">Questions</div>
-          <div class="admin-tab" data-tab="behavioral">Behavioral</div>
-          <div class="admin-tab" data-tab="crowdsourcing">Crowdsourcing</div>
+        <div class="admin-tabs" role="tablist" aria-label="Dashboard sections">
+          <button type="button" role="tab" class="admin-tab active" data-tab="overview" aria-controls="overview" aria-selected="true">{{ ui_lang.admin_tab_overview|default('Overview') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="annotators" aria-controls="annotators" aria-selected="false">{{ ui_lang.admin_tab_annotators|default('Annotators') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="instances" aria-controls="instances" aria-selected="false">{{ ui_lang.admin_tab_instances|default('Instances') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="questions" aria-controls="questions" aria-selected="false">{{ ui_lang.admin_tab_questions|default('Questions') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="behavioral" aria-controls="behavioral" aria-selected="false">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="throughput" aria-controls="throughput" aria-selected="false">Throughput</button>
+          {% if ai_influence_enabled %}
+          <button type="button" role="tab" class="admin-tab" data-tab="ai-influence" aria-controls="ai-influence" aria-selected="false">AI influence</button>
+          {% endif %}
+          <button type="button" role="tab" class="admin-tab" data-tab="devices" aria-controls="devices" aria-selected="false">{{ ui_lang.admin_tab_devices|default('Devices') }}</button>
+          <button type="button" role="tab" class="admin-tab" data-tab="crowdsourcing" aria-controls="crowdsourcing" aria-selected="false">{{ ui_lang.admin_tab_crowdsourcing|default('Crowdsourcing') }}</button>
           {% if bws_enabled %}
-          <div class="admin-tab" data-tab="bws-scoring">BWS Scoring</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="bws-scoring" aria-controls="bws-scoring" aria-selected="false">{{ ui_lang.admin_tab_bws|default('BWS Scoring') }}</button>
           {% endif %}
           {% if mace_enabled %}
-          <div class="admin-tab" data-tab="mace">MACE</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="mace" aria-controls="mace" aria-selected="false">{{ ui_lang.admin_tab_mace|default('MACE') }}</button>
           {% endif %}
           {% if embedding_viz_enabled %}
-          <div class="admin-tab" data-tab="embedding-viz">Embeddings</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="embedding-viz" aria-controls="embedding-viz" aria-selected="false">{{ ui_lang.admin_tab_embeddings|default('Embeddings') }}</button>
           {% endif %}
-          <div class="admin-tab" data-tab="config">Configuration</div>
+          <button type="button" role="tab" class="admin-tab" data-tab="config" aria-controls="config" aria-selected="false">{{ ui_lang.admin_tab_configuration|default('Configuration') }}</button>
         </div>
 
         <!-- Overview Tab -->
-        <div class="admin-tab-content active" id="overview">
-          <div class="dashboard-grid" id="overviewGrid">
-            <!-- Overview cards will be loaded here -->
-          </div>
+        <div class="admin-tab-content active" id="overview" role="tabpanel">
+          <!-- One dense row of figures rather than a grid of hero cards: a
+               researcher reads these together, and the number they came for
+               (agreement) sits directly under them. -->
+          <dl class="admin-summary" id="overviewGrid" aria-live="polite">
+            <!-- Overview figures are loaded here -->
+          </dl>
 
-          <div class="config-form">
-            <h3>System Information</h3>
-            <div id="systemInfo">
-              <!-- System info will be loaded here -->
+          <section class="admin-panel" id="agreementPanel" aria-labelledby="agreementHeading">
+            <div class="admin-panel-header">
+              <h3 id="agreementHeading">Agreement</h3>
+              <a href="{{ url_prefix }}/admin/iaa" class="admin-panel-link">Full report →</a>
             </div>
-          </div>
+            <div id="agreementSummary">
+              <p class="admin-muted">Loading…</p>
+            </div>
+          </section>
+
+          <section class="admin-panel">
+            <h3>{{ ui_lang.admin_section_system_info|default('System Information') }}</h3>
+            <dl class="admin-dl" id="systemInfo">
+              <!-- System info will be loaded here -->
+            </dl>
+          </section>
         </div>
 
         <!-- Annotators Tab -->
@@ -70,7 +133,7 @@
           <div class="table-controls">
             <button
               onclick="refreshAnnotators()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
@@ -80,15 +143,15 @@
             <table class="admin-table" id="annotatorsTable">
               <thead>
                 <tr>
-                  <th>User ID</th>
-                  <th>Phase</th>
-                  <th>Annotations</th>
-                  <th>Working Time</th>
-                  <th>Avg Time/Annotation</th>
-                  <th>Speed (per hour)</th>
-                  <th>Completion %</th>
-                  <th>Max Instances</th>
-                  <th>Last Activity</th>
+                  <th>{{ ui_lang.admin_th_user_id|default('User ID') }}</th>
+                  <th>{{ ui_lang.admin_th_phase|default('Phase') }}</th>
+                  <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
+                  <th>{{ ui_lang.admin_th_working_time|default('Working Time') }}</th>
+                  <th>{{ ui_lang.admin_th_avg_time_per_annotation|default('Avg Time/Annotation') }}</th>
+                  <th>{{ ui_lang.admin_th_speed_per_hour|default('Speed (per hour)') }}</th>
+                  <th>{{ ui_lang.admin_th_completion_pct|default('Completion %') }}</th>
+                  <th>{{ ui_lang.admin_th_max_instances|default('Max Instances') }}</th>
+                  <th>{{ ui_lang.admin_th_last_activity|default('Last Activity') }}</th>
                 </tr>
               </thead>
               <tbody id="annotatorsTableBody">
@@ -97,42 +160,40 @@
             </table>
           </div>
 
-          <div class="pagination" id="annotatorsPagination">
-            <!-- Pagination will be added here if needed -->
-          </div>
+          <div class="pagination" id="annotatorsPagination"></div>
         </div>
 
         <!-- Instances Tab -->
         <div class="admin-tab-content" id="instances">
           <div class="table-controls">
             <select id="pageSize" onchange="loadInstances()">
-              <option value="25">25 per page</option>
-              <option value="50">50 per page</option>
-              <option value="100">100 per page</option>
+              <option value="25">{{ ui_lang.admin_opt_per_page|default('{n} per page')|replace('{n}','25') }}</option>
+              <option value="50">{{ ui_lang.admin_opt_per_page|default('{n} per page')|replace('{n}','50') }}</option>
+              <option value="100">{{ ui_lang.admin_opt_per_page|default('{n} per page')|replace('{n}','100') }}</option>
             </select>
 
             <select id="sortBy" onchange="loadInstances()">
-              <option value="annotation_count">Sort by Annotations</option>
-              <option value="completion_percentage">Sort by Completion</option>
-              <option value="disagreement">Sort by Disagreement</option>
-              <option value="id">Sort by ID</option>
-              <option value="average_time">Sort by Avg Time</option>
+              <option value="annotation_count">{{ ui_lang.admin_sort_annotations|default('Sort by Annotations') }}</option>
+              <option value="completion_percentage">{{ ui_lang.admin_sort_completion|default('Sort by Completion') }}</option>
+              <option value="disagreement">{{ ui_lang.admin_sort_disagreement|default('Sort by Disagreement') }}</option>
+              <option value="id">{{ ui_lang.admin_sort_id|default('Sort by ID') }}</option>
+              <option value="average_time">{{ ui_lang.admin_sort_avg_time|default('Sort by Avg Time') }}</option>
             </select>
 
             <select id="sortOrder" onchange="loadInstances()">
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
+              <option value="desc">{{ ui_lang.admin_order_desc|default('Descending') }}</option>
+              <option value="asc">{{ ui_lang.admin_order_asc|default('Ascending') }}</option>
             </select>
 
             <select id="filterCompletion" onchange="loadInstances()">
-              <option value="">All Instances</option>
-              <option value="completed">Completed Only</option>
-              <option value="incomplete">Incomplete Only</option>
+              <option value="">{{ ui_lang.admin_filter_all|default('All Instances') }}</option>
+              <option value="completed">{{ ui_lang.admin_filter_completed|default('Completed Only') }}</option>
+              <option value="incomplete">{{ ui_lang.admin_filter_incomplete|default('Incomplete Only') }}</option>
             </select>
 
             <button
               onclick="refreshInstances()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh
             </button>
@@ -142,15 +203,17 @@
             <table class="admin-table" id="instancesTable">
               <thead>
                 <tr>
-                  <th>Instance ID</th>
-                  <th>Text Preview</th>
-                  <th>Annotations</th>
-                  <th>Completion %</th>
-                  <th>Most Frequent Label</th>
-                  <th>Disagreement</th>
-                  <th>Avg Time</th>
-                  <th>Annotators</th>
-                  <th>Num AI Used</th>
+                  <th>{{ ui_lang.admin_th_instance_id|default('Instance ID') }}</th>
+                  <th>{{ ui_lang.admin_th_text_preview|default('Text Preview') }}</th>
+                  <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
+                  <th>{{ ui_lang.admin_th_completion_pct|default('Completion %') }}</th>
+                  <th title="The most common answer to each question, with how many of the annotators gave it">{{ ui_lang.admin_th_most_frequent_label|default('Most Frequent Label') }}</th>
+                  <th title="Share of annotations that did not pick the most common answer, pooled over all questions: 0 is unanimous, values near 1 mean the votes are spread out.">
+                    <span class="admin-th-defined">{{ ui_lang.admin_th_disagreement|default('Disagreement') }}</span>
+                  </th>
+                  <th>{{ ui_lang.admin_th_avg_time|default('Avg Time') }}</th>
+                  <th>{{ ui_lang.admin_th_annotators|default('Annotators') }}</th>
+                  <th>{{ ui_lang.admin_th_num_ai_used|default('Num AI Used') }}</th>
                 </tr>
               </thead>
               <tbody id="instancesTableBody">
@@ -169,7 +232,7 @@
           <div class="table-controls">
             <button
               onclick="refreshQuestions()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
@@ -181,25 +244,65 @@
         </div>
 
         <!-- Behavioral Analytics Tab -->
+        <!-- Devices Tab -->
+        <div class="admin-tab-content" id="devices">
+          <div class="table-controls">
+            <button
+              onclick="loadDevices()"
+              class="shadcn-button shadcn-button-outline"
+            >
+              Refresh Data
+            </button>
+          </div>
+
+          <div class="question-card" id="devicesSummaryCard" style="margin-bottom: 1.5rem;">
+            <div class="question-header">
+              <h3 class="question-title">{{ ui_lang.admin_section_devices|default('Annotator Devices') }}</h3>
+            </div>
+            <div id="devicesSummary">
+              <!-- Device summary loads here -->
+            </div>
+          </div>
+
+          <div class="admin-table-container">
+            <table class="admin-table" id="devicesTable">
+              <thead>
+                <tr>
+                  <th>{{ ui_lang.admin_th_user_id|default('User ID') }}</th>
+                  <th>{{ ui_lang.admin_th_last_device|default('Last Device') }}</th>
+                  <th>{{ ui_lang.admin_th_mobile_visits|default('Mobile Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_tablet_visits|default('Tablet Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_desktop_visits|default('Desktop Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_pocket_visits|default('Mobile UI Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_last_seen|default('Last Seen') }}</th>
+                </tr>
+              </thead>
+              <tbody id="devicesTableBody">
+                <!-- Device data loads here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="admin-tab-content" id="behavioral">
           <div class="table-controls">
             <button
               onclick="refreshBehavioral()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
           </div>
 
           <!-- Summary Cards -->
-          <div class="dashboard-grid" id="behavioralGrid">
-            <!-- Behavioral summary cards will be loaded here -->
-          </div>
+          <dl class="admin-summary" id="behavioralGrid">
+            <!-- Behavioral summary figures are loaded here -->
+          </dl>
 
           <!-- AI Usage Section -->
           <div class="question-card" id="aiUsageSection" style="margin-bottom: 1.5rem;">
             <div class="question-header">
-              <h3 class="question-title">AI Assistance Usage</h3>
+              <h3 class="question-title">{{ ui_lang.admin_section_ai_usage|default('AI Assistance Usage') }}</h3>
             </div>
             <div id="aiUsageContent">
               <!-- AI usage data will be loaded here -->
@@ -209,10 +312,34 @@
           <!-- Quality Summary Section -->
           <div class="question-card" id="qualitySection" style="margin-bottom: 1.5rem;">
             <div class="question-header">
-              <h3 class="question-title">Quality Indicators</h3>
+              <h3 class="question-title">{{ ui_lang.admin_section_quality|default('Quality Indicators') }}</h3>
             </div>
             <div id="qualityContent">
               <!-- Quality indicators will be loaded here -->
+            </div>
+          </div>
+
+          <!-- Writing Process (typing dynamics on free-text fields).
+               Hidden entirely unless keystroke_logging is enabled. -->
+          <div class="question-card" id="writingProcessSection"
+               style="margin-bottom: 1.5rem; display: none;">
+            <div class="question-header">
+              <h3 class="question-title">{{ ui_lang.admin_section_writing_process|default('Writing Process') }}</h3>
+            </div>
+            <div id="writingProcessContent">
+              <!-- Writing process data will be loaded here -->
+            </div>
+          </div>
+
+          <!-- Authenticity (page-level paradata on every task type).
+               Hidden entirely unless authenticity is enabled. -->
+          <div class="question-card" id="authenticitySection"
+               style="margin-bottom: 1.5rem; display: none;">
+            <div class="question-header">
+              <h3 class="question-title">{{ ui_lang.admin_section_authenticity|default('Authenticity') }}</h3>
+            </div>
+            <div id="authenticityContent">
+              <!-- Authenticity data will be loaded here -->
             </div>
           </div>
 
@@ -221,14 +348,14 @@
             <table class="admin-table" id="behavioralTable">
               <thead>
                 <tr>
-                  <th>User ID</th>
-                  <th>Instances</th>
-                  <th>Avg Time (s)</th>
-                  <th>Interactions</th>
-                  <th>Changes</th>
-                  <th>AI Requests</th>
-                  <th>AI Accept Rate</th>
-                  <th>Suspicion</th>
+                  <th>{{ ui_lang.admin_th_user_id|default('User ID') }}</th>
+                  <th>{{ ui_lang.admin_th_instances|default('Instances') }}</th>
+                  <th>{{ ui_lang.admin_th_avg_time_s|default('Avg Time (s)') }}</th>
+                  <th>{{ ui_lang.admin_th_interactions|default('Interactions') }}</th>
+                  <th>{{ ui_lang.admin_th_changes|default('Changes') }}</th>
+                  <th>{{ ui_lang.admin_th_ai_requests|default('AI Requests') }}</th>
+                  <th>{{ ui_lang.admin_th_ai_accept_rate|default('AI Accept Rate') }}</th>
+                  <th>{{ ui_lang.admin_th_suspicion|default('Suspicion') }}</th>
                 </tr>
               </thead>
               <tbody id="behavioralTableBody">
@@ -243,20 +370,26 @@
           <div class="table-controls">
             <button
               onclick="refreshCrowdsourcing()"
-              class="shadcn-button shadcn-button-primary"
+              class="shadcn-button shadcn-button-outline"
             >
               Refresh Data
             </button>
           </div>
 
           <!-- Summary Cards -->
-          <div class="dashboard-grid" id="crowdsourcingGrid">
-            <!-- Crowdsourcing summary cards will be loaded here -->
-          </div>
+          <dl class="admin-summary" id="crowdsourcingGrid">
+            <!-- Crowdsourcing summary figures are loaded here -->
+          </dl>
 
           <!-- Platform Sections -->
           <div id="crowdsourcingDetails">
             <!-- Platform-specific data will be loaded here -->
+          </div>
+
+          <!-- Prolific Study Management (Tier-3 API) -->
+          <div id="crowdStudyPanel" style="margin-top: 1rem;">
+            <!-- Study lifecycle + submissions review, shown when a Prolific
+                 API token and study_id are configured -->
           </div>
         </div>
 
@@ -276,7 +409,7 @@
             <div style="flex: 2; min-width: 600px;">
               <div class="dashboard-card" style="position: relative; min-height: 500px;">
                 <div id="embedding-viz-loader" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); z-index: 10; justify-content: center; align-items: center;">
-                  <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6;"></div>
+                  <div class="loading-spinner" style="width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary);"></div>
                 </div>
                 <div id="embedding-viz-error" style="display: none;"></div>
                 <div id="embedding-viz-chart" style="width: 100%; height: 500px;"></div>
@@ -308,12 +441,12 @@
               <div class="dashboard-card" style="margin-top: 1rem;">
                 <h3 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; color: var(--muted-foreground);">CONTROLS</h3>
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                  <button class="shadcn-button shadcn-button-primary" onclick="embeddingViz && embeddingViz.refresh(true)" style="width: 100%;">
+                  <button class="shadcn-button shadcn-button-outline" onclick="embeddingViz && embeddingViz.refresh(true)" style="width: 100%;">
                     Refresh Visualization
                   </button>
                   <select id="embedding-viz-label-source" onchange="changeEmbeddingVizLabelSource()" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius);">
-                    <option value="mace">Color by MACE Labels</option>
-                    <option value="majority">Color by Majority Vote</option>
+                    <option value="mace">{{ ui_lang.admin_opt_color_mace|default('Color by MACE Labels') }}</option>
+                    <option value="majority">{{ ui_lang.admin_opt_color_majority|default('Color by Majority Vote') }}</option>
                   </select>
                 </div>
               </div>
@@ -330,15 +463,15 @@
 
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h3 style="margin: 0;">BWS Item Scores</h3>
+              <h3 style="margin: 0;">{{ ui_lang.admin_section_bws_scores|default('BWS Item Scores') }}</h3>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <select id="bwsScoringMethod" class="shadcn-input" style="width: auto; padding: 6px 12px;">
-                  <option value="counting">Counting</option>
+                  <option value="counting">{{ ui_lang.admin_opt_scoring_counting|default('Counting') }}</option>
                   <option value="bradley_terry">Bradley-Terry</option>
                   <option value="plackett_luce">Plackett-Luce</option>
                 </select>
                 <button class="shadcn-button shadcn-button-primary" onclick="generateBwsScores()">
-                  Generate Scores
+                  {{ ui_lang.admin_btn_generate_scores|default('Generate Scores') }}
                 </button>
               </div>
             </div>
@@ -350,13 +483,13 @@
               <table class="admin-table">
                 <thead>
                   <tr>
-                    <th>Rank</th>
-                    <th>Item ID</th>
-                    <th>Text</th>
-                    <th>Score</th>
-                    <th>Best Count</th>
-                    <th>Worst Count</th>
-                    <th>Appearances</th>
+                    <th>{{ ui_lang.admin_th_rank|default('Rank') }}</th>
+                    <th>{{ ui_lang.admin_th_item_id|default('Item ID') }}</th>
+                    <th>{{ ui_lang.admin_th_text|default('Text') }}</th>
+                    <th>{{ ui_lang.admin_th_score|default('Score') }}</th>
+                    <th>{{ ui_lang.admin_th_best_count|default('Best Count') }}</th>
+                    <th>{{ ui_lang.admin_th_worst_count|default('Worst Count') }}</th>
+                    <th>{{ ui_lang.admin_th_appearances|default('Appearances') }}</th>
                   </tr>
                 </thead>
                 <tbody id="bwsScoresBody">
@@ -365,6 +498,38 @@
               </table>
             </div>
           </div>
+        </div>
+        {% endif %}
+
+        <div class="admin-tab-content" id="throughput">
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <h3 style="margin-top: 0;">How fast is the work going?</h3>
+            <p style="color: var(--muted-foreground);">
+              Active time is measured from each annotator's own interaction
+              events, with gaps longer than five minutes capped so an idle tab
+              does not count as work. Only saved items count. When the review
+              workflow is on, first-pass approval is the share of an
+              annotator's reviewed items that were finished without being sent
+              back, and rework is the share sent back at least once.
+            </p>
+          </div>
+          <div id="throughputBody"><p style="color: var(--muted-foreground);">Loading...</p></div>
+        </div>
+
+        {% if ai_influence_enabled %}
+        <div class="admin-tab-content" id="ai-influence">
+          <div class="dashboard-card" style="margin-bottom: 1.5rem;">
+            <h3 style="margin-top: 0;">Did AI assistance change the answers?</h3>
+            <p style="color: var(--muted-foreground);">
+              A random share of each annotator's items (<code>ai_support.holdout</code>)
+              showed no AI assistance. Each scheme compares those answers with the
+              assisted ones: how often they match the model's own answer, how often
+              they match gold where there is one, and how much annotators agree
+              within each group. Higher model agreement with assistance, without
+              higher gold accuracy, is the signature of anchoring.
+            </p>
+          </div>
+          <div id="aiInfluenceBody"><p style="color: var(--muted-foreground);">Loading...</p></div>
         </div>
         {% endif %}
 
@@ -377,7 +542,7 @@
 
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h3 style="margin: 0;">Annotator Competence</h3>
+              <h3 style="margin: 0;">{{ ui_lang.admin_section_competence|default('Annotator Competence') }}</h3>
               <button class="shadcn-button shadcn-button-primary" onclick="triggerMace()">
                 Run MACE
               </button>
@@ -389,9 +554,9 @@
               <table class="admin-table">
                 <thead>
                   <tr>
-                    <th>Annotator</th>
-                    <th>Competence</th>
-                    <th>Reliability</th>
+                    <th>{{ ui_lang.admin_th_annotator|default('Annotator') }}</th>
+                    <th>{{ ui_lang.admin_th_competence|default('Competence') }}</th>
+                    <th>{{ ui_lang.admin_th_reliability|default('Reliability') }}</th>
                   </tr>
                 </thead>
                 <tbody id="maceCompetenceBody">
@@ -402,12 +567,12 @@
           </div>
 
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
-            <h3>Predicted Labels</h3>
+            <h3>{{ ui_lang.admin_section_predicted_labels|default('Predicted Labels') }}</h3>
             <p style="color: var(--muted-foreground); margin-bottom: 1rem;">
-              MACE's best estimate of the true label for each item, weighted by annotator competence.
+              {{ ui_lang.admin_mace_predicted_help|default("MACE's best estimate of the true label for each item, weighted by annotator competence.") }}
             </p>
             <div id="macePredictionsContainer">
-              <p style="color: var(--muted-foreground);">Run MACE to see predictions.</p>
+              <p style="color: var(--muted-foreground);">{{ ui_lang.admin_mace_run_predictions|default('Run MACE to see predictions.') }}</p>
             </div>
           </div>
         </div>
@@ -415,45 +580,51 @@
 
         <div class="admin-tab-content" id="config">
           <div class="config-form">
-            <h3>System Configuration</h3>
+            <h3>{{ ui_lang.admin_section_system_config|default('System Configuration') }}</h3>
             <form id="configForm">
+              <!-- "No limit" is a checkbox, not the magic number -1: the
+                   Overview said "Unlimited" while this form said -1, and
+                   typing -1 to mean "no limit" is not discoverable. The
+                   API still takes -1; the form translates. -->
               <div class="config-group">
                 <label for="maxAnnotationsPerUser"
-                  >Max Annotations per User</label
+                  >{{ ui_lang.admin_label_max_per_user|default('Max Annotations per User') }}</label
                 >
-                <input
-                  type="number"
-                  id="maxAnnotationsPerUser"
-                  name="maxAnnotationsPerUser"
-                  min="-1"
-                  value="-1"
-                />
-                <small>Use -1 for unlimited</small>
+                <div class="admin-limit-control">
+                  <input type="number" id="maxAnnotationsPerUser" name="maxAnnotationsPerUser"
+                         min="1" step="1" inputmode="numeric" />
+                  <label class="admin-check">
+                    <input type="checkbox" id="maxAnnotationsPerUserUnlimited"
+                           data-limit-for="maxAnnotationsPerUser" />
+                    No limit
+                  </label>
+                </div>
               </div>
 
               <div class="config-group">
                 <label for="maxAnnotationsPerItem"
-                  >Max Annotations per Item</label
+                  >{{ ui_lang.admin_label_max_per_item|default('Max Annotations per Item') }}</label
                 >
-                <input
-                  type="number"
-                  id="maxAnnotationsPerItem"
-                  name="maxAnnotationsPerItem"
-                  min="-1"
-                  value="-1"
-                />
-                <small>Use -1 for unlimited</small>
+                <div class="admin-limit-control">
+                  <input type="number" id="maxAnnotationsPerItem" name="maxAnnotationsPerItem"
+                         min="1" step="1" inputmode="numeric" />
+                  <label class="admin-check">
+                    <input type="checkbox" id="maxAnnotationsPerItemUnlimited"
+                           data-limit-for="maxAnnotationsPerItem" />
+                    No limit
+                  </label>
+                </div>
               </div>
 
               <div class="config-group">
-                <label for="assignmentStrategy">Assignment Strategy</label>
+                <label for="assignmentStrategy">{{ ui_lang.admin_label_assignment_strategy|default('Assignment Strategy') }}</label>
                 <select id="assignmentStrategy" name="assignmentStrategy">
-                  <option value="random">Random</option>
-                  <option value="fixed_order">Fixed Order</option>
-                  <option value="least_annotated">Least Annotated</option>
-                  <option value="max_diversity">Max Diversity</option>
-                  <option value="active_learning">Active Learning</option>
-                  <option value="llm_confidence">LLM Confidence</option>
+                  <option value="random">{{ ui_lang.admin_opt_strat_random|default('Random') }}</option>
+                  <option value="fixed_order">{{ ui_lang.admin_opt_strat_fixed_order|default('Fixed Order') }}</option>
+                  <option value="least_annotated">{{ ui_lang.admin_opt_strat_least_annotated|default('Least Annotated') }}</option>
+                  <option value="max_diversity">{{ ui_lang.admin_opt_strat_max_diversity|default('Max Diversity') }}</option>
+                  <option value="active_learning">{{ ui_lang.admin_opt_strat_active_learning|default('Active Learning') }}</option>
+                  <option value="llm_confidence">{{ ui_lang.admin_opt_strat_llm_confidence|default('LLM Confidence') }}</option>
                 </select>
               </div>
 
@@ -462,14 +633,14 @@
                   type="submit"
                   class="shadcn-button shadcn-button-primary"
                 >
-                  Save Changes
+                  {{ ui_lang.admin_btn_save_changes|default('Save Changes') }}
                 </button>
                 <button
                   type="button"
                   onclick="loadConfig()"
                   class="shadcn-button shadcn-button-outline"
                 >
-                  Reload
+                  {{ ui_lang.admin_btn_reload|default('Reload') }}
                 </button>
               </div>
             </form>
@@ -478,7 +649,14 @@
       </main>
     </div>
 
+    <!-- Status messages. These were alert() dialogs, which block the page
+         and read as errors even when they report a success. -->
+    <div class="admin-toast" id="adminToast" role="status" aria-live="polite" hidden></div>
+
+    <script>window.UI_LANG = {{ ui_lang|tojson }};</script>
     <script>
+      // Localized UI strings (falls back to the English literal if a key is absent)
+      var L = window.UI_LANG || {};
       // Global state
       let currentTab = "overview";
       let currentPage = 1;
@@ -486,33 +664,75 @@
       let currentSortBy = "annotation_count";
       let currentSortOrder = "desc";
       let currentFilter = "";
+      const ADJUDICATION_ENABLED = {{ 'true' if adjudication_enabled else 'false' }};
 
       // Initialize dashboard
       document.addEventListener("DOMContentLoaded", function () {
         initializeTabs();
-        loadOverview();
+        initializeLimitControls();
+        // A reload or a shared link lands on the tab it named, not Overview.
+        const fromHash = decodeURIComponent((window.location.hash || "").slice(1));
+        if (fromHash && document.querySelector(`.admin-tab[data-tab="${CSS.escape(fromHash)}"]`)) {
+          switchTab(fromHash);
+        } else {
+          loadOverview();
+        }
         loadConfig();
       });
 
       // Tab functionality
       function initializeTabs() {
-        const tabs = document.querySelectorAll(".admin-tab");
-        tabs.forEach((tab) => {
+        const tabs = Array.from(document.querySelectorAll(".admin-tab"));
+        tabs.forEach((tab, index) => {
+          tab.tabIndex = tab.classList.contains("active") ? 0 : -1;
           tab.addEventListener("click", function () {
-            const tabName = this.getAttribute("data-tab");
-            switchTab(tabName);
+            switchTab(this.getAttribute("data-tab"));
+          });
+          // Arrow keys move between tabs, as on any tablist.
+          tab.addEventListener("keydown", function (e) {
+            let next = null;
+            if (e.key === "ArrowRight") next = tabs[(index + 1) % tabs.length];
+            else if (e.key === "ArrowLeft") next = tabs[(index - 1 + tabs.length) % tabs.length];
+            else if (e.key === "Home") next = tabs[0];
+            else if (e.key === "End") next = tabs[tabs.length - 1];
+            if (next) {
+              e.preventDefault();
+              next.focus();
+              switchTab(next.getAttribute("data-tab"));
+            }
           });
         });
+        updateTabOverflow();
+        const strip = document.querySelector(".admin-tabs");
+        strip.addEventListener("scroll", updateTabOverflow, { passive: true });
+        window.addEventListener("resize", updateTabOverflow);
+      }
+
+      // On a phone the tab strip scrolls sideways. Mark which edges have
+      // more tabs past them so the fade says "there is more here".
+      function updateTabOverflow() {
+        const strip = document.querySelector(".admin-tabs");
+        if (!strip) return;
+        const max = strip.scrollWidth - strip.clientWidth;
+        strip.classList.toggle("overflow-start", strip.scrollLeft > 2);
+        strip.classList.toggle("overflow-end", max - strip.scrollLeft > 2);
       }
 
       function switchTab(tabName) {
         // Update active tab
         document.querySelectorAll(".admin-tab").forEach((tab) => {
           tab.classList.remove("active");
+          tab.setAttribute("aria-selected", "false");
+          tab.tabIndex = -1;
         });
-        document
-          .querySelector(`[data-tab="${tabName}"]`)
-          .classList.add("active");
+        const activeTab = document.querySelector(`.admin-tab[data-tab="${tabName}"]`);
+        activeTab.classList.add("active");
+        activeTab.setAttribute("aria-selected", "true");
+        activeTab.tabIndex = 0;
+        activeTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+        if (history.replaceState) {
+          history.replaceState(null, "", tabName === "overview" ? window.location.pathname : `#${tabName}`);
+        }
 
         // Update active content
         document.querySelectorAll(".admin-tab-content").forEach((content) => {
@@ -539,6 +759,15 @@
           case "behavioral":
             loadBehavioral();
             break;
+          case "throughput":
+            loadThroughput();
+            break;
+          case "ai-influence":
+            loadAiInfluence();
+            break;
+          case "devices":
+            loadDevices();
+            break;
           case "crowdsourcing":
             loadCrowdsourcing();
             break;
@@ -558,17 +787,32 @@
       }
 
       // API functions
+      // User ids, schema names and flag explanations are interpolated into
+      // innerHTML below. They originate from annotator input and config files,
+      // so they are escaped rather than trusted.
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return "";
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       async function makeApiRequest(endpoint, options = {}) {
-        const defaultOptions = {
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": "{{ admin_api_key }}",
-          },
+        // Headers are merged, not replaced: a caller passing its own
+        // `headers` used to drop X-API-Key, so the request only worked when
+        // the session happened to authorise it.
+        const headers = {
+          "Content-Type": "application/json",
+          "X-API-Key": "{{ admin_api_key }}",
+          ...(options.headers || {}),
         };
 
         const response = await fetch(endpoint, {
-          ...defaultOptions,
           ...options,
+          headers,
         });
 
         if (!response.ok) {
@@ -585,84 +829,187 @@
           displayOverview(data);
         } catch (error) {
           console.error("Error loading overview:", error);
-          showError("Failed to load overview data");
+          showError(L.admin_err_overview || "Failed to load overview data");
         }
+      }
+
+      // "7m", "1h 12m", "45s". The server's string printed "0.0h 7.0m".
+      function formatDuration(seconds) {
+        seconds = Math.max(0, Math.round(Number(seconds) || 0));
+        if (seconds < 60) return `${seconds}s`;
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return h ? `${h}h ${m}m` : `${m}m`;
+      }
+
+      function summaryItem(label, value, sub, extraClass) {
+        return `<div class="admin-summary-item${extraClass ? " " + extraClass : ""}">
+                  <dt>${escapeHtml(label)}</dt>
+                  <dd><span class="admin-summary-value">${escapeHtml(value)}</span>${
+                    sub ? `<span class="admin-summary-sub">${escapeHtml(sub)}</span>` : ""}</dd>
+                </div>`;
+      }
+
+      function limitText(value) {
+        const n = Number(value);
+        return value === null || value === undefined || value === "Unlimited" || n < 0
+          ? "No limit" : String(value);
       }
 
       function displayOverview(data) {
         const overviewGrid = document.getElementById("overviewGrid");
         const systemInfo = document.getElementById("systemInfo");
+        const o = data.overview;
 
-        // Display overview cards
-        overviewGrid.innerHTML = `
-                <div class="dashboard-card">
-                    <h3>Total Users</h3>
-                    <div class="value">${data.overview.total_users}</div>
-                    <div class="description">Registered annotators</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Active Users</h3>
-                    <div class="value">${data.overview.active_users}</div>
-                    <div class="description">Currently annotating</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Total Annotations</h3>
-                    <div class="value">${data.overview.total_annotations}</div>
-                    <div class="description">Completed annotations</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Completion</h3>
-                    <div class="value">${data.overview.completion_percentage}%</div>
-                    <div class="description">Items with annotations</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Total Items</h3>
-                    <div class="value">${data.overview.total_items}</div>
-                    <div class="description">Items in dataset</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Working Time</h3>
-                    <div class="value">${data.overview.total_working_time}</div>
-                    <div class="description">Total time spent</div>
-                </div>
-            `;
+        const parts = [
+          summaryItem("Items", o.total_items,
+            `${o.items_with_annotations} annotated (${o.completion_percentage}%)`),
+          summaryItem("Annotations", o.total_annotations,
+            `${o.average_annotations_per_item} per item`),
+          // "Active users / currently annotating" counted everyone in the
+          // annotation phase, including people who stopped hours ago. Say
+          // what is actually counted.
+          summaryItem("Annotators", o.total_users,
+            `${o.active_users} in annotation phase · ${o.completed_users} finished`),
+          summaryItem("Working time",
+            o.total_working_seconds !== undefined ? formatDuration(o.total_working_seconds) : o.total_working_time,
+            "summed over annotators"),
+        ];
+        if (o.open_issues !== undefined) {
+          parts.push(summaryItem("Open issues", o.open_issues,
+            `${o.resolved_issues} resolved · raised from the Notes panel`,
+            o.open_issues > 0 ? "is-warning" : ""));
+        }
+        if (o.over_collected_items > 0) {
+          parts.push(summaryItem("Over-collected", o.over_collected_items,
+            "items with more annotations than the per-item cap", "is-warning"));
+        }
+        overviewGrid.innerHTML = parts.join("");
 
-        // Display system info
-        systemInfo.innerHTML = `
-                <div class="config-group">
-                    <label>Task Name</label>
-                    <input type="text" value="${
-                      data.config.annotation_task_name
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Max Annotations per User</label>
-                    <input type="text" value="${
-                      data.config.max_annotations_per_user
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Max Annotations per Item</label>
-                    <input type="text" value="${
-                      data.config.max_annotations_per_item
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Assignment Strategy</label>
-                    <input type="text" value="${
-                      data.config.assignment_strategy
-                    }" readonly>
-                </div>
-                <div class="config-group">
-                    <label>Debug Mode</label>
-                    <input type="text" value="${
-                      data.config.debug_mode ? "Enabled" : "Disabled"
-                    }" readonly>
-                </div>
-            `;
+        const c = data.config;
+        const rows = [
+          ["Task name", c.annotation_task_name],
+          ["Max annotations per user", limitText(c.max_annotations_per_user)],
+          ["Max annotations per item", limitText(c.max_annotations_per_item)],
+          ["Assignment strategy", c.assignment_strategy],
+          ["Debug mode", c.debug_mode ? "Enabled" : "Disabled"],
+        ];
+        systemInfo.innerHTML = rows
+          .map(([k, v]) => `<div class="admin-dl-row"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
+          .join("");
+
+        loadAgreementSummary();
+      }
+
+      const METRIC_NAMES = {
+        alpha_nominal: "Krippendorff's α (nominal)",
+        alpha_ordinal: "Krippendorff's α (ordinal)",
+        alpha_interval: "Krippendorff's α (interval)",
+        alpha_masi: "Krippendorff's α (MASI)",
+        cohen_kappa: "Cohen's κ",
+        fleiss_kappa: "Fleiss' κ",
+        weighted_kappa_linear: "Weighted κ (linear)",
+        weighted_kappa_quadratic: "Weighted κ (quadratic)",
+        spearman_rho: "Spearman ρ",
+        pearson_r: "Pearson r",
+        icc_2_k: "ICC(2,k)",
+        mean_jaccard: "Mean Jaccard",
+      };
+
+      async function loadAgreementSummary() {
+        const box = document.getElementById("agreementSummary");
+        if (!box) return;
+        try {
+          const data = await makeApiRequest("/admin/api/iaa_summary");
+          const schemas = data.schemas || [];
+          if (!schemas.length) {
+            box.innerHTML = `<p class="admin-muted">This task has no annotation schemes to compare.</p>`;
+            return;
+          }
+          if (!data.n_overlap_items) {
+            box.innerHTML = `<p class="admin-muted">No item has two or more annotators yet, so there is nothing to compare. Agreement appears here once items are annotated by more than one person.</p>`;
+            return;
+          }
+          // The words of the /admin/iaa scale legend, in the interface language.
+          const bandText = {
+            strong: {{ (ui_lang.iaa_band_strong|default('strong'))|tojson }},
+            substantial: {{ (ui_lang.iaa_band_substantial|default('substantial'))|tojson }},
+            weak: {{ (ui_lang.iaa_band_poor|default('poor'))|tojson }},
+          };
+          box.innerHTML = `
+            <div class="admin-table-container admin-table-flat">
+              <table class="admin-table">
+                <thead><tr>
+                  <th>Schema</th><th>Measure</th><th class="num">Value</th>
+                  <th class="num">Items</th><th class="num">Annotators</th>
+                </tr></thead>
+                <tbody>${schemas.map((r) => `
+                  <tr>
+                    <td><strong>${escapeHtml(r.schema)}</strong> <span class="admin-muted">${escapeHtml(r.annotation_type || "")}</span></td>
+                    <td>${r.metric ? escapeHtml(METRIC_NAMES[r.metric] || r.metric) : `<span class="admin-muted">${escapeHtml(r.note || "Not computable yet")}</span>`}</td>
+                    <td class="num">${r.metric ? `<span class="agreement-value band-${r.band || "none"}">${escapeHtml(r.display)}</span>${
+                      bandText[r.band] ? ` <span class="agreement-band band-${r.band}">${bandText[r.band]}</span>` : ""}` : "—"}</td>
+                    <td class="num">${r.n_items ?? "—"}</td>
+                    <td class="num">${r.n_annotators ?? "—"}</td>
+                  </tr>`).join("")}
+                </tbody>
+              </table>
+            </div>`;
+        } catch (error) {
+          console.error("Error loading agreement summary:", error);
+          box.innerHTML = `<p class="admin-muted">Agreement could not be computed: ${escapeHtml(error.message)}. The full report at /admin/iaa may say more.</p>`;
+        }
       }
 
       // Annotators functions
+      async function loadDevices() {
+        try {
+          const data = await makeApiRequest("/pocket/api/devices");
+          displayDevices(data);
+        } catch (error) {
+          console.error("Error loading device data:", error);
+          showError("Failed to load device data");
+        }
+      }
+
+      function displayDevices(data) {
+        const summary = document.getElementById("devicesSummary");
+        const routing = data.routing || {};
+        const s = data.summary || {};
+        // Matches device-routing.js: the warning shows only when a type is
+        // outside TOUCH_USABLE_TYPES, not whenever Pocket cannot host the task.
+        const routingLine = routing.available
+          ? "Touch devices are auto-routed to the mobile interface (/pocket)."
+          : routing.capable
+            ? "Task is Pocket-capable, but Pocket Mode is not enabled — phones get the regular page, which works by touch."
+            : routing.touch_usable === false
+              ? "This task includes annotation types not verified for touch; phone and tablet visitors see a warning recommending a desktop browser."
+              : "Phones get the regular page, which works by touch for every type in this task. Pocket Mode cannot host it.";
+        summary.innerHTML = `
+          <p><strong>${s.n_touch_users || 0}</strong> of <strong>${s.n_users_seen || 0}</strong>
+          users seen so far have visited from a phone or tablet.</p>
+          <p class="admin-muted">${routingLine}</p>`;
+
+        const tbody = document.getElementById("devicesTableBody");
+        const rows = data.users || [];
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="7" class="admin-muted">No visits recorded yet.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows
+          .map((u) => `
+                <tr${u.used_touch_device ? ' class="admin-row-flagged"' : ""}>
+                    <td>${escapeHtml(u.username)}</td>
+                    <td>${u.last_device || "—"}${u.used_touch_device ? " 📱" : ""}</td>
+                    <td>${u.mobile_visits}</td>
+                    <td>${u.tablet_visits}</td>
+                    <td>${u.desktop_visits}</td>
+                    <td>${u.pocket_visits}</td>
+                    <td>${u.last_seen ? new Date(u.last_seen * 1000).toLocaleString() : "—"}</td>
+                </tr>`)
+          .join("");
+      }
+
       async function loadAnnotators() {
         try {
           const data = await makeApiRequest("/admin/api/annotators");
@@ -670,7 +1017,7 @@
           displayAnnotators(data);
         } catch (error) {
           console.error("Error loading annotators:", error);
-          showError("Failed to load annotators data");
+          showError(L.admin_err_annotators || "Failed to load annotators data");
         }
       }
 
@@ -681,21 +1028,41 @@
           .map(
             (annotator) => `
                 <tr>
-                    <td>${annotator.user_id}</td>
+                    <td>${escapeHtml(annotator.user_id)}</td>
                     <td><span class="status-badge status-${annotator.phase.toLowerCase()}">${
               annotator.phase
             }</span></td>
                     <td>${annotator.total_annotations}</td>
-                    <td>${annotator.total_working_time || "N/A"}</td>
-                    <td>${annotator.average_time_per_annotation || "N/A"}</td>
-                    <td>${annotator.annotations_per_hour}/hr</td>
+                    <!-- /admin/api/annotators returns total_seconds and
+                         average_seconds_per_annotation (admin.py:265). Reading
+                         total_working_time / average_time_per_annotation, which it has
+                         never returned, made both columns read "N/A" for every
+                         annotator regardless of how much work they had done. -->
+                    <td>${
+                      annotator.total_seconds
+                        ? formatTime(Math.round(annotator.total_seconds))
+                        : "N/A"
+                    }</td>
+                    <td>${
+                      annotator.average_seconds_per_annotation
+                        ? formatTime(Math.round(annotator.average_seconds_per_annotation))
+                        : "N/A"
+                    }</td>
+                    <td>${Math.round(annotator.annotations_per_hour)}/hr</td>
                     <td>${annotator.completion_percentage.toFixed(1)}%</td>
                     <td>
-                      <div style="display:flex;align-items:center;gap:4px;">
-                        <button onclick="adjustUserInstances('${annotator.user_id}', -5)" style="padding:2px 6px;cursor:pointer;">-</button>
-                        <span id="max-inst-${annotator.user_id}">${annotator.max_assignments < 0 ? '∞' : annotator.max_assignments}</span>
-                        <button onclick="adjustUserInstances('${annotator.user_id}', 5)" style="padding:2px 6px;cursor:pointer;">+</button>
-                      </div>
+                      <!-- A typed number and an explicit Set, replacing
+                           20px -/+ buttons that changed a live quota by 5
+                           on every click with no way back. Empty = no limit. -->
+                      <form class="admin-quota" data-user="${escapeHtml(annotator.user_id)}"
+                            onsubmit="setUserInstances(this); return false;">
+                        <input type="number" min="0" step="1" inputmode="numeric"
+                               aria-label="Max instances for ${escapeHtml(annotator.user_id)}"
+                               placeholder="No limit"
+                               value="${annotator.max_assignments < 0 ? "" : annotator.max_assignments}"
+                               data-current="${annotator.max_assignments}">
+                        <button type="submit" class="shadcn-button shadcn-button-outline admin-quota-set">Set</button>
+                      </form>
                     </td>
                     <td>${
                       annotator.last_activity
@@ -708,25 +1075,44 @@
           .join("");
       }
 
-      async function adjustUserInstances(userId, delta) {
+      async function postUserInstances(userId, value) {
+        return makeApiRequest(`/admin/api/user/${encodeURIComponent(userId)}/set_instances`, {
+          method: "POST",
+          body: JSON.stringify({ max_instances: value }),
+        });
+      }
+
+      async function setUserInstances(form) {
+        const userId = form.dataset.user;
+        const input = form.querySelector("input");
+        const previous = parseInt(input.dataset.current, 10);
+        const raw = input.value.trim();
+        const next = raw === "" ? -1 : parseInt(raw, 10);
+        if (raw !== "" && (!Number.isFinite(next) || next < 0)) {
+          showError(`Max instances for ${userId} must be a whole number, or empty for no limit.`);
+          return;
+        }
+        if (next === previous) return;
         try {
-          // First get current value
-          const span = document.getElementById(`max-inst-${userId}`);
-          let current = span.textContent === '∞' ? -1 : parseInt(span.textContent);
-          let newVal = current < 0 ? delta : current + delta;
-          if (newVal < 0) newVal = -1; // Switch to unlimited
-
-          const response = await makeApiRequest(`/admin/api/user/${encodeURIComponent(userId)}/set_instances`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({max_instances: newVal})
+          const result = await postUserInstances(userId, next);
+          if (!result.success) throw new Error(result.error || "not saved");
+          input.dataset.current = result.max_instances;
+          input.value = result.max_instances < 0 ? "" : result.max_instances;
+          const describe = (v) => (v < 0 ? "no limit" : `${v} instances`);
+          const clamped = next >= 0 && result.max_instances > next
+            ? ` (not below the ${result.current_annotations} already annotated)` : "";
+          showSuccess(`${userId}: ${describe(previous)} → ${describe(result.max_instances)}${clamped}.`, {
+            label: "Undo",
+            run: async () => {
+              const undone = await postUserInstances(userId, previous);
+              input.dataset.current = undone.max_instances;
+              input.value = undone.max_instances < 0 ? "" : undone.max_instances;
+              showSuccess(`${userId}: back to ${describe(undone.max_instances)}.`);
+            },
           });
-
-          if (response.success) {
-            span.textContent = response.max_instances < 0 ? '∞' : response.max_instances;
-          }
         } catch (err) {
-          console.error('Failed to adjust instances:', err);
+          console.error("Failed to set instances:", err);
+          showError(`Could not change max instances for ${userId}: ${err.message}`);
         }
       }
 
@@ -758,31 +1144,45 @@
           displayInstances(data);
         } catch (error) {
           console.error("Error loading instances:", error);
-          showError("Failed to load instances data");
+          showError(L.admin_err_instances || "Failed to load instances data");
         }
       }
 
       function displayInstances(data) {
         const tbody = document.getElementById("instancesTableBody");
         const pagination = document.getElementById("instancesPagination");
-        console.log(data.instances);
         // Display instances
         tbody.innerHTML = data.instances
-          .map(
-            (instance) => `
+          .map((instance) => {
+            // Per question, so a topic and a sentiment are never in one
+            // column without saying which is which.
+            const perSchema = instance.label_summary_by_schema || [];
+            const labels = perSchema.length
+              ? perSchema.map((l) => `<div class="admin-label-line">${
+                  l.schema ? `<span class="admin-muted">${escapeHtml(l.schema)}:</span> ` : ""
+                }${escapeHtml(l.label)} <span class="admin-muted">(${l.count}/${l.total})</span></div>`).join("")
+              : `<span class="admin-muted">${escapeHtml(instance.most_frequent_label || "—")}</span>`;
+            const d = Number(instance.label_disagreement) || 0;
+            const level = instance.annotation_count < 2 ? "none" : d >= 0.5 ? "high" : d > 0 ? "some" : "agree";
+            const disagreement = `<span class="disagreement disagreement-${level}">${
+              instance.annotation_count < 2 ? "—" : d.toFixed(2)}</span>`;
+            const linked = ADJUDICATION_ENABLED && instance.annotation_count >= 2
+              ? `<a class="admin-row-link" href="${window.potatoUrl ? window.potatoUrl("/adjudicate") : "/adjudicate"}?instance=${encodeURIComponent(instance.id)}"
+                    title="Open this item in adjudication">${disagreement}</a>`
+              : disagreement;
+            return `
                 <tr>
-                    <td>${instance.id}</td>
-                    <td title="${instance.text}">${instance.text}</td>
+                    <td>${escapeHtml(instance.id)}</td>
+                    <td title="${escapeHtml(instance.text)}">${escapeHtml(instance.text)}</td>
                     <td>${instance.annotation_count}</td>
                     <td>${instance.completion_percentage}%</td>
-                    <td>${instance.most_frequent_label || "N/A"}</td>
-                    <td>${instance.label_disagreement}</td>
-                    <td>${instance.average_time_per_annotation || "N/A"}</td>
-                    <td>${instance.annotators.join(", ") || "None"}</td>
+                    <td>${labels}</td>
+                    <td>${linked}</td>
+                    <td>${escapeHtml(instance.average_time_per_annotation || "—")}</td>
+                    <td>${escapeHtml(instance.annotators.join(", ")) || "None"}</td>
                     <td>${instance.num_ai_instance}</td>
-                </tr>
-            `
-          )
+                </tr>`;
+          })
           .join("");
 
         // Display pagination
@@ -853,7 +1253,7 @@
           displayQuestions(data);
         } catch (error) {
           console.error("Error loading questions:", error);
-          showError("Failed to load questions data");
+          showError(L.admin_err_questions || "Failed to load questions data");
         }
       }
 
@@ -876,11 +1276,11 @@
             (question) => `
                 <div class="question-card">
                     <div class="question-header">
-                        <h3 class="question-title">${question.name}</h3>
-                        <span class="question-type">${question.type}</span>
+                        <h3 class="question-title">${escapeHtml(question.name)}</h3>
+                        <span class="question-type">${escapeHtml(question.type)}</span>
                     </div>
 
-                    <p class="question-description">${question.description}</p>
+                    <p class="question-description">${escapeHtml(question.description)}</p>
 
                     <div class="question-stats">
                         <div class="question-stat">
@@ -929,30 +1329,29 @@
         }
       }
 
+      // Dense horizontal bars: label on the left where it can be read, the
+      // count and share on the right. The old vertical bars were full-width
+      // purple blocks with 12px labels hanging underneath them.
+      function generateBars(labels, counts, percentages) {
+        const maxCount = Math.max(1, ...counts);
+        return `<div class="admin-hbars">${labels.map((label, i) => {
+          const pct = percentages && percentages[i] !== undefined ? ` · ${Number(percentages[i]).toFixed(0)}%` : "";
+          return `<div class="admin-hbar-row">
+              <span class="admin-hbar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+              <span class="admin-hbar-track"><span class="admin-hbar-fill" style="width:${(counts[i] / maxCount) * 100}%"></span></span>
+              <span class="admin-hbar-value">${counts[i]}${pct}</span>
+            </div>`;
+        }).join("")}</div>`;
+      }
+
       function generateHistogram(analysis) {
         const { labels, counts, percentages } = analysis.data;
-        const maxCount = Math.max(...counts);
 
         let html = "<h4>Response Distribution</h4>";
-        html += '<div class="histogram">';
-
-        labels.forEach((label, index) => {
-          const count = counts[index];
-          const percentage = percentages[index];
-          const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-          html += `
-                    <div class="histogram-bar" style="height: ${height}%">
-                        <div class="histogram-value">${count}</div>
-                        <div class="histogram-label">${label}</div>
-                    </div>
-                `;
-        });
-
-        html += "</div>";
+        html += generateBars(labels, counts, percentages);
 
         if (analysis.most_common) {
-          html += `<p><strong>Most common:</strong> ${analysis.most_common[0]} (${analysis.most_common[1]} times)</p>`;
+          html += `<p><strong>Most common:</strong> ${escapeHtml(analysis.most_common[0])} (${analysis.most_common[1]} times)</p>`;
         }
 
         if (analysis.agreement_score !== undefined) {
@@ -1037,7 +1436,7 @@
           html += "<h5>Most Common Words</h5>";
           html += '<div class="common-words">';
           common_words.forEach(([word, count]) => {
-            html += `<span class="word-tag">${word}<span class="count">(${count})</span></span>`;
+            html += `<span class="word-tag">${escapeHtml(word)}<span class="count">(${escapeHtml(count)})</span></span>`;
           });
           html += "</div>";
         }
@@ -1075,34 +1474,19 @@
       }
 
       function generateMultiselectAnalysis(analysis) {
-        const { labels, counts, percentages, average_labels_per_item } =
-          analysis.data;
-        const maxCount = Math.max(...counts);
-
+        const { labels, counts, percentages } = analysis.data;
+        // Sent beside `data`, not inside it; reading it from `data` showed
+        // "undefined".
+        const average_labels_per_item = analysis.average_labels_per_item;
         let html = "<h4>Label Frequency</h4>";
-        html += '<div class="histogram">';
+        html += generateBars(labels, counts, percentages);
 
-        labels.forEach((label, index) => {
-          const count = counts[index];
-          const percentage = percentages[index];
-          const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-          html += `
-                    <div class="histogram-bar" style="height: ${height}%">
-                        <div class="histogram-value">${count}</div>
-                        <div class="histogram-label">${label}</div>
-                    </div>
-                `;
-        });
-
-        html += "</div>";
-
-        html += `<p><strong>Average labels per item:</strong> ${average_labels_per_item}</p>`;
+        html += `<p><strong>Average labels per answer:</strong> ${average_labels_per_item}</p>`;
 
         if (analysis.most_common && analysis.most_common.length > 0) {
           html += "<p><strong>Most common labels:</strong> ";
           html += analysis.most_common
-            .map(([label, count]) => `${label} (${count})`)
+            .map(([label, count]) => `${escapeHtml(label)} (${escapeHtml(count)})`)
             .join(", ");
           html += "</p>";
         }
@@ -1121,7 +1505,150 @@
           displayCrowdsourcing(data);
         } catch (error) {
           console.error("Error loading crowdsourcing data:", error);
-          showError("Failed to load crowdsourcing data");
+          showError(L.admin_err_crowdsourcing || "Failed to load crowdsourcing data");
+        }
+        loadCrowdStudyPanel();
+      }
+
+      // --- Prolific study management (Tier-3 API) ---
+      async function crowdApiPost(endpoint, body) {
+        return makeApiRequest(endpoint, {
+          method: "POST",
+          body: JSON.stringify(body || {}),
+        });
+      }
+
+      async function loadCrowdStudyPanel() {
+        const panel = document.getElementById("crowdStudyPanel");
+        if (!panel) return;
+        try {
+          const status = await makeApiRequest("/admin/api/crowd/status");
+          if (!status.api_configured || !status.study_id) {
+            panel.innerHTML = "";
+            return;
+          }
+          const study = await makeApiRequest(
+            `/admin/api/crowd/study?study_id=${encodeURIComponent(status.study_id)}`);
+          const submissions = await makeApiRequest(
+            `/admin/api/crowd/study/${encodeURIComponent(status.study_id)}/submissions`);
+          renderCrowdStudyPanel(status.study_id, study, submissions.results || []);
+        } catch (error) {
+          console.error("Error loading crowd study panel:", error);
+          panel.innerHTML = `<div class="question-card"><div class="error-message">
+            Prolific study panel unavailable: ${error.message}</div></div>`;
+        }
+      }
+
+      function renderCrowdStudyPanel(studyId, study, submissions) {
+        const panel = document.getElementById("crowdStudyPanel");
+        const awaiting = submissions.filter((s) => s.status === "AWAITING REVIEW");
+        const submissionRows = submissions.slice(0, 50).map((s) => `
+          <tr>
+            <td>${escapeHtml(s.participant_id || "")}</td>
+            <td>${escapeHtml(s.status || "")}</td>
+            <td>${s.started_at ? s.started_at.substring(0, 16) : ""}</td>
+            <td>
+              ${s.status === "AWAITING REVIEW" ? `
+                <button class="shadcn-button" onclick="crowdApprove(${escapeHtml(JSON.stringify(String(s.id)))})">Approve</button>
+                <button class="shadcn-button" onclick="crowdReject(${escapeHtml(JSON.stringify(String(s.id)))})">Reject</button>
+              ` : ""}
+            </td>
+          </tr>`).join("");
+
+        panel.innerHTML = `
+          <div class="question-card">
+            <h3>Prolific Study: ${escapeHtml(study.name || studyId)}</h3>
+            <p>
+              Status: <strong>${escapeHtml(study.status)}</strong> ·
+              Places: ${study.places_taken || 0}/${study.total_available_places || 0} ·
+              Reward: ${study.reward != null ? study.reward : "?"}
+            </p>
+            <div class="table-controls">
+              <button class="shadcn-button shadcn-button-primary" onclick="crowdStudyAction('publish')">Publish</button>
+              <button class="shadcn-button" onclick="crowdStudyAction('pause')">Pause</button>
+              <button class="shadcn-button" onclick="crowdStudyAction('start')">Start</button>
+              <button class="shadcn-button" onclick="crowdStudyAction('stop')">Stop</button>
+              <button class="shadcn-button" onclick="crowdAddPlaces()">Add places…</button>
+              <button class="shadcn-button" onclick="crowdAutoScale()">Auto-scale places</button>
+              ${awaiting.length ? `<button class="shadcn-button shadcn-button-primary"
+                 onclick="crowdBulkApprove(${JSON.stringify(awaiting.map((s) => s.id)).replace(/"/g, "&quot;")})">
+                 Approve all awaiting (${awaiting.length})</button>` : ""}
+            </div>
+            <table class="shadcn-table">
+              <thead><tr><th>Participant</th><th>Status</th><th>Started</th><th>Actions</th></tr></thead>
+              <tbody>${submissionRows ||
+                '<tr><td colspan="4">No submissions yet.</td></tr>'}</tbody>
+            </table>
+          </div>`;
+        panel.dataset.studyId = studyId;
+      }
+
+      async function crowdStudyAction(action) {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        try {
+          await crowdApiPost(`/admin/api/crowd/study/${encodeURIComponent(studyId)}/${action}`);
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Study ${action} failed: ${error.message}`);
+        }
+      }
+
+      async function crowdAddPlaces() {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        const places = parseInt(prompt("New total_available_places (can only increase):"), 10);
+        if (!places) return;
+        try {
+          await crowdApiPost(`/admin/api/crowd/study/${encodeURIComponent(studyId)}/places`,
+                             { total_available_places: places });
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Increasing places failed: ${error.message}`);
+        }
+      }
+
+      async function crowdAutoScale() {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        try {
+          const result = await crowdApiPost(
+            `/admin/api/crowd/study/${encodeURIComponent(studyId)}/auto_scale`, {});
+          alert(`Auto-scaled to ${result.target_places} places ` +
+                `(${result.remaining_annotation_slots} annotation slots remaining).`);
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Auto-scale failed: ${error.message}`);
+        }
+      }
+
+      async function crowdApprove(submissionId) {
+        try {
+          await crowdApiPost(`/admin/api/crowd/submissions/${encodeURIComponent(submissionId)}/approve`);
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Approve failed: ${error.message}`);
+        }
+      }
+
+      async function crowdReject(submissionId) {
+        const message = prompt(
+          "Rejection message (Prolific requires at least 100 characters):");
+        if (!message) return;
+        try {
+          await crowdApiPost(`/admin/api/crowd/submissions/${encodeURIComponent(submissionId)}/reject`,
+                             { message: message, rejection_category: "OTHER" });
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Reject failed: ${error.message}`);
+        }
+      }
+
+      async function crowdBulkApprove(submissionIds) {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        try {
+          await crowdApiPost(`/admin/api/crowd/study/${encodeURIComponent(studyId)}/bulk_approve`,
+                             { submission_ids: submissionIds });
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Bulk approve failed: ${error.message}`);
         }
       }
 
@@ -1130,28 +1657,12 @@
         const details = document.getElementById("crowdsourcingDetails");
 
         // Display summary cards
-        grid.innerHTML = `
-          <div class="dashboard-card">
-            <h3>Total Workers</h3>
-            <div class="value">${data.summary.total_workers}</div>
-            <div class="description">All crowdsourcing workers</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Prolific Workers</h3>
-            <div class="value">${data.summary.prolific_workers}</div>
-            <div class="description">${data.summary.prolific_studies} study/studies</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>MTurk Workers</h3>
-            <div class="value">${data.summary.mturk_workers}</div>
-            <div class="description">${data.summary.mturk_hits} HIT(s)</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Other Workers</h3>
-            <div class="value">${data.summary.other_workers}</div>
-            <div class="description">Direct or non-platform</div>
-          </div>
-        `;
+        grid.innerHTML = [
+          summaryItem("Workers", data.summary.total_workers, "all platforms"),
+          summaryItem("Prolific", data.summary.prolific_workers, `${data.summary.prolific_studies} study/studies`),
+          summaryItem("MTurk", data.summary.mturk_workers, `${data.summary.mturk_hits} HIT(s)`),
+          summaryItem("Other", data.summary.other_workers, "direct or non-platform"),
+        ].join("");
 
         // Display platform details
         let detailsHtml = "";
@@ -1221,10 +1732,10 @@
 
         // Show study IDs or HIT IDs
         if (platformKey === "prolific" && platformData.study_ids && platformData.study_ids.length > 0) {
-          html += `<p><strong>Study IDs:</strong> ${platformData.study_ids.join(", ")}</p>`;
+          html += `<p><strong>Study IDs:</strong> ${escapeHtml(platformData.study_ids.join(", "))}</p>`;
         }
         if (platformKey === "mturk" && platformData.hit_ids && platformData.hit_ids.length > 0) {
-          html += `<p><strong>HIT IDs:</strong> ${platformData.hit_ids.join(", ")}</p>`;
+          html += `<p><strong>HIT IDs:</strong> ${escapeHtml(platformData.hit_ids.join(", "))}</p>`;
         }
 
         // Workers table
@@ -1233,19 +1744,19 @@
               <table class="admin-table">
                 <thead>
                   <tr>
-                    <th>Worker ID</th>
-                    <th>Phase</th>
-                    <th>Annotations</th>
-                    <th>Time</th>
-                    <th>Speed</th>
-                    <th>Completion</th>
-                    <th>Status</th>
+                    <th>{{ ui_lang.admin_th_worker_id|default('Worker ID') }}</th>
+                    <th>{{ ui_lang.admin_th_phase|default('Phase') }}</th>
+                    <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
+                    <th>{{ ui_lang.admin_th_time|default('Time') }}</th>
+                    <th>{{ ui_lang.admin_th_speed|default('Speed') }}</th>
+                    <th>{{ ui_lang.admin_th_completion|default('Completion') }}</th>
+                    <th>{{ ui_lang.admin_th_status|default('Status') }}</th>
         `;
 
         if (platformKey === "prolific") {
-          html += `<th>Session ID</th>`;
+          html += `<th>{{ ui_lang.admin_th_session_id|default('Session ID') }}</th>`;
         } else if (platformKey === "mturk") {
-          html += `<th>Assignment ID</th>`;
+          html += `<th>{{ ui_lang.admin_th_assignment_id|default('Assignment ID') }}</th>`;
         }
 
         html += `
@@ -1255,26 +1766,28 @@
         `;
 
         workers.forEach(worker => {
-          const phaseClass = worker.phase.includes("DONE") ? "status-completed" :
-                            worker.phase.includes("ANNOTATION") ? "status-active" : "status-login";
+          // Phases arrive as str(UserPhase): "done", "annotation", ...
+          const phase = String(worker.phase || "").toLowerCase();
+          const phaseClass = phase.includes("done") ? "status-completed" :
+                            phase.includes("annotation") ? "status-active" : "status-login";
           const suspiciousClass = worker.suspicious_level === "High" || worker.suspicious_level === "Very High" ?
-                                 "color: var(--error-color);" : "";
+                                 "color: var(--destructive-text);" : "";
 
           html += `
                   <tr>
-                    <td>${worker.worker_id}</td>
+                    <td>${escapeHtml(worker.worker_id)}</td>
                     <td><span class="status-badge ${phaseClass}">${worker.phase.replace("Phase.", "")}</span></td>
                     <td>${worker.total_annotations}</td>
-                    <td>${formatTime(worker.total_seconds)}</td>
+                    <td>${formatTime(Math.round(worker.total_seconds || 0))}</td>
                     <td>${worker.annotations_per_hour.toFixed(1)}/hr</td>
                     <td>${worker.completion_percentage.toFixed(1)}%</td>
                     <td style="${suspiciousClass}">${worker.suspicious_level}</td>
           `;
 
           if (platformKey === "prolific") {
-            html += `<td>${worker.session_id || "N/A"}</td>`;
+            html += `<td>${escapeHtml(worker.session_id || "N/A")}</td>`;
           } else if (platformKey === "mturk") {
-            html += `<td>${worker.assignment_id || "N/A"}</td>`;
+            html += `<td>${escapeHtml(worker.assignment_id || "N/A")}</td>`;
           }
 
           html += `</tr>`;
@@ -1300,15 +1813,378 @@
         loadCrowdsourcing();
       }
 
+      // Throughput charts: inline SVG, no chart library. Each chart sits next
+      // to a table holding the same numbers, which is what a screen reader
+      // reads; the SVG carries a one-line summary as its label.
+      // Bin edges are whole seconds or whole minutes: "30s", "2m".
+      const tpEdge = s => s < 60 ? `${s}s` : `${s / 60}m`;
+      const binLabel = b => b.to === null ? `${tpEdge(b.from)}+` : `${tpEdge(b.from)}–${tpEdge(b.to)}`;
+
+      function throughputBars(values, labels, opts) {
+        // opts.axis: tick labels under the bars and the count above each
+        // (when there are few enough to read); always a baseline, so empty
+        // bins still show where they are.
+        const w = opts.width, h = opts.height, bottom = opts.axis ? 18 : 1, top = opts.axis ? 14 : 0;
+        const max = Math.max(1, ...values);
+        const step = w / values.length, bw = Math.max(1, step * 0.72);
+        const labelled = opts.axis && values.length <= 14;
+        const bars = values.map((v, i) => {
+          const bh = v ? Math.max(1, (h - bottom - top) * v / max) : 0;
+          const x = i * step + (step - bw) / 2, y = h - bottom - bh;
+          return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}"
+            rx="1"><title>${escapeHtml(labels[i])}: ${v}</title></rect>${labelled && v
+            ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle">${v}</text>` : ""}`;
+        }).join("");
+        const ticks = opts.axis ? labels.map((l, i) => (values.length <= 12 || i % Math.ceil(values.length / 12) === 0)
+          ? `<text x="${(i * step + step / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(l)}</text>` : "").join("") : "";
+        return `<svg class="tp-chart ${opts.cls || ""}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"
+          role="img" aria-label="${escapeHtml(opts.label)}">${bars}<line class="tp-base" x1="0" x2="${w}"
+          y1="${h - bottom + 0.5}" y2="${h - bottom + 0.5}" />${ticks}</svg>`;
+      }
+
+      function throughputLine(values, opts) {
+        // opts.ticks: day labels under the points, with each value above its
+        // point. The y axis starts at zero, so a flat line means a steady pace.
+        const w = opts.width, h = opts.height, bottom = opts.ticks ? 18 : 3, top = opts.ticks ? 14 : 3;
+        const known = values.map((v, i) => [i, v]).filter(([, v]) => v !== null && v !== undefined);
+        if (known.length < 2) return "";
+        const max = Math.max(...known.map(([, v]) => v)) || 1;
+        const inset = opts.ticks ? 24 : 3;
+        const x = i => inset + i * (w - 2 * inset) / (values.length - 1);
+        const y = v => h - bottom - (h - bottom - top) * v / max;
+        const pts = known.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+        const [li, lv] = known[known.length - 1];
+        const labelled = opts.ticks && values.length <= 14;
+        const marks = labelled ? known.map(([i, v]) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2" fill="currentColor" />
+          <text x="${x(i).toFixed(1)}" y="${(y(v) - 5).toFixed(1)}" text-anchor="middle">${Math.round(v)}</text>`).join("")
+          : `<circle cx="${x(li).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="2.5" fill="currentColor" />`;
+        const ticks = opts.ticks ? opts.ticks.map((l, i) => (values.length <= 12 || i % Math.ceil(values.length / 12) === 0)
+          ? `<text x="${x(i).toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(l)}</text>` : "").join("")
+          + `<line class="tp-base" x1="0" x2="${w}" y1="${h - bottom + 0.5}" y2="${h - bottom + 0.5}" />` : "";
+        return `<svg class="tp-chart tp-line" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"
+          role="img" aria-label="${escapeHtml(opts.label)}"><polyline points="${pts}" fill="none"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />${marks}${ticks}</svg>`;
+      }
+
+      function throughputDistribution(d, who) {
+        if (!d) return "";
+        const labels = d.bins.map(binLabel);
+        return `<figure class="tp-figure">
+          ${throughputBars(d.bins.map(b => b.count), labels, {width: 420, height: 140, axis: true, cls: "tp-hist",
+            label: `Histogram of active time per item for ${who}: median ${d.p50}s, 90% under ${d.p90}s, ${d.n} items`})}
+          <figcaption>Half the items took under ${escapeHtml(formatDuration(Math.round(d.p50)))} of active
+            time; the middle half between ${escapeHtml(formatDuration(Math.round(d.p25)))} and
+            ${escapeHtml(formatDuration(Math.round(d.p75)))}; 90% under ${escapeHtml(formatDuration(Math.round(d.p90)))}
+            (${d.n} timed items).</figcaption></figure>`;
+      }
+
+      async function loadThroughput() {
+        const body = document.getElementById("throughputBody");
+        if (!body) return;
+        const na = v => (v === null || v === undefined) ? "n/a" : String(v);
+        const pct = v => (v === null || v === undefined) ? "n/a" : (100 * v).toFixed(0) + "%";
+        // Seconds, not the rounded hours: 1.7 s of work rounded to 0.000 h read as 0s.
+        const dur = s => (s > 0 && s < 1) ? "<1s" : formatDuration(s || 0);
+        try {
+          const data = await makeApiRequest("/admin/api/throughput");
+          const p = data.project;
+          const review = data.review_enabled;
+          const summary = `<dl class="admin-summary">${[
+            summaryItem("Items per active hour", na(p.items_per_active_hour), `${p.items_timed} timed items`),
+            summaryItem("Median time per item", p.median_active_seconds === null ? "n/a" : `${p.median_active_seconds}s`, "active time"),
+            summaryItem("Active time", dur(p.active_seconds), `${p.annotators} annotators`),
+            ...(p.qc_items ? [summaryItem("Check items", p.qc_items, "attention and gold, not counted above")] : []),
+          ].join("")}</dl>`;
+          const note = data.note ? `<p style="color: var(--muted-foreground);">${escapeHtml(data.note)}</p>` : "";
+          const head = `<tr><th scope="col">Annotator</th><th scope="col">Items</th><th scope="col">Items / active hour</th>
+            <th scope="col">Pace by day</th><th scope="col">Median time per item</th>
+            <th scope="col">Time per item</th><th scope="col">Active time</th>${review
+              ? '<th scope="col">Reviewed</th><th scope="col">First-pass approval</th><th scope="col">Rework</th>' : ""}</tr>`;
+          const dated = days => days.filter(d => d.day !== "no events");
+          const rows = data.annotators.map(a => {
+            const ad = dated(a.by_day);
+            const pace = throughputLine(ad.map(d => d.items_per_active_hour), {width: 84, height: 22,
+              label: `Items per active hour by day for ${a.annotator}: ${ad.map(d => `${d.day} ${na(d.items_per_active_hour)}`).join(", ")}`});
+            const td = a.time_distribution;
+            const spread = td ? throughputBars(td.bins.map(b => b.count), td.bins.map(binLabel), {width: 84, height: 22,
+              cls: "tp-mini", label: `Time per item for ${a.annotator}: median ${td.p50}s, 10% under ${td.p10}s, 90% under ${td.p90}s`})
+              + `<small class="tp-range">${td.p10}–${td.p90}s</small>` : "n/a";
+            return `<tr><th scope="row">${escapeHtml(a.annotator)}</th>
+            <td>${a.items}</td><td>${na(a.items_per_active_hour)}</td>
+            <td>${pace || '<small class="tp-range">one day</small>'}</td>
+            <td>${a.median_active_seconds === null ? "n/a" : a.median_active_seconds + "s"}</td>
+            <td class="tp-cell">${spread}</td>
+            <td>${dur(a.active_seconds)}</td>${review
+              ? `<td>${a.reviewed_items}</td><td>${pct(a.first_pass_approval)}</td><td>${pct(a.rework_rate)}</td>` : ""}</tr>`;
+          }).join("");
+          const pd = dated(p.by_day);
+          const trend = pd.length >= 2 ? `<div class="tp-trend">
+              <figure class="tp-figure"><figcaption>Items saved per day</figcaption>
+                ${throughputBars(pd.map(d => d.items), pd.map(d => d.day.slice(5)), {width: 420, height: 120, axis: true,
+                  label: `Items saved per day: ${pd.map(d => `${d.day} ${d.items}`).join(", ")}`})}</figure>
+              <figure class="tp-figure"><figcaption>Items per active hour</figcaption>
+                ${throughputLine(pd.map(d => d.items_per_active_hour), {width: 420, height: 120, ticks: pd.map(d => d.day.slice(5)),
+                  label: `Items per active hour by day: ${pd.map(d => `${d.day} ${na(d.items_per_active_hour)}`).join(", ")}`})
+                  || '<p class="tp-range">Fewer than two days with timed items.</p>'}</figure></div>`
+            : '<p class="tp-range">The trend charts appear once work has been saved on two or more days.</p>';
+          const days = p.by_day.map(d => `<tr><th scope="row">${escapeHtml(d.day)}</th><td>${d.items}</td>
+            <td>${na(d.items_per_active_hour)}</td><td>${d.day === "no events" ? "n/a" : dur(d.active_seconds)}</td></tr>`).join("");
+          body.innerHTML = data.annotators.length ? `
+            <div class="dashboard-card" style="margin-bottom: 1rem;">${summary}${note}</div>
+            <div class="dashboard-card" style="margin-bottom: 1rem;"><h4 style="margin-top: 0;">Time per item</h4>
+              ${throughputDistribution(p.time_distribution, "all annotators") || '<p class="tp-range">No timed items yet.</p>'}</div>
+            <div class="dashboard-card" style="margin-bottom: 1rem;"><h4 style="margin-top: 0;">By annotator</h4>
+              <div class="admin-table-container"><table class="admin-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>
+            <div class="dashboard-card"><h4 style="margin-top: 0;">By day (UTC)</h4>${trend}
+              <div class="admin-table-container"><table class="admin-table"><thead><tr><th scope="col">Day</th><th scope="col">Items</th>
+                <th scope="col">Items / active hour</th><th scope="col">Active time</th></tr></thead><tbody>${days}</tbody></table></div></div>`
+            : "<p>No annotator has saved an item yet.</p>";
+        } catch (error) {
+          body.innerHTML = `<p>Could not load throughput: ${escapeHtml(String(error))}</p>`;
+        }
+      }
+
       // Behavioral Analytics functions
+      async function loadAiInfluence() {
+        const body = document.getElementById("aiInfluenceBody");
+        if (!body) return;
+        const pct = v => (v === null || v === undefined) ? "n/a" : (100 * v).toFixed(1) + "%";
+        const num = v => (v === null || v === undefined) ? "n/a" : v.toFixed(3);
+        try {
+          const data = await makeApiRequest("/admin/api/ai_influence");
+          if (data.note) {
+            body.innerHTML = `<p>${escapeHtml(data.note)}</p>`;
+            return;
+          }
+          const schemas = Object.entries(data.schemas || {});
+          if (!schemas.length) {
+            body.innerHTML = "<p>No radio, multiselect, likert or select scheme to compare.</p>";
+            return;
+          }
+          body.innerHTML = schemas.map(([name, s]) => {
+            const row = (label, g) => `<tr><th scope="row">${label}</th>
+              <td>${g.n_pairs}</td><td>${pct(g.model_agreement)} <small>(${g.n_with_model_answer})</small></td>
+              <td>${pct(g.gold_accuracy)} <small>(${g.n_with_gold})</small></td>
+              <td>${g.alpha_note ? `<span title="${escapeHtml(g.alpha_note)}">n/a</span> <small>${escapeHtml(g.alpha_note)}</small>` : num(g.alpha)}</td></tr>`;
+            let summary = "";
+            if (s.model_agreement_difference !== undefined) {
+              const ci = s.difference_ci95
+                ? ` (95% interval ${(100 * s.difference_ci95[0]).toFixed(1)} to ${(100 * s.difference_ci95[1]).toFixed(1)} points)`
+                : "";
+              summary = `<p>Assisted answers matched the model ${(100 * s.model_agreement_difference).toFixed(1)}
+                points ${s.model_agreement_difference >= 0 ? "more" : "less"} often than held-out ones${ci}.</p>`;
+            } else if (s.note) {
+              summary = `<p style="color: var(--muted-foreground);">${escapeHtml(s.note)}</p>`;
+            }
+            return `<div class="dashboard-card" style="margin-bottom: 1rem;">
+              <h4 style="margin-top: 0;">${escapeHtml(name)}</h4>
+              <div class="admin-table-container"><table class="admin-table">
+                <thead><tr><th scope="col">Group</th><th scope="col">Answers</th><th scope="col">Match the model</th>
+                  <th scope="col">Match gold</th><th scope="col">Alpha within group</th></tr></thead>
+                <tbody>${row("Assisted", s.assisted)}${row("Held out", s.held_out)}</tbody>
+              </table></div>${summary}</div>`;
+          }).join("");
+        } catch (error) {
+          body.innerHTML = `<p>Could not load the comparison: ${escapeHtml(String(error))}</p>`;
+        }
+      }
+
       async function loadBehavioral() {
         try {
           const data = await makeApiRequest("/admin/api/behavioral_analytics");
           displayBehavioral(data);
         } catch (error) {
           console.error("Error loading behavioral data:", error);
-          showError("Failed to load behavioral analytics data");
+          showError(L.admin_err_behavioral || "Failed to load behavioral analytics data");
         }
+      }
+
+      // Writing Process panel: how free-text responses were produced.
+      // Rendered from the `writing_process` block of the behavioral payload.
+      function displayWritingProcess(wp) {
+        const section = document.getElementById("writingProcessSection");
+        const content = document.getElementById("writingProcessContent");
+        if (!section || !content) return;
+
+        if (!wp || !wp.enabled) {
+          section.style.display = "none";
+          return;
+        }
+        section.style.display = "";
+
+        if (wp.error) {
+          content.innerHTML = `<p style="color: var(--destructive-text);">Could not read typing sessions: ${escapeHtml(wp.error)}</p>`;
+          return;
+        }
+        if (!wp.users || wp.users.length === 0) {
+          content.innerHTML = `<p style="color: var(--muted-foreground);">${escapeHtml(wp.reason || "No typing sessions recorded yet.")}</p>`;
+          return;
+        }
+
+        const s = wp.summary || {};
+        const flagTotals = Object.entries(s.flag_totals || {})
+          .sort((a, b) => b[1] - a[1]);
+
+        // The caveat is rendered first and unconditionally. These rankings are
+        // easy to over-read, and the panel should say so before the numbers do.
+        let html = `
+          <div style="padding: 0.75rem 1rem; margin-bottom: 1rem; border-left: 3px solid var(--primary, #6d5ce7); background: var(--muted, #f4f4f6); border-radius: 4px;">
+            <strong>Read this first.</strong>
+            <div style="margin-top: 0.25rem; color: var(--muted-foreground);">${escapeHtml(wp.caveat || "")}</div>
+          </div>
+          <div class="question-stats" style="margin-bottom: 1rem;">
+            <div class="question-stat"><span class="value">${s.total_sessions || 0}</span><span class="label">Typing Sessions</span></div>
+            <div class="question-stat"><span class="value">${s.total_users || 0}</span><span class="label">Annotators</span></div>
+            <div class="question-stat"><span class="value">${s.users_with_flags || 0}</span><span class="label">With Any Flag</span></div>
+            <div class="question-stat"><span class="value">${escapeHtml(wp.fidelity || "")}</span><span class="label">Fidelity</span></div>
+            <div class="question-stat"><span class="value">${wp.calibrated ? "Yes" : "No"}</span><span class="label">Calibrated</span></div>
+          </div>`;
+
+        if (flagTotals.length) {
+          html += `<div style="margin-bottom: 1rem;">` +
+            flagTotals.map(([name, n]) =>
+              `<span style="display:inline-block; margin:0 0.4rem 0.4rem 0; padding:0.15rem 0.5rem; border-radius:999px; background: var(--muted, #eee); font-size: 0.85em;">${escapeHtml(name)} &times; ${n}</span>`
+            ).join("") + `</div>`;
+        }
+
+        html += `
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead><tr>
+                <th>User ID</th><th>Sessions</th><th>Chars</th>
+                <th>Median IKI</th><th>Rhythm CV</th><th>Pauses &ge;2s /100ch</th>
+                <th>Pasted</th><th>Silent Insert</th><th>Flags</th><th>Risk</th>
+              </tr></thead>
+              <tbody>`;
+
+        for (const u of wp.users) {
+          const flags = Object.entries(u.flag_counts || {})
+            .map(([n, c]) => `${n}×${c}`).join(", ") || "—";
+          // Colour tracks risk, but the number is always shown next to it so the
+          // colour is never the only thing an admin acts on.
+          const risk = u.writing_process_risk || 0;
+          const colour = risk >= 0.3 ? "var(--destructive-text)" : (risk > 0 ? "var(--warning-text)" : "inherit");
+          const mobile = u.any_virtual_keyboard
+            ? ` <span title="Some sessions used a mobile keyboard, where keystroke-count rules do not apply" style="font-size:0.8em; color: var(--muted-foreground);">(mobile)</span>`
+            : "";
+          html += `<tr>
+            <td>${escapeHtml(u.user_id)}${mobile}</td>
+            <td>${u.sessions}</td>
+            <td>${u.chars}</td>
+            <td>${u.iki_median_ms}ms</td>
+            <td>${u.iki_log_cv}</td>
+            <td>${u.pause_2s_per_100_chars}</td>
+            <td>${(u.pasted_char_fraction * 100).toFixed(1)}%</td>
+            <td>${(u.mean_silent_insert_ratio * 100).toFixed(1)}%</td>
+            <td style="font-size: 0.85em;">${escapeHtml(flags)}</td>
+            <td style="color:${colour}; font-weight:600;">${risk.toFixed(3)}</td>
+          </tr>`;
+
+          // Per-session evidence, so an adjudicator can see the actual numbers
+          // rather than only the verdict label.
+          for (const fs of (u.flagged_sessions || [])) {
+            html += `<tr style="background: var(--muted, #fafafa);">
+              <td colspan="10" style="font-size: 0.85em; padding-left: 2rem; color: var(--muted-foreground);">
+                <strong>instance ${escapeHtml(fs.instance_id)}</strong> &middot;
+                ${escapeHtml(fs.schema)}.${escapeHtml(fs.label)} &middot;
+                <em>${escapeHtml(fs.level)}</em><br>
+                ${(fs.explanations || []).map(e => escapeHtml(e)).join("<br>")}
+              </td></tr>`;
+          }
+        }
+
+        html += `</tbody></table></div>`;
+        content.innerHTML = html;
+      }
+
+      // Authenticity panel: leaving the page, copying the item, external
+      // pastes and automation, per annotator. Same layout and the same
+      // caveat-first rule as the Writing Process panel.
+      function displayAuthenticity(au) {
+        const section = document.getElementById("authenticitySection");
+        const content = document.getElementById("authenticityContent");
+        if (!section || !content) return;
+
+        if (!au || !au.enabled) {
+          section.style.display = "none";
+          return;
+        }
+        section.style.display = "";
+
+        if (au.error) {
+          content.innerHTML = `<p style="color: var(--destructive-text);">${escapeHtml(au.error)}</p>`;
+          return;
+        }
+        if (!au.users || au.users.length === 0) {
+          content.innerHTML = `<p style="color: var(--muted-foreground);">No authenticity data recorded yet.</p>`;
+          return;
+        }
+
+        const s = au.summary || {};
+        const flagTotals = Object.entries(s.flag_totals || {})
+          .sort((a, b) => b[1] - a[1]);
+
+        let html = `
+          <div style="padding: 0.75rem 1rem; margin-bottom: 1rem; border-left: 3px solid var(--primary, #6d5ce7); background: var(--muted, #f4f4f6); border-radius: 4px;">
+            <strong>Read this first.</strong>
+            <div style="margin-top: 0.25rem; color: var(--muted-foreground);">${escapeHtml(au.caveat || "")}</div>
+          </div>
+          <div class="question-stats" style="margin-bottom: 1rem;">
+            <div class="question-stat"><span class="value">${s.total_items || 0}</span><span class="label">Items</span></div>
+            <div class="question-stat"><span class="value">${s.total_users || 0}</span><span class="label">Annotators</span></div>
+            <div class="question-stat"><span class="value">${s.users_with_flags || 0}</span><span class="label">With Any Flag</span></div>
+          </div>`;
+
+        if (flagTotals.length) {
+          html += `<div style="margin-bottom: 1rem;">` +
+            flagTotals.map(([name, n]) =>
+              `<span style="display:inline-block; margin:0 0.4rem 0.4rem 0; padding:0.15rem 0.5rem; border-radius:999px; background: var(--muted, #eee); font-size: 0.85em;">${escapeHtml(name)} &times; ${n}</span>`
+            ).join("") + `</div>`;
+        }
+
+        html += `
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead><tr>
+                <th>User ID</th><th>Items</th><th>No Paradata</th>
+                <th>Left Page</th><th>Time Away</th><th>Item Copies</th>
+                <th>Ext. Pastes</th><th>Automation</th><th>Flags</th><th>Risk</th>
+              </tr></thead>
+              <tbody>`;
+
+        for (const u of au.users) {
+          const flags = Object.entries(u.flag_counts || {})
+            .map(([n, c]) => `${n}×${c}`).join(", ") || "—";
+          const risk = u.authenticity_risk || 0;
+          const colour = risk >= 0.3 ? "var(--destructive-text)" : (risk > 0 ? "var(--warning-text)" : "inherit");
+          const automation = u.webdriver ? "webdriver"
+            : (u.untrusted_events ? `${u.untrusted_events} synthetic` : "—");
+          html += `<tr>
+            <td>${escapeHtml(u.user_id)}</td>
+            <td>${u.items}</td>
+            <td>${u.items_without_paradata}</td>
+            <td>${u.away_events}</td>
+            <td>${(u.away_fraction * 100).toFixed(1)}%</td>
+            <td>${u.item_copy_events}</td>
+            <td>${u.external_paste_events}</td>
+            <td>${escapeHtml(automation)}</td>
+            <td style="font-size: 0.85em;">${escapeHtml(flags)}</td>
+            <td style="color:${colour}; font-weight:600;">${risk.toFixed(3)}</td>
+          </tr>`;
+
+          for (const fi of (u.flagged_items || [])) {
+            const where = fi.phase_page ? "survey / training page" : `instance ${fi.instance_id}`;
+            html += `<tr style="background: var(--muted, #fafafa);">
+              <td colspan="10" style="font-size: 0.85em; padding-left: 2rem; color: var(--muted-foreground);">
+                <strong>${escapeHtml(where)}</strong> &middot;
+                <em>${escapeHtml(fi.level)}</em><br>
+                ${(fi.explanations || []).map(e => escapeHtml(e)).join("<br>")}
+              </td></tr>`;
+          }
+        }
+
+        html += `</tbody></table></div>`;
+        content.innerHTML = html;
       }
 
       function displayBehavioral(data) {
@@ -1317,40 +2193,31 @@
         const qualityContent = document.getElementById("qualityContent");
         const tbody = document.getElementById("behavioralTableBody");
 
+        displayWritingProcess(data.writing_process);
+        displayAuthenticity(data.authenticity);
+
         // Display summary cards
         const stats = data.aggregate_stats;
-        grid.innerHTML = `
-          <div class="dashboard-card">
-            <h3>Users with Data</h3>
-            <div class="value">${stats.total_users}</div>
-            <div class="description">Users with behavioral tracking</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Total Instances</h3>
-            <div class="value">${stats.total_instances}</div>
-            <div class="description">Tracked annotation sessions</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Avg Time</h3>
-            <div class="value">${stats.avg_time_per_instance_sec.toFixed(1)}s</div>
-            <div class="description">Per annotation instance</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Total Interactions</h3>
-            <div class="value">${stats.total_interactions}</div>
-            <div class="description">Clicks, focus, navigation</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>Annotation Changes</h3>
-            <div class="value">${stats.total_changes}</div>
-            <div class="description">Label modifications</div>
-          </div>
-          <div class="dashboard-card">
-            <h3>AI Requests</h3>
-            <div class="value">${stats.total_ai_requests}</div>
-            <div class="description">AI assistance requests</div>
-          </div>
-        `;
+        // Interactions are only counted where an interaction log exists.
+        // Imported or pre-seeded annotations have label changes but no
+        // click log, and showing "0 interactions" beside "48 changes" read
+        // as a contradiction. Say it was not recorded instead.
+        const logged = stats.instances_with_interaction_log;
+        const interactionsRecorded = logged === undefined || logged > 0;
+        grid.innerHTML = [
+          summaryItem("Users with data", stats.total_users, "with behavioral tracking"),
+          summaryItem("Instances", stats.total_instances, "tracked annotation sessions"),
+          summaryItem("Avg time", `${stats.avg_time_per_instance_sec.toFixed(1)}s`, "per instance"),
+          interactionsRecorded
+            ? summaryItem("Interactions", stats.total_interactions,
+                logged !== undefined && logged < stats.total_instances
+                  ? `clicks, focus, navigation · over ${logged} of ${stats.total_instances} instances`
+                  : "clicks, focus, navigation")
+            : summaryItem("Interactions", "Not recorded",
+                "these annotations were imported or seeded without an interaction log"),
+          summaryItem("Annotation changes", stats.total_changes, "label modifications"),
+          summaryItem("AI requests", stats.total_ai_requests, "AI assistance requests"),
+        ].join("");
 
         // Display AI usage section
         const ai = data.ai_usage;
@@ -1370,7 +2237,7 @@
                 <span class="label">Rejected</span>
               </div>
               <div class="question-stat">
-                <span class="value">${ai.accept_rate.toFixed(1)}%</span>
+                <span class="value">${ai.accept_rate == null ? 'n/a' : (ai.accept_rate * 100).toFixed(1) + '%'}</span>
                 <span class="label">Accept Rate</span>
               </div>
               <div class="question-stat">
@@ -1385,7 +2252,7 @@
 
         // Display quality indicators
         const quality = data.quality_summary;
-        const suspicionColor = quality.high_suspicion_users > 0 ? "var(--error-color)" : "var(--success-color)";
+        const suspicionColor = quality.high_suspicion_users > 0 ? "var(--destructive-text)" : "var(--success-text)";
         qualityContent.innerHTML = `
           <div class="question-stats">
             <div class="question-stat">
@@ -1393,15 +2260,15 @@
               <span class="label">High Suspicion Users</span>
             </div>
             <div class="question-stat">
-              <span class="value">${quality.fast_annotation_rate.toFixed(1)}%</span>
-              <span class="label">Fast Annotations (&lt;2s)</span>
+              <span class="value">${(quality.fast_annotation_rate * 100).toFixed(1)}%</span>
+              <span class="label">Annotators with fast items (&lt;5s)</span>
             </div>
             <div class="question-stat">
-              <span class="value">${quality.low_interaction_rate.toFixed(1)}%</span>
+              <span class="value">${(quality.low_interaction_rate * 100).toFixed(1)}%</span>
               <span class="label">Low Interaction Rate</span>
             </div>
             <div class="question-stat">
-              <span class="value">${quality.no_change_rate.toFixed(1)}%</span>
+              <span class="value">${(quality.no_change_rate * 100).toFixed(1)}%</span>
               <span class="label">No Change Rate</span>
             </div>
           </div>
@@ -1409,7 +2276,7 @@
             <h4>Interaction Types</h4>
             <div class="common-words">
               ${Object.entries(data.interaction_types).map(([type, count]) =>
-                `<span class="word-tag">${type}<span class="count">(${count})</span></span>`
+                `<span class="word-tag">${escapeHtml(type)}<span class="count">(${escapeHtml(count)})</span></span>`
               ).join('')}
             </div>
           </div>
@@ -1417,7 +2284,7 @@
             <h4>Change Sources</h4>
             <div class="common-words">
               ${Object.entries(data.change_sources).map(([source, count]) =>
-                `<span class="word-tag">${source}<span class="count">(${count})</span></span>`
+                `<span class="word-tag">${escapeHtml(source)}<span class="count">(${escapeHtml(count)})</span></span>`
               ).join('')}
             </div>
           </div>
@@ -1425,17 +2292,19 @@
 
         // Display per-user table
         tbody.innerHTML = data.users.map(user => {
-          const suspicionClass = user.suspicion_score > 0.5 ? "color: var(--error-color); font-weight: bold;" :
-                                user.suspicion_score > 0.3 ? "color: orange;" : "";
+          const suspicionClass = user.suspicion_score > 0.5 ? "color: var(--destructive-text); font-weight: bold;" :
+                                user.suspicion_score > 0.3 ? "color: var(--warning-text);" : "";
           return `
             <tr>
-              <td>${user.user_id}</td>
+              <td>${escapeHtml(user.user_id)}</td>
               <td>${user.total_instances}</td>
-              <td>${user.avg_time_sec.toFixed(1)}</td>
-              <td>${user.total_interactions}</td>
+              <td>${user.avg_time_sec == null ? 'n/a' : user.avg_time_sec.toFixed(1)}</td>
+              <td>${user.instances_with_interaction_log === 0
+                    ? '<span class="admin-muted" title="No interaction log for this annotator: imported or seeded annotations">not recorded</span>'
+                    : user.total_interactions}</td>
               <td>${user.total_changes}</td>
               <td>${user.ai_requests}</td>
-              <td>${user.ai_requests > 0 ? (user.ai_accept_rate * 100).toFixed(0) + '%' : 'N/A'}</td>
+              <td>${user.ai_accept_rate == null ? 'N/A' : (user.ai_accept_rate * 100).toFixed(0) + '%'}</td>
               <td style="${suspicionClass}">${(user.suspicion_score * 100).toFixed(0)}%</td>
             </tr>
           `;
@@ -1453,15 +2322,43 @@
           displayConfig(data);
         } catch (error) {
           console.error("Error loading config:", error);
-          showError("Failed to load configuration");
+          showError(L.admin_err_config || "Failed to load configuration");
         }
       }
 
+      // The API speaks -1 for "no limit"; the form shows a checkbox.
+      function setLimitField(id, value) {
+        const input = document.getElementById(id);
+        const box = document.getElementById(id + "Unlimited");
+        const n = Number(value);
+        const unlimited = value === null || value === undefined || !Number.isFinite(n) || n < 0;
+        box.checked = unlimited;
+        input.disabled = unlimited;
+        input.value = unlimited ? "" : n;
+      }
+
+      function readLimitField(id) {
+        if (document.getElementById(id + "Unlimited").checked) return -1;
+        return parseInt(document.getElementById(id).value, 10);
+      }
+
+      function initializeLimitControls() {
+        document.querySelectorAll("[data-limit-for]").forEach((box) => {
+          box.addEventListener("change", () => {
+            const input = document.getElementById(box.dataset.limitFor);
+            input.disabled = box.checked;
+            if (box.checked) {
+              input.value = "";
+            } else {
+              input.focus();
+            }
+          });
+        });
+      }
+
       function displayConfig(data) {
-        document.getElementById("maxAnnotationsPerUser").value =
-          data.max_annotations_per_user;
-        document.getElementById("maxAnnotationsPerItem").value =
-          data.max_annotations_per_item;
+        setLimitField("maxAnnotationsPerUser", data.max_annotations_per_user);
+        setLimitField("maxAnnotationsPerItem", data.max_annotations_per_item);
         document.getElementById("assignmentStrategy").value =
           data.assignment_strategy;
       }
@@ -1473,15 +2370,18 @@
           e.preventDefault();
 
           const formData = {
-            max_annotations_per_user: parseInt(
-              document.getElementById("maxAnnotationsPerUser").value
-            ),
-            max_annotations_per_item: parseInt(
-              document.getElementById("maxAnnotationsPerItem").value
-            ),
+            max_annotations_per_user: readLimitField("maxAnnotationsPerUser"),
+            max_annotations_per_item: readLimitField("maxAnnotationsPerItem"),
             assignment_strategy:
               document.getElementById("assignmentStrategy").value,
           };
+          for (const [key, label] of [["max_annotations_per_user", "Max annotations per user"],
+                                      ["max_annotations_per_item", "Max annotations per item"]]) {
+            if (!Number.isFinite(formData[key]) || (formData[key] !== -1 && formData[key] < 1)) {
+              showError(`${label}: enter a number of 1 or more, or tick "No limit".`);
+              return;
+            }
+          }
 
           try {
             const result = await makeApiRequest("/admin/api/config", {
@@ -1489,11 +2389,11 @@
               body: JSON.stringify(formData),
             });
 
-            showSuccess("Configuration updated successfully");
+            showSuccess(L.admin_ok_config_saved || "Configuration updated successfully");
             loadOverview(); // Refresh overview to show updated stats
           } catch (error) {
             console.error("Error updating config:", error);
-            showError("Failed to update configuration");
+            showError(L.admin_err_config || "Failed to update configuration");
           }
         });
 
@@ -1512,19 +2412,19 @@
         try {
           const method = document.getElementById('bwsScoringMethod').value;
           const btn = document.querySelector('#bws-scoring .shadcn-button-primary');
-          if (btn) { btn.textContent = 'Computing...'; btn.disabled = true; }
+          if (btn) { btn.textContent = L.admin_btn_computing || 'Computing…'; btn.disabled = true; }
           const result = await makeApiRequest(`/admin/api/bws_scoring/generate?method=${method}`, { method: "POST" });
           if (result.status === "success") {
             displayBwsScoring(result);
           } else {
             showError(result.error || "BWS score generation failed");
           }
-          if (btn) { btn.textContent = 'Generate Scores'; btn.disabled = false; }
+          if (btn) { btn.textContent = L.admin_btn_generate_scores || 'Generate Scores'; btn.disabled = false; }
         } catch (error) {
           console.error("Error generating BWS scores:", error);
           showError("Failed to generate BWS scores");
           const btn = document.querySelector('#bws-scoring .shadcn-button-primary');
-          if (btn) { btn.textContent = 'Generate Scores'; btn.disabled = false; }
+          if (btn) { btn.textContent = L.admin_btn_generate_scores || 'Generate Scores'; btn.disabled = false; }
         }
       }
 
@@ -1563,8 +2463,8 @@
         tbody.innerHTML = scores.map((row, i) => `
           <tr>
             <td>${row.rank || i + 1}</td>
-            <td><code>${row.item_id || ''}</code></td>
-            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${row.text || ''}</td>
+            <td><code>${escapeHtml(row.item_id || '')}</code></td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(row.text || '')}</td>
             <td><strong>${typeof row.score === 'number' ? row.score.toFixed(4) : row.score || ''}</strong></td>
             <td>${row.best_count !== undefined ? row.best_count : ''}</td>
             <td>${row.worst_count !== undefined ? row.worst_count : ''}</td>
@@ -1580,7 +2480,7 @@
           displayMace(data);
         } catch (error) {
           console.error("Error loading MACE data:", error);
-          showError("Failed to load MACE data");
+          showError(L.admin_err_mace_load || "Failed to load MACE data");
         }
       }
 
@@ -1597,7 +2497,7 @@
           if (btn) { btn.textContent = 'Run MACE'; btn.disabled = false; }
         } catch (error) {
           console.error("Error triggering MACE:", error);
-          showError("Failed to trigger MACE");
+          showError(L.admin_err_mace_trigger || "Failed to trigger MACE");
           const btn = document.querySelector('#mace .shadcn-button-primary');
           if (btn) { btn.textContent = 'Run MACE'; btn.disabled = false; }
         }
@@ -1654,11 +2554,11 @@
             let color = 'var(--success-color)';
             let label = 'High';
             if (score < 0.5) { color = 'var(--error-color)'; label = 'Low'; }
-            else if (score < 0.7) { color = 'orange'; label = 'Moderate'; }
+            else if (score < 0.7) { color = 'var(--warning-text)'; label = 'Moderate'; }
 
             return `
               <tr>
-                <td>${uid}</td>
+                <td>${escapeHtml(uid)}</td>
                 <td>
                   <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <div style="flex: 1; background: var(--muted); border-radius: 4px; height: 8px; overflow: hidden;">
@@ -1702,9 +2602,9 @@
                 <table class="admin-table">
                   <thead>
                     <tr>
-                      <th>Instance</th>
-                      <th>Predicted Label</th>
-                      <th>Uncertainty</th>
+                      <th>{{ ui_lang.admin_th_instance|default('Instance') }}</th>
+                      <th>{{ ui_lang.admin_th_predicted_label|default('Predicted Label') }}</th>
+                      <th>{{ ui_lang.admin_th_uncertainty|default('Uncertainty') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1713,12 +2613,12 @@
                       const entPct = (ent * 100).toFixed(1);
                       let entColor = 'var(--success-color)';
                       if (ent > 0.5) entColor = 'var(--error-color)';
-                      else if (ent > 0.1) entColor = 'orange';
+                      else if (ent > 0.1) entColor = 'var(--warning-text)';
 
                       return `
                         <tr>
-                          <td>${id}</td>
-                          <td><strong>${preds[id]}</strong></td>
+                          <td>${escapeHtml(id)}</td>
+                          <td><strong>${escapeHtml(preds[id])}</strong></td>
                           <td>
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                               <div style="flex: 1; max-width: 100px; background: var(--muted); border-radius: 4px; height: 6px; overflow: hidden;">
@@ -1743,21 +2643,58 @@
       }
 
       // Utility functions
+      // One status line at the bottom of the screen, replacing alert().
+      // An optional action (Undo) rides along with a success.
+      let toastTimer = null;
+      function showToast(message, kind, action) {
+        const toast = document.getElementById("adminToast");
+        if (!toast) return;
+        clearTimeout(toastTimer);
+        toast.className = `admin-toast admin-toast-${kind}`;
+        toast.setAttribute("role", kind === "error" ? "alert" : "status");
+        toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+        if (action) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "admin-toast-action";
+          btn.textContent = action.label;
+          btn.addEventListener("click", () => {
+            toast.hidden = true;
+            action.run().catch((e) => showError(`${action.label} failed: ${e.message}`));
+          });
+          toast.appendChild(btn);
+        }
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "admin-toast-close";
+        close.setAttribute("aria-label", "Dismiss");
+        close.textContent = "×";
+        close.addEventListener("click", () => { toast.hidden = true; });
+        toast.appendChild(close);
+        toast.hidden = false;
+        // Errors stay until dismissed; a success with an Undo stays long
+        // enough to use it.
+        if (kind !== "error") {
+          toastTimer = setTimeout(() => { toast.hidden = true; }, action ? 10000 : 4000);
+        }
+      }
+
       function showError(message) {
-        // Simple error display - could be enhanced with a toast notification
-        alert("Error: " + message);
+        showToast(message, "error");
       }
 
-      function showSuccess(message) {
-        // Simple success display - could be enhanced with a toast notification
-        alert("Success: " + message);
+      function showSuccess(message, action) {
+        showToast(message, "success", action);
       }
 
-      function logout() {
-        // Clear admin session and redirect to login
-        fetch("/admin", { method: "GET" }).then(() => {
-          window.location.href = "/admin";
-        });
+      async function logout() {
+        // Drop the admin key from this browser session, then go back to the
+        // key form. GETting /admin, which this used to do, signed nobody out.
+        try {
+          await fetch(window.potatoUrl("/admin/logout"), { method: "POST" });
+        } finally {
+          window.location.href = window.potatoUrl("/admin");
+        }
       }
 
       // =============================================
@@ -1770,14 +2707,21 @@
           return;
         }
 
-        // Load Plotly.js if not already loaded
+        // Load Plotly.js if not already loaded. Prefer the vendored copy so the
+        // dashboard works on offline / air-gapped installs; the CDN is only a
+        // fallback for deployments that stripped the vendor directory.
         if (typeof Plotly === 'undefined') {
-          await loadScript('https://cdn.plot.ly/plotly-2.27.0.min.js');
+          try {
+            await loadScript('/static/vendor/plotly-2.27.0.min.js');
+          } catch (localErr) {
+            console.warn('[admin] local Plotly unavailable, falling back to CDN', localErr);
+            await loadScript('https://cdn.plot.ly/plotly-2.27.0.min.js');
+          }
         }
 
         // Load embedding-viz.js if not already loaded
         if (typeof initEmbeddingVisualization === 'undefined') {
-          await loadScript('/static/js/embedding-viz.js');
+          await loadScript('/static/js/embedding-viz.js?v=2');
         }
 
         // Initialize the visualization

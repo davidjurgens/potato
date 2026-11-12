@@ -6,6 +6,7 @@ or auto-generated key file. Used by both routes.py and admin.py to ensure
 consistent authentication across all admin endpoints.
 """
 
+import ipaddress
 import os
 import hmac
 import logging
@@ -60,6 +61,7 @@ def get_admin_api_key(config):
                 existing_key = f.read().strip()
                 if existing_key:
                     _generated_admin_api_key = existing_key
+                    _restrict_to_owner(key_file_path)
                     logger.info(f"Loaded existing admin API key from {key_file_path}")
                     return _generated_admin_api_key
         except Exception as e:
@@ -69,17 +71,109 @@ def get_admin_api_key(config):
     import secrets
     _generated_admin_api_key = secrets.token_urlsafe(32)
 
-    # Save to file
+    # Save to file, readable only by this user: the key is a full admin
+    # credential, and the umask's default mode let every local user read it.
     try:
-        with open(key_file_path, 'w', encoding='utf-8') as f:
+        fd = os.open(key_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             f.write(_generated_admin_api_key)
+        _restrict_to_owner(key_file_path)
         logger.info(f"Generated admin API key and saved to {key_file_path}")
         logger.info(f"Use this key to access the admin dashboard at /admin")
     except Exception as e:
-        logger.warning(f"Could not save admin API key to file: {e}")
-        logger.info(f"Auto-generated admin API key (not persisted): {_generated_admin_api_key}")
+        # Never the key itself: logs are shipped, shared and pasted into
+        # issues, and a logged key is an admin login for whoever reads them.
+        logger.warning(
+            f"Could not save the generated admin API key to {key_file_path}: {e}. "
+            "The admin dashboard and admin API cannot be reached with it. Set "
+            "admin_api_key in the config or POTATO_ADMIN_API_KEY in the "
+            "environment, and restart.")
 
     return _generated_admin_api_key
+
+
+def _restrict_to_owner(path):
+    """Make a key file readable by its owner only, where the platform allows.
+    A file written by an older Potato has the umask's mode, usually 0644."""
+    try:
+        if os.stat(path).st_mode & 0o077:
+            os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def admin_api_key_source(config):
+    """Where the key that ``get_admin_api_key`` returns comes from.
+
+    ``"config"``, ``"env"`` or ``"file"``, in the same priority order. The
+    admin login page used to say the key was in ``admin_api_key.txt`` even
+    when the config file set ``admin_api_key`` inline, so an administrator
+    who followed the instruction looked for a file that was never written.
+    """
+    if config.get("admin_api_key"):
+        return "config"
+    if os.environ.get("POTATO_ADMIN_API_KEY"):
+        return "env"
+    return "file"
+
+
+def is_loopback_bind(config) -> bool:
+    """True when the server is bound to loopback only.
+
+    The debug conveniences are for a server only the developer can reach. On
+    any other interface they are a way in for whoever else can connect.
+    """
+    host = str(config.get("host", "0.0.0.0")).strip()
+    if host in ("localhost", ""):
+        return host == "localhost"
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        # A hostname we cannot classify. Treat as not-loopback: the failure
+        # mode of guessing wrong in the other direction is an open admin API.
+        return False
+
+
+#: Headers a reverse proxy adds. A request carrying one came from elsewhere,
+#: whatever its socket address says.
+_FORWARDING_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded")
+
+
+def request_is_local(request) -> bool:
+    """True when this request came from this machine: a loopback peer, and no
+    proxy header saying it was forwarded from somewhere else."""
+    try:
+        if any(request.headers.get(h) for h in _FORWARDING_HEADERS):
+            return False
+        return ipaddress.ip_address(request.remote_addr or "").is_loopback
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
+def debug_grants_admin(config, request=None) -> bool:
+    """Whether `debug: true` should bypass admin authentication for this call.
+
+    Debug bypassing the admin key is deliberate and documented, but it was
+    unconditional, so a server started with `debug: true` on the default
+    0.0.0.0 bind handed the admin dashboard and the admin API to anyone who
+    could reach the port. It applies to requests from this machine: the
+    request must come over loopback with no forwarding header, on any bind.
+    A loopback bind is not enough by itself, because a reverse proxy or tunnel
+    on the same host forwards other machines' requests to 127.0.0.1. Other
+    callers need the admin API key, as without debug. With no request at all
+    (a check made outside a request), a loopback bind still grants it.
+    """
+    if not config.get("debug", False):
+        return False
+    if request is None:
+        try:
+            from flask import has_request_context, request as current
+            request = current if has_request_context() else None
+        except Exception:
+            request = None
+    if request is None:
+        return is_loopback_bind(config)
+    return request_is_local(request)
 
 
 def validate_admin_api_key(provided_key, config):
@@ -90,9 +184,10 @@ def validate_admin_api_key(provided_key, config):
         config: The application config dict.
 
     Returns:
-        bool: True if the key is valid or debug mode is enabled.
+        bool: True if the key is valid, or debug mode is on and the request
+        comes from this machine (see debug_grants_admin).
     """
-    if config.get("debug", False):
+    if debug_grants_admin(config):
         return True
 
     expected_key = get_admin_api_key(config)

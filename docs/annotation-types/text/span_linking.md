@@ -1,6 +1,6 @@
 # Span Linking Annotation
 
-Span linking allows annotators to create typed relationships between spans (text segments) that have already been annotated. This is useful for relation extraction tasks where you need to identify how entities relate to each other, such as "PERSON works_for ORGANIZATION" or "PERSON collaborates_with PERSON".
+Span linking lets annotators draw typed relationships between spans (text segments) that have already been annotated. This is useful for relation extraction tasks where you need to identify how entities relate to each other, such as "PERSON works_for ORGANIZATION" or "PERSON collaborates_with PERSON".
 
 ## Overview
 
@@ -116,7 +116,7 @@ visual_display:
 
 See the complete working example at:
 - Config: `examples/span/span-linking/config.yaml`
-- Data: `examples/span/span-linking/data/span-linking-example.json`
+- Data: `examples/span/span-linking/data.json`
 
 To run:
 ```bash
@@ -159,6 +159,13 @@ Annotations are saved with both span annotations and link annotations:
   ]
 }
 ```
+
+## Agreement
+
+`/admin/iaa` scores span-link schemes by comparing links over the spans in
+`span_schema`, matched by offsets and link type. It reports `link_f1` and
+`mention_f1` for each pair of annotators, pooled over the items both saved,
+and averages over pairs. The figures are not chance-corrected.
 
 ## Constraints and Validation
 

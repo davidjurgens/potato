@@ -1,21 +1,21 @@
 # Usage
 
-Getting started with Potato is easy! Here's what you need to do:
+Three steps: install Potato, set up the project data, then start the server.
 
 ## Install Potato to your machine
 
 Potato has a Python-based server architecture that can be run locally or
-hosted on any device. In order to install Potato:
+hosted on any device. To install it:
 
-- Make sure you have Python version 3.8+ installed
+- Make sure you have Python 3.9 or newer installed
 - Follow the quickstart instructions in our [Quick Start Guide](../quick-start.md)
 
 ## Set up the project data
 
-In order to input documents and specify annotation preferences:
+To load documents and set annotation preferences:
 
-- [Prepare your input data](../configuration/data_format.md#input-data-formats) (CSV, TSV, or JSON) and upload it to your project's `data` folder
-- Specify where and in what format you want the [output data](../configuration/data_format.md#output-data-formats)
+- [Prepare your input data](../configuration/data_format.md#update-input-data-formats-on-the-yaml-config-file) (CSV, TSV, or JSON) and upload it to your project's `data` folder
+- Specify where and in what format you want the [output data](../configuration/data_format.md#update-output-data-preferences-on-the-yaml-config-file)
 - Optional: Update the config YAML file with input and output data preferences
 
 ## Create your codebook and schema
@@ -29,14 +29,14 @@ Next, you'll need to specify what annotators annotate:
   - Answer Choices for multiselect and radio types
   - End Labels and Length for likert type questions
   - Optional Question Features: `required`, `horizontal` (placement of answers is horizontal not vertical), `has_free_response` (whether to include an open text box at the end of multiselect or radio question, like having an "other" option)
-  - Optional Answer Features: [tooltips](../administration/productivity.md#tooltips), [keyboard shortcuts](../administration/productivity.md#keyboard-shortcuts), [keywords to highlight](../administration/productivity.md#dynamic-highlighting)
+  - Optional Answer Features: [tooltips](../administration/productivity.md#tooltips), [keyboard shortcuts](../administration/productivity.md#keyboard-shortcuts), [keywords to highlight](../administration/productivity.md#admin-keyword-highlights)
 - Optional: See [schemas and templates](../annotation-types/schemas_and_templates.md) for basic and advanced examples
 
 ## Define annotation settings
 
 There are a few other settings you can configure:
 
-- Choose an existing [HTML template](../annotation-types/schemas_and_templates.md#available-layout-templates) for the annotation task or create a new one
+- Optional: Replace the generated annotation form with your own HTML using [`task_layout`](../annotation-types/schemas_and_templates.md#layouts)
 - Optional: Specify privacy and access [settings](../auth-users/user_and_collaboration.md) for the task
 - Optional: Update the YAML file with the [UI and layout configuration](../configuration/configuration.md#ui-and-layout-configuration)
 - Optional: Set up [active learning](../ai-intelligence/active_learning_guide.md)
@@ -145,5 +145,5 @@ See [Migration CLI](../tools/migration_cli.md) for details.
 - [Configuration Guide](../configuration/configuration.md) - Complete configuration reference
 - [Schemas and Templates](../annotation-types/schemas_and_templates.md) - All annotation types
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards
-- [Crowdsourcing](crowdsourcing.md) - MTurk and Prolific integration
+- [Crowdsourcing](crowdsourcing.md) - Prolific, Connect, SONA and other crowd providers
 - [Admin Dashboard](../administration/admin_dashboard.md) - Monitoring and management

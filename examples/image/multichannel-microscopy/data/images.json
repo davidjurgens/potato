@@ -1,0 +1,4 @@
+[
+  {"id": "tissue_a", "image": "tissue_a.ome.zarr", "note": "OME-Zarr 0.5: three channels, three z-slices, a cell label image."},
+  {"id": "tissue_b", "image": "tissue_b.ome.tif", "cells": "tissue_b_cells.tif", "note": "OME-TIFF: three channels, three time points, a separate label TIFF."}
+]

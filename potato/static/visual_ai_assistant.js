@@ -6,6 +6,25 @@
  * and Peaks.js timeline (video), with accept/reject UI.
  */
 
+// `aiTextToSafeHtml` is defined in ai_assistant_manager.js, which loads
+// first. The fallback keeps this file usable on a page that does not load
+// that one, rather than throwing a ReferenceError the moment a hint arrives.
+//
+// Installed on `window`, not declared. This used to be
+// `const aiTextToSafeHtml = window.aiTextToSafeHtml || ...`, and a top-level
+// `const` naming a global that another classic script already declared is a
+// SyntaxError: the whole file failed to parse on every page that loaded both,
+// which is every image or video project with AI support, and the suggestion
+// panel never existed.
+if (typeof window.aiTextToSafeHtml !== 'function') {
+    window.aiTextToSafeHtml = function (text) {
+        return String(text == null ? '' : text)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+}
+
+
 class VisualAIAssistantManager {
     /**
      * Create a VisualAIAssistantManager.
@@ -19,6 +38,15 @@ class VisualAIAssistantManager {
         this.annotationType = options.annotationType;
         this.annotationId = options.annotationId;
         this.annotationManager = options.annotationManager;
+        // Review-only mode: keep the suggestion controls, drop the buttons
+        // that call the server.
+        //
+        // Text prompting runs its model in the BROWSER, so a project can have
+        // suggestions to review with no AI endpoint configured anywhere.
+        // Rendering Detect / Auto / Hint there gives the annotator three
+        // buttons whose only possible outcome is an error, which is worse than
+        // not offering them.
+        this.serverAssists = options.serverAssists !== false;
 
         // Suggestion storage
         this.suggestions = [];
@@ -57,16 +85,27 @@ class VisualAIAssistantManager {
             return;
         }
 
-        // Check if AI toolbar already exists
-        if (container.querySelector('.ai-toolbar')) {
-            this.toolbar = container.querySelector('.ai-toolbar');
+        // The image and video schemes render the toolbar and an empty tooltip
+        // container server-side. Adopt both: every result and error is written
+        // into the tooltip container, so leaving it unset dropped them all.
+        const existingToolbar = container.querySelector('.ai-toolbar');
+        if (existingToolbar) {
+            this.toolbar = existingToolbar;
+            this.tooltipContainer = container.querySelector('.ai-tooltip-container');
+            if (!this.tooltipContainer) {
+                this.tooltipContainer = document.createElement('div');
+                this.tooltipContainer.className = 'ai-tooltip-container';
+                this.tooltipContainer.style.display = 'none';
+                existingToolbar.after(this.tooltipContainer);
+            }
+            this._addStyles();
             return;
         }
 
         // Create AI toolbar
         this.toolbar = document.createElement('div');
         this.toolbar.className = 'ai-toolbar';
-        this.toolbar.innerHTML = `
+        const serverButtons = this.serverAssists ? `
             <div class="ai-toolbar-group">
                 <span class="ai-toolbar-label">AI Assist:</span>
                 <button type="button" class="ai-btn" data-action="detect" title="Detect objects">
@@ -78,7 +117,9 @@ class VisualAIAssistantManager {
                 <button type="button" class="ai-btn" data-action="hint" title="Get a hint">
                     <span class="ai-btn-icon">💡</span> Hint
                 </button>
-            </div>
+            </div>` : '';
+        this.toolbar.innerHTML = `
+            ${serverButtons}
             <div class="ai-suggestion-controls" style="display: none;">
                 <span class="suggestion-count">0 suggestions</span>
                 <button type="button" class="ai-btn ai-btn-accept" data-action="accept-all" title="Accept all suggestions">
@@ -105,10 +146,23 @@ class VisualAIAssistantManager {
         this.tooltipContainer = document.createElement('div');
         this.tooltipContainer.className = 'ai-tooltip-container';
         this.tooltipContainer.style.display = 'none';
-        container.appendChild(this.tooltipContainer);
+        this.toolbar.after(this.tooltipContainer);
 
         // Add CSS styles
         this._addStyles();
+        this._syncToolbarVisibility();
+    }
+
+    /**
+     * Without the Detect/Auto/Hint group (text-prompt pages) the toolbar holds
+     * only the suggestion controls and the loading indicator. Hide it while
+     * both are hidden, or it draws as an empty bar above the image.
+     */
+    _syncToolbarVisibility() {
+        if (!this.toolbar || this.toolbar.querySelector('.ai-toolbar-group')) return;
+        const anyShown = Array.from(this.toolbar.children)
+            .some(el => el.style.display !== 'none');
+        this.toolbar.style.display = anyShown ? '' : 'none';
     }
 
     /**
@@ -125,8 +179,8 @@ class VisualAIAssistantManager {
                 align-items: center;
                 gap: 1rem;
                 padding: 0.5rem 0.75rem;
-                background: linear-gradient(to right, #f0f9ff, #e0f2fe);
-                border: 1px solid #bae6fd;
+                background: linear-gradient(to right, light-dark(#f0f9ff, #0e212f), light-dark(#e0f2fe, #112735));
+                border: 1px solid light-dark(#bae6fd, #305669);
                 border-radius: 0.375rem;
                 margin-bottom: 0.5rem;
                 flex-wrap: wrap;
@@ -134,14 +188,16 @@ class VisualAIAssistantManager {
 
             .ai-toolbar-label {
                 font-weight: 600;
-                color: #0369a1;
+                color: light-dark(#0369a1, #9bd1ef);
                 font-size: 0.85rem;
             }
 
             .ai-toolbar-group {
                 display: flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 0.5rem;
+                min-width: 0;
             }
 
             .ai-btn {
@@ -149,7 +205,7 @@ class VisualAIAssistantManager {
                 align-items: center;
                 gap: 0.25rem;
                 padding: 0.375rem 0.75rem;
-                background: white;
+                background: light-dark(white, #1a1a1a);
                 border: 1px solid #0ea5e9;
                 border-radius: 0.25rem;
                 color: #0284c7;
@@ -173,9 +229,9 @@ class VisualAIAssistantManager {
             }
 
             .ai-btn-accept {
-                background: #dcfce7;
+                background: light-dark(#dcfce7, #143620);
                 border-color: #22c55e;
-                color: #166534;
+                color: light-dark(#166534, #b5e5c7);
             }
 
             .ai-btn-accept:hover:not(:disabled) {
@@ -184,9 +240,9 @@ class VisualAIAssistantManager {
             }
 
             .ai-btn-clear {
-                background: #fee2e2;
+                background: light-dark(#fee2e2, #341111);
                 border-color: #ef4444;
-                color: #dc2626;
+                color: light-dark(#dc2626, #e3a1a1);
             }
 
             .ai-btn-clear:hover:not(:disabled) {
@@ -203,21 +259,21 @@ class VisualAIAssistantManager {
 
             .suggestion-count {
                 font-size: 0.8rem;
-                color: #64748b;
+                color: light-dark(#64748b, #bac0c9);
             }
 
             .ai-loading-indicator {
                 display: flex;
                 align-items: center;
                 gap: 0.5rem;
-                color: #0369a1;
+                color: light-dark(#0369a1, #9bd1ef);
                 font-size: 0.8rem;
             }
 
             .ai-loading-indicator .spinner {
                 width: 1rem;
                 height: 1rem;
-                border: 2px solid #e0f2fe;
+                border: 2px solid light-dark(#e0f2fe, #305269);
                 border-top-color: #0ea5e9;
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
@@ -227,22 +283,21 @@ class VisualAIAssistantManager {
                 to { transform: rotate(360deg); }
             }
 
+            /* In the flow, directly under the AI toolbar. It was absolutely
+               positioned at the bottom of the annotation container, which put
+               a hint below the image, off screen, under the next question. */
             .ai-tooltip-container {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
-                background: #fef3c7;
+                position: relative;
+                background: light-dark(#fef3c7, #413814);
                 border: 1px solid #f59e0b;
                 border-radius: 0.375rem;
-                padding: 0.75rem 1rem;
-                margin-top: 0.5rem;
-                z-index: 100;
+                padding: 0.75rem 2.25rem 0.75rem 1rem;
+                margin-bottom: 0.5rem;
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             }
 
             .ai-tooltip-container .hint-text {
-                color: #92400e;
+                color: light-dark(#92400e, #e9bda2);
                 font-size: 0.9rem;
                 line-height: 1.4;
             }
@@ -254,7 +309,7 @@ class VisualAIAssistantManager {
                 background: none;
                 border: none;
                 font-size: 1.25rem;
-                color: #92400e;
+                color: light-dark(#92400e, #e9bda2);
                 cursor: pointer;
                 padding: 0;
                 line-height: 1;
@@ -344,6 +399,12 @@ class VisualAIAssistantManager {
                 case 'keyframe_detection':
                     this.requestSuggestion(action);
                     break;
+                case 'critique':
+                    // Not routed through requestSuggestion: critique POSTs the
+                    // annotations that exist rather than GETting new ones, and
+                    // its result is a review queue rather than canvas overlays.
+                    this.requestCritique();
+                    break;
                 case 'accept-all':
                     this.acceptAllSuggestions();
                     break;
@@ -407,12 +468,42 @@ class VisualAIAssistantManager {
     }
 
     /**
+     * Ask a vision model to review the annotations already on the canvas.
+     *
+     * Only meaningful for images: it crops each region, so there is nothing to
+     * crop on a video timeline until tubelet critique exists.
+     */
+    async requestCritique() {
+        if (this.annotationType !== 'image_annotation') {
+            this._showError('Review is only available for image annotation.');
+            return;
+        }
+        if (typeof AnnotationCritiqueReview === 'undefined') {
+            this._showError('The review panel did not load. Reload the page.');
+            return;
+        }
+        if (!this.critiqueReview) {
+            this.critiqueReview = new AnnotationCritiqueReview(this.annotationManager);
+        }
+        this._showLoading(true);
+        try {
+            await this.critiqueReview.run();
+        } finally {
+            this._showLoading(false);
+        }
+    }
+
+    /**
      * Handle the suggestion response from the server.
      * @param {string} assistantType - Type of assistant that responded
      * @param {Object} data - Response data
      */
     _handleSuggestionResponse(assistantType, data) {
         console.log('[VisualAI] _handleSuggestionResponse:', assistantType, data);
+
+        // Which model produced this batch, so an accepted detection can name it
+        // rather than exporting as an anonymous "a model did this".
+        this.lastModel = data.model || '';
 
         // Handle hints differently
         if (assistantType === 'hint' && (data.hint || data.suggestive_choice)) {
@@ -473,6 +564,13 @@ class VisualAIAssistantManager {
 
         detections.forEach((detection, index) => {
             const suggestionId = `suggestion_${Date.now()}_${index}`;
+            // Reported at render, not at request: the latency that matters is
+            // how long the annotator looked at the suggestion, and the model's
+            // own inference time is not part of that.
+            this._telemetry('ai_suggest', {
+                shape: 'bbox',
+                meta: { sid: suggestionId, src: 'detection' },
+            });
 
             // Denormalize bbox coordinates
             const bbox = detection.bbox;
@@ -662,8 +760,8 @@ class VisualAIAssistantManager {
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
             <div class="hint-text">
-                <strong>Hint:</strong> ${hintData.hint}
-                ${hintData.suggestive_choice ? `<br><em>Focus: ${hintData.suggestive_choice}</em>` : ''}
+                <strong>Hint:</strong> ${aiTextToSafeHtml(hintData.hint)}
+                ${hintData.suggestive_choice ? `<br><em>Focus: ${aiTextToSafeHtml(hintData.suggestive_choice)}</em>` : ''}
             </div>
         `;
         this.tooltipContainer.style.display = 'block';
@@ -679,9 +777,9 @@ class VisualAIAssistantManager {
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
             <div class="hint-text">
-                <strong>Suggested Label:</strong> ${result.suggested_label}
+                <strong>Suggested Label:</strong> ${aiTextToSafeHtml(result.suggested_label)}
                 (${Math.round(result.confidence * 100)}% confidence)
-                ${result.reasoning ? `<br><em>Reasoning: ${result.reasoning}</em>` : ''}
+                ${result.reasoning ? `<br><em>Reasoning: ${aiTextToSafeHtml(result.reasoning)}</em>` : ''}
             </div>
         `;
         this.tooltipContainer.style.display = 'block';
@@ -694,6 +792,11 @@ class VisualAIAssistantManager {
     acceptSuggestion(suggestionId) {
         const suggestion = this.suggestions.find(s => s.id === suggestionId);
         if (!suggestion) return;
+
+        this._telemetry('ai_accept', {
+            shape: suggestion.type === 'detection' ? 'bbox' : 'unknown',
+            meta: { sid: suggestionId },
+        });
 
         if (suggestion.type === 'detection') {
             this._convertDetectionToAnnotation(suggestion);
@@ -713,9 +816,30 @@ class VisualAIAssistantManager {
      * @param {string} suggestionId - ID of the suggestion to reject
      */
     rejectSuggestion(suggestionId) {
+        // Only report a rejection of something that was actually offered, so
+        // clearSuggestions() on an empty list cannot deflate the accept rate.
+        if (this.suggestions.some(s => s.id === suggestionId)) {
+            this._telemetry('ai_reject', { meta: { sid: suggestionId } });
+        }
         this._removeSuggestionVisual(suggestionId);
         this.suggestions = this.suggestions.filter(s => s.id !== suggestionId);
         this._updateSuggestionControls();
+    }
+
+    /**
+     * Report one interaction to the telemetry tracker, if it is loaded.
+     *
+     * Scoped to the annotation manager's schema so the suggestion and the shape
+     * it becomes land in the same session; an assistant with no manager
+     * attached has nothing to attribute the event to and reports nothing.
+     */
+    _telemetry(action, detail) {
+        if (typeof window.recordAnnotationTelemetry !== 'function') return;
+        const schema = this.annotationManager
+            && this.annotationManager.config
+            && this.annotationManager.config.schemaName;
+        if (!schema) return;
+        window.recordAnnotationTelemetry(schema, action, detail || {});
     }
 
     /**
@@ -755,17 +879,38 @@ class VisualAIAssistantManager {
             console.log('[VisualAI] Using modified detection data:', detection);
         }
 
-        this.annotationManager.setLabel(detection.label, this._getLabelColor(detection.label));
+        const color = this._getLabelColor(detection.label);
+        this.annotationManager.setLabel(detection.label, color);
 
-        // Create annotation from bbox
-        this.annotationManager.addAnnotation({
+        // `detection.bbox` is already normalized to [0, 1]: the server returns
+        // normalized boxes (see VisualDetectionFormat) and the 'modified'
+        // handler in _renderDetections re-normalizes after any user edit. The
+        // client contract wants that under `coordinates`, not `bbox` — passing
+        // `bbox` was one of the two reasons accepting a detection did nothing.
+        const added = this.annotationManager.addAnnotation({
             type: 'bbox',
             label: detection.label,
-            bbox: detection.bbox,
-            confidence: detection.confidence,
-            source: 'ai_suggestion',
-            modified: detection.modified || false
+            color: color,
+            coordinates: {
+                x: detection.bbox.x,
+                y: detection.bbox.y,
+                width: detection.bbox.width,
+                height: detection.bbox.height
+            },
+            // Provenance travels with the shape. Without it an accepted
+            // detection and a hand-drawn box export identically, so a study
+            // that pre-labels with a detector cannot report its own acceptance
+            // rate from its own data.
+            source: 'ai',
+            ai_model: this.lastModel || '',
+            confidence: (detection.confidence !== undefined
+                         && detection.confidence !== null)
+                ? detection.confidence : undefined
         });
+
+        if (!added) {
+            console.warn('[VisualAI] Detection was rejected by addAnnotation:', detection);
+        }
     }
 
     /**
@@ -872,6 +1017,7 @@ class VisualAIAssistantManager {
         } else {
             controls.style.display = 'none';
         }
+        this._syncToolbarVisibility();
     }
 
     /**
@@ -885,6 +1031,7 @@ class VisualAIAssistantManager {
         const buttons = this.toolbar.querySelectorAll('.ai-btn');
 
         indicator.style.display = show ? 'flex' : 'none';
+        this._syncToolbarVisibility();
         buttons.forEach(btn => {
             if (!btn.closest('.ai-suggestion-controls')) {
                 btn.disabled = show;
@@ -901,8 +1048,8 @@ class VisualAIAssistantManager {
 
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
-            <div class="hint-text" style="color: #dc2626;">
-                <strong>Error:</strong> ${message}
+            <div class="hint-text" style="color: light-dark(#dc2626, #e3a1a1);">
+                <strong>Error:</strong> ${aiTextToSafeHtml(message)}
             </div>
         `;
         this.tooltipContainer.style.display = 'block';

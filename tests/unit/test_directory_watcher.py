@@ -196,8 +196,12 @@ class TestFileLoading:
 class TestDeduplication:
     """Existing instances should be updated, not duplicated."""
 
-    def test_existing_instance_updated(self, watcher_env):
-        """If has_item returns True, update_item should be called instead of add_item."""
+    def test_an_id_loaded_elsewhere_is_kept_not_overwritten(self, watcher_env):
+        """An id already in the pool from another source keeps its first row.
+
+        This used to call update_item, so a file that reused an id silently
+        replaced an item someone may already have annotated.
+        """
         w = watcher_env["watcher"]
         ism = watcher_env["ism"]
 
@@ -212,8 +216,7 @@ class TestDeduplication:
 
         w.load_directory()
 
-        ism.update_item.assert_called_once()
-        assert ism.update_item.call_args[0][0] == "dup1"
+        ism.update_item.assert_not_called()
         ism.add_item.assert_called_once()
         assert ism.add_item.call_args[0][0] == "new1"
 

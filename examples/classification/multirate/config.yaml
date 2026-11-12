@@ -1,7 +1,8 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 annotation_task_name: Simple Multirate Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-multirate/
-output_annotation_format: csv
+export_annotation_format: csv
 annotation_codebook_url: ''
 data_files:
 - data/toy-example.json
@@ -30,6 +31,5 @@ annotation_schemes:
   - Strongly Agree
   label_requirement:
     required: true
-  sequential_key_binding: true
   option_randomization: true
 site_dir: default

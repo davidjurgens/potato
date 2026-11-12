@@ -106,12 +106,12 @@
 }
 
 .instance-text-container.max-height-limited::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: light-dark(#f1f1f1, #222222);
     border-radius: 4px;
 }
 
 .instance-text-container.max-height-limited::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
+    background: light-dark(#c1c1c1, #333333);
     border-radius: 4px;
 }
 
@@ -191,9 +191,99 @@
     white-space: nowrap;
 }
 
+/* The × is drawn at 16px so it does not crowd the line above, but WCAG 2.2
+   wants a 24px target: the pseudo-element extends the hit area without
+   changing the drawing. */
+.span-controls .span-delete-btn::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+}
+
+/* --destructive-text, not the --destructive fill: the white × on #ef4444 is
+   3.8:1, below the 4.5:1 a 12px glyph needs. On #9f1e17 it is 8.3:1. */
+.span-controls .span-delete-btn {
+    background-color: var(--destructive-text);
+}
+
+.span-controls .span-delete-btn:hover {
+    background-color: var(--destructive);
+}
+
+/* In the dark theme --destructive-text is a light red that cannot carry the
+   white x; this red holds 6.5:1 under it. */
+:root[data-theme="dark"] .span-controls .span-delete-btn { background-color: #b91c1c; }
+
+.span-controls .span-delete-btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Overlapping codes
+
+   A chip sat 22px above the line it labels, which at line-height 1.8 lands on
+   the glyphs of the line above. Coding a passage with several overlapping codes
+   — the normal case in qualitative work, not an edge case — then papers the
+   text over with chips. Two things fix it: a gutter tall enough for a chip to
+   live in, and collapsing chips that would still collide with each other.
+   -------------------------------------------------------------------------- */
+
+/* Opened only when labels are actually being drawn, so span tasks without
+   labels keep the tighter setting. Set by SpanManager on the text container. */
+#instance-text.span-labels-on,
+.span-labels-on {
+    line-height: 2.35;
+}
+
+/* The second and later chips of a collision become a colour dot. The code is
+   still identifiable (colour, tooltip, accessible name) and the text stays
+   readable; hovering or focusing restores the full chip. */
+.span-controls.is-compact .span-label {
+    width: 12px;
+    height: 12px;
+    min-width: 12px;
+    padding: 0;
+    border-radius: 50%;
+    background-color: var(--span-colour, rgba(0, 0, 0, 0.85)) !important;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    color: transparent;
+    overflow: hidden;
+    text-indent: -999px;
+}
+
+.span-controls.is-compact .span-delete-btn {
+    display: none;
+}
+
+.span-controls.is-compact:hover .span-label,
+.span-controls.is-compact:focus-within .span-label {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.85) !important;
+    border: none;
+    color: #fff;
+    text-indent: 0;
+}
+
+.span-controls.is-compact:hover .span-delete-btn,
+.span-controls.is-compact:focus-within .span-delete-btn {
+    display: inline-flex;
+}
+
+/* A collapsed chip that is hovered has to sit above its neighbours, or it
+   expands underneath them and is unreadable again. */
+.span-controls.is-compact:hover,
+.span-controls.is-compact:focus-within {
+    z-index: 40 !important;
+}
+
 #instance-text:focus {
     outline: none;
-    border-color: #007bff;
+    border-color: var(--ring);
 }
 
 /* ==========================================================================
@@ -203,11 +293,11 @@
 /* Hint text shown when discontinuous mode is enabled */
 .discontinuous-hint {
     font-size: 12px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
     font-style: italic;
     margin-bottom: 8px;
     padding: 4px 8px;
-    background-color: #f0f8ff;
+    background-color: light-dark(#f0f8ff, #0e1f2f);
     border-left: 3px solid #007bff;
     border-radius: 2px;
 }
@@ -271,4 +361,35 @@
         transparent 8px
     );
     opacity: 0.5;
+}
+
+/* Touch highlight button (span-touch.js): pinned above the bottom edge while
+   a text selection is live on a phone. */
+.span-touch-highlight {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 2100;
+    min-height: 48px;
+    max-width: calc(100vw - 32px);
+    padding: 0 20px;
+    border: none;
+    border-radius: 24px;
+    background: var(--primary, #6e56cf);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.span-touch-highlight:disabled {
+    background: var(--gray-500);
+}
+
+.span-touch-highlight[hidden] {
+    display: none;
 }

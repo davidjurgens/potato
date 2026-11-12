@@ -33,6 +33,25 @@ class TestTrajectoryEvalSchema:
         assert isinstance(keybindings, list)
         assert len(keybindings) == 0  # no keyboard shortcuts
 
+    def test_error_types_accepts_plain_strings(self):
+        # A natural config (list of strings) must render, not raise
+        # "'str' object has no attribute 'get'".
+        html, _ = generate_trajectory_eval_layout(
+            self._make_scheme(error_types=["1.1 Disobey task spec", "2.3 Task derailment"]))
+        assert "1.1 Disobey task spec" in html
+        assert "2.3 Task derailment" in html
+
+    def test_error_types_accepts_label_alias(self):
+        html, _ = generate_trajectory_eval_layout(
+            self._make_scheme(error_types=[{"label": "Spec error"}]))
+        assert "Spec error" in html
+
+    def test_error_types_skip_junk_entries(self):
+        # None / numbers are skipped rather than crashing layout generation.
+        html, _ = generate_trajectory_eval_layout(
+            self._make_scheme(error_types=[None, 5, "real_error"]))
+        assert "real_error" in html
+
     def test_html_contains_form_and_hidden_input(self):
         html, _ = generate_trajectory_eval_layout(self._make_scheme())
         assert 'class="annotation-form trajectory-eval-container"' in html

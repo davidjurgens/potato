@@ -6,7 +6,6 @@ port: 8000
 server_name: Image Annotation Test
 annotation_task_name: Image Annotation Test Task
 output_annotation_dir: annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/test_images.jsonl

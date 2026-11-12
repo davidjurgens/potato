@@ -8,6 +8,21 @@ from .select import generate_select_layout
 from .span import generate_span_layout, render_span_annotations, get_spans_for_field
 from .span_link import generate_span_link_layout
 from .textbox import generate_textbox_layout
+from .cloze import generate_cloze_layout
+from .listening_test import generate_listening_test_layout
+from .interval_label import generate_interval_label_layout
+from .microscopy import generate_microscopy_layout
+from .viewer_selection import generate_viewer_selection_layout
+from .chemical_structure import generate_chemical_structure_layout
+from .peak_picking import generate_peak_picking_layout
+from .spectrogram_annotation import generate_spectrogram_annotation_layout
+from .geo_annotation import generate_geo_annotation_layout
+from .ego_network import generate_ego_network_layout
+from .free_list import generate_free_list_layout
+from .triad_test import generate_triad_test_layout
+from .incentive_schemes import generate_price_list_layout, generate_bdm_layout, generate_belief_elicitation_layout
+from .interlinear_gloss import generate_interlinear_gloss_layout
+from .survey_experiments import generate_list_experiment_layout, generate_randomized_response_layout
 from .slider import generate_slider_layout
 from .video import generate_video_layout
 from .image_annotation import generate_image_annotation_layout
@@ -35,7 +50,23 @@ from .error_span import generate_error_span_layout
 from .card_sort import generate_card_sort_layout
 from .conjoint import generate_conjoint_layout
 from .trajectory_eval import generate_trajectory_eval_layout
+from .trajectory_edit import generate_trajectory_edit_layout
 from .process_reward import generate_process_reward_layout
+from .failure_attribution import generate_failure_attribution_layout
+from .tool_call_review import generate_tool_call_review_layout
+from .consensus_tracking import generate_consensus_tracking_layout
+from .context_attribution import generate_context_attribution_layout
+from .agent_scorecard import generate_agent_scorecard_layout
+from .handoff_review import generate_handoff_review_layout
+from .agent_interaction_graph import generate_agent_interaction_graph_layout
+from .gui_trajectory import generate_gui_trajectory_layout
+from .voice_interaction import generate_voice_interaction_layout
+from .multimodal_reasoning import generate_multimodal_reasoning_layout
+from .speech_transcript import generate_speech_transcript_layout
+from .tool_contention import generate_tool_contention_layout
+from .temporal_grounding import generate_temporal_grounding_layout
+from .emergent_behavior import generate_emergent_behavior_layout
+from .table_grid import generate_table_grid_layout
 from .code_review import generate_code_review_layout
 
 # Import identifier utilities for use by other modules

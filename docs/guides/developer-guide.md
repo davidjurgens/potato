@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide covers extending Potato, integrating via API, and customizing the platform.
+Extending Potato, driving it through the API, and customizing it.
 
 ## Architecture Overview
 
@@ -26,10 +26,16 @@ Full REST API documentation for programmatic access:
 Schema implementations live in `potato/server_utils/schemas/`. To add a new type:
 
 1. Create `potato/server_utils/schemas/my_schema.py`
-2. Register in `potato/server_utils/schemas/registry.py`
-3. Add to valid_types in `potato/server_utils/config_module.py`
-4. Create documentation at `docs/annotation-types/<category>/my_schema.md`
-5. Add example project at `examples/<category>/my-schema-example/`
+2. Register it in `potato/server_utils/schemas/registry.py`, declaring every
+   config key the generator reads
+3. Create documentation at `docs/annotation-types/<category>/my_schema.md` and
+   add it to the `mkdocs.yml` nav
+4. Add an example project at `examples/<category>/my-schema-example/`
+
+The registry is the only list of valid types. `config_module.py` reads it
+through `schema_registry.get_supported_types()`, so there is nothing to add
+there. The [Contributing guide](contributing.md#adding-an-annotation-type) has
+the full checklist, including the tests and the regeneration steps.
 
 For the schema registry API, see the [Schema Gallery](../annotation-types/schemas_and_templates.md).
 
@@ -73,4 +79,4 @@ pytest --cov=potato --cov-report=html  # Coverage
 
 ## Contributing
 
-- **[Contributing Guide](../deployment/open-sourcing.md)** - How to contribute to Potato
+- **[Contributing Guide](contributing.md)** - Setup, conventions, and what reviewers look at

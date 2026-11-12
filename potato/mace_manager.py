@@ -50,6 +50,84 @@ class MACEConfig:
         return cls(**{k: v for k, v in d.items() if k in known})
 
 
+#: Below this, a per-annotator reliability score is not a basis for a decision
+#: about a person. `min_items` defaults to 5, which lets the fit RUN -- raising
+#: it would silently stop MACE working on studies that rely on it today -- so
+#: the number is reported rather than enforced.
+_DEFENSIBLE_ITEMS = 30
+
+#: Share of all answers held by the most common label, above which MACE cannot
+#: reliably separate "answered correctly" from "always said the common thing".
+_SKEW_LIMIT = 0.75
+
+
+def _assess_reliability(matrix, annotators, idx_to_value, min_items,
+                        schema_name, option_name=None):
+    """What the fit was computed on, and the reasons not to trust it.
+
+    Two of the three checks here need no model at all. A constant-response
+    annotator is found by looking at their answers; the label skew is a count.
+    Both are cheap, and both describe exactly the regime where the competence
+    numbers are most confidently wrong -- so they belong next to the numbers,
+    not in a separate tool nobody runs.
+    """
+    import numpy as _np
+
+    answered = matrix[matrix >= 0]
+    total = int(answered.size)
+    counts = {}
+    for idx, count in zip(*_np.unique(answered, return_counts=True)):
+        counts[str(idx_to_value.get(int(idx), int(idx)))] = int(count)
+
+    top_share = (max(counts.values()) / total) if total else 0.0
+    num_items = int(matrix.shape[0])
+
+    constant = []
+    for j, user_id in enumerate(annotators):
+        column = matrix[:, j]
+        given = column[column >= 0]
+        if given.size >= 2 and _np.unique(given).size == 1:
+            constant.append({
+                "user_id": user_id,
+                "answer": str(idx_to_value.get(int(given[0]), int(given[0]))),
+                "items": int(given.size),
+            })
+
+    warnings = []
+    if num_items < _DEFENSIBLE_ITEMS:
+        warnings.append(
+            f"fitted on {num_items} item(s); a per-annotator competence score "
+            f"below about {_DEFENSIBLE_ITEMS} items is too noisy to act on")
+    if top_share >= _SKEW_LIMIT:
+        warnings.append(
+            f"the most common label holds {top_share:.0%} of all answers; at "
+            f"this skew MACE cannot reliably separate a competent annotator "
+            f"from one who always answers the majority class, and more data "
+            f"does not fix it")
+    for entry in constant:
+        warnings.append(
+            f"{entry['user_id']} gave the same answer ({entry['answer']}) to "
+            f"all {entry['items']} of their items; this is visible without a "
+            f"model and their competence score should not be read as evidence "
+            f"either way")
+
+    if warnings:
+        label = schema_name + (f"[{option_name}]" if option_name else "")
+        for message in warnings:
+            logger.warning("MACE %s: %s", label, message)
+
+    return {
+        "num_items": num_items,
+        "num_answers": total,
+        "label_counts": counts,
+        "majority_label_share": round(top_share, 4),
+        "constant_annotators": constant,
+        "min_items_configured": int(min_items),
+        "trustworthy": not warnings,
+        "warnings": warnings,
+    }
+
+
 @dataclass
 class MACEResult:
     """Result of a single MACE run for one schema (or schema+option for multiselect)."""
@@ -64,9 +142,21 @@ class MACEResult:
     timestamp: str
     log_likelihood: float
     option_name: Optional[str] = None  # For multiselect per-option
+    #: What the fit was computed on, and whether it can be trusted. MACE
+    #: explains an answer as "trying" or "spamming from a fixed strategy"; a
+    #: spammer whose fixed strategy IS the majority class is nearly
+    #: unidentifiable by construction, so on a skewed corpus the competence
+    #: numbers can rank a constant annotator top. Measured on synthetic sweeps:
+    #: at a 50/50 prior the spammer ranks last 95-100% of the time, at 67/33
+    #: more data fixes it, and at 80/20 it ranks last only 10% of the time at
+    #: 300 items -- WORSE than at 30. Rare-event schemes (toxicity, hate
+    #: speech, misinformation) live in that regime, so this ships beside the
+    #: scores rather than in a doc nobody reads.
+    reliability: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self):
         return {
+            "reliability": self.reliability,
             "schema_name": self.schema_name,
             "competence_scores": self.competence_scores,
             "predicted_labels": self.predicted_labels,
@@ -82,6 +172,10 @@ class MACEResult:
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
+
+
+#: Labels a schema stores that are not one of its choices.
+_NOT_A_CHOICE = frozenset({"free_response"})
 
 
 class MACEManager:
@@ -177,7 +271,12 @@ class MACEManager:
                 # Per-option binary MACE
                 labels = scheme.get("labels", [])
                 for option in labels:
-                    option_name = option if isinstance(option, str) else str(option)
+                    # Options may be written as {name: ...} dicts; str() of the
+                    # dict never matched a stored label name.
+                    option_name = (str(option.get("name", ""))
+                                   if isinstance(option, dict) else str(option))
+                    if not option_name:
+                        continue
                     result = self._run_for_schema(
                         usm, ism, schema_name, schema_type,
                         binary_option=option_name
@@ -226,10 +325,22 @@ class MACEManager:
         annotations_by_item = {}
         all_annotators = set()
 
+        from potato.annotator_origin import is_machine
+
         user_ids = usm.get_user_ids()
         for user_id in user_ids:
             user_state = usm.get_user_state(user_id)
             if not user_state:
+                continue
+
+            # MACE estimates per-annotator competence, and its output is used to
+            # make judgements about people -- whose labels to trust, whose to
+            # discard. A competence score for an annotation pipeline is a
+            # different claim entirely, and mixing the two puts a tool's
+            # spurious "reliability" beside a person's. Declared machines are
+            # left out with no opt-in, unlike the psychometrics engine, where
+            # modelling a tool's ability is the point.
+            if is_machine(user_state):
                 continue
 
             for instance_id, label_dict in user_state.instance_id_to_label_to_value.items():
@@ -248,6 +359,10 @@ class MACEManager:
             iid: annots for iid, annots in annotations_by_item.items()
             if len(annots) >= min_annots
         }
+        # Only annotators who answered an eligible item. Someone who only
+        # annotated items nobody else did became an all-missing column and
+        # got the prior's 0.5 as a "competence".
+        all_annotators = {uid for annots in eligible_items.values() for uid in annots}
 
         if len(eligible_items) < self.mace_config.min_items:
             logger.debug(
@@ -322,6 +437,9 @@ class MACEManager:
         }
 
         return MACEResult(
+            reliability=_assess_reliability(
+                matrix, sorted_annotators, idx_to_value,
+                self.mace_config.min_items, schema_name, binary_option),
             schema_name=schema_name,
             competence_scores=competence_scores,
             predicted_labels=predicted_labels,
@@ -349,8 +467,14 @@ class MACEManager:
         Returns:
             The annotation value as a string, or None if not found.
         """
-        # Known falsy values that indicate "not selected"
-        _FALSY = (False, "false", "False", 0, "0", "", None)
+        # Whether an option was chosen is decided by the shared reader. The
+        # private copy this replaced read a stored "0" as unchecked, but radio
+        # and likert store {Label(s, "0"): "0"}, so every answer of "0" was
+        # missing from the fit.
+        from potato.server_utils.annotation_values import selected_labels
+
+        def chosen(name, value):
+            return bool(selected_labels({name: value}))
 
         if schema_type == "multiselect" and binary_option:
             # Look for the specific option's Label
@@ -358,17 +482,27 @@ class MACEManager:
                 if (label.get_schema() == schema_name
                         and label.get_name() == binary_option):
                     # Convert to binary: "1" for checked, "0" for unchecked
-                    if value not in _FALSY:
+                    if chosen(label.get_name(), value):
                         return "1"
                     return "0"
-            return None
+            # The server clears unchecked options rather than storing False,
+            # so an annotator who saved this item and did not check the
+            # option voted "0". Reading the absence as "no answer" left MACE
+            # a matrix of 1s: every option predicted on every item and a
+            # coin-flip spammer scored 0.95.
+            return "0" if label_dict else None
         else:
             # Radio/likert/select: find the label with a truthy (non-falsy) value.
             # The value may be True, "true", or the label name itself (e.g. "positive").
+            # The free-text box of a radio with has_free_response is stored
+            # as its own label; it is not the choice, and which of the two
+            # came first in the dict decided what MACE read.
             for label, value in label_dict.items():
                 if label.get_schema() != schema_name:
                     continue
-                if value not in _FALSY:
+                if label.get_name() in _NOT_A_CHOICE:
+                    continue
+                if chosen(label.get_name(), value):
                     return label.get_name()
             return None
 
@@ -425,6 +559,10 @@ class MACEManager:
             for key, result in self.results.items():
                 schemas.append({
                     "key": key,
+                    # Beside the scores, not in a separate call: the numbers
+                    # look equally authoritative in every regime, and the
+                    # regime is what decides whether to believe them.
+                    "reliability": result.reliability,
                     "schema_name": result.schema_name,
                     "option_name": result.option_name,
                     "num_annotators": result.num_annotators,
@@ -449,11 +587,27 @@ class MACEManager:
                     "average": sum(scores) / len(scores) if scores else 0.0,
                 }
 
+            # An annotator flagged on ANY schema is flagged in the summary:
+            # the competence average hides it otherwise.
+            flagged = {}
+            for key, result in self.results.items():
+                for entry in result.reliability.get("constant_annotators", []):
+                    flagged.setdefault(entry["user_id"], []).append(
+                        {"schema": key, **entry})
+            for uid, entries in flagged.items():
+                if uid in annotator_competence:
+                    annotator_competence[uid]["constant_response"] = entries
+
             return {
                 "enabled": self.mace_config.enabled,
                 "has_results": True,
                 "schemas": schemas,
                 "annotator_competence": annotator_competence,
+                "reliability_warnings": [
+                    {"schema": key, "warning": w}
+                    for key, result in self.results.items()
+                    for w in result.reliability.get("warnings", [])
+                ],
                 "config": {
                     "trigger_every_n": self.mace_config.trigger_every_n,
                     "min_annotations_per_item": self.mace_config.min_annotations_per_item,

@@ -1,9 +1,8 @@
 """
 LLM Labeler for Solo Mode
 
-This module provides background LLM labeling functionality for Solo Mode.
-It manages a thread that continuously labels instances while the human
-annotator works, enabling parallel annotation.
+Background LLM labeling for Solo Mode. A thread labels instances continuously
+while the human annotator works, so the two run in parallel.
 """
 
 import json
@@ -17,6 +16,10 @@ from typing import Any, Dict, List, Optional, Set
 from queue import Queue, Empty
 
 logger = logging.getLogger(__name__)
+
+
+# Re-exported: the solo labeller's callers import it from here.
+from potato.ai.ai_endpoint import normalize_confidence  # noqa: E402
 
 
 @dataclass
@@ -95,6 +98,8 @@ class LLMLabelingThread(threading.Thread):
         self.solo_config = solo_config
         self.prompt_getter = prompt_getter
         self.examples_getter = examples_getter
+        #: Set by the manager when solo_mode.cache is on (label_cache.py)
+        self.label_cache = None
         self.result_callback = result_callback
         self.prompt_version_getter = prompt_version_getter
 
@@ -284,14 +289,19 @@ class LLMLabelingThread(threading.Thread):
         text: str,
         schema_name: str,
         endpoint=None,
+        prompt_override: Optional[str] = None,
     ) -> Optional[LabelingResult]:
-        """Label a single instance."""
+        """Label a single instance.
+
+        ``prompt_override`` labels with a prompt other than the current one:
+        a gold-set evaluation of an earlier version, or a trial of a draft.
+        """
         if endpoint is None:
             endpoint = self._get_endpoint()
         if endpoint is None:
             return None
 
-        prompt = self.prompt_getter()
+        prompt = prompt_override if prompt_override is not None else self.prompt_getter()
         if not prompt:
             logger.warning("No prompt available for labeling")
             return None
@@ -307,26 +317,34 @@ class LLMLabelingThread(threading.Thread):
                 logger.warning(f"Schema {schema_name} not found")
                 return None
 
+            if getattr(endpoint, 'is_decision_model', False) is True:
+                return self._label_with_decision_model(
+                    instance_id, text, schema_name, schema_info, prompt, endpoint)
+
             # Build labeling prompt
             labels = self._extract_labels(schema_info)
+            is_multiselect = schema_info.get('annotation_type') == 'multiselect'
+            is_span = schema_info.get('annotation_type') == 'span'
 
             # Assemble the exact prompt the LLM will see. Kept in one place
             # (_build_full_prompt) so the annotate-UI "Prompt the LLM sees"
             # preview can render byte-for-byte what labeling actually sends —
             # including the live codebook section — with zero drift.
-            assembled = self._build_full_prompt(text, labels, schema_info)
+            assembled = self._build_full_prompt(
+                text, labels, schema_info, base_prompt=prompt)
             full_prompt = assembled["full_prompt"]
             request_edge_case = assembled["request_edge_case"]
 
-            # Query endpoint
-            from pydantic import BaseModel
-
-            class LabelResponse(BaseModel):
-                label: str
-                confidence: float = 50.0
-                reasoning: str = ""
-
-            response = endpoint.query(full_prompt, LabelResponse)
+            # Query endpoint. The response schema names the scheme's labels,
+            # so a backend that enforces it (vLLM, OpenAI, Gemini, Ollama)
+            # cannot answer outside the label set.
+            query_endpoint = endpoint
+            if self.label_cache is not None:
+                from .label_cache import CachingEndpoint
+                query_endpoint = CachingEndpoint(endpoint, self.label_cache)
+            response = query_endpoint.query(
+                full_prompt,
+                self._response_model(schema_info, request_edge_case))
 
             # Parse response
             if isinstance(response, str):
@@ -337,12 +355,77 @@ class LLMLabelingThread(threading.Thread):
                 response_data = response
 
             label = response_data.get('label', '')
-            confidence = float(response_data.get('confidence', 50)) / 100.0
+            confidence = normalize_confidence(response_data.get('confidence', 50))
             reasoning = response_data.get('reasoning', '')
 
             # Validate label
             valid_labels = self._get_valid_labels(schema_info)
-            if valid_labels and label not in valid_labels:
+            if is_span:
+                # The model returns [{"text","label"}]; locate each snippet's
+                # char offsets in the source text and store as a JSON array of
+                # {start, end, text, label} (the human span format).
+                try:
+                    raw = label if isinstance(label, list) else json.loads(str(label))
+                except (ValueError, TypeError):
+                    raw = []
+                spans_out = []
+                # Where to look for the next copy of each snippet, so a name
+                # the model lists twice lands on its second occurrence rather
+                # than on the first one again.
+                search_from: Dict[str, int] = {}
+                if isinstance(raw, list):
+                    for sp in raw:
+                        if not isinstance(sp, dict):
+                            continue
+                        snippet = str(sp.get('text', '')).strip()
+                        lbl = str(sp.get('label', ''))
+                        if not snippet:
+                            continue
+                        if valid_labels and lbl not in valid_labels:
+                            # A label outside the schema is not an answer the
+                            # annotator could have given; drop the span rather
+                            # than store it.
+                            lbl = self._fuzzy_match_label(lbl, valid_labels)
+                            if lbl is None:
+                                continue
+                        idx = text.find(snippet, search_from.get(snippet, 0))
+                        if idx < 0:
+                            continue
+                        search_from[snippet] = idx + len(snippet)
+                        spans_out.append({
+                            'start': idx, 'end': idx + len(snippet),
+                            'text': snippet, 'label': lbl,
+                        })
+                label = json.dumps(spans_out)
+            elif is_multiselect:
+                # The model may return one or more labels (comma/JSON). Validate
+                # each against the label set and store as a JSON array string so
+                # it matches the human multiselect format and the agreement
+                # check's set parsing.
+                if isinstance(label, list):
+                    parts = [str(p) for p in label]
+                else:
+                    parts = [p.strip() for p in re.split(r'[;,]', str(label)) if p.strip()]
+                matched = []
+                for p in parts:
+                    if valid_labels and p not in valid_labels:
+                        m = self._fuzzy_match_label(p, valid_labels)
+                        if m:
+                            matched.append(m)
+                    elif p:
+                        matched.append(p)
+                # de-duplicate, preserve order
+                seen = set()
+                matched = [x for x in matched if not (x in seen or seen.add(x))]
+                if not matched:
+                    return LabelingResult(
+                        instance_id=instance_id, schema_name=schema_name,
+                        label=None, confidence=0, uncertainty=1, reasoning="",
+                        prompt_version=0, model_name=getattr(endpoint, 'model', ''),
+                        error="No valid labels returned",
+                    )
+                label = json.dumps(matched)
+            elif valid_labels and label not in valid_labels:
                 label = self._fuzzy_match_label(label, valid_labels)
                 if label is None:
                     return LabelingResult(
@@ -363,12 +446,16 @@ class LLMLabelingThread(threading.Thread):
             if estimator:
                 try:
                     logger.debug(f"Running uncertainty estimation ({estimator.__class__.__name__}) for {instance_id}")
+                    # The one-question estimators are deterministic and are
+                    # cached with the label. Sampling needs fresh samples.
+                    cache_estimate = self.solo_config.uncertainty.strategy in (
+                        'direct_confidence', 'direct_uncertainty')
                     estimate = estimator.estimate_uncertainty(
                         instance_id=instance_id,
                         text=text,
                         prompt=full_prompt,
                         predicted_label=label,
-                        endpoint=endpoint,
+                        endpoint=query_endpoint if cache_estimate else endpoint,
                         schema_info=schema_info
                     )
                     uncertainty = estimate.uncertainty_score
@@ -432,11 +519,25 @@ class LLMLabelingThread(threading.Thread):
                 error=str(e)
             )
 
+    @staticmethod
+    def _label_hint(schema_info: Dict[str, Any]) -> str:
+        """What the prompt tells the model to put in its "label" field."""
+        atype = schema_info.get('annotation_type')
+        if atype == 'multiselect':
+            return "comma-separated list of ALL applicable labels"
+        if atype == 'span':
+            return ('JSON array of objects like '
+                    '[{"text": "<exact substring copied from the text>", '
+                    '"label": "<one of the available labels>"}] '
+                    'for every span to mark; use [] if nothing applies')
+        return "your label"
+
     def _build_full_prompt(
         self,
         text: str,
         labels: str,
         schema_info: Dict[str, Any],
+        base_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Assemble the full prompt sent to the LLM for one instance, and
         return it alongside its component sections.
@@ -446,9 +547,12 @@ class LLMLabelingThread(threading.Thread):
         prompt preview (which only displays) call it, so what the user sees
         is exactly what the model is given. The base prompt is re-fetched
         here via ``prompt_getter`` so the preview reflects the current
-        prompt version.
+        prompt version. ``_label_instance`` passes ``base_prompt`` so a
+        ``prompt_override`` (gold-set evaluation, draft trial) is honoured.
         """
-        base_prompt = self.prompt_getter() or ""
+        if base_prompt is None:
+            base_prompt = self.prompt_getter() or ""
+        label_hint = self._label_hint(schema_info)
 
         # Transparently augment the user's prompt with the project's
         # structured codebook (definitions / include / exclude / worked
@@ -509,7 +613,7 @@ Available labels: {labels}
 
 Respond with JSON. If you are uncertain about the label (confidence below 75), also identify a generalizable edge case rule that describes when this type of ambiguity occurs:
 {{
-    "label": "<your label or -1 if unclassifiable>",
+    "label": "<{label_hint}, or -1 if unclassifiable>",
     "confidence": <0-100>,
     "reasoning": "<brief explanation>",
     "is_edge_case": <true if this is an ambiguous/edge case, false otherwise>,
@@ -526,7 +630,7 @@ Available labels: {labels}
 
 Respond with JSON:
 {{
-    "label": "<your label>",
+    "label": "<{label_hint}>",
     "confidence": <0-100>,
     "reasoning": "<brief explanation>"
 }}
@@ -680,16 +784,109 @@ Respond with JSON:
         except Exception:
             return ""
 
+    def _response_model(self, schema_info: Dict[str, Any], request_edge_case: bool):
+        """The JSON reply the labeling prompt asks for, as a Pydantic model.
+
+        Backends that enforce a response schema produce only the fields it
+        names. The schema used to have label, confidence and reasoning alone,
+        so under vLLM's guided decoding the is_edge_case and edge_case_rule
+        fields the prompt asked for never came back, and edge-case discovery
+        during labeling did nothing.
+
+        Every field is listed as required in the JSON schema, so guided
+        decoding cannot omit one. The Pydantic defaults stay, so a backend
+        that does not enforce the schema can still omit them.
+        """
+        from typing import List, Literal
+        from pydantic import ConfigDict, create_model
+
+        atype = schema_info.get('annotation_type')
+        valid = self._get_valid_labels(schema_info)
+        if not valid:
+            label_type, label_default = str, ''
+        elif atype == 'span':
+            span_model = create_model(
+                'SpanResponse',
+                text=(str, ...),
+                label=(Literal[tuple(valid)], ...),
+            )
+            label_type, label_default = List[span_model], []
+        elif atype == 'multiselect':
+            label_type, label_default = List[Literal[tuple(valid)]], []
+        else:
+            # The edge-case prompt allows -1 for "unclassifiable".
+            choices = tuple(valid) + (('-1',) if request_edge_case else ())
+            label_type, label_default = Literal[choices], valid[0]
+
+        fields = {
+            'label': (label_type, label_default),
+            'confidence': (float, 50.0),
+            'reasoning': (str, ''),
+        }
+        if request_edge_case:
+            fields['is_edge_case'] = (bool, False)
+            fields['edge_case_rule'] = (str, '')
+        return create_model(
+            'LabelResponse',
+            __config__=ConfigDict(json_schema_extra={'required': list(fields)}),
+            **fields,
+        )
+
+    def _label_with_decision_model(self, instance_id, text, schema_name,
+                                   schema_info, prompt, endpoint):
+        """Label with a decision model (systemone, laya): one forward pass.
+
+        The model returns a probability for every option, so its confidence
+        is the probability of the chosen one and no uncertainty estimator
+        runs: those ask a generative model a follow-up question, which a
+        decision model cannot answer.
+        """
+        from potato.ai.decision_endpoint import (
+            UnsupportedSchemeError, questions_for_scheme)
+
+        model_name = getattr(endpoint, 'model', '')
+        prompt_version = 0
+        if self.prompt_version_getter:
+            try:
+                prompt_version = self.prompt_version_getter()
+            except Exception:
+                pass
+        try:
+            questions = questions_for_scheme(schema_info, instructions=prompt)
+            answer = endpoint.decide(text, questions)[0]
+        except UnsupportedSchemeError as e:
+            return LabelingResult(
+                instance_id=instance_id, schema_name=schema_name, label=None,
+                confidence=0, uncertainty=1, reasoning='', prompt_version=0,
+                model_name=model_name, error=str(e))
+
+        top = sorted(answer.probabilities.items(), key=lambda kv: -kv[1])[:3]
+        reasoning = 'Decision model probabilities: ' + ', '.join(
+            f'{label} {p:.2f}' for label, p in top)
+        confidence = max(0.0, min(1.0, float(answer.confidence)))
+        return LabelingResult(
+            instance_id=instance_id,
+            schema_name=schema_name,
+            label=str(answer.value),
+            confidence=confidence,
+            uncertainty=1.0 - confidence,
+            reasoning=reasoning,
+            prompt_version=prompt_version,
+            model_name=model_name,
+        )
+
     def _extract_labels(self, schema_info: Dict[str, Any]) -> str:
-        """Extract label names from schema."""
-        labels = schema_info.get('labels', [])
-        label_names = []
-        for label in labels:
-            if isinstance(label, str):
-                label_names.append(label)
-            elif isinstance(label, dict):
-                label_names.append(label.get('name', str(label)))
-        return ', '.join(label_names)
+        """Extract label names from schema (for the prompt)."""
+        labels = self._get_valid_labels(schema_info)
+        # For a likert scale, hint the endpoints so the model knows the direction.
+        if (not schema_info.get('labels')
+                and schema_info.get('annotation_type') == 'likert'
+                and schema_info.get('size')):
+            lo = schema_info.get('min_label', '')
+            hi = schema_info.get('max_label', '')
+            hint = f" (1 = {lo}, {schema_info['size']} = {hi})" if (lo or hi) else ""
+            return ', '.join(labels) + hint
+        return ', '.join(labels)
 
     def _get_valid_labels(self, schema_info: Dict[str, Any]) -> List[str]:
         """Get valid label list from schema."""
@@ -700,20 +897,23 @@ Respond with JSON:
                 valid.append(label)
             elif isinstance(label, dict):
                 valid.append(label.get('name', str(label)))
+        # Likert scales carry size + min/max labels rather than a label list;
+        # derive numeric scale points so the model has valid options to choose.
+        if (not valid
+                and schema_info.get('annotation_type') == 'likert'
+                and schema_info.get('size')):
+            valid = [str(i) for i in range(1, int(schema_info['size']) + 1)]
         return valid
 
     def _fuzzy_match_label(self, label, valid: List[str]) -> Optional[str]:
-        """Try to match label to valid labels. Handles non-string inputs gracefully."""
-        if label is None:
-            return None
+        """Match a model's label to a valid one (the engine's matcher, which
+        also ignores quotes and a trailing period). Non-strings that are not
+        labels return None."""
+        from potato.labeling_engine.schemes import normalize_label
         try:
-            label_lower = str(label).lower().strip()
+            return normalize_label(label, [str(v) for v in valid])
         except Exception:
             return None
-        for v in valid:
-            if str(v).lower().strip() == label_lower:
-                return v
-        return None
 
     def _parse_edge_case_rule(self, rule_text: str) -> tuple:
         """Parse a rule in 'When <condition> -> <action>' format.
@@ -742,23 +942,25 @@ Respond with JSON:
         return rule_text.strip(), ""
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON from response."""
+        """Parse a reply into a dict with the shared parser.
+
+        It handles prose before the JSON, ``<think>`` blocks and fences, which
+        the private parser this replaced did not: those replies came back as
+        ``{'label': <the whole reply>}`` and failed label validation.
+        """
+        from potato.ai.ai_endpoint import parse_llm_json
+
         content = response.strip()
-
-        if '```json' in content:
-            match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
-            if match:
-                content = match.group(1).strip()
-        elif '```' in content:
-            match = re.search(r'```\s*([\s\S]*?)\s*```', content)
-            if match:
-                content = match.group(1).strip()
-
         try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            # Try to extract just the label
+            parsed = parse_llm_json(content)
+        except ValueError:
+            return {'label': ''}
+        if not isinstance(parsed, dict):
             return {'label': content}
+        if set(parsed) == {'response'}:
+            # No JSON in the reply: treat the bare text as the label.
+            return {'label': str(parsed['response']).strip()}
+        return parsed
 
     def get_stats(self) -> Dict[str, Any]:
         """Get labeling statistics."""

@@ -2,7 +2,8 @@
 
 Demonstrates the **universal Memos sidebar**: free-text analytic notes
 attached to an instance or to a specific text selection, with
-per-memo visibility (`private` = author + admins; `shared` = peers too).
+per-memo visibility (`private` = the author plus adjudicators listed in
+`adjudication.adjudicator_users`; `shared` = every annotator).
 
 ```bash
 python potato/flask_server.py start \
@@ -16,6 +17,13 @@ python potato/flask_server.py start \
 - Select some text first, then add a note — the composer offers to
   **anchor** the memo to that selection (character offsets are stored).
 - Navigate away and back: your notes persist (stored server-side).
+- Highlight the words behind your choice with the `evidence` span scheme,
+  then export the coded passages with your notes beside them:
+
+  ```bash
+  python -m potato.export --config examples/advanced/memos-example/config.yaml \
+    --format quotation_report --output ./export/ --option include_memos=true
+  ```
 
 This example sets `annotation_ui.visibility: private`. See the
 inter-annotator bias caution before using `shared`.

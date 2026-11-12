@@ -1,0 +1,208 @@
+# Reviewing Model Output
+
+Model pre-labels, then human QC — check the least confident, correct what is
+wrong, ship. This is how most annotation pipelines run once there is a model
+worth running.
+
+Potato had the parts and not the workflow. `ai_prelabel` writes predictions,
+active learning ranks by uncertainty, curation slices the data, and
+adjudication compares one human against another. Comparing a human against the
+model had no home.
+
+---
+
+## Quick start
+
+```yaml
+assignment_strategy: model_review
+pre_annotation:
+  enabled: true
+  field: predictions
+```
+
+Annotators are now served prelabelled items least-confident first.
+Prelabels can also come from [model training](model_training.md): its
+write-back puts predictions in the same `predictions` field by default.
+
+> **Successor in 2.11:** `pre_annotation` still works in 2.11 and is planned for
+> removal in 3.0. In the [labeling engine](../labeling-engine/overview.md),
+> existing predictions are a `static` source.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
+
+The report:
+
+```bash
+curl -H "X-API-Key: $KEY" http://localhost:8000/admin/model-review
+```
+
+```json
+{
+  "n_items": 12,
+  "n_prelabelled": 9,
+  "queue": ["r00", "r01", "r02", "..."],
+  "worst_first": ["r00", "r01"],
+  "empty_prediction_ids": ["r03", "r07", "r11"],
+  "n_empty": 3,
+  "metrics": { "precision": null, "recall": null, "..." : "..." }
+}
+```
+
+---
+
+## Two separate review jobs
+
+### Worst-first review
+
+An item's rank is its **lowest** prediction confidence. One bad box makes an
+item worth reviewing even beside nine good ones, and a mean would average that
+signal away.
+
+Items whose predictions carry no confidence sort after the ones that do. A
+model that does not report confidence is not thereby unsure, and treating it as
+confidence zero fills the worst-first queue with items nobody has a reason to
+doubt.
+
+A trainer's `acquisition` score (see
+[Choosing what to ask next](model_training.md#choosing-what-to-ask-next)) does
+not change this order. It ranks the items most worth labelling, and a
+core-set score in particular can put a confidently right prediction first.
+The `llm_confidence` strategy uses it.
+
+The convention is to check the worst 10–20%. `worst_first` is the least
+confident 20% of the queue, and never fewer than one item.
+
+### Items the model said nothing about
+
+A wrong prediction is visible in a review UI. It is right there, wrong. A
+missing prediction is invisible: the reviewer sees an empty item and moves on.
+
+A confidence-ordered queue cannot surface one either, since an item with no
+prediction has no confidence to be low. So missing detections survive review
+unless someone goes looking for them.
+
+Potato ships a built-in slice for that, `model-found-nothing`. You do not
+have to save it, but it lives in the curation catalog, so the project needs
+`curation: {enabled: true}`; without it the `/admin/catalog` routes are not
+registered. See [Semantic curation](../agent-evaluation/semantic_curation.md).
+
+```bash
+curl -H "X-API-Key: $KEY" \
+  "http://localhost:8000/admin/catalog/api/slices/model-found-nothing/resolve"
+```
+
+It appears in `/admin/catalog` alongside your own slices, and can become a
+review dataset through the normal slice-to-dataset path. With model training
+on, "Train on these" pins it to the next runs' training data (see
+[Semantic curation](../agent-evaluation/semantic_curation.md#train-on-a-slice)).
+
+`GET /admin/model-review` names, under `provenance`, the training run behind
+each prelabel in the queue: its id, trainer and held-out score.
+
+!!! note "An empty prediction list is an answer"
+    `"predictions": {"boxes": []}` means the model looked and found nothing.
+    That is what puts an item in the pool. An item with no `predictions` key at
+    all counts the same way.
+
+---
+
+## Verdicts
+
+A reviewer's judgement of a prelabel is stored separately from an annotation.
+Verdicts are posted to the API; the annotation page has no verdict buttons.
+
+```bash
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: $ADMIN_KEY" \
+     -d '{"instance_id": "r00", "verdict": "accept", "schema_name": "tone"}' \
+     http://localhost:8000/api/model-review/verdict
+```
+
+An annotator's session can record a verdict only on an item assigned to
+them; an admin with `X-API-Key` can record one on any item. Anything else
+gets `403`, as does a request from another site's page.
+
+| Verdict | Meaning |
+|---|---|
+| `accept` | The model was right |
+| `correct` | Partly right; the human changed something |
+| `reject` | Wrong |
+
+"The model was right" and "a human independently chose this label" are
+different facts. Storing the first as the second makes model precision
+unmeasurable, because every accepted prelabel then looks like human work.
+
+A `correct` verdict also moves the item into the `train` split of every
+later [training run](model_training.md#corrections-and-pinned-items-always-train),
+so a correction teaches the next model and is never used to score it.
+
+A verdict records whether the item showed a prelabel when it was given. A
+`reject` takes the prelabel down, and the item then reads as empty; the
+verdict still counts as a rejected prelabel, not as something the model
+missed. Verdicts stored before 2.14 did not record this, and a `reject`
+among them counts as a rejected prelabel when training still holds a
+prediction for that item.
+
+Re-reviewing replaces a verdict rather than appending, so an annotator who
+changes their mind is counted once. An unknown verdict is refused: a silently
+stored typo would make the precision denominator wrong with nothing to show
+for it.
+
+---
+
+## Precision and recall
+
+**Precision** is the accepted share of reviewed prelabels. A *corrected*
+prelabel does not count as a true positive — it was partly wrong, and counting
+corrections as correct lets a model that is always nearly-right score
+perfectly.
+
+**Recall** requires someone to have opened the empty-prediction pool. Until
+they have, Potato reports:
+
+```json
+"recall": null,
+"recall_note": "The empty-prediction pool was not reviewed, so there is no
+                evidence about what the model missed and recall cannot be
+                computed. Sample it from the empty-prediction slice."
+```
+
+A recall computed over an unreviewed denominator would be an assumption
+reported as a measurement.
+
+Once the pool is sampled, a verdict on an item that showed no prelabel can only mean the reviewer
+found something the model had not, so each is a confirmed false negative and
+recall becomes computable. Only items a human actually opened count; anything
+else moves recall by assumption.
+
+Both sides are samples, so each is scaled to its own pool before recall is
+computed: the share of reviewed prelabelled items the model got right stands for
+every prelabelled item, and the share of reviewed empty items that held
+something stands for every empty item. One miss in 2 sampled empty items out of
+1,000 is about 500 misses, not 1. `recall_note` says what was sampled and
+scaled.
+
+Verdicts on empty items stay out of the precision denominator, so the model is
+not penalised for a prediction it never made. When two reviewers judge the same
+item, both verdicts count.
+
+---
+
+## Assignment behaviour
+
+`assignment_strategy: model_review` serves the queue. Items with no prediction
+are excluded from assignment; review those through the slice instead.
+
+The strategy is incompatible with `search.annotator_claim`, which lets
+annotators reorder a queue whose order is what makes it useful.
+
+---
+
+## Related
+
+- [AI Support](ai_support.md) — generating the prelabels
+- [Active Learning](active_learning_guide.md) — a different use of the same
+  uncertainty signal
+- [Near-Duplicate Detection](../advanced/near_duplicates.md) — the other
+  curation pass worth running before annotation starts
+- [AI Costs](ai_costs.md)

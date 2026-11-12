@@ -1,0 +1,133 @@
+/* volume_annotation: three linked slice views (static/volume-annotation.js). */
+
+.volume-annotation-container fieldset { min-width: 0; }
+
+.vol-toolbar,
+.vol-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.vol-toolbar .tool-btn[aria-pressed="true"],
+.vol-label-btn[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.vol-brush,
+.vol-window {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--text-dense);
+  color: var(--muted-foreground);
+}
+
+.vol-label-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--text-dense);
+  cursor: pointer;
+}
+
+.vol-label-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--vol-label-color, #e6553a);
+}
+
+.vol-views {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.vol-view-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-dense);
+  color: var(--muted-foreground);
+  margin-bottom: var(--space-xs);
+}
+
+.vol-view-name { font-weight: 600; color: var(--foreground); }
+
+/* Medical images are read on black in both themes. */
+.vol-stage {
+  position: relative;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.vol-stage:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+.vol-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+}
+
+.vol-overlay { cursor: crosshair; }
+[data-active-tool="navigate"] .vol-overlay { cursor: pointer; }
+
+.vol-slider { width: 100%; margin-top: var(--space-xs); }
+
+.vol-tags {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px var(--space-md);
+  margin: var(--space-md) 0 0;
+  font-size: var(--text-dense);
+}
+
+.vol-tags dt { color: var(--muted-foreground); }
+.vol-tags dd { margin: 0; color: var(--foreground); }
+
+.vol-shapes {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-sm) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--text-dense);
+}
+
+.vol-shapes li { display: flex; gap: var(--space-sm); align-items: center; }
+
+.vol-shape-go,
+.vol-shape-remove {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 2px var(--space-sm);
+  cursor: pointer;
+}
+
+.vol-status { min-height: 1.2em; font-size: var(--text-dense); color: var(--muted-foreground); }
+.vol-status[data-kind="error"] { color: var(--destructive-text); }
+
+.vol-help { font-size: var(--text-xs); color: var(--muted-foreground); }
+
+/* The form forces `color: inherit` on everything inside a fieldset, which
+   leaves Bootstrap's dark kbd chip with muted text on it. */
+.volume-annotation-container kbd {
+  background: var(--muted);
+  color: var(--foreground) !important;
+  border: 1px solid var(--border);
+  padding: 0 0.3em;
+}

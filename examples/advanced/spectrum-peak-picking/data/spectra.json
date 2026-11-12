@@ -1,0 +1,5 @@
+[
+  {"id": "nmr_ethyl_acetate", "note": "1H NMR at 400 MHz in CDCl3. Pick each multiplet's lines, give each picked peak its assignment and multiplicity, and integrate each multiplet (Integrate mode, then drag across it).", "spectrum": "spectra/ethyl_acetate_1h.jdx"},
+  {"id": "nmr_ethanol", "note": "1H NMR at 400 MHz in CDCl3. The suggested peaks came from automatic peak detection: accept the real ones, reject the solvent line at 7.26 ppm, and add any the detector missed.", "spectrum": "spectra/ethanol_1h.jdx"},
+  {"id": "ir_ethyl_benzoate", "note": "IR, transmittance. Pick the main bands and name the group each comes from (C=O stretch, C-O stretch ...).", "spectrum": "spectra/ethyl_benzoate_ir.csv"}
+]

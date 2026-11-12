@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Maze task (Forster, Guerrera & Elliot 2009; A-maze, Boyce, Futrell & Levy 2020)
+#
+# Each word of the sentence is paired with a distractor that cannot continue
+# it; the participant picks the word that does (E = left, I = right). The
+# first word is paired with x-x-x. A wrong choice ends the sentence
+# (on_error: stop). The time to choose is that word's reading time.
+#
+# Distractors are one per word in the `distractors` field. A-maze
+# distractors are normally generated with a language model; this example's
+# are written by hand.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/maze-task/config.yaml -p 8000
+
+annotation_task_name: "Maze task"
+
+data_files:
+  - data/sentences.jsonl
+
+item_properties:
+  id_key: id
+  text_key: sentence
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+
+assignment_strategy: fixed_order
+
+trial_timing:
+  enabled: true
+  fixation_ms: 300
+  iti_ms: 600
+  presentation:
+    mode: maze
+    field: sentence
+    distractor_field: distractors
+    maze_keys: {left: e, right: i}
+    on_error: stop
+
+annotation_schemes:
+  - annotation_type: pure_display
+    name: instructions
+    description: "Choose the word that continues the sentence."

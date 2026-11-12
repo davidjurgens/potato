@@ -71,6 +71,16 @@ class EventAnnotationManager {
         // Load existing events if any
         this.loadExistingEvents();
 
+        // Events saved before arguments carried their own text can only get it
+        // from the overlays, which do not exist yet when the list first renders.
+        // Redraw once, when the spans arrive.
+        document.addEventListener('potato:spansRendered', () => {
+            if (this.hasArgumentMissingText()) this.updateEventList();
+            // Arcs drawn before the spans arrived had nothing to anchor to,
+            // and a re-render of the spans replaces the overlays they used.
+            if (this.events.length > 0) this.renderArcsWhenReady();
+        });
+
         console.log(`[EventAnnotationManager] Initialization complete for schema: ${this.schemaName}`);
     }
 
@@ -258,11 +268,17 @@ class EventAnnotationManager {
         const start = parseInt(spanOverlay.dataset.start);
         const end = parseInt(spanOverlay.dataset.end);
 
-        // Get the original plain text from the data-original-text attribute
-        // This is the text that span offsets are based on
-        const textContent = document.getElementById('text-content');
-        if (textContent && textContent.dataset.originalText) {
-            return textContent.dataset.originalText.substring(start, end);
+        // The offsets index the text the span was drawn on. Under
+        // `instance_display` that is `#text-content-<field>`; the legacy
+        // `#text-content` still exists but holds the item's `text_key`, which
+        // is usually a title or an id. Reading the legacy node there returned a
+        // substring of the wrong (short) string -- almost always "" -- so every
+        // trigger and argument rendered as "?" from the moment it was created,
+        // and `trigger_text` was stored empty.
+        const original = this.resolveOriginalText(spanOverlay);
+        if (original) {
+            const slice = original.substring(start, end);
+            if (slice) return slice;
         }
 
         // Fallback: try to get text from the span overlay's own text content
@@ -274,6 +290,29 @@ class EventAnnotationManager {
 
         // Last fallback: use the span overlay's text content directly
         return spanOverlay.textContent || '';
+    }
+
+    /** The plain text the overlay's offsets are relative to. */
+    resolveOriginalText(spanOverlay) {
+        // The field this overlay belongs to, when the overlay container says so.
+        const overlayHost = spanOverlay.closest('[id^="span-overlays-"]');
+        if (overlayHost) {
+            const fieldKey = overlayHost.id.replace('span-overlays-', '');
+            const fieldText = document.getElementById(`text-content-${fieldKey}`);
+            if (fieldText && fieldText.dataset.originalText) {
+                return fieldText.dataset.originalText;
+            }
+        }
+
+        // A single span-target field is unambiguous.
+        const fields = document.querySelectorAll(
+            '.display-field[data-span-target="true"] [id^="text-content-"]');
+        if (fields.length === 1 && fields[0].dataset.originalText) {
+            return fields[0].dataset.originalText;
+        }
+
+        const legacy = document.getElementById('text-content');
+        return (legacy && legacy.dataset.originalText) || '';
     }
 
     selectTrigger(spanOverlay, spanData) {
@@ -368,9 +407,14 @@ class EventAnnotationManager {
             schema: this.schemaName,
             event_type: this.currentEventType,
             trigger_span_id: this.triggerSpan.id,
+            // `text` alongside `span_id` for the same reason `trigger_text` is
+            // stored below: the list is rendered before the span overlays are
+            // restored, so looking the text up by span id at render time
+            // returns null on every revisit and the row reads "intervention: ?".
             arguments: Object.entries(this.arguments).map(([role, span]) => ({
                 role: role,
-                span_id: span.id
+                span_id: span.id,
+                text: span.text
             })),
             properties: {
                 color: this.currentEventConfig?.color || '#dc2626',
@@ -438,8 +482,9 @@ class EventAnnotationManager {
             return;
         }
 
-        // Force a reflow by scrolling the instance text into view
-        const instanceText = document.getElementById('instance-text');
+        // Force a reflow by scrolling the instance text into view. The same host
+        // the arcs are drawn in -- scrolling a display:none node does nothing.
+        const instanceText = this.resolveTextHost();
         if (instanceText && attempt === 0) {
             instanceText.scrollIntoView({ behavior: 'instant', block: 'center' });
             // Force synchronous reflow
@@ -512,8 +557,8 @@ class EventAnnotationManager {
 
         if (!this.textWrapper) {
             console.warn('[EventAnnotationManager] textWrapper not available for caching');
-            // Try to find it
-            const instanceText = document.getElementById('instance-text');
+            // Try to find it, in the same host createArcsContainer used.
+            const instanceText = this.resolveTextHost();
             if (instanceText) {
                 this.textWrapper = instanceText.querySelector('.event-annotation-text-wrapper');
                 console.log(`[EventAnnotationManager] Found textWrapper: ${!!this.textWrapper}`);
@@ -607,7 +652,31 @@ class EventAnnotationManager {
         }
     }
 
-    async syncToBackend() {
+    /** Store the model's events as the annotator's when they move on, as
+     *  span prelabels are; see SpanLinkManager.commitPrelabels. */
+    async commitPrelabels() {
+        if (!this.events.some(e => e.prelabel)) return;
+        // A model's event loses an argument whose span the annotator
+        // deleted, and goes entirely when its trigger was deleted.
+        const live = typeof window.potatoLiveSpanIds === 'function'
+            ? window.potatoLiveSpanIds() : null;
+        if (live) {
+            this.events = this.events.filter(e => !e.prelabel || live.has(e.trigger_span_id));
+            this.events.filter(e => e.prelabel).forEach(e => {
+                e.arguments = (e.arguments || []).filter(a => live.has(a.span_id));
+            });
+        }
+        await this.syncToBackend(true);
+    }
+
+    async syncToBackend(committingPrelabels = false) {
+        // Saving stores every event shown, a model's included.
+        this.events.forEach(e => { delete e.prelabel; });
+        // On an edit, the other schemes' prelabels first: the server offers
+        // none once the annotator has stored an event (annotation.js).
+        if (!committingPrelabels && typeof window.commitAllPrelabels === 'function') {
+            await window.commitAllPrelabels();
+        }
         const instanceId = window.currentInstanceId || this.getInstanceId();
         if (!instanceId) {
             console.error('[EventAnnotationManager] No instance ID found');
@@ -658,7 +727,13 @@ class EventAnnotationManager {
         return null;
     }
 
-    async loadExistingEvents() {
+    /** Show the events stored now (a teammate's change in a live session). */
+    reload() {
+        return this.loadExistingEvents({ force: true });
+    }
+
+    async loadExistingEvents(options) {
+        const force = !!(options && options.force);
         const instanceId = window.currentInstanceId || this.getInstanceId();
         if (!instanceId) {
             console.warn('[EventAnnotationManager] No instance ID for loading events');
@@ -666,7 +741,7 @@ class EventAnnotationManager {
         }
 
         // Prevent loading if we've already loaded for this instance
-        if (this._loadedForInstance === instanceId && this.events.length > 0) {
+        if (!force && this._loadedForInstance === instanceId && this.events.length > 0) {
             console.log(`[EventAnnotationManager] Already loaded events for instance ${instanceId}, skipping`);
             return;
         }
@@ -695,6 +770,9 @@ class EventAnnotationManager {
                     }
 
                     this.events = uniqueEvents;
+                    if (uniqueEvents.some(e => e.prelabel)) {
+                        this.prelabelsOffered = true;
+                    }
                     this._loadedForInstance = instanceId;
                     this.updateEventDataInput();
                     this.updateUI();
@@ -702,8 +780,15 @@ class EventAnnotationManager {
                     console.log(`[EventAnnotationManager] Loaded ${this.events.length} unique events`);
                 } else {
                     console.log(`[EventAnnotationManager] No events returned from server`);
+                    const had = this.events.length > 0;
                     this.events = [];
                     this._loadedForInstance = instanceId;
+                    if (had) {
+                        // A reload after the last event was removed elsewhere.
+                        this.updateEventDataInput();
+                        this.updateUI();
+                        this.renderArcs();
+                    }
                 }
             } else {
                 console.log(`[EventAnnotationManager] Server returned status: ${response.status}`);
@@ -716,6 +801,16 @@ class EventAnnotationManager {
     async deleteEvent(eventId) {
         const instanceId = window.currentInstanceId || this.getInstanceId();
         if (!instanceId) return;
+
+        const removed = this.events.find(e => e.id === eventId);
+        if (removed && removed.prelabel) {
+            // Never stored; nothing to delete on the server.
+            this.events = this.events.filter(e => e.id !== eventId);
+            this.updateEventDataInput();
+            this.updateUI();
+            this.renderArcs();
+            return;
+        }
 
         try {
             const response = await fetch(`/api/events/${instanceId}/${eventId}`, {
@@ -857,7 +952,9 @@ class EventAnnotationManager {
                         </div>`;
 
             for (const arg of event.arguments || []) {
-                const spanText = this.getSpanTextById(arg.span_id);
+                // Stored text first; overlay lookup only for events saved before
+                // arguments carried their text.
+                const spanText = arg.text || this.getSpanTextById(arg.span_id);
                 html += `
                     <div class="event-argument-info">
                         <span class="argument-role">${this.escapeHtml(arg.role)}:</span>
@@ -879,12 +976,53 @@ class EventAnnotationManager {
         });
     }
 
+    /** Any argument still showing "?" that a rendered overlay could now name. */
+    hasArgumentMissingText() {
+        return this.events.some(event =>
+            (event.arguments || []).some(arg => !arg.text));
+    }
+
     getSpanTextById(spanId) {
         const overlay = document.querySelector(`[data-annotation-id="${CSS.escape(spanId)}"]`);
         if (overlay) {
             return this.getSpanText(overlay);
         }
         return null;
+    }
+
+    /**
+     * The element whose content the arcs are drawn above.
+     *
+     * `#instance-text` is the legacy container, and it is what this used to
+     * hardcode. With `instance_display` configured the template still emits
+     * `#instance-text` but sets `display: none` on it and renders the real
+     * content into `.display-field` / `#text-content-<field>` elements instead
+     * — so the arc container was built inside a hidden div, measured zero high,
+     * and drew nothing. The "Show event arcs above text" checkbox and the
+     * `visual_display` config key both stayed visible and did nothing, and
+     * because the pack tells authors to use `instance_display` for anything
+     * beyond plain text classification, the normal configuration was the
+     * broken one.
+     *
+     * Prefer the span-target field the events actually anchor into; arcs join
+     * two spans, so any other field would be the wrong place to draw them.
+     */
+    resolveTextHost() {
+        const legacy = document.getElementById('instance-text');
+        const legacyIsVisible = legacy && !legacy.closest('[style*="display: none"]');
+        if (legacyIsVisible) return legacy;
+
+        // instance_display: the field the spans live in.
+        const spanFields = document.querySelectorAll(
+            '.display-field[data-span-target="true"]');
+        for (const field of spanFields) {
+            const content = field.querySelector('.display-field-content');
+            if (content) return content;
+        }
+
+        // Nothing better available. Returning the hidden legacy node keeps the
+        // previous behaviour rather than throwing.
+        return legacy;
     }
 
     createArcsContainer() {
@@ -898,11 +1036,11 @@ class EventAnnotationManager {
             return;
         }
 
-        const instanceText = document.getElementById('instance-text');
-        console.log(`[EventAnnotationManager] instanceText found: ${!!instanceText}`);
+        const instanceText = this.resolveTextHost();
+        console.log(`[EventAnnotationManager] arc host: ${instanceText ? instanceText.id || instanceText.className : 'none'}`);
 
         if (!instanceText) {
-            console.warn(`[EventAnnotationManager] instance-text element not found!`);
+            console.warn(`[EventAnnotationManager] no text container found to draw arcs in!`);
             return;
         }
 

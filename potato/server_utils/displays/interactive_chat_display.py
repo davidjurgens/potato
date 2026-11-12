@@ -5,9 +5,11 @@ Renders either a live chat panel (when conversation data is null/empty)
 or a completed dialogue (when conversation data is populated).
 
 Before the annotator finishes chatting, this shows the chat UI.
-After clicking "Finish & Annotate", the route writes the conversation
-into the item data, and this display renders the completed conversation
-using DialogueDisplay (which supports per-turn ratings).
+After clicking "Finish & Annotate", the route stores the conversation for
+that annotator and item (potato/agent_chat_store.py), the page render puts
+it on that annotator's view of the item only, and this display renders the
+completed conversation using DialogueDisplay (which supports per-turn
+ratings). Every other annotator of the item still gets an empty panel.
 """
 
 import html
@@ -23,6 +25,13 @@ _dialogue_display = DialogueDisplay()
 class InteractiveChatDisplay(BaseDisplay):
     """
     Display type for interactive agent chat sessions.
+
+    This is the only thing that puts an `agent_proxy` chat on a page. The
+    `agent_proxy` block configures the backend and logs that it initialised;
+    the panel itself (`#agent-chat-panel`, which agent-chat.js looks for)
+    exists only where a field of this type is rendered. A config with
+    `agent_proxy` and no such field boots cleanly, loads the chat assets, and
+    shows the annotator nothing.
 
     When data is null/empty: renders a chat panel placeholder
     (the actual chat UI is handled by agent-chat.js).

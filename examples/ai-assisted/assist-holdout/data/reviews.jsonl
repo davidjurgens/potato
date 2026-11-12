@@ -1,0 +1,10 @@
+{"id": "r01", "text": "Arrived quickly and works exactly as described.", "predictions": {"sentiment": "positive"}}
+{"id": "r02", "text": "Broke after two days. Would not buy again.", "predictions": {"sentiment": "negative"}}
+{"id": "r03", "text": "Good sound, but the battery barely lasts an hour.", "predictions": {"sentiment": "positive"}}
+{"id": "r04", "text": "Customer service never answered my emails.", "predictions": {"sentiment": "negative"}}
+{"id": "r05", "text": "Fine for the price, nothing special.", "predictions": {"sentiment": "positive"}}
+{"id": "r06", "text": "Love the design; the app is confusing though.", "predictions": {"sentiment": "positive"}}
+{"id": "r07", "text": "Exactly what I needed for my kitchen.", "predictions": {"sentiment": "positive"}}
+{"id": "r08", "text": "The color was nothing like the photos.", "predictions": {"sentiment": "negative"}}
+{"id": "r09", "text": "Comfortable, but the stitching came loose.", "predictions": {"sentiment": "negative"}}
+{"id": "r10", "text": "Five stars, already ordered a second one.", "predictions": {"sentiment": "positive"}}

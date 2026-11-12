@@ -10,6 +10,7 @@ from potato.webhooks.events import (
     TASK_COMPLETED,
     USER_PHASE_COMPLETED,
     QUALITY_ATTENTION_CHECK_FAILED,
+    MEMO_ISSUE_ASSIGNED,
     build_annotation_payload,
     build_item_fully_annotated_payload,
     build_task_completed_payload,
@@ -27,6 +28,7 @@ class TestEventConstants:
             TASK_COMPLETED,
             USER_PHASE_COMPLETED,
             QUALITY_ATTENTION_CHECK_FAILED,
+            MEMO_ISSUE_ASSIGNED,
         }
         assert set(ALL_EVENTS) == expected
 

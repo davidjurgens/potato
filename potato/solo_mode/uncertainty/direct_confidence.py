@@ -92,11 +92,13 @@ Respond in JSON format:
             else:
                 response_data = response
 
-            confidence = float(response_data.get('confidence', 50))
+            from potato.solo_mode.llm_labeler import normalize_confidence
+
+            confidence = response_data.get('confidence', 50)
             reasoning = response_data.get('reasoning', '')
 
-            # Normalize to 0-1 range
-            confidence_score = max(0.0, min(100.0, confidence)) / 100.0
+            # 0-1 and 0-100 replies both normalise to [0, 1].
+            confidence_score = normalize_confidence(confidence)
             uncertainty_score = 1.0 - confidence_score
 
             return UncertaintyEstimate(
@@ -124,6 +126,17 @@ Respond in JSON format:
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON from response, handling markdown code blocks."""
+        from potato.ai.ai_endpoint import parse_llm_json
+
+        # The shared parser also reads JSON after prose or a <think> block,
+        # which the fence-only code below gave up on.
+        try:
+            parsed = parse_llm_json(response)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict) and set(parsed) != {'response'}:
+            return parsed
+
         content = response.strip()
 
         # Try to extract JSON from markdown code blocks

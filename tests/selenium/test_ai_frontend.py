@@ -85,7 +85,6 @@ annotation_schemes:
         key_value: u
 
 output_annotation_dir: {cls.test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(cls.test_dir, "config.yaml")
         with open(config_file, 'w') as f:
@@ -273,7 +272,6 @@ annotation_schemes:
       - negative
 
 output_annotation_dir: {cls.test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(cls.test_dir, "config.yaml")
         with open(config_file, 'w') as f:
@@ -436,7 +434,6 @@ ai_support:
       on_prev: 0
 
 output_annotation_dir: {cls.test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(cls.test_dir, "config.yaml")
         with open(config_file, 'w') as f:

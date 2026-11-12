@@ -1,0 +1,31 @@
+.counter-plugin-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm, 8px);
+}
+
+.counter-plugin-value {
+    width: 5em;
+    text-align: center;
+}
+
+.counter-plugin-step {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 6px);
+    background: var(--card, #fff);
+    font-size: var(--text-lg, 18px);
+    cursor: pointer;
+}
+
+.counter-plugin-step:focus-visible {
+    outline: 2px solid var(--ring, #6E56CF);
+    outline-offset: 2px;
+}
+
+.word-count-total {
+    margin-top: var(--space-xs, 4px);
+    color: var(--muted-foreground, #71717a);
+    font-size: var(--text-sm, 14px);
+}

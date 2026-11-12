@@ -13,6 +13,25 @@
  *   displayLogicManager.evaluateAll();
  */
 
+/**
+ * A number the way display_logic.py reads one: "3abc", "" and booleans are
+ * not numbers (parseFloat would read "3abc" as 3).
+ */
+function dlStrictNumber(value) {
+    if (value === null || value === undefined || typeof value === 'boolean' ||
+            Array.isArray(value)) { return NaN; }
+    if (typeof value === 'number') { return value; }
+    const text = String(value).trim();
+    return text === '' ? NaN : Number(text);
+}
+
+/** Characters in a text answer; items in a list answer (as in Python). */
+function dlAnswerLength(value) {
+    if (value === null || value === undefined) { return 0; }
+    if (Array.isArray(value)) { return value.length; }
+    return String(value).length;
+}
+
 class DisplayLogicManager {
     constructor() {
         // Map of schema name -> display logic configuration
@@ -87,7 +106,7 @@ class DisplayLogicManager {
      */
     buildDependencyGraph() {
         this.displayLogicRules.forEach((rule, schemaName) => {
-            const conditions = rule.show_when || [];
+            const conditions = this.leafConditions(rule.show_when);
 
             conditions.forEach(condition => {
                 const watchedSchema = condition.schema;
@@ -150,50 +169,165 @@ class DisplayLogicManager {
      * @returns {Object} Current annotations keyed by schema name
      */
     getCurrentAnnotations() {
-        // Try to get from global currentAnnotations (set by annotation.js)
-        if (typeof currentAnnotations !== 'undefined' && currentAnnotations) {
-            // Transform from {schema: {label: value}} to {schema: value}
-            const result = {};
-
-            for (const [schema, labels] of Object.entries(currentAnnotations)) {
-                // For radio/select: single value
-                // For multiselect: array of selected values
-                // For text/slider: direct value
-
-                if (labels && typeof labels === 'object') {
-                    // Check if it's a radio (single selection)
-                    const selectedLabels = [];
-                    let textValue = null;
-
-                    for (const [label, value] of Object.entries(labels)) {
-                        if (value === true || value === 'true' || value === 1) {
-                            selectedLabels.push(label);
-                        } else if (typeof value === 'string' || typeof value === 'number') {
-                            // Text or numeric value
-                            textValue = value;
-                        }
-                    }
-
-                    if (selectedLabels.length === 1) {
-                        // Single selection (radio)
-                        result[schema] = selectedLabels[0];
-                    } else if (selectedLabels.length > 1) {
-                        // Multiple selections (multiselect)
-                        result[schema] = selectedLabels;
-                    } else if (textValue !== null) {
-                        // Text/numeric input
-                        result[schema] = textValue;
-                    }
-                } else if (labels !== null && labels !== undefined) {
-                    result[schema] = labels;
-                }
+        // Cross-page conditions: answers from earlier SurveyFlow phases are
+        // injected by the server as window.priorPhaseAnswersRaw in the SAME
+        // nested {schema: {label: value}} shape as currentAnnotations. They form
+        // the base layer; answers on the CURRENT page override them.
+        let result = {};
+        // The participant's between-subjects condition is the lowest layer,
+        // addressed as condition.<factor> (server: phase_flow.CONDITION_PREFIX).
+        if (typeof window !== 'undefined' && window.potatoConditions) {
+            for (const [factor, level] of Object.entries(window.potatoConditions)) {
+                result['condition.' + factor] = level;
             }
+        }
+        if (typeof window !== 'undefined' && window.priorPhaseAnswersRaw) {
+            Object.assign(result, this.transformRawAnnotations(window.priorPhaseAnswersRaw));
+        }
 
+        // Current-page answers (set by annotation.js)
+        if (typeof currentAnnotations !== 'undefined' && currentAnnotations) {
+            Object.assign(result, this.transformRawAnnotations(currentAnnotations));
             return result;
         }
 
-        // Fallback: scan DOM for current values
-        return this.getAnnotationsFromDOM();
+        // Fallback: scan DOM for current-page values, still layered over prior answers
+        Object.assign(result, this.getAnnotationsFromDOM());
+        return result;
+    }
+
+    /**
+     * Transform a raw annotations object from the {schema: {label: value}} shape
+     * used by currentAnnotations into the flat {schema: comparableValue} shape
+     * that condition evaluation expects (radio/select/text -> scalar,
+     * multiselect -> array of selected labels).
+     *
+     * @param {Object} raw - Annotations keyed by schema then label
+     * @returns {Object} Flattened annotations keyed by schema
+     */
+    transformRawAnnotations(raw, typeHints) {
+        const result = {};
+        if (!raw || typeof raw !== 'object') {
+            return result;
+        }
+        const hints = typeHints || this.getSchemaTypeHints();
+
+        for (const [schema, labels] of Object.entries(raw)) {
+            if (labels && typeof labels === 'object') {
+                const value = DisplayLogicManager.collapseEntries(
+                    Object.entries(labels), hints[schema]);
+                if (value !== null && value !== undefined) {
+                    result[schema] = value;
+                }
+            } else if (labels !== null && labels !== undefined) {
+                result[schema] = labels;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Collapse one schema's [label, value] entries to a comparable value.
+     *
+     * Mirrors potato/server_utils/answer_collapse.py — see that module for why each
+     * rule exists. Kept in lockstep by tests/jest/display-logic-collapse.test.js,
+     * which drives both sides from tests/data/answer_collapse_cases.json.
+     *
+     * @param {Array} entries - [[labelName, value], ...]
+     * @param {string} [annotationType] - Enables the type-aware branches
+     * @returns {*} The comparable value, or null when there is nothing to compare
+     */
+    static collapseEntries(entries, annotationType) {
+        // Rule 2: dedupe by label, last write wins.
+        const byLabel = new Map();
+        for (const [label, value] of entries || []) {
+            byLabel.set(label || '', value);
+        }
+
+        // Rule 1: free_response is a companion answer, not a competing option.
+        const main = [], exempt = [];
+        byLabel.forEach((value, label) => {
+            (DisplayLogicManager.EXEMPT_LABELS.has(label) ? exempt : main).push([label, value]);
+        });
+
+        if (main.length === 0) {
+            for (const [, value] of exempt) {
+                if (value !== null && value !== '' && value !== false) return value;
+            }
+            return null;
+        }
+
+        // A slider or number stores the answer itself: 1 is the number 1, not
+        // "the label was ticked".
+        const scalarType = DisplayLogicManager.SCALAR_TYPES.has(annotationType);
+        const selected = scalarType ? [] : main
+            .filter(([label, value]) => DisplayLogicManager.isSelected(label, value))
+            .map(([label]) => label);
+
+        if (annotationType === 'multiselect') {
+            // Presence means checked: unchecked boxes are deleted from state, not
+            // stored false. One selection stays scalar so `equals` keeps working.
+            // An entry stored as false is still an unchecked box.
+            const names = selected.length ? selected
+                : main.filter(([, v]) => !DisplayLogicManager.isUnchecked(v)).map(([label]) => label);
+            if (!names.length) return null;
+            return names.length === 1 ? names[0] : names;
+        }
+
+        // Rule 4: the label NAME is the canonical value for a selection.
+        if (selected.length === 1) return selected[0];
+        if (selected.length > 1) return selected;
+
+        const scalars = main
+            .map(([, value]) => value)
+            .filter(v => (typeof v === 'string' || typeof v === 'number')
+                         && typeof v !== 'boolean' && v !== '');
+        if (!scalars.length) return null;
+        // Post-#167 a single-select schema cannot hold several values; the browser
+        // has no behavioural trail, so last-in-order is the best it can do here.
+        return scalars[scalars.length - 1];
+    }
+
+    /** A stored value that explicitly says "not selected". */
+    static isUnchecked(value) {
+        if (value === null || value === undefined || value === false || value === 0) return true;
+        return typeof value === 'string'
+            && ['false', '0', 'off', 'no', ''].includes(value.trim().toLowerCase());
+    }
+
+    /** Rule 3: True/1/"true", or a value echoing its own label name. */
+    static isSelected(label, value) {
+        if (value === true) return true;
+        if (typeof value === 'boolean') return false;
+        if (value === 1) return true;
+        if (typeof value === 'string') {
+            if (value.toLowerCase() === 'true') return true;
+            if (label && value === label) return true;
+        }
+        return false;
+    }
+
+    /**
+     * {schema: annotation_type} for every schema the page knows about.
+     *
+     * Read from the DOM — every generator stamps data-schema-name and
+     * data-annotation-type on the schema <form> — layered over
+     * window.priorPhaseAnswerTypes for schemas answered on an earlier phase page.
+     */
+    getSchemaTypeHints() {
+        const hints = {};
+        if (typeof window !== 'undefined' && window.priorPhaseAnswerTypes) {
+            Object.assign(hints, window.priorPhaseAnswerTypes);
+        }
+        if (typeof document !== 'undefined') {
+            document.querySelectorAll('[data-schema-name][data-annotation-type]')
+                .forEach(el => {
+                    hints[el.getAttribute('data-schema-name')] =
+                        el.getAttribute('data-annotation-type');
+                });
+        }
+        return hints;
     }
 
     /**
@@ -201,64 +335,53 @@ class DisplayLogicManager {
      * @returns {Object} Annotations keyed by schema name
      */
     getAnnotationsFromDOM() {
-        const annotations = {};
+        // Build the same nested {schema: {label: value}} shape currentAnnotations uses,
+        // then run it through the one collapse. This used to be a third, subtly
+        // different implementation: it keyed radios on `input.value` rather than the
+        // label name, which is identical for radio/multiselect (value === label) but
+        // NOT for likert, whose value diverges from its label under key_value or
+        // sequential_key_binding. Reading label_name here makes divergence impossible
+        // by construction.
+        const raw = {};
+        const record = (input, value) => {
+            const schema = input.getAttribute('schema');
+            const label = input.getAttribute('label_name');
+            if (!schema) return;
+            if (!raw[schema]) raw[schema] = {};
+            raw[schema][label || ''] = value;
+        };
 
-        // Radio buttons
         document.querySelectorAll('input[type="radio"]:checked').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = input.value;
-            }
+            record(input, input.getAttribute('label_name') || input.value);
         });
-
-        // Checkboxes (multiselect)
-        const checkboxSchemas = new Map();
         document.querySelectorAll('input[type="checkbox"]:checked').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                if (!checkboxSchemas.has(schema)) {
-                    checkboxSchemas.set(schema, []);
-                }
-                checkboxSchemas.get(schema).push(input.value);
-            }
+            record(input, input.getAttribute('label_name') || input.value);
         });
-        checkboxSchemas.forEach((values, schema) => {
-            annotations[schema] = values;
-        });
-
-        // Text inputs
-        document.querySelectorAll('textarea.annotation-input, input[type="text"].annotation-input').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = input.value;
-            }
-        });
-
-        // Sliders
-        document.querySelectorAll('input[type="range"].annotation-input').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = parseFloat(input.value);
-            }
-        });
-
-        // Number inputs
-        document.querySelectorAll('input[type="number"].annotation-input').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = parseFloat(input.value);
-            }
-        });
-
-        // Select dropdowns
+        document.querySelectorAll(
+            'textarea.annotation-input, input[type="text"].annotation-input'
+        ).forEach(input => record(input, input.value));
+        document.querySelectorAll(
+            'input[type="range"].annotation-input, input[type="number"].annotation-input'
+        ).forEach(input => record(input, parseFloat(input.value)));
         document.querySelectorAll('select.annotation-input').forEach(select => {
-            const schema = select.getAttribute('schema');
-            if (schema && select.value) {
-                annotations[schema] = select.value;
-            }
+            if (select.value) record(select, select.value);
+        });
+        // Hidden inputs are the answer for every tile-based widget -- pairwise,
+        // bws, ranking, triage, and the rest of the `data-schema=` family. Without
+        // them a display_logic gate naming one of those schemas sees no answer at
+        // all on any page that reaches this fallback (phase pages, where
+        // annotation.js's currentAnnotations does not exist).
+        //
+        // Same data-modified/data-server-set guard syncAnnotationsFromDOM uses:
+        // browsers restore hidden input .value across a reload, which would
+        // otherwise leak the previous instance's answer into the gate.
+        document.querySelectorAll('input[type="hidden"].annotation-input').forEach(input => {
+            const touched = input.hasAttribute('data-modified')
+                || input.hasAttribute('data-server-set');
+            if (input.value && touched) record(input, input.value);
         });
 
-        return annotations;
+        return this.transformRawAnnotations(raw);
     }
 
     /**
@@ -275,16 +398,51 @@ class DisplayLogicManager {
         if (conditions.length === 0) {
             return true; // No conditions = always visible
         }
+        return this.evaluateItems(logic, conditions, annotations);
+    }
 
-        const results = conditions.map(condition => {
-            return this.evaluateCondition(condition, annotations);
+    /**
+     * `all` / `any` / `not` groups, mirroring display_logic.group_key on the
+     * server: an item without `schema` whose only key is one of those three.
+     */
+    groupKey(item) {
+        if (!item || typeof item !== 'object' || 'schema' in item) return null;
+        const keys = Object.keys(item);
+        if (keys.length !== 1) return null;
+        return ['all', 'any', 'not'].includes(keys[0]) ? keys[0] : null;
+    }
+
+    groupItems(item) {
+        const key = this.groupKey(item);
+        const inner = item[key];
+        if (key === 'not' && inner && !Array.isArray(inner)) return [inner];
+        return Array.isArray(inner) ? inner : [];
+    }
+
+    leafConditions(items) {
+        const out = [];
+        (items || []).forEach(item => {
+            if (this.groupKey(item)) {
+                out.push(...this.leafConditions(this.groupItems(item)));
+            } else if (item && typeof item === 'object') {
+                out.push(item);
+            }
         });
+        return out;
+    }
 
-        if (logic === 'all') {
-            return results.every(r => r);
-        } else {
-            return results.some(r => r);
-        }
+    evaluateItems(logic, items, annotations) {
+        const results = items.map(item => {
+            const key = this.groupKey(item);
+            if (key === 'not') {
+                return !this.evaluateItems('all', this.groupItems(item), annotations);
+            }
+            if (key) {
+                return this.evaluateItems(key, this.groupItems(item), annotations);
+            }
+            return this.evaluateCondition(item, annotations);
+        });
+        return logic === 'any' ? results.some(r => r) : results.every(r => r);
     }
 
     /**
@@ -352,6 +510,20 @@ class DisplayLogicManager {
             return this.checkLengthRange(actualValue, value);
         }
 
+        // Number of options selected
+        if (['count_gt', 'count_lt', 'count_equals'].includes(operator)) {
+            let n = 0;
+            if (!this.isEmpty(actualValue)) {
+                n = Array.isArray(actualValue) ? actualValue.length
+                    : (typeof actualValue === 'object' ? Object.keys(actualValue).length : 1);
+            }
+            const want = parseInt(value, 10);
+            if (Number.isNaN(want)) return false;
+            if (operator === 'count_gt') return n > want;
+            if (operator === 'count_lt') return n < want;
+            return n === want;
+        }
+
         console.warn('[DisplayLogic] Unknown operator:', operator);
         return false;
     }
@@ -389,6 +561,18 @@ class DisplayLogicManager {
     valuesEqual(actual, expected, caseSensitive) {
         if (actual === null || actual === undefined) {
             return expected === null || expected === undefined;
+        }
+        // A multiselect's list is not equal to one option (String(["a"]) is
+        // "a"); `contains` tests membership. Mirrors display_logic.py.
+        if (Array.isArray(actual)) {
+            return false;
+        }
+
+        // A number in the YAML (`value: 3`) against a form value, which is a
+        // string ("3"): compare as numbers. Mirrors display_logic.py.
+        if (typeof expected === 'number' && typeof actual !== 'boolean') {
+            const actualNum = Number(actual);
+            return String(actual).trim() !== '' && !isNaN(actualNum) && actualNum === expected;
         }
 
         // String comparison with case sensitivity
@@ -458,8 +642,8 @@ class DisplayLogicManager {
      * Check numeric comparison.
      */
     checkNumeric(operator, actual, expected) {
-        const actualNum = parseFloat(actual);
-        const expectedNum = parseFloat(expected);
+        const actualNum = dlStrictNumber(actual);
+        const expectedNum = dlStrictNumber(expected);
 
         if (isNaN(actualNum) || isNaN(expectedNum)) {
             return false;
@@ -482,9 +666,9 @@ class DisplayLogicManager {
             return false;
         }
 
-        const actualNum = parseFloat(actual);
-        const minVal = parseFloat(range[0]);
-        const maxVal = parseFloat(range[1]);
+        const actualNum = dlStrictNumber(actual);
+        const minVal = dlStrictNumber(range[0]);
+        const maxVal = dlStrictNumber(range[1]);
 
         if (isNaN(actualNum) || isNaN(minVal) || isNaN(maxVal)) {
             return false;
@@ -497,7 +681,7 @@ class DisplayLogicManager {
      * Check text length comparison.
      */
     checkLength(operator, actual, expected) {
-        const length = actual ? String(actual).length : 0;
+        const length = dlAnswerLength(actual);
         const expectedLen = parseInt(expected);
 
         if (isNaN(expectedLen)) {
@@ -522,7 +706,7 @@ class DisplayLogicManager {
             return false;
         }
 
-        const length = actual ? String(actual).length : 0;
+        const length = dlAnswerLength(actual);
         const minLen = parseInt(range[0]);
         const maxLen = parseInt(range[1]);
 
@@ -605,7 +789,7 @@ class DisplayLogicManager {
         }
 
         const annotations = this.getCurrentAnnotations();
-        const conditions = rule.show_when || [];
+        const conditions = this.leafConditions(rule.show_when);
         const reasons = conditions.map(cond => {
             const actual = annotations[cond.schema];
             return `${cond.schema} ${cond.operator} ${JSON.stringify(cond.value)} (actual: ${JSON.stringify(actual)})`;
@@ -685,7 +869,7 @@ class DisplayLogicManager {
 
             if (!visible) {
                 // Build reason string
-                const conditions = rule.show_when || [];
+                const conditions = this.leafConditions(rule.show_when);
                 const annotations = this.getCurrentAnnotations();
                 const reasons = conditions.map(cond => {
                     const actual = annotations[cond.schema];
@@ -714,6 +898,17 @@ class DisplayLogicManager {
     }
 }
 
+// Labels that coexist with a schema's real answer instead of competing with it.
+// Mirrors EXEMPT_LABEL_NAMES in potato/server_utils/answer_collapse.py.
+DisplayLogicManager.EXEMPT_LABELS = new Set(['free_response']);
+
+// Types whose stored value is the answer itself. Mirrors SCALAR_ANSWER_TYPES in
+// potato/server_utils/annotation_keys.py.
+DisplayLogicManager.SCALAR_TYPES = new Set([
+    'text', 'textbox', 'number', 'slider', 'range_slider', 'vas',
+    'soft_label', 'constant_sum', 'span', 'span_link',
+]);
+
 // Global instance
 let displayLogicManager = null;
 
@@ -738,4 +933,10 @@ function initDisplayLogic() {
  */
 function getDisplayLogicManager() {
     return displayLogicManager;
+}
+
+// Exported for the Python/JS parity test (tests/jest/display-logic-collapse.test.js).
+// Same guarded pattern as static/instance-display.js; no effect in the browser.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { DisplayLogicManager, getDisplayLogicManager };
 }

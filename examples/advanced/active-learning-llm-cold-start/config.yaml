@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 9002
 annotation_task_name: Active Learning with LLM Cold-Start
 task_dir: .
 output_annotation_dir: annotation_output/active-learning-llm-cold-start/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 data_files:
@@ -39,13 +40,7 @@ active_learning:
     final_icl_weight: 0.2
     transition_instances: 50
 
-  # Annotation routing: auto-label high-confidence instances
-  annotation_routing: true
-  routing_thresholds:
-    auto_label_min_confidence: 0.9
-    show_suggestion_below: 0.5
-
-  # LLM endpoint for cold-start and routing
+  # LLM endpoint for cold-start
   llm:
     enabled: true
     use_mock: true  # Set to false and configure endpoint_url for real LLM

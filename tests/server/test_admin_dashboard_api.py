@@ -411,13 +411,18 @@ class TestAdminDashboardAPI:
         response = self._api_get("/admin/item_state")
         assert response.status_code == 200
 
-    @pytest.mark.skip(reason="Known issue: /admin/item_state/<id> has Label serialization bug")
     def test_item_state_by_id(self):
-        """Test /admin/item_state/<item_id> endpoint."""
+        """Test /admin/item_state/<item_id> endpoint.
+
+        It used to answer 500 for an annotated item: annotations keyed by
+        Label objects, which jsonify cannot sort."""
         response = self._api_get("/admin/item_state/review_01")
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text[:300]
         data = response.json()
         assert isinstance(data, dict)
+        assert data["annotations"], "the item has annotations to show"
+        for per_user in data["annotations"].values():
+            assert all(isinstance(v, dict) for v in per_user.values())
 
     def test_user_state_by_id(self):
         """Test /admin/user_state/<user_id> endpoint."""

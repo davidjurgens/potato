@@ -33,9 +33,13 @@ Span Target Contract:
     See displays/ARCHITECTURE.md for the full contract.
 """
 
+import json
 import html as html_module
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDisplay(ABC):
@@ -203,9 +207,33 @@ class BaseDisplay(ABC):
 
         return errors
 
+    #: Keys that belong to the field entry itself, never to a display's
+    #: options. Excluded from the top-level pull-up below so a structural key
+    #: can never be mistaken for a setting.
+    STRUCTURAL_FIELD_KEYS = frozenset({
+        "key", "type", "label", "span_target", "display_options",
+        "_turn_schemes", "_run_tree",
+    })
+
     def get_display_options(self, field_config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Get display options with defaults applied.
+
+        Options may be written nested or at the field's top level:
+
+            {key: turns, type: dialogue, display_options: {show_turn_numbers: true}}
+            {key: turns, type: dialogue, show_turn_numbers: true}
+
+        Only the nested form used to be read, and the flat one is what an
+        author writes after seeing the option listed as an "optional field" of
+        the display type -- `describe_display_type("dialogue")` lists sixteen
+        of them with no mention of the nesting. The flat form did nothing, and
+        did it silently: `show_turn_numbers: true` rendered turns with no
+        numbers and nothing said why.
+
+        Only keys the display actually declares are pulled up, so an unrelated
+        top-level key is still ignored rather than being handed to the display
+        as a setting. `display_options` wins when both are given.
 
         Args:
             field_config: The field configuration
@@ -213,10 +241,94 @@ class BaseDisplay(ABC):
         Returns:
             Dictionary of display options with defaults filled in
         """
-        options = field_config.get("display_options", {})
         result = dict(self.optional_fields)  # Start with defaults
-        result.update(options)  # Override with user-specified options
+
+        declared = set(self.optional_fields) - self.STRUCTURAL_FIELD_KEYS
+        for name in declared:
+            if name in field_config:
+                result[name] = field_config[name]
+
+        result.update(field_config.get("display_options", {}) or {})
         return result
+
+
+def display_text(value: Any) -> str:
+    """One value, rendered as text a person can read.
+
+    `str()` on a dict or a list is a Python repr, and annotators were shown
+    `{'headline': 'NESTED_HEADLINE', 'sub': 'NESTED_SUB'}` -- braces, single
+    quotes and all -- across seventeen of the twenty-four displays. It reached
+    the page four separate ways before this existed: dialogue turn text,
+    multi_agent_discussion, spreadsheet cells, and an API's typed content
+    blocks in the trace displays.
+
+    A dict becomes indented JSON, which is what the DEFAULT rendering path in
+    `flask_server.get_displayed_text` has always produced for one. The two
+    paths disagreed, and the `instance_display` path -- the one Potato's own
+    docs push authors toward -- was the worse of the two.
+
+    Lists keep their own formatter, because `list_as_text` governs how a
+    list-valued field reads and that is a deliberate config surface. Callers
+    that handle lists themselves should keep doing so; this is for the
+    scalar-or-structured case.
+
+    Returns TEXT, never markup. Callers escape or sanitize as they already do.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        # Before the numeric branch: bool is an int subclass.
+        return str(value)
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (dict, list, tuple)):
+        try:
+            return json.dumps(value, ensure_ascii=False, indent=2,
+                              default=str)
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
+
+
+def resolve_display_options(field_config: Dict[str, Any]) -> Dict[str, Any]:
+    """A field's display options, resolved the way the display itself resolves them.
+
+    `BaseDisplay.get_display_options()` accepts an option written flat on the
+    field or nested under `display_options`, and applies the display's declared
+    defaults. Anything OUTSIDE a display that needs to know an option's value
+    has to agree with it, or the two disagree about what the page shows.
+
+    They did. When the flat form started working, the dialogue display began
+    honouring `show_turn_numbers: true` written at the field level while the
+    export, `/api/spans` and the keyword scan still read only the nested block
+    -- so the browser measured spans against a numbered DOM and the server
+    sliced them out of an un-numbered string. Every dialogue span exported
+    shifted left by the width of the numbering, and enabling the option on an
+    already-annotated study moved every highlight on screen instead.
+
+    Falls back to a plain merge for a type the registry does not know, so a
+    plugin display or a stale config still resolves rather than raising.
+    """
+    if not isinstance(field_config, dict):
+        return {}
+
+    try:
+        from potato.server_utils.displays.registry import display_registry
+
+        entry = display_registry.get(field_config.get("type", ""))
+        renderer = getattr(entry, "renderer", entry)
+        if isinstance(renderer, BaseDisplay):
+            return renderer.get_display_options(field_config)
+    except ImportError:
+        pass   # displays package unavailable (a bare unit-test import path)
+
+    merged = dict(field_config.get("display_options") or {})
+    for name, value in field_config.items():
+        if name not in BaseDisplay.STRUCTURAL_FIELD_KEYS and name not in merged:
+            merged[name] = value
+    return merged
 
 
 def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key: str = "text") -> str:
@@ -255,6 +367,37 @@ def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key:
     return "\n".join(parts)
 
 
+#: The text node the dialogue display puts between consecutive turn elements.
+#: Both sides of the span-offset contract depend on this exact character.
+TURN_SEPARATOR = "\n"
+
+
+def document_dom_text(value: Any, options: Optional[Dict[str, Any]] = None) -> str:
+    """The text a ``document`` field puts in the DOM.
+
+    That text is the basis its span offsets index, so every consumer of those
+    offsets has to reconstruct it the same way -- the same contract
+    :func:`reconstruct_dialogue_dom_text` carries for dialogue, and it broke
+    the same way. The display wrote a whitespace-collapsed
+    ``data-original-text`` while the DOM kept the raw newlines (the field
+    carries ``white-space: pre-wrap``), so offsets counted characters the
+    bounds check did not have: the tail of every document became silently
+    unselectable, and `/get_annotations` sliced the collapsed form and handed
+    back text shifted by one character per collapsed run.
+
+    Whitespace is collapsed only when the browser will collapse it -- when
+    ``preserve_structure`` is off, or when the body carries block markup of
+    its own and the display therefore does not apply the pre-wrap class.
+    """
+    from potato.server_utils.displays.document_display import (
+        _BLOCK_MARKUP, _dom_text_of, _safe_document_html)
+
+    rendered = _safe_document_html(value)
+    preserves = bool((options or {}).get("preserve_structure", True)
+                     and not _BLOCK_MARKUP.search(rendered or ""))
+    return _dom_text_of(rendered, collapse=not preserves)
+
+
 def reconstruct_dialogue_dom_text(
     data: Any,
     speaker_key: str = "speaker",
@@ -262,15 +405,25 @@ def reconstruct_dialogue_dom_text(
     show_turn_numbers: bool = False,
 ) -> str:
     """
-    Reconstruct the whitespace-normalized DOM textContent of a dialogue display.
+    Reproduce, exactly, the ``textContent`` of a rendered dialogue span container.
 
-    When DialogueDisplay renders HTML, the browser's ``textContent`` includes
-    turn numbers, speaker prefixes, and the text of each turn — all separated
-    by whitespace that ``normalizeText()`` collapses to single spaces.
+    Span offsets are produced in the browser against the DOM, and the annotated
+    substring is sliced back out here on the server. That only yields the right
+    text if both sides agree on the *same string, character for character* — so
+    this function is one half of a contract, not a convenience.
 
-    This function reproduces that collapsed form so that span offsets produced
-    by the client (DOM-based) can be used server-side to extract the correct
-    substring.
+    The other half is ``DialogueDisplay.render()``, which emits each turn as
+    ``[i] Speaker: text`` with single spaces and no incidental indentation, and
+    separates turns with :data:`TURN_SEPARATOR`. Elements excluded from the
+    offset basis by ``shouldSkipForOffsets()`` in ``static/span-core.js``
+    (``.turn-anno-slot``, ``.per-turn-rating``, span overlays, link arcs) are
+    correspondingly absent here.
+
+    This used to collapse all whitespace with ``\\s+ -> " "`` while the client
+    deliberately did not normalize at all, so every dialogue span was sliced at
+    the wrong offset — the drift grew by a few characters per turn, which meant
+    short conversations looked fine and long ones silently returned neighbouring
+    text. ``tests/unit/test_dialogue_span_contract.py`` pins the two together.
 
     Args:
         data: Dialogue data — list of dicts, list of strings, or a string
@@ -279,7 +432,7 @@ def reconstruct_dialogue_dom_text(
         show_turn_numbers: Whether turn numbers like ``[1]`` are shown
 
     Returns:
-        Single-line text matching the browser's normalized textContent
+        The container's textContent, matching the browser byte for byte.
     """
     if isinstance(data, str):
         return data.strip()
@@ -304,11 +457,7 @@ def reconstruct_dialogue_dom_text(
 
         parts.append(" ".join(turn_parts))
 
-    # Join turns with single space (browser normalizes inter-turn whitespace)
-    import re as _re
-    joined = " ".join(parts)
-    # Final normalization: collapse any remaining multi-space to single space
-    return _re.sub(r"\s+", " ", joined).strip()
+    return TURN_SEPARATOR.join(parts)
 
 
 def render_display_container(
@@ -333,7 +482,11 @@ def render_display_container(
         Complete HTML for the display container
     """
     class_str = " ".join(css_classes)
-    attr_str = " ".join(f'data-{k}="{v}"' for k, v in data_attrs.items())
+    # Values can be item data (a media URL, a code language, a format name),
+    # so they are attribute-escaped here once for every display.
+    attr_str = " ".join(
+        f'data-{html_module.escape(str(k), quote=True)}="{html_module.escape(str(v), quote=True)}"'
+        for k, v in data_attrs.items())
 
     parts = []
     parts.append(f'<div class="{class_str}" {attr_str}>')
@@ -347,3 +500,58 @@ def render_display_container(
     parts.append(f'</div>')
 
     return "\n".join(parts)
+
+
+def css_length(value: Any, fallback: str = "") -> str:
+    """A CSS length from a config value that may or may not carry a unit.
+
+    Six display types built one by appending ``px`` unconditionally, so an
+    author who wrote ``max_height: "220px"`` got ``max-height: 220pxpx`` --
+    an invalid declaration, dropped by the browser, leaving the field
+    unclamped with nothing said. That is not an exotic mistake: the same
+    `instance_display` block takes ``layout.grid.gap``, which REQUIRES a unit,
+    so writing both lengths the same way is what following the documentation
+    produces.
+
+    `video_display` already had this right, one file away from five that did
+    not.
+
+    A bare number, as an int or as a string, is a pixel count. Anything else
+    is passed through -- it already carries a unit, or it is `auto`, `calc()`
+    or a `var()`.
+    """
+    if value is None or isinstance(value, bool):
+        return fallback
+    if isinstance(value, (int, float)):
+        return f"{value}px"
+    text = str(value).strip()
+    if not text:
+        return fallback
+    try:
+        float(text)
+    except ValueError:
+        return text
+    return f"{text}px"
+
+
+def css_pixels(value: Any, default: int) -> int:
+    """A pixel COUNT, for the displays that do arithmetic on it.
+
+    `gallery` computes ``max_height - 40``, so it needs a number rather than a
+    length. It used a bare ``int()``, which raises on ``"220px"`` and was
+    caught into the default -- the same silent revert, one layer along.
+    """
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip().lower()
+    if text.endswith("px"):
+        text = text[:-2].strip()
+    try:
+        return int(float(text))
+    except (TypeError, ValueError):
+        logger.warning(
+            "display: %r is not a usable pixel length; using %d instead. "
+            "Write a number, or a length in px.", value, default)
+        return default

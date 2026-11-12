@@ -24,7 +24,7 @@ Below are examples of the different annotation schema types available in Potato:
 
 | Triage | Coreference | Conversation Tree |
 |:---:|:---:|:---:|
-| ![Triage](../img/screenshots/triage_annotation.png) | ![Coreference](../img/screenshots/coreference_annotation.png) | ![Tree](../img/screenshots/tree_annotation.png) |
+| ![Triage](../img/screenshots/triage_inline.png) | Group mentions of the same entity across a document | Annotate branching conversation structures |
 
 | Soft Label | Constant Sum | Semantic Differential |
 |:---:|:---:|:---:|
@@ -43,6 +43,93 @@ All annotation schemas share these **required fields**:
 - **`description`** (string): Text displayed to annotators explaining what to do
 
 Additional fields are specific to each annotation type and may be required or optional.
+
+## Annotation Type Reference
+
+`annotation_type` accepts the values below. The sections after this table cover the common ones in detail; for the rest, the Details column links to the guide that does. The Example column names a runnable project for every type that has one. Run one from the repository root with `python potato/flask_server.py start <example>/config.yaml -p 8000`.
+
+| Type | What it does | Details | Example |
+|---|---|---|---|
+| `agent_interaction_graph` | Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/interaction-graph/` |
+| `agent_scorecard` | Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/agent-scorecard/` |
+| `audio_annotation` | Audio segmentation and annotation with waveform visualization | [below](#10-audio-annotation-audio_annotation) | `examples/audio/audio-annotation/` |
+| `bws` | Best-Worst Scaling: select the best and worst item from a set | [below](#31-best-worst-scaling-bws) | `examples/classification/iterative-bws/` |
+| `card_sort` | Drag-and-drop card sorting into predefined or user-created groups | [below](#21-card-sorting-card_sort) | `examples/classification/card-sort/` |
+| `free_list` | Free listing: the participant lists items in a domain, in order, with per-item timing; the export computes salience (Smith's S, CSI) | [Free list](survey/free_list.md) | `examples/advanced/cultural-domain/` |
+| `triad_test` | Triad test: pick the item most unlike the other two, with complete, balanced or sampled designs; the export builds the similarity matrix | [Triad test](survey/triad_test.md) | `examples/advanced/cultural-domain/` |
+| `spectrogram_annotation` | Time-frequency boxes on an audio spectrogram, with Raven, Audacity and BirdNET import and export | [Spectrogram annotation](multimedia/spectrogram_annotation.md) | `examples/audio/bioacoustics-boxes/` |
+| `geo_annotation` | Points, lines and polygons on a map (draw, pin, or classify regions), stored as GeoJSON | [Maps](spatial/geo_annotation.md) | `examples/advanced/dialect-map/` |
+| `interlinear_gloss` | Interlinear glossed text: morpheme segmentation and Leipzig glosses per word, with alignment checks and FLExText/Toolbox import and export | [Interlinear gloss](text/interlinear_gloss.md) | `examples/span/interlinear-gloss/` |
+| `list_experiment` | List experiment (item count technique): the sensitive statement is shown to the treatment group only, and the export estimates its prevalence | [Sensitive questions](measurement/sensitive_questions.md) | `examples/advanced/sensitive-questions/` |
+| `randomized_response` | Randomized response (forced response or crosswise) for a sensitive yes/no question, with the prevalence estimated in the export | [Sensitive questions](measurement/sensitive_questions.md) | `examples/advanced/sensitive-questions/` |
+| `viewer_selection` | What the annotator selected in a viewer display: residues in a `protein_structure`, calls and features plus the locus in a `genome_locus`, with optional labels and counts | [Protein structures](science/protein_structures.md) | `examples/advanced/protein-binding-site/` |
+| `chemical_structure` | Draw or correct a chemical structure in the OpenChemLib editor, or paste a SMILES or molfile; stores molfile V3000, canonical SMILES and, with RDKit.js, the InChIKey | [Chemical structures](science/chemical_structures.md) | `examples/advanced/chemical-structure-correction/` |
+| `peak_picking` | Pick peaks and integrate regions on a `spectrum` display (NMR, IR, MS), with per-peak fields and review of suggested peaks | [Spectra](science/spectra.md) | `examples/advanced/spectrum-peak-picking/` |
+| `interval_label` | Label intervals, events or fixed-length epochs on a `time_series` display of a multi-channel recording | [Time series](science/time_series.md) | `examples/advanced/time-series-intervals/` |
+| `microscopy` | Draw regions and classify cells on a multichannel OME-Zarr or OME-TIFF image, with channel, z and t controls | [Microscopy](science/microscopy.md) | `examples/image/multichannel-microscopy/` |
+| `listening_test` | Listening tests: MUSHRA (ITU-R BS.1534), BS.1116, ACR, DCR, CCR, P.835 and ABX, with blinded samples and switching at the same position | [Listening tests](multimedia/listening_tests.md) | `examples/audio/listening-test-mushra/` |
+| `ego_network` | Personal (ego) network: name generators, per-person questions, a dyad census and a sociogram, on survey pages or items | [Ego networks](structured/ego_network.md) | `examples/advanced/ego-network/` |
+| `price_list` | Multiple price list: option A or B in each row, with the Holt & Laury (2002) and time-preference presets and an optional single switch point | [Price list](measurement/price_list.md) | `examples/advanced/incentivized-elicitation/` |
+| `bdm` | Becker-DeGroot-Marschak bid: the most a participant would pay, paid from a price drawn after the study | [BDM bid](measurement/bdm.md) | `examples/advanced/incentivized-elicitation/` |
+| `belief_elicitation` | A probability (0-100) or a distribution over bins that sums to 100, paid by the binarized scoring rule | [Belief elicitation](measurement/belief_elicitation.md) | `examples/advanced/incentivized-elicitation/` |
+| `cloze` | Fill-in-the-blank passage, fixed or per item; the answer key stays on the server and scores the export | [cloze](text/cloze.md) | `examples/classification/cloze-test/` |
+| `code_review` | GitHub PR-style code review with inline comments and file ratings | [below](#24-code-review-code_review) | `examples/agent-traces/coding-agent-review/` |
+| `confidence` | Confidence rating meta-annotation for any primary annotation | [below](#33-confidence-rating-confidence) | `examples/classification/confidence-calibrated/` |
+| `conjoint` | Discrete choice conjoint analysis with side-by-side profile comparison | [below](#22-conjoint-analysis-conjoint) | `examples/classification/conjoint/` |
+| `consensus_tracking` | Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals | [multi agent discussion](../agent-evaluation/multi_agent_discussion.md) | `examples/agent-traces/debate-judging/` |
+| `constant_sum` | Allocate a fixed budget of points across categories | [below](#34-constant-sum-points-allocation-constant_sum) | `examples/classification/constant-sum/` |
+| `context_attribution` | Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn | [agent task recipes](../agent-evaluation/agent_task_recipes.md) | `examples/agent-traces/context-attribution/` |
+| `coreference` | Coreference chain annotation for grouping mentions of the same entity | [below](#13-coreference-chains-coreference) | `examples/span/coreference/` |
+| `emergent_behavior` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/emergent-behavior/` |
+| `episode_annotation` | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation | [episodes](embodied/episodes.md) | `examples/embodied/lerobot-episode/` |
+| `error_span` | MQM-style error span annotation with typed severity for quality evaluation | [below](#20-error-span-with-typed-severity-error_span) | `examples/classification/error-span/` |
+| `event_annotation` | N-ary event annotation with triggers and typed arguments | [below](#30-event-annotation-event_annotation) | `examples/span/event-annotation/` |
+| `extractive_qa` | SQuAD-style extractive question answering with answer span highlighting | [below](#17-extractive-qa-extractive_qa) | `examples/classification/extractive-qa/` |
+| `failure_attribution` | Multi-agent failure attribution: responsible agent + decisive step + reason | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/failure-attribution/` |
+| `grounding_eval` | Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/ai-assisted/grounding-eval/` |
+| `gui_trajectory` | Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/gui-trajectory/` |
+| `handoff_review` | Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/handoff-review/` |
+| `hierarchical_multiselect` | Hierarchical tree-structured multi-label selection | [below](#38-hierarchical-multi-label-selection-hierarchical_multiselect) | `examples/classification/hierarchical-multiselect/` |
+| `image_annotation` | Image annotation with bounding boxes, polygons, freeform drawing, and landmarks | [below](#9-image-annotation-image_annotation) | `examples/image/image-annotation/` |
+| `likert` | Likert scale rating | [below](#2-likert-scale-likert) | `examples/classification/likert/` |
+| `multi_document_event` | Cross-document event annotation: template slots filled with evidence from many documents | [multi document events](../advanced/multi_document_events.md) | `examples/advanced/multi-document-events/` |
+| `multimodal_reasoning` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/multimodal-reasoning/` |
+| `multirate` | Rate multiple items on a scale | [below](#7-multi-rate-multirate) | `examples/classification/multirate/` |
+| `multiselect` | Multiple-choice checkbox selection | [below](#3-multiple-choice-multiselect) | `examples/classification/check-box/` |
+| `number` | Numeric input field | [below](#8-number-input-number) | `examples/advanced/all-annotation-types/` |
+| `pairwise` | Pairwise comparison of two items (binary selection or scale rating) | [below](#29-pairwise-comparison-pairwise) | `examples/classification/pairwise-scale/` |
+| `process_reward` | Per-step process reward signals for PRM training | [below](#23-process-reward-process_reward) | `examples/agent-traces/cot-process-reward/` |
+| `pure_display` | Display-only content (instructions, headers) | [below](#27-display-only-pure_display) | `examples/advanced/all-annotation-types/` |
+| `radio` | Single-choice radio button selection | [below](#1-single-choice-radio) | `examples/classification/single-choice/` |
+| `range_slider` | Dual-thumb slider for selecting an acceptable range | [below](#37-range-slider-dual-thumb-range_slider) | `examples/classification/range-slider/` |
+| `ranking` | Drag-and-drop ranking of items by preference or relevance | [below](#36-ranking-drag-and-drop-ranking) | `examples/classification/ranking/` |
+| `region_caption` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/image/region-captioning/` |
+| `rollout_evaluation` | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility | [world model eval](../agent-evaluation/world_model_eval.md) | `examples/agent-traces/world-model-rollouts/` |
+| `rubric_eval` | Multi-criteria rubric evaluation grid for LLM and text quality assessment | [below](#18-rubric-evaluation-rubric_eval) | `examples/classification/rubric-eval/` |
+| `select` | Dropdown selection | [below](#25-dropdown-selection-select) | `examples/advanced/all-annotation-types/` |
+| `semantic_differential` | Bipolar adjective scales for measuring connotative meaning | [below](#35-semantic-differential-semantic_differential) | `examples/classification/semantic-differential/` |
+| `slider` | Slider for selecting a value in a range | [below](#5-slider-slider) | `examples/classification/slider/` |
+| `soft_label` | Probability distribution across labels via constrained sliders | [below](#32-soft-label-probability-distribution-soft_label) | `examples/classification/soft-label/` |
+| `span` | Text span annotation/highlighting with optional entity linking to knowledge bases | [below](#4-text-span-selection-span) | `examples/span/span-labeling/` |
+| `span_link` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | [below](#26-span-linking-span_link) | `examples/span/span-linking/` |
+| `spatial_annotation` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | [point cloud](spatial/point_cloud.md) | `examples/spatial/kitti-cuboids/` |
+| `volume_annotation` | 3D medical volumes (DICOM, NIfTI): three linked slice views, brush masks with interpolation, boxes and polygons | [volumes](multimedia/volume_annotation.md) | `examples/image/ct-volume/` |
+| `speech_transcript` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction | [transcript formats](multimedia/transcript_formats.md) | `examples/agent-traces/speech-transcript/` |
+| `table_grid` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/table-grid/` |
+| `temporal_grounding` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/temporal-grounding/` |
+| `text` | Free-form text input | [below](#6-text-input-text) | `examples/classification/text-box/` |
+| `text_edit` | Inline text editing with diff tracking for post-editing and correction tasks | [below](#19-text-edit-post-edit-text_edit) | `examples/classification/text-edit/` |
+| `tiered_annotation` | Hierarchical multi-tier annotation for audio/video (ELAN-style) | [below](#15-tiered-annotation-tiered_annotation) | `examples/audio/tiered-annotation/` |
+| `tool_call_review` | Per-tool-call correctness review (right tool / args / ordering) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-call-review/` |
+| `tool_contention` | Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-contention/` |
+| `trajectory_edit` | Per-step trajectory correction/editing for SFT/DPO training data | [trajectory correction](../agent-evaluation/trajectory_correction.md) | `examples/agent-traces/trajectory-correction/` |
+| `trajectory_eval` | Per-step trajectory evaluation with error taxonomy and severity scoring | [below](#39-trajectory-evaluation-trajectory_eval) | `examples/agent-traces/trajectory-evaluation/` |
+| `tree_annotation` | Annotation of conversation tree nodes with path selection | [below](#14-conversation-tree-tree_annotation) | `examples/span/conversation-tree/` |
+| `triage` | Binary accept/reject triage for rapid data curation | [below](#12-triage-triage) | `examples/advanced/triage/` |
+| `vas` | Continuous visual analog scale for fine-grained magnitude estimation | [below](#16-visual-analog-scale-vas) | `examples/classification/vas/` |
+| `video` | Video player display | [below](#28-video-player-video) | `examples/video/video-player/` |
+| `video_annotation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | [below](#11-video-annotation-video_annotation) | `examples/video/video-frame-annotation/` |
+| `voice_interaction` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/voice-interaction/` |
 
 ## Supported Annotation Types
 
@@ -100,8 +187,6 @@ Allows annotators to select multiple options from a predefined list.
 
 **Optional Fields:**
 - `sequential_key_binding` (boolean): Enable keyboard shortcuts (1, 2, 3...)
-- `single_select` (boolean): Force single selection only (default: false)
-- `horizontal` (boolean): Display options horizontally
 - `has_free_response` (boolean): Add optional text input field
 - `video_as_label` (boolean): Use video files as labels
 - `label_requirement` (object): Set completion requirements
@@ -114,7 +199,6 @@ annotation_schemes:
     description: "Select all emotions expressed in this text"
     labels: ["happy", "sad", "angry", "surprised", "neutral"]
     sequential_key_binding: true
-    horizontal: true
 ```
 
 **Video Labels Example:**
@@ -141,8 +225,8 @@ Allows annotators to highlight and label specific text spans.
 
 **Optional Fields:**
 - `sequential_key_binding` (boolean): Enable keyboard shortcuts
-- `bad_text_label` (object): Option for marking text as unannotatable
-  - `label_content` (string): Text for the "bad text" option
+- `bad_text_label` (string or object): Option for marking text as unannotatable.
+  Write the text directly, or as `{label_content: <text>}`
 
 **Example:**
 ```yaml
@@ -152,21 +236,38 @@ annotation_schemes:
     description: "Highlight positive and negative phrases"
     labels: ["positive", "negative", "neutral"]
     sequential_key_binding: true
-    bad_text_label:
-      label_content: "No answer"
+    bad_text_label: "No answer"
 ```
+
+**Label colors.** Give a label its own color by writing it as an object:
+
+```yaml
+    labels:
+      - {name: "positive", color: "#22c55e"}
+      - {name: "negative", color: "rgb(239, 68, 68)"}
+      - "neutral"                     # takes the next palette color
+```
+
+Accepted forms are `#rrggbb`, `#rgb`, `rgb(r, g, b)` and `(r, g, b)`. Named
+CSS colors such as `red` are not read. A color Potato cannot parse falls back
+to an automatically assigned palette color; `potato validate` reports that,
+and fails on it under `--strict`.
+
+Alpha is not carried through. Potato takes the three channels from an `rgba()`
+and applies its own opacity, so that highlights and label chips stay legible
+over text at a consistent weight. Write the color you want at full strength.
 
 ### 5. Slider (`slider`)
 
 Provides a continuous range for numerical ratings.
 
 **Required Fields:**
-- `min` (number): Minimum value
-- `max` (number): Maximum value
+- `min_value` (number): Minimum value
+- `max_value` (number): Maximum value
+- `starting_value` (number): Where the handle starts, between the two
 
 **Optional Fields:**
 - `step` (number): Increment size (default: 1)
-- `default` (number): Default position
 
 **Example:**
 ```yaml
@@ -174,10 +275,10 @@ annotation_schemes:
   - annotation_type: "slider"
     name: "confidence_score"
     description: "How confident are you in your assessment?"
-    min: 0
-    max: 100
+    min_value: 0
+    max_value: 100
+    starting_value: 50
     step: 5
-    default: 50
 ```
 
 ### 6. Text Input (`text`)
@@ -274,24 +375,49 @@ annotation_schemes:
 
 ### 9. Image Annotation (`image_annotation`)
 
-Allows annotators to draw bounding boxes, polygons, and place landmarks on images.
+Allows annotators to draw bounding boxes, polygons, open polylines, ellipses and
+freeform shapes, place landmark points, and paint segmentation masks on images.
 
 **Required Fields:**
-- `labels` (list): Array of label categories for annotations
+- `labels` (list): Label categories. Entries may be plain strings, or objects
+  with `name`, `color`, `key_value`, and (for COCO round-tripping) `label_id`.
+- `tools` (list): Which drawing tools to enable. One or more of
+  `bbox`, `polygon`, `polyline`, `ellipse`, `freeform`, `landmark`,
+  `keypoint_set`, `cuboid_2d`, `brush`, `eraser`, `fill`.
 
 **Optional Fields:**
-- `annotation_mode` (string): Drawing mode - "bbox", "polygon", or "landmark"
-- `allow_multiple` (boolean): Allow multiple annotations per image
+- `source_field` (string): Instance field holding the image URL
+- `zoom_enabled` / `pan_enabled` (boolean, default `true`)
+- `min_annotations` / `max_annotations` (int)
+- `brush_size` / `eraser_size` (int, default 20), `mask_opacity` (float, default 0.5)
+- `fill_mode` (`"region"` default, or `"empty"`), `fill_tolerance` (0–255, default 32)
+- `keybinding_profile` (`"v7"` default, or `"legacy"`)
+- `carry_over` (`false` default, `"prompt"`, or `"auto"`)
+- `ai_support` (object): AI-assisted detection settings
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "image_annotation"
-    name: "object_detection"
+  - annotation_type: image_annotation
+    name: object_detection
     description: "Draw boxes around all vehicles"
-    labels: ["car", "truck", "motorcycle", "bicycle"]
-    annotation_mode: "bbox"
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+      - brush
+    labels:
+      - name: car
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: truck
+        color: "#4ECDC4"
+        key_value: "2"
 ```
+
+There is **no** `annotation_mode` or `allow_multiple` option — enable multiple
+entries in `tools` instead, and use `min_annotations` / `max_annotations` to
+control how many annotations an image may carry.
 
 See [Image Annotation](multimedia/image_annotation.md) for detailed documentation.
 
@@ -319,24 +445,41 @@ See [Audio Annotation](multimedia/audio_annotation.md) for detailed documentatio
 
 ### 11. Video Annotation (`video_annotation`)
 
-Allows frame-by-frame labeling of video content with playback controls.
+Temporal segmentation, frame classification, keyframes, and object tracking on
+video, with a waveform-style timeline.
 
 **Required Fields:**
-- `labels` (list): Array of label categories
+- `labels` (list): Label categories
 
 **Optional Fields:**
-- `annotation_mode` (string): "frame" for frame-by-frame, "segment" for time segments
-- `frame_step` (number): Frame advance increment
+- `mode` (string): One of `segment` (default), `frame`, `keyframe`, `tracking`,
+  or `combined`
+- `frame_stepping` (boolean): Enable frame-by-frame stepping controls
+- `video_fps` (number): Frames per second, for frame/timecode display
+- `segment_schemes` (list): Nested schemas applied to each segment; answers
+  are stored on the segment under its `annotations` key
+- `min_segments` / `max_segments` (int)
+- `timeline_height` / `overview_height` (int)
+- `zoom_enabled`, `playback_rate_control`, `show_timecode` (boolean)
+- `tracking_options` (object): Settings for `tracking` mode
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "video_annotation"
-    name: "action_recognition"
+  - annotation_type: video_annotation
+    name: action_recognition
     description: "Label the action being performed"
-    labels: ["walking", "running", "sitting", "standing"]
-    annotation_mode: "frame"
+    mode: segment
+    frame_stepping: true
+    labels:
+      - name: walking
+        color: "#FF6B6B"
+      - name: running
+        color: "#4ECDC4"
 ```
+
+There is **no** `annotation_mode` or `frame_step` option; the keys are `mode`
+and `frame_stepping`, and `mode` accepts five values, not two.
 
 See [Video Annotation](multimedia/video_annotation.md) for detailed documentation.
 
@@ -637,10 +780,10 @@ See [Coding Agent Annotation](../agent-evaluation/coding_agent_annotation.md) fo
 A dropdown menu for selecting a single option from a predefined list. Supports predefined datasets (country, ethnicity, religion).
 
 **Required Fields:**
-- `labels` (list): Array of option labels
+- `labels` (list or string): the options, as a list or as the path of a text file with one option per line. `use_predefined_labels` can stand in for it.
 
 **Optional Fields:**
-- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion"
+- `use_predefined_labels` (string): Use built-in label sets - "country", "ethnicity", or "religion". With `labels` also set, the page shows the built-in list and a warning says `labels` is ignored.
 
 **Example:**
 ```yaml
@@ -650,6 +793,21 @@ annotation_schemes:
     description: "Select the genre of this text"
     labels: ["news", "opinion", "review", "social_media"]
 ```
+
+A long list can live in a file:
+
+```yaml
+annotation_schemes:
+  - annotation_type: "select"
+    name: "language"
+    description: "Which language is this text in?"
+    labels: "options/languages.txt"
+```
+
+The path is relative to `task_dir`, then to the config file's directory, and
+must stay inside `task_dir`. Blank lines are skipped, and an empty file or an
+option listed twice is refused. The file is read when the server starts, so an
+edit to it takes a restart. This works in survey phase files too.
 
 ### 26. Span Linking (`span_link`)
 
@@ -994,6 +1152,14 @@ Per-step error marking for agent/LLM traces. Marks each step with correctness st
 - `error_types` (list): Error type definitions with optional subtypes
 - `severities` (list): Severity levels with penalty weights
 - `show_score` (boolean): Display cumulative score (default: true)
+- `max_score` (integer): Score before any deductions (default: 100)
+
+The score deducts a step's `severity` weight, and only for steps marked
+something other than `correct`. While any step is unjudged, or any step marked
+wrong has no severity chosen, Next is blocked and the readout says the number is
+not final. The stored `score` is then `null`, with `score_complete: false`
+beside it. Marking a step `correct` clears the severity it carried while it was
+wrong.
 
 **Example:**
 ```yaml
@@ -1099,6 +1265,12 @@ label_requirement:
 
 When `required: true` is set, annotators must complete all fields in the schema before they can proceed to the next instance. This is particularly useful for ensuring data quality in multi-rate and other complex annotation tasks.
 
+With `required_label`, the annotator must choose one of the listed options to
+continue. On a consent, instructions, prestudy or poststudy page the server
+checks this too: a participant who chose "I disagree" on a consent question
+that requires "I agree" is kept on the consent page (HTTP 400), however the
+request was sent.
+
 ### Multiple Schemas
 
 Combine different annotation types in a single task:
@@ -1134,25 +1306,19 @@ annotation_codebook_url: "https://docs.google.com/document/d/example"
 # Hide navigation bar (for crowdworking)
 hide_navbar: false
 
-# HTML layout template
-html_layout: "default"  # Options: default, fixed_keybinding, kwargs, or custom path
+# Custom HTML for the annotation form area (optional)
+task_layout: "templates/my_layout.html"
 ```
 
-### Available Layout Templates
+### Layouts
 
-- **`default`**: General-purpose layout for most annotation tasks
-- **`fixed_keybinding`**: Shows keyboard shortcuts prominently
-- **`kwargs`**: Specialized layout for Likert scales with custom endpoints
-- **Custom path**: Point to your own HTML template file
+Without `task_layout`, Potato generates the annotation form from
+`annotation_schemes`. Set `task_layout` to an HTML file in your project to
+replace that form with your own markup. It applies to the annotation page
+only. A phase page takes its own `task_layout` inside its `phases:` entry.
+See [Layout Customization](../configuration/layout_customization.md).
 
-### Surveyflow Layout
-
-Use different layouts for survey pages vs annotation pages:
-
-```yaml
-html_layout: "templates/annotation-layout.html"
-surveyflow_html_layout: "default"
-```
+`html_layout` and `surveyflow_html_layout` are legacy keys and have no effect.
 
 ## Best Practices
 

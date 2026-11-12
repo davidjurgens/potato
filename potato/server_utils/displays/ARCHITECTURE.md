@@ -1,6 +1,6 @@
 # Display Type System Architecture
 
-This document describes the design contracts and extension points for the
+The design contracts and extension points for the
 display type system in `potato/server_utils/displays/`.
 
 ## Overview
@@ -46,7 +46,7 @@ Config YAML
 | `get_js_init()` | `None` | Return JS to run on page load |
 | `validate_config(field_config)` | Checks `required_fields` | Add enum/range validation |
 | `has_inline_label(field_config)` | `False` | Return `True` if display renders its own label (avoids duplicate) |
-| `get_display_options(field_config)` | Merges `optional_fields` with `display_options` | Rarely needed |
+| `get_display_options(field_config)` | Resolves a field's options: declared defaults, then options written flat on the field, then the nested `display_options` block | Use it in `render()` and `validate_config()`; never read `field_config["display_options"]` by hand |
 
 ### Class attributes
 
@@ -54,6 +54,20 @@ Config YAML
 |-----------|------|-------------|
 | `required_fields` | `List[str]` | Config keys that must be present |
 | `optional_fields` | `Dict[str, Any]` | Default values for optional display_options |
+
+### Reading a display's options from outside the display
+
+Code outside a display that needs an option's value — the exporters,
+`/api/spans`, the keyword scan — must call
+`resolve_display_options(field_config)` from `displays/base.py`. It answers
+through the registered display, so it agrees with what the page renders.
+
+Parsing `field_config["display_options"]` by hand is how the two sides drift.
+When `get_display_options()` learned to accept an option written flat on the
+field, every hand-parsing reader kept seeing only the nested block: the
+dialogue display honoured `show_turn_numbers: true` while the export resolved
+spans against an un-numbered string, and every dialogue span exported shifted
+by the width of the numbering.
 | `description` | `str` | Human-readable description |
 | `supports_span_target` | `bool` | Whether this type implements the span annotation contract |
 
@@ -152,6 +166,37 @@ label, and `.display-field-content` wrapper.
 6. Add CSS to `styles.css` using `.display-type-{name}` convention
 7. Write unit tests verifying render output
 8. Write a contract enforcement test (see `test_display_span_contract.py`)
+
+## Viewer Displays
+
+`viewer_display.py` holds `ViewerDisplay`, the base for displays that embed
+a third-party JavaScript viewer (`protein_structure` in 3Dmol.js or Mol*,
+`genome_locus` in igv.js). A new viewer is a subclass plus one adapter in
+`static/viewers/`. The base provides:
+
+- the container (`div.potato-viewer` with `data-viewer-kind`,
+  `data-viewer-field` and `data-viewer-config`) and its status and fallback
+  slots
+- lazy loading: the page loads `viewer-framework.js` and the adapters; the
+  library itself is fetched when a viewer mounts, from `static/vendor/` or
+  from a `potato vendor fetch` bundle (`ViewerEngine.bundles`)
+- a WebGL check that shows a message instead of a blank canvas
+- `window.potatoViewers[field]` with `getSelection`, `setSelection`,
+  `onSelectionChange` and `describe`, which the `viewer_selection` scheme
+  binds to through `viewer_field`
+- `validate_selection()`, which checks a selection against the viewer's
+  shape and returns the problems. The server does not call it: saving and
+  exporting keep the selection JSON as the browser sent it
+- `display_required_bundles()`: `potato validate` and boot fail on a config
+  whose engine needs a bundle that has not been fetched
+- `resolve_source()`, which raises `ViewerDataError` for an http(s) URL in
+  the data unless the field sets `allow_remote: true`
+
+A subclass sets `name`, `engines` and `default_engine`, and implements
+`client_config()` (the JSON the adapter receives; raise `ViewerDataError`
+for an item that cannot be shown) and `validate_item()`. `render_extras()`
+adds HTML under the stage, such as the residue table that works without
+WebGL.
 
 ## Shared Utilities
 

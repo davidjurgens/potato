@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Delphi study: a panel rates eight candidate quality criteria for annotation
+# guidelines from 1 (not important) to 9 (essential), over up to three rounds
+# of three days each. From round 2, each statement shows the panel's median,
+# the middle half of ratings and the panelist's own previous rating, with the
+# other panelists' comments (no names). The study stops when every item has
+# an IQR of at most 1 or fewer than 15% of panelists changed their rating, or
+# after round 3. Summaries are hidden for items fewer than 3 panelists rated.
+#
+# Rounds are study-wide: round 1 opens when the server first starts with this
+# config (set schedule.delphi.start to fix the date). An admin can close a
+# round early from /admin/schedule. Messages go to the log channel.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/delphi-study/config.yaml -p 8000
+# Docs: docs/workflow/delphi.md
+
+annotation_task_name: "Guideline quality Delphi"
+
+data_files:
+  - data/background.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+require_password: false
+
+phases:
+  order: [consent, instructions, annotation]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  instructions:
+    type: instructions
+    file: surveys/instructions.json
+  annotation:
+    type: annotation
+
+# The regular flow ends with one background item (every Potato study has an
+# annotation phase); finishing it enrols the panelist and opens round 1.
+annotation_schemes:
+  - annotation_type: radio
+    name: role
+    description: "Which best describes your work with annotation guidelines?"
+    labels: ["I write them", "I annotate with them", "I use the annotated data", "Other"]
+  - annotation_type: radio
+    name: years
+    description: "Years of experience"
+    labels: ["Under 2", "2 to 5", "Over 5"]
+
+schedule:
+  timezone: "UTC"
+  delphi:
+    title: "Guideline criteria"
+    intro: "Rate how important each criterion is for annotation guidelines in your field."
+    items_file: data/criteria.json
+    scale: {min: 1, max: 9, min_label: "Not important", max_label: "Essential"}
+    comments: true
+    max_rounds: 3
+    round_length: 72h
+    gap: 12h
+    min_panel: 3
+    stop:
+      iqr_at_most: 1
+      changed_share_below: 0.15
+    reminders:
+      - at: open
+      - before_close: 24h
+
+notifications:
+  channels:
+    - type: log
+  contact:
+    consent:
+      question: contact_consent
+      value: "Yes"

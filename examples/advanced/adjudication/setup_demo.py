@@ -330,12 +330,37 @@ def write_user_state(user_id, state):
     print(f"  Wrote {filepath}")
 
 
+#: The annotators this script owns. Anything else under OUTPUT_DIR is left over from
+#: a previous run of some other demo or test.
+DEMO_USERS = ("user_1", "user_2", "user_3")
+
+
 def clean_decisions():
     """Remove adjudication decisions so the queue is fully pending."""
     adj_dir = os.path.join(OUTPUT_DIR, "adjudication")
     if os.path.exists(adj_dir):
         shutil.rmtree(adj_dir)
         print(f"  Removed {adj_dir}")
+
+
+def clean_stale_users():
+    """Remove annotator directories this script did not create.
+
+    OUTPUT_DIR is gitignored and generated entirely by this script, but it is a
+    shared path: running another demo or a browser session against this config
+    leaves extra user directories behind. Those users then show up as additional
+    annotators on every item, so the demo's "3 annotators per item" premise quietly
+    stops holding and the adjudication queue reports whatever accumulated.
+    """
+    if not os.path.isdir(OUTPUT_DIR):
+        return
+    for entry in sorted(os.listdir(OUTPUT_DIR)):
+        if entry in DEMO_USERS or entry == "adjudication":
+            continue
+        path = os.path.join(OUTPUT_DIR, entry)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+            print(f"  Removed stale annotator directory {path}")
 
 
 def main():
@@ -348,6 +373,8 @@ def main():
     args = parser.parse_args()
 
     print("Generating synthetic annotation data...")
+
+    clean_stale_users()
 
     write_user_state(
         "user_1", build_user_state("user_1", USER_1_LABELS, USER_1_BEHAVIORAL)

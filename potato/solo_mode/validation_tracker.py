@@ -198,9 +198,46 @@ class ValidationTracker:
                 f"agrees={agrees}, rate={self._metrics.agreement_rate:.2%}"
             )
 
+    def retract_comparison(self, instance_id: str, schema_name: str) -> bool:
+        """Undo the latest comparison recorded for (instance, schema).
+
+        Used when a human re-labels: the new label replaces the old one
+        rather than being counted on top of it or being ignored.
+        Returns False when there was nothing to retract.
+        """
+        with self._lock:
+            for index in range(len(self._comparison_history) - 1, -1, -1):
+                entry = self._comparison_history[index]
+                if (entry['instance_id'], entry['schema_name']) != (instance_id, schema_name):
+                    continue
+                del self._comparison_history[index]
+                human_str, llm_str = str(entry['human_label']), str(entry['llm_label'])
+                self._metrics.total_compared -= 1
+                if entry['agrees']:
+                    self._metrics.agreements -= 1
+                    _decrement(self._metrics.label_agreements, human_str)
+                else:
+                    self._metrics.disagreements -= 1
+                    _decrement(self._metrics.label_disagreements, human_str)
+                    _decrement(self._metrics.confusion_matrix, (llm_str, human_str))
+                self._metrics.agreement_rate = (
+                    self._metrics.agreements / self._metrics.total_compared
+                    if self._metrics.total_compared > 0 else 0.0)
+                self._update_recent_metrics()
+                return True
+            return False
+
     def _update_recent_metrics(self) -> None:
-        """Update metrics based on recent comparisons."""
-        if len(self._comparison_history) < 2:
+        """Update metrics based on recent comparisons.
+
+        Recomputed on every change, including a retraction. Returning early
+        below two comparisons left the rate at 0.0 after one agreeing
+        comparison, and left it (and the trend) at its old value when a
+        retraction brought the history back under two.
+        """
+        if not self._comparison_history:
+            self._metrics.recent_agreement_rate = 0.0
+            self._metrics.trend = "stable"
             return
 
         # Calculate recent agreement rate
@@ -222,6 +259,9 @@ class ValidationTracker:
                 self._metrics.trend = "declining"
             else:
                 self._metrics.trend = "stable"
+        else:
+            # Not enough history for two windows: no trend to report.
+            self._metrics.trend = "stable"
 
     def get_metrics(self) -> AgreementMetrics:
         """Get current agreement metrics."""
@@ -580,3 +620,11 @@ class ValidationTracker:
                 )
 
             self._llm_labels_since_review = data.get('llm_labels_since_review', 0)
+
+
+def _decrement(counts: dict, key) -> None:
+    """Subtract one, dropping the key at zero."""
+    if counts.get(key, 0) <= 1:
+        counts.pop(key, None)
+    else:
+        counts[key] -= 1

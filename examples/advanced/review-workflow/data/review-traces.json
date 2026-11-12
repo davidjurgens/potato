@@ -1,0 +1,8 @@
+[
+  {"id": "rt-1", "text": "Agent booked the requested flight and confirmed the itinerary.", "status": "ok", "metadata": {"confidence": 0.94}},
+  {"id": "rt-2", "text": "Agent called the payments API with malformed arguments and gave up.", "status": "error", "metadata": {"confidence": 0.31}},
+  {"id": "rt-3", "text": "Agent answered the refund question but cited a policy that does not exist.", "status": "error", "metadata": {"confidence": 0.62}},
+  {"id": "rt-4", "text": "Agent resolved the ticket in two turns with correct tool use.", "status": "ok", "metadata": {"confidence": 0.88}},
+  {"id": "rt-5", "text": "Agent's answer looks plausible but the judge flagged low confidence.", "status": "ok", "metadata": {"confidence": 0.42}},
+  {"id": "rt-6", "text": "Agent escalated to a human after the search tool timed out twice.", "status": "ok", "metadata": {"confidence": 0.71}}
+]

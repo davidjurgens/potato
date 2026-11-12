@@ -21,10 +21,13 @@ from .document_display import DocumentDisplay
 from .spreadsheet_display import SpreadsheetDisplay
 from .code_display import CodeDisplay
 from .agent_trace_display import AgentTraceDisplay
+from .eval_trace_display import EvalTraceDisplay
+from .cot_trace_display import CotTraceDisplay
 from .gallery_display import GalleryDisplay
 from .interactive_chat_display import InteractiveChatDisplay
 from .web_agent_trace_display import WebAgentTraceDisplay
 from .live_agent_display import LiveAgentDisplay
+from .multi_agent_discussion_display import MultiAgentDiscussionDisplay
 
 __all__ = [
     'display_registry',
@@ -38,8 +41,11 @@ __all__ = [
     'SpreadsheetDisplay',
     'CodeDisplay',
     'AgentTraceDisplay',
+    'EvalTraceDisplay',
+    'CotTraceDisplay',
     'GalleryDisplay',
     'InteractiveChatDisplay',
     'WebAgentTraceDisplay',
     'LiveAgentDisplay',
+    'MultiAgentDiscussionDisplay',
 ]

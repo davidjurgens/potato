@@ -26,9 +26,12 @@ Configuration example:
 
 import html
 import json
+import logging
 from typing import Any, Dict, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length, css_pixels
+
+logger = logging.getLogger(__name__)
 
 
 class LiveAgentDisplay(BaseDisplay):
@@ -101,12 +104,30 @@ class LiveAgentDisplay(BaseDisplay):
             "allow_instructions": allow_instructions,
         }), quote=True)
 
-        # Extract task info from instance data if available
+        # Extract task info from instance data if available.
+        #
+        # `key` is this display's only required field, so naming a field that
+        # holds the URL is the obvious reading -- and it was the one shape not
+        # handled: a string value left the Starting URL box empty with its
+        # placeholder, and the annotator retyped the same URL on every item.
         task_desc = ""
         start_url = ""
         if isinstance(data, dict):
             task_desc = data.get("task_description", "")
             start_url = data.get("start_url", data.get("url", ""))
+        elif isinstance(data, str) and data.strip():
+            candidate = data.strip()
+            if candidate.startswith(("http://", "https://")):
+                start_url = candidate
+            else:
+                # Seeding a non-URL would send the agent somewhere meaningless,
+                # so leave the box on its placeholder and say why.
+                logger.warning(
+                    "live_agent field %r holds %r, which is not an http(s) URL, "
+                    "so the Starting URL box was left empty. Point `key` at a "
+                    "field holding the URL, or an object with `start_url` and "
+                    "`task_description`.",
+                    field_config.get("key", ""), candidate[:80])
 
         css = self._build_css(max_w, max_h, filmstrip_size)
         html_content = self._build_html(
@@ -122,10 +143,10 @@ class LiveAgentDisplay(BaseDisplay):
         return f"""
 .live-agent-viewer {{
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 8px;
     overflow: hidden;
-    background: #fafafa;
+    background: light-dark(#fafafa, #1d1d1d);
 }}
 
 /* Status bar */
@@ -134,8 +155,8 @@ class LiveAgentDisplay(BaseDisplay):
     align-items: center;
     justify-content: space-between;
     padding: 8px 16px;
-    background: #f0f0f0;
-    border-bottom: 1px solid #ddd;
+    background: light-dark(#f0f0f0, #232323);
+    border-bottom: 1px solid light-dark(#ddd, #4c4c4c);
     font-size: 13px;
 }}
 .live-agent-status-indicator {{
@@ -166,11 +187,11 @@ class LiveAgentDisplay(BaseDisplay):
     position: relative;
     background: #000;
     min-height: 200px;
-    max-width: {max_w}px;
+    max-width: {css_length(max_w)};
 }}
 .live-agent-screenshot {{
     width: 100%;
-    max-height: {max_h}px;
+    max-height: {css_length(max_h)};
     object-fit: contain;
     display: block;
 }}
@@ -189,11 +210,11 @@ class LiveAgentDisplay(BaseDisplay):
 .live-agent-collapse-toggle {{
     cursor: pointer;
     font-size: 12px;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
     padding: 2px 8px;
-    border: 1px solid #ccc;
+    border: 1px solid light-dark(#ccc, #4c4c4c);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
 }}
 .live-agent-collapse-toggle:hover {{ background: #f0f0f0; }}
 
@@ -257,14 +278,14 @@ class LiveAgentDisplay(BaseDisplay):
     width: 320px;
     display: flex;
     flex-direction: column;
-    border-left: 1px solid #ddd;
-    background: #fff;
+    border-left: 1px solid light-dark(#ddd, #4c4c4c);
+    background: light-dark(#fff, #1a1a1a);
 }}
 
 /* Thought panel */
 .live-agent-thought-panel {{
     padding: 12px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid light-dark(#eee, #4c4c4c);
     max-height: 200px;
     overflow-y: auto;
 }}
@@ -272,12 +293,12 @@ class LiveAgentDisplay(BaseDisplay):
     margin: 0 0 8px 0;
     font-size: 12px;
     text-transform: uppercase;
-    color: #666;
+    color: light-dark(#666, #c2c2c2);
 }}
 .live-agent-thought-text {{
     font-size: 13px;
     line-height: 1.5;
-    color: #333;
+    color: light-dark(#333, #d1d1d1);
     white-space: pre-wrap;
 }}
 
@@ -300,8 +321,8 @@ class LiveAgentDisplay(BaseDisplay):
 /* Controls */
 .live-agent-controls {{
     padding: 12px;
-    border-top: 1px solid #ddd;
-    background: #f8f8f8;
+    border-top: 1px solid light-dark(#ddd, #4c4c4c);
+    background: light-dark(#f8f8f8, #1e1e1e);
 }}
 .live-agent-control-buttons {{
     display: flex;
@@ -311,9 +332,9 @@ class LiveAgentDisplay(BaseDisplay):
 }}
 .live-agent-btn {{
     padding: 6px 14px;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 4px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
     cursor: pointer;
     font-size: 13px;
     transition: all 0.15s;
@@ -337,7 +358,7 @@ class LiveAgentDisplay(BaseDisplay):
 .live-agent-instruction-input input {{
     flex: 1;
     padding: 6px 10px;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 4px;
     font-size: 13px;
 }}
@@ -353,7 +374,7 @@ class LiveAgentDisplay(BaseDisplay):
     max-width: 500px;
     margin: 8px auto;
     padding: 8px 12px;
-    border: 1px solid #ddd;
+    border: 1px solid light-dark(#ddd, #4c4c4c);
     border-radius: 4px;
     font-size: 14px;
 }}
@@ -364,8 +385,8 @@ class LiveAgentDisplay(BaseDisplay):
     gap: 4px;
     padding: 8px;
     overflow-x: auto;
-    border-top: 1px solid #ddd;
-    background: #f5f5f5;
+    border-top: 1px solid light-dark(#ddd, #4c4c4c);
+    background: light-dark(#f5f5f5, #1f1f1f);
 }}
 .live-agent-filmstrip-thumb {{
     width: {filmstrip_size}px;
@@ -398,7 +419,7 @@ class LiveAgentDisplay(BaseDisplay):
     gap: 12px;
     padding: 6px 12px;
     background: rgba(0,0,0,0.03);
-    border-top: 1px solid #eee;
+    border-top: 1px solid light-dark(#eee, #4c4c4c);
     font-size: 12px;
 }}
 .live-agent-overlay-controls label {{
@@ -434,7 +455,7 @@ class LiveAgentDisplay(BaseDisplay):
         <span class="live-agent-step-counter" style="margin-left: 12px; color: #888;">Step 0</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
-        <span class="live-agent-url-display" style="color: #666; font-size: 12px;"></span>
+        <span class="live-agent-url-display" style="color: light-dark(#666, #c2c2c2); font-size: 12px;"></span>
         <button class="live-agent-collapse-toggle" title="Collapse/expand agent view">&#x25B2; Collapse</button>
     </div>
 </div>
@@ -461,14 +482,17 @@ class LiveAgentDisplay(BaseDisplay):
         # Main viewer (hidden until session starts)
         parts.append('<div class="live-agent-main" style="display: none;">')
 
-        # Screenshot panel
+        # Screenshot panel. A viewBox takes numbers, not CSS lengths; the
+        # viewer replaces it with the page's viewport on the first frame.
+        box_w = css_pixels(max_w, 900) if _is_pixel_length(max_w) else 900
+        box_h = css_pixels(max_h, 650) if _is_pixel_length(max_h) else 650
         parts.append(f"""
 <div class="live-agent-screenshot-panel">
     <div class="live-agent-screenshot-placeholder">
         Waiting for agent to start...
     </div>
     <img class="live-agent-screenshot" style="display: none;" alt="Agent screenshot">
-    <svg class="live-agent-overlay-layer" viewBox="0 0 {max_w} {max_h}"></svg>
+    <svg class="live-agent-overlay-layer" viewBox="0 0 {box_w} {box_h}"></svg>
 </div>
 """)
 
@@ -523,7 +547,7 @@ class LiveAgentDisplay(BaseDisplay):
             if allow_takeover:
                 parts.append("""
 <div class="live-agent-takeover-toolbar" style="display:none;">
-    <div style="font-size:12px;color:#666;margin-bottom:4px;">
+    <div style="font-size:12px;color:light-dark(#666, #c2c2c2);margin-bottom:4px;">
         <strong>Manual Control</strong> &mdash;
         Click screenshot to click &bull;
         Scroll wheel to scroll &bull;
@@ -566,3 +590,18 @@ class LiveAgentDisplay(BaseDisplay):
         parts.append('</div>')  # viewer
 
         return "\n".join(parts)
+
+
+def _is_pixel_length(value) -> bool:
+    """A bare number or a px length, which a viewBox can use as it is."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    text = str(value).strip().lower()
+    text = text[:-2].strip() if text.endswith("px") else text
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False

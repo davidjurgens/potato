@@ -1,6 +1,6 @@
 # Quality Control Features
 
-Potato provides comprehensive quality control features to ensure high-quality annotations in your projects. This guide covers five key features:
+Five quality control features, all optional and independent of each other:
 
 1. **Attention Checks** - Verify annotator engagement with known-answer items
 2. **Gold Standards** - Track accuracy against expert-labeled items
@@ -28,8 +28,8 @@ attention_checks:
   # OR
   probability: 0.1           # 10% chance per item
 
-  # Optional: flag suspiciously fast responses
-  min_response_time: 3.0     # Flag if answered in < 3 seconds
+  # Optional: fail responses that arrive too fast to have been read
+  min_response_time: 3.0     # Fail the check if answered in under 3 seconds
 
   # Failure handling
   failure_handling:
@@ -65,15 +65,53 @@ Create a JSON file with your attention check items:
 **Fields:**
 - `id` (required): Unique identifier for the attention check
 - `text` (required): The text to display to annotators
-- `expected_answer` (required): Dictionary mapping schema names to expected values
+- `expected_answer` (required): Dictionary mapping schema names to expected values.
+  For a multiselect, a single label means "this box and no other"; a list means
+  exactly those boxes, in any order. An annotator who ticks extra boxes fails.
 
-### How It Works
+### When a check is injected and what happens next
 
 1. Attention check items are loaded at server startup
 2. Based on `frequency` or `probability`, checks are injected into the annotation flow
 3. When an annotator submits a response, it's compared to the expected answer
-4. Failures are tracked per-user
-5. Warnings and blocks are triggered at configured thresholds
+4. A response faster than `min_response_time` fails whatever it says. The clock
+   runs from when the server sent the item to when it received the save, and it
+   is measured on the server. The annotator's own client also reports a
+   duration; that number is not what the check reads, and a large disagreement
+   between the two is logged
+5. Failures are tracked per-user, at most one result per annotator per check
+   item, so changing an answer does not add a second result. Re-saves merge
+   rather than replace. The answer is taken from the latest save, the recorded
+   time is the fastest one seen, and a check that failed on speed stays failed —
+   the annotation page saves twice for one answer, on selection and again on
+   Next, and that second save carries the seconds spent looking at an answer
+   already given
+6. The comparison accepts either shape the annotation endpoint takes for a
+   selection: the label in the value, or the label in the key with the form's
+   own `on` as the value
+
+If the server restarts between sending an item and receiving its answer, it
+cannot time that answer. The check is skipped for that one response and a line
+naming the annotator and the item goes to the log, rather than the answer
+passing quietly.
+7. Warnings and blocks are triggered at configured thresholds
+8. Once a warning or block has been shown for a failed check, that failure
+   stands: answering the same check again does not change it. An answer changed
+   before any verdict was shown (a misclick corrected on the same page) still
+   counts
+9. Moving past a check without answering it fails it
+10. A blocked annotator gets no more items. Reloading the annotation page ends
+    their task, and further saves are refused with HTTP 403. On a crowd
+    platform the end page carries the platform's failure code; elsewhere it
+    shows the block message. A block cannot be lifted by re-answering
+
+Consent, instruction and survey pages are never graded as attention checks or
+gold items, and their answers are not considered for auto-promotion.
+
+Attention-check and gold results are written to
+`<output_annotation_dir>/quality_control_results.json` as they are recorded, and
+read back at startup, so a restart for a deploy or a crash does not clear an
+annotator's failure history or unblock someone who had been blocked.
 
 ### Admin Dashboard
 
@@ -86,7 +124,7 @@ View attention check statistics in the admin dashboard at `/admin`:
 
 ## Gold Standards
 
-Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. This allows you to track quality without influencing annotator behavior.
+Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. You therefore track quality without influencing annotator behavior.
 
 ### Configuration
 
@@ -98,10 +136,10 @@ gold_standards:
   items_file: "gold_standards.json"
 
   # How to use gold standards
-  mode: "mixed"              # Options: training, mixed, separate
-  # - training: Show only during training phase
-  # - mixed: Mix into regular annotation (silent tracking)
-  # - separate: Dedicated evaluation phase
+  mode: "mixed"              # Options: mixed, separate, training
+  # - mixed: inject into the annotation stream on the frequency below
+  # - separate: accepted, and behaves exactly as mixed
+  # - training: serves nothing at all. See the note below.
 
   # For mixed mode, how often to inject
   frequency: 20              # Insert one every 20 items
@@ -110,6 +148,10 @@ gold_standards:
   accuracy:
     min_threshold: 0.7       # Minimum required accuracy (70%)
     evaluation_count: 10     # Evaluate after this many gold items
+  # Evaluated whether or not feedback is on. Annotators under the threshold
+  # appear in `gold_standards.below_accuracy_threshold` in
+  # /admin/api/quality_control, and are named in the server log the first time
+  # they cross it. Only the message TO the annotator depends on `feedback`.
 
   # Feedback settings (disabled by default for silent tracking)
   # Enable for training scenarios where you want to give annotators feedback
@@ -123,6 +165,57 @@ gold_standards:
     min_annotators: 3          # Minimum annotators before checking
     agreement_threshold: 1.0   # 1.0 = unanimous, 0.8 = 80% agree
 ```
+
+### What each mode does
+
+`mixed` is the implemented mode: gold items are injected into the annotation
+stream every `frequency` items, and graded silently unless `feedback` is on.
+
+`separate` is accepted and takes the same code path as `mixed`. There is no
+dedicated evaluation block; the server says so at boot.
+
+`training` serves no gold items. Nothing delivers them during the training
+phase, so a study configured this way loads its gold file, logs the same lines
+as a working config, and measures nothing. Both the server and
+`potato validate --strict` now refuse to let that pass quietly. To grade during
+training, put practice questions in the training phase's own config — they use
+the same comparator.
+
+### Grading and the payload shape
+
+Answers reach the server as `{"schema:label": value}` or
+`{"schema:::label": value}`; both are accepted and both are graded the same
+way. When the value is a selection marker — `on`, `true`, `yes`, `1`, `checked`
+or `selected` — the answer is the **label**, which is what a browser form, the
+simulator and most API callers send. When the value is anything else it is the
+answer, which is what a free-text or numeric schema stores.
+
+### Auto-promotion
+
+An item is promoted when `min_annotators` have answered it and they agree.
+Agreement is measured per schema on the resolved label, so two annotators
+giving opposite answers do not promote, and a schema only one of them answered
+is not treated as unanimous. A tie never promotes, whatever
+`agreement_threshold` is: at 0.5, a one-to-one split has no majority label.
+The promotion record's `agreement` is the share of annotators behind the
+promoted label, taken from the least-agreed schema.
+
+Raters declared under
+[`machine_annotators`](../advanced/machine_annotators.md) are not counted
+toward promotion. Tools that share a reference database make the same mistakes,
+so counting them would let a few tools write their shared error into the answer
+key before any person had looked at the item. People who agree with the tools
+still promote it.
+
+A promoted item is graded when an annotator meets it in the ordinary stream; it
+is never injected. The annotators whose answers promoted it are not graded on
+it, since its gold label is their own consensus. The headline gold accuracy therefore depends on when an
+annotator arrived: items promoted behind them count, items promoted ahead of
+them do not. `/admin/api/quality_control` reports `configured_correct` /
+`configured_total` per annotator alongside the totals, because the configured
+pool is the same for everyone and is the comparable number. `total_items`
+counts everything currently gradeable, with `configured_items` and
+`promoted_items` broken out.
 
 ### Gold Standard Items File Format
 
@@ -155,6 +248,53 @@ gold_standards:
 - `gold_label` (required): Dictionary with correct annotations
 - `explanation` (optional): Explanation shown to annotators
 - `difficulty` (optional): Metadata for analysis
+
+### Gold Standards for Drawn Answers
+
+Image annotation gold standards work, and are graded by **overlap rather than
+equality** — two annotators never produce byte-identical geometry, so a string
+comparison would fail every drawn answer no matter how well it was drawn.
+
+The `gold_label` value is the same JSON the annotation client stores: a list of
+objects with normalized (0–1) coordinates.
+
+```json
+[
+  {
+    "id": "gold_img_001",
+    "image": "images/street_042.jpg",
+    "gold_label": {
+      "objects": "[{\"type\": \"bbox\", \"label\": \"car\", \"coordinates\": {\"x\": 0.12, \"y\": 0.40, \"width\": 0.22, \"height\": 0.18}}]"
+    },
+    "explanation": "The parked car on the left; the reflection in the window is not a second car."
+  }
+]
+```
+
+An answer passes when **every** gold shape is matched by a drawn shape of the
+**same label** at or above the IoU tolerance, with no extra shapes. Right place,
+wrong label is a failure — that is what a gold standard exists to catch.
+
+```yaml
+quality_control:
+  geometry_iou_tolerance: 0.5   # default; also accepted inside gold_standards
+```
+
+| Tolerance | Effect |
+|---|---|
+| `0.5` (default) | The Pascal VOC / COCO detection convention. The annotator clearly found and outlined the right object. |
+| `0.75`–`0.9` | Strict. Appropriate for segmentation work where boundary precision is the skill being tested. |
+| `0.25`–`0.4` | Loose. Appropriate for "did you spot it at all" screening, or for small objects where a few pixels dominate the IoU. |
+
+!!! tip "IoU punishes small objects"
+
+    A fixed pixel error costs far more IoU on a small object than a large one.
+    If your gold items are dominated by small objects, a 0.5 tolerance is
+    stricter in practice than it sounds — consider lowering it or choosing
+    larger gold objects.
+
+The same comparator grades training-phase practice questions, so a project's
+gold standards and its training answers are held to the same standard.
 
 ### Feedback Display
 
@@ -206,10 +346,16 @@ gold_standards:
 
 ## Pre-annotation Support
 
-Pre-annotation allows you to pre-fill annotation forms with model predictions, useful for:
+Pre-annotation pre-fills the form with model predictions, which is useful for:
 - Active learning workflows
 - Correcting model outputs
 - Bootstrapping from existing annotations
+
+As of 2.11.0, `pre_annotation` still works, but the
+[labeling engine](../labeling-engine/overview.md) is its successor: the same
+predictions become a `static` source, and `potato label migrate-config` writes
+the equivalent `labeling_engine` block (see
+[Migration](../labeling-engine/migration.md)).
 
 ### Configuration
 
@@ -219,6 +365,10 @@ pre_annotation:
 
   # Field in data items containing predictions
   field: "predictions"
+
+  # Optional: read predictions from a separate file instead (path relative
+  # to task_dir). Used for an item that has no `field` of its own.
+  predictions_file: "data/predictions.json"
 
   # Can annotators change pre-filled values?
   allow_modification: true
@@ -260,12 +410,39 @@ For span annotations:
 }
 ```
 
-### How It Works
+To keep predictions out of the data, put them in `predictions_file`. Two
+shapes are accepted, as JSON or (for a `.jsonl`/`.ndjson` file) one record per
+line:
+
+```json
+{"item_001": {"sentiment": "positive"}, "item_002": {"sentiment": "negative"}}
+```
+
+```json
+[{"id": "item_001", "predictions": {"sentiment": "positive"}}]
+```
+
+In the list form each record names its item with `id` (or `instance_id`) and
+holds the predictions under the configured `field`, falling back to
+`predictions`. A missing or unreadable file, or one with no usable records,
+logs a warning and seeds nothing.
+
+### When predictions are applied
 
 1. When an item is loaded, the predictions field is extracted
 2. If the annotator hasn't already annotated this item, predictions are used to pre-fill the form
 3. Annotators can modify the pre-filled values (if `allow_modification: true`)
 4. Low-confidence items can be visually highlighted
+
+### Acceptance records
+
+When a seed is applied, Potato records it in that item's behavioral data as
+`pre_annotation_seeds` (`{schema: seeded value}`, kept after later saves). Set
+against the saved annotation, it shows which answers the annotator left as the
+model wrote them. For AI-assistant suggestions, each AI usage event's
+`final_annotation` is stamped with what was actually saved for that schema,
+alongside `suggestion_accepted`. After a click on accept, `suggestion_accepted`
+keeps the clicked value and `decision` says what the save did with it.
 
 ### Best Practices
 
@@ -318,6 +495,14 @@ The system automatically selects the appropriate metric:
 - **Nominal metric**: For categorical annotations (radio, multiselect)
 - **Interval metric**: For numeric annotations (likert, slider, number)
 
+An interval metric subtracts the two ratings, so a likert, slider or number
+scheme whose answers are not numbers is measured nominally instead. The report
+says so, in `metric_note` on the schema and in the top-level `warnings` list.
+
+Nothing is reported for a schema until `min_overlap` annotators have answered
+the same item, so a study with one annotator shows "No items with 2+
+annotators" rather than a number.
+
 ---
 
 ## API Endpoints
@@ -363,18 +548,54 @@ Returns:
 {
   "enabled": true,
   "overall": {
-    "average_krippendorff_alpha": 0.75,
-    "interpretation": "Tentative agreement"
+    "average_krippendorff_alpha": 0.82,
+    "schemas_evaluated": 1,
+    "interpretation": "Good agreement",
+    "average_cohen_kappa": 0.79,
+    "average_fleiss_kappa": 0.78
   },
   "by_schema": {
     "sentiment": {
       "krippendorff_alpha": 0.82,
+      "metric_type": "nominal",
       "items_evaluated": 100,
-      "interpretation": "Good agreement"
+      "total_annotations": 300,
+      "interpretation": "Good agreement",
+      "cohen_kappa": {"mean_kappa": 0.79, "pairs": [...], "n_pairs_evaluated": 3, "n_pairs_skipped": 0},
+      "fleiss_kappa": {"kappa": 0.78, "n_items_evaluated": 100, "n_raters": 3, "n_categories": 3, "interpretation": "Substantial"}
+    },
+    "regions": {
+      "error": "Structured answers (steps, segments, regions, glosses, links, chains or events) are scored in the agreement report at /admin/iaa, not here.",
+      "see": "/admin/iaa"
     }
-  }
+  },
+  "warnings": [],
+  "machine_annotators_excluded": [{"user_id": "llm-1", "origin": "gpt-4o (llm)"}]
 }
 ```
+
+- Only human annotators are counted. Declared machine annotators are listed
+  in `machine_annotators_excluded` (present only when there are any), with a
+  matching entry in `warnings`.
+- `cohen_kappa` (pairwise, with the mean) and `fleiss_kappa` are computed for
+  nominal schemas only. A schema scored on an interval scale gets
+  Krippendorff's alpha alone.
+- Multi-label schemas (`multiselect`, `hierarchical_multiselect` and
+  `card_sort`) have `"metric_type": "masi"`; one capped at a single choice
+  (`max_selections: 1`) is scored as nominal instead. Each annotator's
+  answer is a set of labels: `krippendorff_alpha` uses MASI distance, so a
+  partial overlap counts as partial agreement, and `mean_jaccard` is the mean
+  pairwise overlap. They have no kappas, which would treat each set as one
+  category. `/admin/iaa` reports the same two figures.
+- `overall` averages each figure over the schemas that produced one, and is
+  empty when no schema did.
+- When every annotator gave the same label on every item, chance agreement is
+  1 and alpha and kappa are undefined. The schema then reports
+  `"krippendorff_alpha": null`, `"percent_agreement": 1.0` and
+  `"interpretation": "Undefined"`. That is perfect agreement, not a failed
+  computation.
+- Structured schemes (steps, segments, regions, glosses, span links,
+  coreference chains, events and other non-label answers) are skipped with an `error` pointing to `/admin/iaa`, which scores them.
 
 ---
 
@@ -420,6 +641,8 @@ gold_standards:
     show_correct_answer: true
     show_explanation: true
 
+# Still supported in 2.11.0; the labeling engine's `static` source is its
+# successor (`potato label migrate-config` translates this block).
 pre_annotation:
   enabled: true
   field: "model_prediction"
@@ -459,6 +682,42 @@ Step-level QC is particularly useful for:
 - **Code review** tasks with multiple files to review
 
 Step-level agreement metrics (Cohen's kappa) are computed per annotator pair for step-level schemas and available in the admin dashboard.
+
+---
+
+## Writing-Process Signals (free-text quality)
+
+Attention checks and gold standards work on *categorical* answers. They cannot
+tell you whether a free-text rationale was written by the annotator or pasted in
+from an LLM — the finished text usually looks fine either way.
+
+[Keystroke logging](../advanced/keystroke_logging.md) adds a complementary
+signal for free-text fields by recording *how* the response was produced:
+
+```yaml
+keystroke_logging:
+  enabled: true
+  detection:
+    enabled: true
+    on_external_insert: flag   # allow | warn | block | flag
+```
+
+This produces per-response flags — `paste_dominant`, `silent_insertion`,
+`transcription_rhythm`, `offscreen_composition`, `implausible_speed`,
+`synthetic_input` — each carrying the evidence that fired it. They surface in
+the **Writing Process** panel of the admin dashboard and in the
+`typing_dynamics.csv` export.
+
+!!! warning "These flags are not attention checks"
+    A failed attention check is a discrete, defensible fact: the annotator gave
+    a known-wrong answer. A writing-process flag is a **statistical signal about
+    a behaviour that has innocent explanations** — fast typists, mobile
+    keyboards, dictation, assistive technology. Do not wire them to automatic
+    rejection.
+
+    See [false positives](../advanced/writing_process_detection.md#false-positives)
+    and [the ethics guide](../advanced/keystroke_logging_ethics.md) before using
+    them in any decision that affects an annotator.
 
 ---
 

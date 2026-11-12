@@ -1,6 +1,6 @@
 # Crowdsourcing Integration
 
-Potato can be seamlessly deployed online to collect annotations from common crowdsourcing platforms like Prolific and Amazon Mechanical Turk.
+Potato can be deployed online to collect annotations from crowdsourcing platforms such as Prolific and Amazon Mechanical Turk.
 
 ## Setup Potato on a Server
 
@@ -14,9 +14,46 @@ You should then be able to access the annotation page via `your_ip_address:the_p
 
 ---
 
+## Crowd Providers
+
+Potato connects to recruitment platforms through **crowd providers**. Prolific,
+CloudResearch Connect and SONA have dedicated providers; any other panel that passes a participant ID in
+the URL and accepts a completion code (Besample, Positly, User Interviews,
+Testable Minds, Cint, ...) can be configured with the `generic` provider — no
+code required:
+
+```yaml
+login:
+  type: url_direct
+  url_argument: response_id        # must match id_param below
+
+crowdsourcing:
+  provider: generic                # generic | prolific | connect | sona | ...
+  generic:
+    platform_label: "Besample"     # shown on the done-page return button
+    id_param: response_id          # URL parameter carrying the participant ID
+    capture_params: [study]        # extra URL params to capture
+    completion:
+      code: "BSMP-4432"
+      redirect_url: "https://besample.app/complete?rid={worker_id}&code={code}"
+      failed_code: "BSMP-FAIL"     # optional: shown to blocked participants
+```
+
+Available placeholders in `redirect_url`: `{code}`, `{worker_id}`,
+`{session_id}`, `{study_id}`, and any name from `capture_params`.
+
+Configs without a `crowdsourcing:` block keep the historical behavior:
+`login.type: url_direct` serves both Prolific-style and MTurk-style arrivals
+simultaneously, exactly as before. See
+[Choosing a Crowdsourcing Platform](crowdsourcing-platforms.md) for which
+platforms fit this model, and
+`examples/crowdsourcing/generic-panel/` for a runnable example.
+
+---
+
 ## Prolific Integration
 
-[Prolific](https://www.prolific.com/) is a platform where you can easily recruit task participants. Potato provides seamless integration with Prolific through:
+[Prolific](https://www.prolific.com/) is a platform for recruiting task participants. Potato integrates with it through:
 
 1. **URL-Direct Login**: Automatic login using Prolific's URL parameters
 2. **Completion Codes**: Built-in support for completion code display and redirect
@@ -181,6 +218,7 @@ instance_reclaim:
 token: "your-prolific-api-token"
 study_id: "your-study-id"
 max_concurrent_sessions: 30      # Maximum concurrent workers
+workload_checker: true           # Opt in to automatic pause/resume polling
 workload_checker_period: 300     # Seconds between load checks
 ```
 
@@ -198,15 +236,17 @@ completion_code: "YOUR-PROLIFIC-CODE"
 
 ### Server Workload Management
 
-When many workers access your study concurrently, your server might become overloaded. Potato automatically manages this:
+When many workers access your study concurrently, your server might become overloaded. Potato can manage this automatically when you opt in with `workload_checker: true`:
 
 1. Checks active worker count against `max_concurrent_sessions`
-2. Pauses the Prolific study if threshold is exceeded
+2. Pauses the Prolific study if the threshold is exceeded
 3. Monitors worker count every `workload_checker_period` seconds
-4. Resumes when active workers drop to 20% of the maximum
+4. Resumes when active workers drop to 20% of the maximum (only if the monitor
+   itself paused the study — a study you pause manually is never restarted)
 
 ```yaml
 # In prolific_config.yaml
+workload_checker: true        # Off by default: enables periodic Prolific API polling
 max_concurrent_sessions: 30   # Pause study above this threshold
 workload_checker_period: 300  # Check every 5 minutes
 ```
@@ -215,33 +255,46 @@ workload_checker_period: 300  # Check every 5 minutes
 
 ---
 
-## Alternative: Using Surveyflow for Completion
+## Alternative: A Completion Page of Your Own
 
-If you need more control over the completion page, you can use surveyflow instead of the built-in completion page:
+For more control than the built-in completion page, end the study with a
+`poststudy` phase that shows your own text and link:
 
-1. **Create an end page** (`surveyflow/end.jsonl`):
+1. **Create the page** (`surveys/end.json`):
 
 ```json
-{"id":"1","text":"Thanks for your participation! Click the link below to complete the study.","schema": "pure_display", "choices": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"]}
+[
+  {
+    "annotation_type": "pure_display",
+    "name": "finish",
+    "description": "Thanks for your participation! Click the link below to complete the study.",
+    "labels": ["<a href=\"https://app.prolific.com/submissions/complete?cc=YOUR-CODE\" target=\"_blank\">Complete Study on Prolific</a>"],
+    "allow_html": true
+  }
+]
 ```
 
-2. **Configure surveyflow** in your YAML:
+2. **Add it as the last phase**:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/consent.jsonl
-  post_annotation:
-    - surveyflow/end.jsonl
+phases:
+  order: [consent, annotation, poststudy]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  poststudy:
+    type: poststudy
+    file: surveys/end.json
 ```
 
 ---
 
 ## Amazon Mechanical Turk Integration
+
+!!! warning "MTurk closed permanently on September 30, 2026"
+    No HITs can be created or completed. This section describes how the
+    integration worked, for archived studies; new studies need another
+    provider. See [Choosing a Crowdsourcing Platform](crowdsourcing-platforms.md).
 
 [Amazon Mechanical Turk (MTurk)](https://www.mturk.com/) is a popular crowdsourcing marketplace for human intelligence tasks. Potato provides full integration with MTurk through:
 

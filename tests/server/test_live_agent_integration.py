@@ -509,7 +509,6 @@ class TestLiveAgentAPI:
             "task_dir": test_dir,
             "user_config": {"allow_all_users": True},
             "output_annotation_dir": os.path.join(test_dir, "annotation_output"),
-            "output_annotation_format": "json",
             "live_agent": {
                 "endpoint_type": "ollama_vision",
                 "ai_config": {
@@ -818,7 +817,6 @@ class TestLiveAgentSSE:
             "task_dir": test_dir,
             "user_config": {"allow_all_users": True},
             "output_annotation_dir": os.path.join(test_dir, "annotation_output"),
-            "output_annotation_format": "json",
             "live_agent": {
                 "endpoint_type": "ollama_vision",
                 "ai_config": {

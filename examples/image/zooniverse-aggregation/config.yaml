@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+###############################################################################
+# Zooniverse-style consensus aggregation
+#
+# An invented penguin-count workflow, imported from the Zooniverse exports in
+# zooniverse-export/ with `potato import ... --keep-annotators`. Five
+# volunteers' classifications ship in volunteer_annotations/, so the consensus
+# export has something to aggregate straight away:
+#
+#   python -m potato.export -c examples/image/zooniverse-aggregation/config.yaml \
+#       -f consensus -o consensus_out
+#
+# To look at the task (and add a classification as a sixth volunteer):
+#
+#   python potato/flask_server.py start \
+#       examples/image/zooniverse-aggregation/config.yaml -p 8000
+#
+# The data file points at local copies of the subject images in media/.
+###############################################################################
+
+port: 8000
+annotation_task_name: Penguin count (imported)
+task_dir: .
+# Not annotation_output/: the repo ignores every examples/**/annotation_output/,
+# which would drop the volunteers' classifications.
+output_annotation_dir: volunteer_annotations/
+data_files:
+- data/zooniverse-aggregation-example.jsonl
+item_properties:
+  id_key: id
+  text_key: image
+user_config:
+  allow_all_users: true
+  users:
+  - vol1
+  - vol2
+  - vol3
+  - vol4
+  - vol5
+require_password: false
+site_dir: default
+
+# Parameters of the consensus export (format `consensus`).
+consensus_aggregation:
+  agreement_threshold: 0.8   # top answer needs 80% of classifiers to retire an item
+  min_classifiers: 2         # one volunteer alone is never a consensus
+  points:
+    eps: 10                  # cluster radius...
+    eps_unit: pixels         # ...in image pixels (needs image_width/image_height)
+    min_samples: 2
+  boxes:
+    iou_threshold: 0.5
+
+annotation_schemes:
+- name: T0
+  description: Are there penguins in the image?
+  annotation_type: radio
+  labels:
+  - 'Yes'
+  - 'No'
+  - Unsure
+- name: T1
+  description: What else is in the image?
+  annotation_type: multiselect
+  labels:
+  - Ice
+  - Water
+  - Rock
+- name: T2
+  description: Mark each adult penguin and draw a box round each nest.
+  annotation_type: image_annotation
+  source_field: image
+  tools:
+  - landmark
+  - bbox
+  labels:
+  - name: Adult
+    color: '#00ff00'
+  - name: Nest
+    color: '#ff0000'

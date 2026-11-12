@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Ollama AI-Assisted Annotation Demo
 #
 # This example demonstrates all AI enhancement features using a local Ollama instance:
@@ -36,7 +37,7 @@ item_properties:
 
 # Output directory for annotations
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Annotation scheme - single radio button for sentiment classification
 # AI buttons available: Hint, Keyword, Rationale (configured via ai_support below)

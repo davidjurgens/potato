@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+port: 8000
+annotation_task_name: Format migration
+task_dir: .
+output_annotation_dir: annotation_output
+data_files:
+- data/instances.json
+item_properties:
+  id_key: id
+  text_key: image_url
+user_config:
+  allow_all_users: true
+  users: []
+site_dir: default
+pre_annotation:
+  enabled: true
+  field: predictions
+  allow_modification: true
+annotation_schemes:
+- annotation_type: image_annotation
+  name: image_annotation
+  description: Correct the imported annotations
+  source_field: image_url
+  tools:
+  - bbox
+  zoom_enabled: true
+  pan_enabled: true
+  labels:
+  - name: car
+    color: '#e6194b'
+    label_id: 1
+  - name: person
+    color: '#3cb44b'
+    label_id: 2
+media_directory: media

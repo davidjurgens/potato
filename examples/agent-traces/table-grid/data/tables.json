@@ -1,0 +1,16 @@
+[
+  {
+    "id": "table_sales_001",
+    "task": "A document-parsing agent extracted this table. Mark its structure: which cells are headers, which are empty.",
+    "rows": 3,
+    "cols": 3,
+    "image": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='130'><rect width='300' height='130' fill='%23ffffff' stroke='%23ced4da'/><rect x='0' y='0' width='300' height='40' fill='%23f1f3f5'/><line x1='100' y1='0' x2='100' y2='130' stroke='%23ced4da'/><line x1='200' y1='0' x2='200' y2='130' stroke='%23ced4da'/><line x1='0' y1='40' x2='300' y2='40' stroke='%23ced4da'/><line x1='0' y1='85' x2='300' y2='85' stroke='%23ced4da'/><text x='20' y='26' font-family='sans-serif' font-size='13'>Region</text><text x='120' y='26' font-family='sans-serif' font-size='13'>Q1</text><text x='220' y='26' font-family='sans-serif' font-size='13'>Q2</text><text x='20' y='70' font-family='sans-serif' font-size='13'>North</text><text x='120' y='70' font-family='sans-serif' font-size='13'>40</text><text x='220' y='70' font-family='sans-serif' font-size='13'>55</text><text x='20' y='114' font-family='sans-serif' font-size='13'>South</text><text x='120' y='114' font-family='sans-serif' font-size='13'>30</text></svg>"
+  },
+  {
+    "id": "table_empty_002",
+    "task": "Mark the header row/column and the empty cell in this 2x2 table.",
+    "rows": 2,
+    "cols": 2,
+    "image": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='90'><rect width='200' height='90' fill='%23ffffff' stroke='%23ced4da'/><rect x='0' y='0' width='200' height='45' fill='%23f1f3f5'/><line x1='100' y1='0' x2='100' y2='90' stroke='%23ced4da'/><line x1='0' y1='45' x2='200' y2='45' stroke='%23ced4da'/><text x='20' y='28' font-family='sans-serif' font-size='13'>Name</text><text x='120' y='28' font-family='sans-serif' font-size='13'>Score</text><text x='20' y='74' font-family='sans-serif' font-size='13'>Ann</text></svg>"
+  }
+]

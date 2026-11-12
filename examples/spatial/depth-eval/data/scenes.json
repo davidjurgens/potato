@@ -1,0 +1,14 @@
+[
+  {
+    "id": "scene_0001",
+    "rgb": "/media/rgb/scene_0001.png",
+    "depth": "depth/scene_0001.png",
+    "note": "Predicted depth for a synthetic corridor. Look at the edge of the near box."
+  },
+  {
+    "id": "scene_0002",
+    "rgb": "/media/rgb/scene_0002.png",
+    "depth": "depth/scene_0002.png",
+    "note": "Predicted depth for a synthetic corridor. The back wall's scale is wrong in this one."
+  }
+]

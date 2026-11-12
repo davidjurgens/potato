@@ -1,0 +1,48 @@
+{
+  "title": "Participant screener",
+  "pages": [
+    {
+      "name": "about you",
+      "title": "About you",
+      "elements": [
+        {"type": "text", "name": "age", "title": "How old are you?", "inputType": "number", "min": 0, "max": 120, "isRequired": true},
+        {"type": "radiogroup", "name": "country", "title": "Where do you live?",
+         "choices": [{"value": "us", "text": "United States"}, {"value": "uk", "text": "United Kingdom"}, "Other"],
+         "hasOther": true, "isRequired": true},
+        {"type": "text", "name": "state", "title": "Which state?", "visibleIf": "{country} = 'us'"},
+        {"type": "checkbox", "name": "languages", "title": "Which languages do you speak fluently?",
+         "choices": ["English", "Spanish", "French", "Mandarin"], "choicesOrder": "random"},
+        {"type": "boolean", "name": "bilingual_home", "title": "Did you grow up in a bilingual home?",
+         "visibleIf": "{languages.length} > 1"},
+        {"type": "comment", "name": "lang_notes", "title": "Anything else about your languages?",
+         "visibleIf": "{languages} contains 'Spanish' or {languages} contains 'French'"}
+      ]
+    },
+    {
+      "name": "experience",
+      "visibleIf": "{age} >= 18",
+      "questionsOrder": "random",
+      "elements": [
+        {"type": "rating", "name": "annot_exp", "title": "How much annotation experience do you have?",
+         "rateMin": 1, "rateMax": 5, "minRateDescription": "None", "maxRateDescription": "A lot"},
+        {"type": "panel", "name": "details", "title": "Details", "visibleIf": "{annot_exp} >= 3",
+         "elements": [
+           {"type": "dropdown", "name": "tool", "title": "Which tool did you use most?",
+            "choices": ["Label Studio", "Prodigy", "brat", "Potato"]},
+           {"type": "multipletext", "name": "years", "title": "Years",
+            "items": [{"name": "start", "title": "First year"}, {"name": "end", "title": "Last year"}]}
+         ]},
+        {"type": "matrix", "name": "agree", "title": "How much do you agree?",
+         "columns": ["Disagree", "Neutral", "Agree"],
+         "rows": [{"value": "r1", "text": "I enjoy careful reading"}, {"value": "r2", "text": "I notice typos"}]},
+        {"type": "expression", "name": "score", "expression": "{annot_exp} * 2"},
+        {"type": "text", "name": "email", "title": "Email for follow-up", "enableIf": "{annot_exp} > 1",
+         "validators": [{"type": "email"}]}
+      ]
+    }
+  ],
+  "triggers": [
+    {"type": "complete", "expression": "{age} < 18"},
+    {"type": "setvalue", "expression": "{age} > 65", "setToName": "senior", "setValue": true}
+  ]
+}

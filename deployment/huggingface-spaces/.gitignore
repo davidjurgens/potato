@@ -1,0 +1,12 @@
+# Runtime artifacts generated when demos are run locally (not source).
+__pycache__/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+# Per-demo server output + server-generated layouts.
+demos/*/annotation_output/
+demos/*/layouts/
+demos/*/output/
+demo-space/annotation_output/
+demo-space/output/

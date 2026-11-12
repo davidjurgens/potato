@@ -10,10 +10,14 @@ Key pools (QWERTY layout):
   Pool 1: q w e r t y u i o p   (top letter row)
   Pool 2: a s d f g h j k l     (home row)
 
-Schemas that self-manage keys (pairwise, bws) pre-claim their hardcoded keys.
-Explicit per-label key_value overrides are always honored.
+Schemas that self-manage keys (pairwise, bws, triage) pre-claim the keys they
+bind, as do explicit per-label key_value settings in any schema and the keys a
+viewer handles on the whole page (PAGE_KEY_MODULES). Explicit keys are always
+honored; a key bound by two schemas is logged, because only one of them
+responds to it.
 """
 
+import importlib
 import logging
 from collections.abc import Mapping
 
@@ -27,6 +31,23 @@ KEY_POOLS = [
 
 # Schema types that manage their own keybindings internally
 SELF_MANAGED_TYPES = {'pairwise', 'bws', 'triage'}
+
+#: Schema types whose viewer listens for keys on the whole page rather than on
+#: an element of its own, and the module whose ``page_keys(scheme)`` lists them.
+#: A label shortcut on one of these keys loses it to the viewer. Two viewers of
+#: one type share their keys by design (one press steps both interval plots),
+#: so only a clash with another type is logged. A module may also define
+#: ``label_keys(scheme)``, the (key, label) pairs its labels take without a
+#: key_value. Viewers that take keys only while focus is inside them
+#: (spectrogram, volume, microscopy, listening and triad tests) are not listed.
+PAGE_KEY_MODULES = {
+    'image_annotation': 'image_annotation',
+    'video_annotation': 'video_annotation',
+    'audio_annotation': 'audio_annotation',
+    'spatial_annotation': 'spatial_annotation',
+    'rollout_evaluation': 'rollout_evaluation',
+    'interval_label': 'interval_label',
+}
 
 
 def _get_label_name(label_data):
@@ -45,6 +66,67 @@ def _get_explicit_key(label_data):
         if kv is not None:
             return str(kv).lower()
     return None
+
+
+def _hardcoded_keys(scheme):
+    """
+    The keys a self-managed schema binds, read from the schema's own module so
+    the two cannot disagree. Lowercase, as label shortcuts are matched.
+    """
+    ann_type = scheme.get("annotation_type", "")
+    if ann_type == "pairwise":
+        # Only binary mode binds keys (pairwise.py); scale and multi_dimension
+        # have none, and 0 is the tie button's.
+        if (scheme.get("mode", "binary") != "binary"
+                or not scheme.get("sequential_key_binding", True)):
+            return []
+        return ["1", "2", "0"] if scheme.get("allow_tie", False) else ["1", "2"]
+    if ann_type == "bws":
+        if not scheme.get("sequential_key_binding", True):
+            return []
+        from .bws import bws_keys
+        best, worst = bws_keys(scheme.get("tuple_size", 4))
+        return best + worst
+    if ann_type == "triage":
+        from .triage import DEFAULT_KEYBINDINGS
+        return [str(scheme.get(f"{action}_key", default)).lower()
+                for action, default in DEFAULT_KEYBINDINGS.items()]
+    return []
+
+
+def _viewer_claims(scheme):
+    """
+    (key, what) for every key a viewer scheme handles page-wide, lowercased
+    (see PAGE_KEY_MODULES). ``what`` is None for a viewer shortcut.
+    """
+    module_name = PAGE_KEY_MODULES.get(scheme.get("annotation_type", ""))
+    if module_name is None:
+        return []
+    module = importlib.import_module(f".{module_name}", __package__)
+    try:
+        claims = [(key, None) for key in module.page_keys(scheme)]
+        if hasattr(module, "label_keys"):
+            claims += [(key, f"label '{label}'") for key, label in module.label_keys(scheme)]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        # A malformed scheme. Its generator runs next and reports the problem
+        # in its own words; failing here would replace that message with ours.
+        return []
+    return [(key.lower(), what) for key, what in claims
+            if isinstance(key, str) and len(key) == 1 and not key.isspace()]
+
+
+def _labels_for_allocation(scheme):
+    """
+    A likert has no ``labels``; its points are named "1".."size", which is what
+    likert.py looks up in ``_allocated_keys``. Without this a sequential likert
+    was allocated nothing and fell back to 1..size whatever else held them.
+    """
+    if scheme.get("annotation_type") == "likert" and not scheme.get("labels"):
+        size = scheme.get("size")
+        if isinstance(size, int) and 0 < size <= 10:
+            return [str(i) for i in range(1, size + 1)]
+        return []
+    return scheme.get("labels", []) or []
 
 
 def _needs_allocation(scheme):
@@ -125,31 +207,36 @@ def allocate_keybindings(annotation_schemes):
         dict: {schema_name: [{"label": str, "key": str|None}, ...]}
               Only schemas that need allocation are included.
     """
-    # Step 1: Collect all explicitly-set keys across all schemas
+    # Steps 1-2: claim every key already bound on the page, by any schema:
+    # explicit key_value on any label (a schema that is not allocated still
+    # binds it), the keys self-managed schemas hard-code, and viewer keys.
     globally_used = set()
+    owners = {}
 
     for scheme in annotation_schemes:
-        if not _needs_allocation(scheme):
-            continue
-        for label_data in scheme.get("labels", []):
-            explicit = _get_explicit_key(label_data)
-            if explicit:
-                globally_used.add(explicit)
-
-    # Step 2: Pre-claim keys used by self-managed schemas (pairwise, bws)
-    for scheme in annotation_schemes:
+        name = scheme.get("name", "")
         ann_type = scheme.get("annotation_type", "")
-        if ann_type == "pairwise":
-            if scheme.get("sequential_key_binding", True):
-                globally_used.update({'1', '2', '0'})
-        elif ann_type == "bws":
-            if scheme.get("sequential_key_binding", True):
-                tuple_size = scheme.get("tuple_size", 4)
-                for i in range(1, tuple_size + 1):
-                    globally_used.add(str(i))
-                for i in range(tuple_size):
-                    if i < 26:
-                        globally_used.add(chr(ord('a') + i))
+        claimed = [(_get_explicit_key(label_data), f"label '{_get_label_name(label_data)}'")
+                   for label_data in (scheme.get("labels") or [])]
+        claimed += [(key, None) for key in _hardcoded_keys(scheme)]
+        claimed += [(key, what or "viewer shortcut") for key, what in _viewer_claims(scheme)]
+        for key, what in claimed:
+            if not key:
+                continue
+            globally_used.add(key)
+            # Who answers the key: the viewer type for a viewer shortcut,
+            # otherwise the scheme.
+            party = ("viewer", ann_type) if what == "viewer shortcut" else name
+            owners.setdefault(key, {}).setdefault(name, (what, party))
+
+    for key, by_schema in owners.items():
+        if len({party for _, party in by_schema.values()}) > 1:
+            names = ", ".join(f"'{s}'" + (f" ({w})" if w else "")
+                              for s, (w, _) in by_schema.items())
+            logger.warning(
+                f"Key '{key}' is bound by more than one schema: {names}. A press "
+                f"reaches only one of them, or all of them at once; set a different "
+                f"key_value or turn off sequential_key_binding on one.")
 
     # Step 3: Build available pools (excluding globally used keys)
     available_pools = []
@@ -166,7 +253,7 @@ def allocate_keybindings(annotation_schemes):
             continue
 
         name = scheme.get("name", "")
-        labels = scheme.get("labels", [])
+        labels = _labels_for_allocation(scheme)
         strategy = scheme.get("keybinding_strategy", "sequential")
 
         if strategy == "mnemonic":
@@ -205,7 +292,8 @@ def allocate_keybindings(annotation_schemes):
             # Not enough keys in any single pool — assign what we can
             logger.warning(
                 f"Schema '{name}' has {needed} labels needing keys "
-                f"but no single pool has enough capacity. "
+                f"but no single pool has enough free keys; keys that other "
+                f"schemes and viewers on the page hold are skipped. "
                 f"Some labels will not have keybindings."
             )
             # Use the pool with the most remaining keys

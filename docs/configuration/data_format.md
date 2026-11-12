@@ -11,14 +11,21 @@ json, or jsonl.
 Each document needs, at minimum, a unique identifier and the body of the
 document.
 
+CSV and TSV cells are loaded exactly as written, as text. An id of `007` stays
+`007`, and the text `NA` or `None` stays `NA` or `None`. CSV uses standard
+double-quote quoting, so a cell can contain commas and line breaks. TSV has no
+quoting: a `"` in a TSV cell is part of the text, and a cell cannot contain a
+tab or a line break. An empty id, or the same id twice, stops the server with
+an error naming the row.
+
 You can find example data files
 [here](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/). We
 currently support four different document formats:
 
 -   Text: body is the document plaintext
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/toy-example.csv))
 -   Image, Video, or GIF: body is the filepath
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-as-input.json))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-label-example.json))
 -   Dialogue or a list of text: body is a list of comma-seperated
     documents and potato will automatically display the list of text
     horizontally.
@@ -29,14 +36,13 @@ currently support four different document formats:
 -   Html files
     - Put the .html files in a folder ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html_data)),
     - Then put the relatiev paths to these htmls as normal text input ([example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/html-annotation/data/html-as-input.json))
--   Best-Worst Scaling: body is a comma-separated list of documents to
-    order
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json))
--   Custom Arguments: body is one of the above + extra fields for
-    whatever custom arguments you want to enter
-    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/bws-example.json)
-    \-- in this `kwargs` and `other_kwargs` are the custom endpoints for
-    a Likert scale)
+-   Best-Worst Scaling: one item per record; Potato groups the pool into
+    tuples using `bws_config` (see [Best-Worst Scaling](../annotation-types/comparison/bws.md))
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/best-worst-scaling/data/sentiment-pool.jsonl))
+-   Extra fields: a record can carry fields beyond the id and text, for
+    display fields or display logic to read
+    ([example](https://github.com/davidjurgens/potato/blob/master/examples/video/video-as-label/data/video-label-example.json),
+    with `gifs` and `gifs_path` fields)
 -   Annotating Document A in context of Document B: body is document A +
     extra `context` field with the body of document B
     ([example](https://github.com/davidjurgens/potato/blob/master/examples/classification/check-box/data/))
@@ -46,12 +52,39 @@ In the [match finding example
 project](https://github.com/davidjurgens/potato-showcase/tree/master/match_finding),
 html tags are used to create two seperate boxes for the finding pairs.
 
+### What the body field can hold
+
+The field named by `item_properties.text_key` is expected to be a string, a
+list or a dictionary. A `null`, a number or a boolean renders as an empty
+string or as the bare value, and the server names the offending ids at
+startup. Earlier versions raised a `TypeError` that named nothing, which on a
+large export meant bisecting by hand.
+
+Three things happen to a string on the way to the page, and each is worth
+knowing before you prepare data:
+
+**Runs of spaces and tabs collapse to one space.** Span offsets have to match
+what the browser measures, and this is how they are kept in step. It means the
+default rendering path destroys indentation, a diff gutter and any
+column-aligned table. If horizontal whitespace carries meaning in your data,
+declare [`instance_display`](../annotation-types/instance_display.md) — that path preserves it
+exactly, including at `type: text`. The server warns at startup when an item's
+text contains a tab or a run of spaces and no `instance_display` is declared.
+
+**Control characters are stripped**, other than newline.
+
+**HTML is sanitized, not escaped.** Tags on an allowlist (`<b>`, `<i>`,
+`<span>` and similar) render as formatting; `<script>` and anything else is
+escaped and inert. This is deliberate: span highlights are injected into the
+item as markup, so escaping the whole field would break them. So scraped
+markup in your corpus becomes formatting rather than visible text.
+
 
 ## Displaying a list or a dictionary of instances
-Potato allows you to easily display a list or a dictionary of instance and you could easily set
-`list_as_text` as `True`.
+Potato can display an instance that is a list or a dictionary rather than a string. Set
+`list_as_text` to `True`.
 
-If you are using a list of instances, you could also define whether adding a prefix to the text
+For a list of instances, you can also add a prefix to each line
 ``` yaml
 "list_as_text": {
   "text_list_prefix_type": 'alphabet'
@@ -84,6 +117,41 @@ biased caused by the ordering effect. You can access the displayed content in th
 },
 ```
 
+
+## Conversational corpora (ConvoKit)
+
+A ConvoKit corpus is converted into a Potato data file with `potato convokit`
+rather than reshaped by hand:
+
+```bash
+potato convokit conversations-gone-awry-corpus -o data/awry.jsonl
+```
+
+Each item carries the conversation's turns, with every turn's `turn_id` set to
+the real ConvoKit utterance id so annotations can be exported back onto the
+corpus:
+
+```json
+{
+  "id": "convo:146743638.12652.12652",
+  "conversation": [
+    {"turn_id": "146743638.12652.12652", "speaker": "Sirex98", "text": "...",
+     "reply_to": null, "timestamp": 1185295934.0, "depth": 0,
+     "meta": {"toxicity": 0.0}}
+  ],
+  "conversation_tree": {"id": "146743638.12652.12652", "children": []},
+  "text": "Sirex98: ...",
+  "convo_meta": {"page_title": "User talk:2005"},
+  "_convokit": {"corpus": "conversations-gone-awry-corpus", "unit": "conversation"}
+}
+```
+
+The `_convokit` block is import provenance. It is never rendered — only keys
+listed in `instance_display.fields` are — but it must survive into any data file
+you post-process, because the ConvoKit exporter uses it to map annotations back.
+
+See the [ConvoKit integration guide](../integrations/convokit.md) for
+granularity options, metadata handling, and the export path.
 
 ## File Encoding
 
@@ -143,11 +211,10 @@ output formats, including: csv, tsv, json, or jsonl.
 # necessary to restart annotation.
 "output_annotation_dir": "annotation_output/folder_name/",
 
-# The output format for the all-annotator data. Allowed formats are:
-# * jsonl
-# * json (same output as jsonl)
-# * csv
-# * tsv
-#
-"output_annotation_format": "json", 
+# Write a periodic export of everyone's annotations to
+# <output_annotation_dir>/exports/<format>/. Any format the export registry
+# knows works here: csv, tsv, jsonl, parquet, huggingface, coco and two dozen
+# more. Leave it out and no export runs; the per-annotator JSON is written
+# either way.
+"export_annotation_format": "jsonl",
 ```

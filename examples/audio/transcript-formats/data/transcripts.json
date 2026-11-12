@@ -1,0 +1,56 @@
+[
+  {
+    "id": "talk_01",
+    "title": "SubRip (.srt) — diarized by a \"Name:\" prefix",
+    "source_format": "SRT, exported from a captioning tool. Speakers come from the \"Host:\" / \"Guest:\" prefix on each cue.",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      "transcript": "data/sources/talk_01.srt"
+    }
+  },
+  {
+    "id": "talk_02",
+    "title": "WebVTT (.vtt) — diarized by <v> voice tags",
+    "source_format": "WebVTT. Speakers come from the <v Name> voice tags, the format's own way of marking who is talking.",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      "transcript": "data/sources/talk_02.vtt"
+    }
+  },
+  {
+    "id": "talk_03",
+    "title": "Whisper JSON — undiarized, with word timings",
+    "source_format": "openai-whisper with --output_format json --word_timestamps True. No speaker labels: Whisper alone does not diarize, so every turn is unassigned and you pick the speaker.",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+      "transcript": "data/sources/talk_03.whisper.json"
+    }
+  },
+  {
+    "id": "talk_04",
+    "title": "YouTube json3 — auto-captions",
+    "source_format": "yt-dlp --write-auto-subs --sub-format json3. Auto-captions have per-word timings but no punctuation and no speakers.",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+      "transcript": "data/sources/talk_04.json3"
+    }
+  },
+  {
+    "id": "talk_05",
+    "title": "Praat TextGrid — one tier per speaker",
+    "source_format": "A Praat TextGrid from a fieldwork session. Each tier is a participant, so the tier name becomes the speaker and the silences between intervals are skipped.",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+      "transcript": "data/sources/talk_05.TextGrid"
+    }
+  },
+  {
+    "id": "talk_06",
+    "title": "Deepgram JSON — diarized cloud ASR",
+    "source_format": "A Deepgram response with diarize=true and utterances=true. Speaker indices become speaker_0 / speaker_1.",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+      "transcript": "data/sources/talk_06.deepgram.json"
+    }
+  }
+]

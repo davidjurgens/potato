@@ -26,14 +26,14 @@ logger = logging.getLogger(__name__)
 
 # HTML template using Jinja2 with comprehensive styling that preserves horizontal layout
 MULTIRATE_TEMPLATE = """
-<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="javascript:void(0)" data-annotation-id="{{ annotation_id }}" {{ layout_attrs }}>
+<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="javascript:void(0)" data-annotation-id="{{ annotation_id }}" data-annotation-type="multirate" data-schema-name="{{ schema_name }}" {{ layout_attrs }}>
     <fieldset schema="{{ schema_name }}">
         <legend class="shadcn-multirate-title">{{ description }}</legend>
-        <table class="shadcn-multirate-table">
+        <table class="shadcn-multirate-table" data-arrangement="{{ arrangement }}" data-cells-per-item="{{ ratings|length + 1 }}">
             <thead>
                 <tr>
                     {% for col in range(num_headers) %}
-                        <th>&nbsp;</th>
+                        <th class="shadcn-multirate-item-head">&nbsp;</th>
                         {% for rating in ratings %}
                             <th>{{ rating }}</th>
                         {% endfor %}
@@ -45,9 +45,13 @@ MULTIRATE_TEMPLATE = """
                     <tr schema="multirate">
                         {% for item in row %}
                             {% if item %}
-                                <td {{ item.tooltip|safe }}>{{ item.label }}</td>
+                                <td class="shadcn-multirate-item" {{ item.tooltip|safe }}>{{ item.label }}</td>
                                 {% for rating in ratings %}
                                     <td class="shadcn-radio-cell">
+                                        {#- The label makes the whole choice tappable and carries the
+                                            rating's name for the stacked phone layout; on desktop
+                                            the column header says it and the text is hidden. -#}
+                                        <label class="shadcn-multirate-choice">
                                         <input name="{{ item.name }}"
                                                type="radio"
                                                id="{{ item.id }}.{{ rating }}"
@@ -58,6 +62,8 @@ MULTIRATE_TEMPLATE = """
                                                schema="{{ schema_name }}"
                                                label_name="{{ item.label_name }}"
                                                aria-label="{{ item.label }}: {{ rating }}" />
+                                        <span class="shadcn-multirate-choice-text" aria-hidden="true">{{ rating }}</span>
+                                        </label>
                                     </td>
                                 {% endfor %}
                             {% else %}
@@ -160,7 +166,10 @@ def _generate_multirate_layout_internal(annotation_scheme):
         'rows': arranged_items,
         'validation': validation,
         'annotation_id': annotation_scheme.get('annotation_id', ''),
-        'layout_attrs': layout_attrs
+        'layout_attrs': layout_attrs,
+        # How items fill the grid, read back by flask_server.randomize_options
+        # to put a shuffled item in the slot the configured one held.
+        'arrangement': 'vertical' if annotation_scheme.get('arrangement') == 'vertical' else 'horizontal',
     }
 
     # Render template
@@ -296,7 +305,7 @@ DYNAMIC_MULTIRATE_JS = """
 
     function buildTable(options) {
         if (!options || !Array.isArray(options) || options.length === 0) {
-            container.innerHTML = '<p style="color:#666;font-style:italic">No dynamic options available for this instance.</p>';
+            container.innerHTML = '<p style="color:light-dark(#666, #c2c2c2);font-style:italic">No dynamic options available for this instance.</p>';
             return;
         }
         var html = '<table class="shadcn-multirate-table"><thead><tr><th>&nbsp;</th>';
@@ -309,13 +318,15 @@ DYNAMIC_MULTIRATE_JS = """
             var safeName = schemaName + ':::' + label.replace(/[^a-zA-Z0-9_]/g, '_');
             html += '<tr schema="multirate"><td>' + escapeHtml(label) + '</td>';
             for (var r = 0; r < ratings.length; r++) {
-                html += '<td class="shadcn-radio-cell"><input name="' + escapeAttr(safeName) +
+                html += '<td class="shadcn-radio-cell"><label class="shadcn-multirate-choice"><input name="' + escapeAttr(safeName) +
                     '" type="radio" id="' + escapeAttr(safeName) + '.' + escapeAttr(ratings[r]) +
                     '" value="' + escapeAttr(ratings[r]) +
                     '" onclick="this.blur();" validation="' + escapeAttr(validation) +
                     '" class="shadcn-multirate-radio annotation-input" schema="' +
                     escapeAttr(schemaName) + '" label_name="' + escapeAttr(label) +
-                    '" aria-label="' + escapeAttr(label + ': ' + ratings[r]) + '" /></td>';
+                    '" aria-label="' + escapeAttr(label + ': ' + ratings[r]) + '" />' +
+                    '<span class="shadcn-multirate-choice-text" aria-hidden="true">' +
+                    escapeHtml(ratings[r]) + '</span></label></td>';
             }
             html += '</tr>';
         }
@@ -346,7 +357,7 @@ DYNAMIC_MULTIRATE_TEMPLATE = """
              data-ratings='{{ ratings_json }}'
              data-options-values='{{ options_values_json }}'>
             <div class="dynamic-multirate-body">
-                <p style="color:#666;font-style:italic">Loading options from instance data...</p>
+                <p style="color:light-dark(#666, #c2c2c2);font-style:italic">Loading options from instance data...</p>
             </div>
         </div>
     </fieldset>

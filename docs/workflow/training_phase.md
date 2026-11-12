@@ -1,10 +1,10 @@
 # Training Phase Documentation
 
-The training phase is an optional component of the annotation workflow that allows administrators to provide users with practice questions and feedback before they begin the main annotation task. This helps ensure annotation quality and user understanding of the task requirements.
+The training phase is an optional step before the main task, in which annotators answer practice questions and get feedback on their answers. It is where a misunderstanding of the guidelines surfaces cheaply, before it is spread across a corpus.
 
 ## Overview
 
-The training phase provides:
+The training phase gives you:
 - **Practice Questions**: Users answer questions with known correct answers
 - **Immediate Feedback**: Users receive feedback on their answers with explanations
 - **Retry Functionality**: Users can retry incorrect answers until they get them right
@@ -36,12 +36,21 @@ training:
 | `enabled` | boolean | Yes | false | Whether to enable the training phase |
 | `data_file` | string | Yes* | - | Path to training data file (required if enabled) |
 | `annotation_schemes` | list | No | All schemes | Which annotation schemes to use in training |
-| `passing_criteria.min_correct` | integer | No | 3 | Minimum correct answers required to pass |
-| `passing_criteria.require_all_correct` | boolean | No | false | Whether all questions must be correct |
-| `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited) |
+| `passing_criteria.min_correct` | integer | No | number of questions | Minimum correct answers required to pass. Checked once the last question is answered, or earlier as soon as it is reached unless `require_all_correct` is set |
+| `passing_criteria.require_all_correct` | boolean | No | false | Whether all questions must be correct. Every question is asked before this is decided |
+| `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited). Counted across retakes |
 | `passing_criteria.max_mistakes_per_question` | integer | No | -1 | Maximum mistakes per question before failure (-1 = unlimited) |
-| `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers |
-| `failure_action` | string | No | "move_to_done" | Action when user fails ("move_to_done" or "repeat_training") |
+| `passing_criteria.max_attempts` | integer | No | unlimited | How many times the training may be taken with `failure_action: repeat_training`. After the last attempt a failing annotator's task ends |
+| `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers. `feedback.allow_retry` is read when this is not set |
+| `feedback.show_explanations` | boolean | No | true | Whether an incorrect answer's feedback includes the question's explanation |
+| `failure_action` | string | No | "move_to_done" | Action when user fails: "move_to_done" ends the task; "repeat_training" starts the training again from the first question. Exceeding `max_mistakes` or `max_mistakes_per_question` ends the task either way. |
+
+Unknown keys under `passing_criteria` and `feedback` are reported in the log at
+startup.
+
+On a crowd platform, an annotator who fails training reaches the end page with
+the platform's screen-out code (`screened_out_code`, or `failed_code` when that
+is not set), never the success code.
 
 ### Training Strategies
 
@@ -249,7 +258,7 @@ GET /admin/user_state/{user_id}
 
 1. **Consistent Format**: Ensure training data matches your annotation schemes
 2. **Clear Examples**: Use unambiguous examples with obvious correct answers
-3. **Comprehensive Coverage**: Include examples for all possible annotation values
+3. **Cover every label**: include at least one training example for each annotation value
 4. **Helpful Explanations**: Provide explanations that help users understand the task
 
 ## Troubleshooting
@@ -330,7 +339,7 @@ training:
 
 ## Integration with Existing Workflows
 
-The training phase integrates seamlessly with existing annotation workflows:
+The training phase fits into an existing annotation workflow as follows:
 
 1. **Phase Progression**: Users automatically advance through phases
 2. **State Persistence**: Training progress is saved and restored

@@ -134,10 +134,56 @@ class TestBuiltinExportersRegistered:
             # ML-format exporters (v2.1–2.2)
             "agent_eval", "coco", "coding_eval", "conll_2003", "conll_u",
             "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo",
+            # CV round-trip exporters: each of these formats was import-only,
+            # which is the wrong asymmetry for a migration story — a team can
+            # move off the source tool but never hand work back to a colleague
+            # still on it.
+            "cvat", "labelme", "darwin", "kitti", "kitti_3d", "mot", "cityscapes", "davis",
+            # Medical volumes: NIfTI label volumes and DICOM SEG
+            "volume_nifti", "dicom_seg",
+            # DICOM SR measurement report; pathology regions (QuPath, ASAP)
+            "dicom_sr", "qupath_geojson", "asap_xml",
+            # Trajectory correction → SFT/DPO
+            "trajectory_correction",
             # Tabular exporters
             "csv", "tsv", "jsonl",
             # QDA-wave exporters (v2.5.0)
             "codebook", "quotation_report",
+            # REFI-QDA project exchange -- the format qualitative researchers
+            # actually move projects with, between NVivo, ATLAS.ti and MAXQDA.
+            # Stdlib zipfile + ElementTree, so no optional dependency.
+            "qdpx",
+            # ConvoKit round-trip — stdlib only, so not optional
+            "convokit",
+            # Keystroke / typing-dynamics streams. Falls back to JSONL when
+            # pyarrow is absent, so it has no hard dependency either.
+            "keystrokes",
+            # Drawing-dynamics streams, the geometry counterpart. Same JSONL
+            # fallback, so also no hard dependency.
+            "annotation_telemetry",
+            # Embodied episodes: a per-frame sidecar. Plain JSON Lines, so no
+            # hard dependency either.
+            "episode_jsonl",
+            # The adjudicated final label -- the deliverable of an adjudicated
+            # workflow, which no per-annotator format above carries.
+            "adjudication",
+            # The labeling engine's resolved labels and certificate.
+            "labeling_engine",
+            # Incentive payments (price_list / bdm / belief_elicitation).
+            "incentives",
+            # Consensus across annotators (numpy only).
+            "consensus",
+            # Science viewers: microscopy, chemistry, spectra, signals; ontology terms.
+            "microscopy", "chemistry", "peak_table", "interval_label", "bids_events",
+            "ontology_terms",
+            # Scheduled sessions (waves, experience sampling, Delphi).
+            "schedule",
+            # Audio and video timeline segments (JSONL, RTTM).
+            "segments",
+            # Trial data from runtime phase pages (project SQLite).
+            "jspsych", "runtime",
+            # Interchange: W3C Web Annotation, Frictionless, Psych-DS.
+            "web_annotation", "data_package", "psych_ds", "listening_test", "survey_experiments", "reliability", "lextale", "flextext", "toolbox", "igt", "ego_network", "cultural_domain", "megadetector", "camtrap_dp", "darwin_core", "raven", "audacity_labels", "geojson", "geo_overlap", "iiif_annotations", "page_xml", "tei",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}
@@ -193,3 +239,96 @@ class TestPhaseResponseExport:
         result = export_registry.export("csv", self._ctx(False, out), out)
         assert result.stats.get("num_phase_responses_excluded") == 2
         assert any("phase/survey responses" in w for w in result.warnings)
+
+
+class TestSurveyOnlyExport:
+    """potato-skill, 2.12.0 pack notes (P3): a survey-only study (phase answers,
+    no item labels, no conditions or trials) got "No annotations to export"
+    from csv, tsv and jsonl, although the release notes said csv/tsv wrote it."""
+
+    def _ctx(self, include_flag, output_dir):
+        return ExportContext(
+            config=({"export_include_phase_data": True} if include_flag else {}),
+            annotations=[], items={}, schemas=[], output_dir=output_dir,
+            phase_responses=[
+                {"user_id": "u1", "phase": "prestudy", "page": "p",
+                 "schema": "tipi_1", "label_name": "4", "value": "4"}],
+        )
+
+    @pytest.mark.parametrize("fmt", ["csv", "tsv", "jsonl"])
+    def test_phase_answers_export_with_the_flag(self, tmp_path, fmt):
+        out = str(tmp_path / fmt)
+        result = export_registry.export(fmt, self._ctx(True, out), out)
+        assert result.success, result.errors
+        assert os.path.exists(os.path.join(out, f"phase_responses.{fmt}"))
+        assert not os.path.exists(os.path.join(out, f"annotations.{fmt}"))
+
+    @pytest.mark.parametrize("fmt", ["csv", "tsv", "jsonl"])
+    def test_without_the_flag_the_refusal_names_it(self, tmp_path, fmt):
+        out = str(tmp_path / f"{fmt}_noflag")
+        ok, reason = export_registry.get(fmt).can_export(self._ctx(False, out))
+        assert not ok and "export_include_phase_data" in reason
+
+
+class TestTheFormatListIsPinned:
+    """Adding or removing an export format is a documented, deliberate change.
+
+    `qdpx` arrived and the count went 29 -> 30 with nothing on either side
+    noticing: the skill pack's guard table did not cover this registry, so the
+    number it published was simply wrong until somebody counted by hand.
+
+    Pinning the names rather than the count means a failure says *which* format
+    moved, which is the thing you need in order to update the docs and the
+    agent-facing tables.
+    """
+
+    EXPECTED = {
+        # tabular
+        "csv", "tsv", "jsonl", "parquet", "huggingface",
+        # text / linguistic
+        "conll_2003", "conll_u", "convokit", "eaf", "textgrid",
+        "codebook", "quotation_report", "qdpx",
+        # vision and tracking
+        "coco", "yolo", "pascal_voc", "mask_png", "cvat", "labelme",
+        "darwin", "cityscapes", "kitti", "kitti_3d", "mot", "davis",
+        # medical volumes
+        "volume_nifti", "dicom_seg",
+        "dicom_sr", "qupath_geojson", "asap_xml",
+        # agent evaluation and behaviour
+        "agent_eval", "coding_eval", "episode_jsonl",
+        "trajectory_correction", "annotation_telemetry", "keystrokes",
+        # behavioral experiments
+        "jspsych", "runtime",
+        # interchange and repository packaging
+        "web_annotation", "data_package", "psych_ds", "listening_test", "survey_experiments", "reliability", "lextale", "flextext", "toolbox", "igt", "ego_network", "cultural_domain", "megadetector", "camtrap_dp", "darwin_core", "raven", "audacity_labels", "geojson", "geo_overlap", "iiif_annotations", "page_xml", "tei",
+        # consensus across annotators (Zooniverse-style aggregation)
+        "consensus",
+        # science viewers and ontology terms
+        "microscopy", "chemistry", "peak_table", "interval_label", "bids_events",
+        "ontology_terms",
+        # scheduled sessions
+        "schedule",
+        # audio and video timeline segments
+        "segments",
+        # adjudication outcome
+        "adjudication",
+        # labeling engine deliverable
+        "labeling_engine",
+        # incentive payments
+        "incentives",
+    }
+
+    def test_every_registered_format_is_accounted_for(self):
+        from potato.export.registry import export_registry
+
+        registered = set(export_registry.get_supported_formats())
+        added = registered - self.EXPECTED
+        removed = self.EXPECTED - registered
+
+        assert not added, (
+            f"new export format(s) {sorted(added)}: add them to EXPECTED here, "
+            f"to the format matrix in the docs, and to the agent-facing tables"
+        )
+        assert not removed, (
+            f"export format(s) {sorted(removed)} disappeared from the registry"
+        )

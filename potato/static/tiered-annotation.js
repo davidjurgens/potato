@@ -24,6 +24,10 @@ function tieredDebugLog(...args) {
 /**
  * TieredAnnotationManager - Main class for managing tiered annotations
  */
+// Canvas fills follow the light/dark theme (templates/_theme_head.html).
+const themeColor = (colour, role) =>
+    (window.potatoThemeColor ? window.potatoThemeColor(colour, role) : colour);
+
 class TieredAnnotationManager {
     /**
      * Create a TieredAnnotationManager instance.
@@ -47,6 +51,10 @@ class TieredAnnotationManager {
         this.mediaElement = null;
         this.isPlaying = false;
         this.annotationCounter = 0;
+        // Per-page part of new annotation ids. Two annotators in one live
+        // session could make `ann_<same ms>_1` and the server's merge (by
+        // id) would keep only one of them.
+        this.idNonce = Math.random().toString(36).slice(2, 8);
 
         // Media metadata
         this.mediaMetadata = {
@@ -111,6 +119,11 @@ class TieredAnnotationManager {
         this.zoomedViewDuration = 10;  // Seconds visible in zoomed view
         this.zoomedViewStart = 0;  // Start time of zoomed view in seconds
         this.zoomedTimelineView = null;  // Will hold ZoomedTimelineView instance
+        // Canvases paint resolved colours; repaint them when the theme flips.
+        document.addEventListener('potato:themechange', () => {
+            this._renderAllTiers();
+            if (this.zoomedTimelineView) this.zoomedTimelineView.render();
+        });
     }
 
     /**
@@ -561,6 +574,21 @@ class TieredAnnotationManager {
 
             button.addEventListener('click', () => {
                 this.setActiveLabel(label.name);
+                // Relabel the selection, not just the next annotation drawn.
+                // Without this the label buttons only ever seeded NEW
+                // annotations, so a seeded transcript turn -- or any
+                // annotation given the wrong label -- could not be corrected
+                // at all: the keyboard offers play/step/Delete/Escape, and
+                // `updateAnnotation` existed with nothing calling it. Delete
+                // and redraw was the only repair.
+                const selected = this.selectedAnnotation;
+                if (selected && selected.tier === tier.name
+                        && selected.label !== label.name) {
+                    this.updateAnnotation(selected.id, {
+                        label: label.name,
+                        color: label.color || '#cccccc'
+                    });
+                }
             });
 
             if (label.tooltip || label.description) {
@@ -857,6 +885,17 @@ class TieredAnnotationManager {
      * Update zoomed view rendering
      */
     _updateZoomedView() {
+        // Clamp the zoom window to the clip length so short clips aren't stuck
+        // at a fixed 10s scale (which would leave most of the panel empty).
+        const duration = this.mediaMetadata.duration || 0;
+        if (duration > 0 && this.zoomedViewDuration > duration) {
+            this.zoomedViewDuration = duration;
+        }
+        const maxStart = Math.max(0, duration - this.zoomedViewDuration);
+        if (this.zoomedViewStart > maxStart) {
+            this.zoomedViewStart = maxStart;
+        }
+
         if (this.zoomedTimelineView) {
             this.zoomedTimelineView.render();
         }
@@ -990,8 +1029,17 @@ class TieredAnnotationManager {
                 });
             });
 
-            // Set up Peaks.js event listeners for segment interactions
-            this._setupPeaksEventListeners();
+            // Set up Peaks.js event listeners for segment interactions.
+            // Isolated: a listener that cannot be registered is worth one
+            // warning, not the loss of auto-scroll, sizing and the initial
+            // zoom, which is what a throw in here cost before.
+            try {
+                this._setupPeaksEventListeners();
+            } catch (listenerError) {
+                console.warn('[TieredAnnotation] Could not wire all Peaks.js '
+                             + 'listeners; playback and sizing still apply:',
+                             listenerError);
+            }
 
             // Enable auto-scroll during playback and set initial zoom
             const zoomviewInstance = this.peaks.views.getView('zoomview');
@@ -1056,33 +1104,55 @@ class TieredAnnotationManager {
             this._onSegmentDragEnd(event.segment);
         });
 
-        // Double-click on zoomview to seek
-        const zoomview = this.peaks.views.getView('zoomview');
-        if (zoomview) {
-            zoomview.on('dblclick', (event) => {
-                tieredDebugLog('Zoomview double-click at time:', event.time);
-                this.mediaElement.currentTime = event.time;
-            });
-        }
+        // Point-tier annotations are Peaks points, not segments.
+        this.peaks.on('points.click', (event) => {
+            if (event && event.point) this.selectAnnotation(event.point.id);
+        });
+        this.peaks.on('points.dragend', (event) => {
+            const point = event && event.point;
+            if (!point) return;
+            for (const tierName in this.annotations) {
+                const ann = this.annotations[tierName].find(a => a.id === point.id);
+                if (ann) {
+                    ann.start_time = ann.end_time = point.time * 1000;
+                    if (this.tierViews[tierName]) this.tierViews[tierName].render();
+                    if (this.zoomedTimelineView) this.zoomedTimelineView.render();
+                    this._renderAnnotationList();
+                    this._saveData();
+                    return;
+                }
+            }
+        });
+
+        // Waveform clicks arrive on the PEAKS INSTANCE, namespaced by view
+        // name -- the view objects in the bundled build are not event
+        // emitters and have no `.on` at all. `zoomview.on('dblclick', ...)`
+        // therefore threw TypeError here on every load, and because the throw
+        // escaped into _initPeaks's outer try/catch, everything after this
+        // function was skipped: auto-scroll, the initial zoom and start time,
+        // the post-layout refit, the resize refit, the zoom-range sync, and
+        // both seek handlers. The widget looked alive only because
+        // `segments.click` and `segments.dragend` are registered above.
+        this.peaks.on('zoomview.dblclick', (event) => {
+            tieredDebugLog('Zoomview double-click at time:', event.time);
+            this.mediaElement.currentTime = event.time;
+        });
 
         // Click on overview to navigate zoomed view and seek
-        const overview = this.peaks.views.getView('overview');
-        if (overview) {
-            overview.on('click', (event) => {
-                tieredDebugLog('Overview click at time:', event.time);
-                // Center zoomed view on clicked time
-                this.zoomedViewStart = Math.max(0, event.time - this.zoomedViewDuration / 2);
-                const maxStart = Math.max(0, this.mediaMetadata.duration - this.zoomedViewDuration);
-                this.zoomedViewStart = Math.min(maxStart, this.zoomedViewStart);
-                this.mediaElement.currentTime = event.time;
-                this._updateZoomedView();
-                this._updateZoomedSlider();
-            });
-            overview.on('dblclick', (event) => {
-                tieredDebugLog('Overview double-click at time:', event.time);
-                this.mediaElement.currentTime = event.time;
-            });
-        }
+        this.peaks.on('overview.click', (event) => {
+            tieredDebugLog('Overview click at time:', event.time);
+            // Center zoomed view on clicked time
+            this.zoomedViewStart = Math.max(0, event.time - this.zoomedViewDuration / 2);
+            const maxStart = Math.max(0, this.mediaMetadata.duration - this.zoomedViewDuration);
+            this.zoomedViewStart = Math.min(maxStart, this.zoomedViewStart);
+            this.mediaElement.currentTime = event.time;
+            this._updateZoomedView();
+            this._updateZoomedSlider();
+        });
+        this.peaks.on('overview.dblclick', (event) => {
+            tieredDebugLog('Overview double-click at time:', event.time);
+            this.mediaElement.currentTime = event.time;
+        });
 
         // Sync when Peaks.js auto-scrolls the zoomview during playback
         this._lastZoomSyncTime = 0;
@@ -1169,10 +1239,13 @@ class TieredAnnotationManager {
                 annotation.start_time = newStartMs;
                 annotation.end_time = newEndMs;
 
-                // Re-render tier canvas
+                // Re-render tier canvas. The zoomed timeline otherwise
+                // repaints only on timeupdate, so a drag made while paused
+                // left it drawing the old position.
                 if (this.tierViews[tierName]) {
                     this.tierViews[tierName].render();
                 }
+                if (this.zoomedTimelineView) this.zoomedTimelineView.render();
 
                 this._renderAnnotationList();
                 this._saveData();
@@ -1189,6 +1262,17 @@ class TieredAnnotationManager {
     _addSegmentToPeaks(annotation) {
         if (!this.peaks) return;
 
+        if (this.isPointTier(annotation.tier)) {
+            this.peaks.points.add({
+                id: annotation.id,
+                time: annotation.start_time / 1000,
+                labelText: annotation.label,
+                color: annotation.color || '#4ECDC4',
+                editable: true
+            });
+            return;
+        }
+
         this.peaks.segments.add({
             id: annotation.id,
             startTime: annotation.start_time / 1000,  // Convert ms to seconds
@@ -1200,13 +1284,37 @@ class TieredAnnotationManager {
     }
 
     /**
+     * Push one annotation's edited times to its Peaks.js segment or point.
+     */
+    _syncAnnotationTimeToPeaks(ann) {
+        if (!this.peaks || !ann) return;
+        try {
+            if (this.isPointTier(ann.tier)) {
+                const point = this.peaks.points.getPoint(ann.id);
+                if (point) point.update({ time: ann.start_time / 1000 });
+            } else {
+                const segment = this.peaks.segments.getSegment(ann.id);
+                if (segment) {
+                    segment.update({
+                        startTime: ann.start_time / 1000,
+                        endTime: ann.end_time / 1000
+                    });
+                }
+            }
+        } catch (e) {
+            // Not in Peaks (no waveform loaded)
+        }
+    }
+
+    /**
      * Sync all annotations to Peaks.js segments
      */
     _syncAnnotationsToPeaks() {
         if (!this.peaks) return;
 
-        // Clear existing segments
+        // Clear existing segments and points
         this.peaks.segments.removeAll();
+        if (this.peaks.points) this.peaks.points.removeAll();
 
         // Add all annotations as segments
         for (const tierName in this.annotations) {
@@ -1222,8 +1330,22 @@ class TieredAnnotationManager {
      * Load existing annotations from hidden input
      */
     _loadExistingAnnotations() {
+        // Replace, never merge into what is shown: a tier the stored answer
+        // does not mention is empty in it. (Before, such a tier kept whatever
+        // it held, so a teammate's cleared tier stayed drawn here.)
+        for (const tier of this.config.tiers) {
+            this.annotations[tier.name] = [];
+        }
+        if (this.peaks) {
+            try {
+                this.peaks.segments.removeAll();
+                if (this.peaks.points) this.peaks.points.removeAll();
+            } catch (e) { /* nothing drawn */ }
+        }
+
         if (!this.inputEl || !this.inputEl.value) {
             tieredDebugLog('No existing annotations to load');
+            this._seedFromTranscript();
             return;
         }
 
@@ -1249,6 +1371,146 @@ class TieredAnnotationManager {
     }
 
     /**
+     * Seed a tier from the instance's transcript (opt-in via transcript_field).
+     *
+     * ASR has already segmented the speech; making annotators re-draw those
+     * boundaries by hand is wasted work. When configured, each transcript turn
+     * becomes one annotation on the target tier, carrying the turn's text as its
+     * value, ready to be corrected, relabeled, or subdivided.
+     *
+     * Seeds are NOT saved on their own. Writing annotations the user never made
+     * would misattribute them; instead they persist on the first real edit, and
+     * because the same transcript always yields the same turns, re-seeding on
+     * reload is idempotent.
+     */
+    _seedFromTranscript() {
+        const field = this.config.transcriptField;
+        const tierName = this.config.transcriptTier;
+        if (!field || !tierName || !this.annotations.hasOwnProperty(tierName)) return;
+        if (this.annotations[tierName] && this.annotations[tierName].length) return;
+
+        const turns = this._transcriptTurns(field);
+        if (!turns.length) return;
+
+        const tier = this.config.tiers.find(t => t.name === tierName);
+        // Dependent tiers need a parent annotation per seed, which does not
+        // exist yet on a blank instance — seed independent tiers only.
+        if (tier && tier.tier_type === 'dependent') {
+            console.warn(
+                '[TieredAnnotation] transcript_tier "' + tierName +
+                '" is a dependent tier; skipping transcript seeding.'
+            );
+            return;
+        }
+
+        // The turn's own speaker, when the tier offers a label by that name.
+        // Seeding every turn with `labels[0]` produced records that contradict
+        // themselves -- four utterances all labelled "Caller", two of them
+        // carrying speaker: "agent" in a field nothing displays -- and there
+        // is no way to relabel a seeded annotation from the UI, so the only
+        // repair was delete and redraw. An unmatched speaker leaves the label
+        // empty: an unanswered turn is honest, a guessed one is not.
+        const labels = (tier && tier.labels) || [];
+        const byName = new Map(
+            labels.map(l => [String(l.name || '').trim().toLowerCase(), l]));
+        const labelForSpeaker = (speaker) => {
+            if (!speaker) return null;
+            return byName.get(String(speaker).trim().toLowerCase()) || null;
+        };
+
+        this.annotations[tierName] = turns.map((turn, i) => {
+            const label = labelForSpeaker(turn.speaker);
+            return {
+                // Derived from the turn id so the same transcript reproduces
+                // the same annotation ids across reloads.
+                id: 'turn-' + (turn.turn_id || ('t' + i)),
+                tier: tierName,
+                start_time: (turn.start || 0) * 1000,
+                end_time: (turn.end || turn.start || 0) * 1000,
+                label: label ? label.name : '',
+                color: label ? (label.color || '#cccccc') : '#cccccc',
+                parent_id: null,
+                value: turn.text || '',
+                speaker: turn.speaker || null
+            };
+        });
+
+        const unmatched = this.annotations[tierName]
+            .filter(a => !a.label).length;
+        if (unmatched && labels.length) {
+            console.warn(
+                '[TieredAnnotation] ' + unmatched + ' of '
+                + this.annotations[tierName].length + ' seeded turn(s) on tier "'
+                + tierName + '" have no speaker matching a tier label, so they '
+                + 'are seeded unlabelled. Tier labels are: '
+                + labels.map(l => l.name).join(', ') + '.');
+        }
+
+        tieredDebugLog(
+            'Seeded ' + this.annotations[tierName].length +
+            ' annotation(s) on tier "' + tierName + '" from transcript field "' + field + '"'
+        );
+        this._syncAnnotationsToPeaks();
+    }
+
+    /**
+     * Normalized turns for a record field, from the server-side transcript
+     * index (see transcripts/binding.py).
+     */
+    _transcriptTurns(field) {
+        let record = {};
+        try {
+            const el = document.querySelector('[data-instance-json]');
+            if (el) record = JSON.parse(el.getAttribute('data-instance-json')) || {};
+        } catch (e) {
+            return [];
+        }
+        const index = record._transcripts && record._transcripts[field];
+        return (index && Array.isArray(index.turns)) ? index.turns : [];
+    }
+
+    /**
+     * Show a teammate's answer (live sessions): replace every tier with
+     * ``value`` (the answer JSON, or null for none) without saving. An empty
+     * answer shows what an unanswered item shows, the transcript seed if one
+     * is configured (seeds are never saved on their own).
+     */
+    applyRemoteAnswer(value) {
+        if (!this.inputEl) this.inputEl = document.getElementById(`input-${this.schemaName}`);
+        if (!this.inputEl) return false;
+        const json = value || '';
+        if (this.inputEl.value !== json) this.inputEl.value = json;
+
+        // A drag in progress holds an annotation object that is about to be
+        // replaced; finishing it would save the stale object's times.
+        for (const tierName in this.tierViews) {
+            const view = this.tierViews[tierName];
+            if (view) { view.dragState = null; view.hoveredHandle = null; }
+        }
+        if (this.zoomedTimelineView) {
+            this.zoomedTimelineView.dragState = null;
+            this.zoomedTimelineView.hoveredHandle = null;
+            if (typeof this.zoomedTimelineView._stopAutoScroll === 'function') {
+                this.zoomedTimelineView._stopAutoScroll();
+            }
+        }
+        this.isDragging = false;
+
+        const selectedId = this.selectedAnnotation ? this.selectedAnnotation.id : null;
+        this._loadExistingAnnotations();
+        this.selectedAnnotation = null;
+        if (selectedId) {
+            for (const tierName in this.annotations) {
+                const found = this.annotations[tierName].find(a => a.id === selectedId);
+                if (found) { this.selectedAnnotation = found; break; }
+            }
+        }
+        this._renderAllTiers();
+        if (this.zoomedTimelineView) this.zoomedTimelineView.render();
+        return true;
+    }
+
+    /**
      * Render all tier views
      */
     _renderAllTiers() {
@@ -1262,18 +1524,28 @@ class TieredAnnotationManager {
      * Generate unique annotation ID
      */
     _generateId() {
-        return `ann_${Date.now()}_${(++this.annotationCounter).toString(36)}`;
+        return `ann_${Date.now()}_${this.idNonce}_${(++this.annotationCounter).toString(36)}`;
     }
 
     /**
      * Create a new annotation
      */
+    /**
+     * Whether a tier marks instants (`point: true`) rather than intervals.
+     */
+    isPointTier(tierName) {
+        const tier = this.config.tiers.find(t => t.name === tierName);
+        return !!(tier && tier.point);
+    }
+
     createAnnotation(tierName, startTime, endTime, label) {
         const tier = this.config.tiers.find(t => t.name === tierName);
         if (!tier) {
             console.error('[TieredAnnotation] Unknown tier:', tierName);
             return null;
         }
+        // A point is an instant: it starts and ends at the same time.
+        if (tier.point) endTime = startTime;
 
         // For dependent tiers, find parent annotation
         let parentAnnotation = null;
@@ -1410,7 +1682,11 @@ class TieredAnnotationManager {
         // Remove from Peaks.js
         if (this.peaks) {
             try {
-                this.peaks.segments.removeById(annotationId);
+                if (this.isPointTier(tierName)) {
+                    this.peaks.points.removeById(annotationId);
+                } else {
+                    this.peaks.segments.removeById(annotationId);
+                }
             } catch (e) {
                 // Segment might not exist in Peaks
             }
@@ -1529,7 +1805,9 @@ class TieredAnnotationManager {
                     <span class="annotation-color" style="background-color: ${ann.color}"></span>
                     <span class="annotation-label">${this._escapeHtml(ann.label)}</span>
                     <span class="annotation-time">
-                        ${this._formatTime(ann.start_time / 1000)} - ${this._formatTime(ann.end_time / 1000)}
+                        ${tier.point
+                            ? this._formatTime(ann.start_time / 1000)
+                            : `${this._formatTime(ann.start_time / 1000)} - ${this._formatTime(ann.end_time / 1000)}`}
                     </span>
                     <button type="button" class="annotation-delete-btn" title="Delete">
                         <i class="fas fa-times"></i>
@@ -1560,6 +1838,10 @@ class TieredAnnotationManager {
 
         const data = this.serialize();
         this.inputEl.value = JSON.stringify(data);
+        // Assigning `.value` fires nothing; the shared autosave in
+        // annotation.js listens for this, and without it the work reaches the
+        // server only when the annotator navigates.
+        this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
 
         tieredDebugLog('Saved data:', data);
     }
@@ -1568,14 +1850,27 @@ class TieredAnnotationManager {
      * Serialize annotations for storage
      */
     serialize() {
-        return {
+        const data = {
             annotations: this.annotations,
             time_slots: this._generateTimeSlots()
         };
+        // Seconds. The TextGrid export spans the whole recording with it.
+        const duration = this.mediaMetadata && this.mediaMetadata.duration;
+        if (duration && isFinite(duration)) data.media_duration = duration;
+        return data;
     }
 
     /**
-     * Generate ELAN-style time slots
+     * Generate ELAN-style time slots, named by their time: {ts1500: 1500}.
+     *
+     * Annotations carry their own start_time/end_time and never refer to a
+     * slot; this map is an index the EAF exporter writes out. Numbered in
+     * time order (ts1, ts2, ...) every slot after a new earlier boundary was
+     * renamed on the next save, so two members of a live session saving
+     * different boundaries sent the server's key-by-key merge conflicting
+     * values for one key (ts3 = 1500 from one, ts3 = 2200 from the other),
+     * and the merged map lost times the annotations still used. Named by
+     * time, a slot's key never changes and two saves can only agree on it.
      */
     _generateTimeSlots() {
         const times = new Set();
@@ -1589,8 +1884,8 @@ class TieredAnnotationManager {
 
         const sortedTimes = Array.from(times).sort((a, b) => a - b);
         const slots = {};
-        sortedTimes.forEach((time, i) => {
-            slots[`ts${i + 1}`] = time;
+        sortedTimes.forEach((time) => {
+            slots[`ts${time}`] = time;
         });
 
         return slots;
@@ -1619,6 +1914,58 @@ class TieredAnnotationManager {
 /**
  * TierView - Handles rendering for a single tier
  */
+/** How close, in pixels, a pointer must be to a point to grab it. */
+const POINT_HIT_PX = 5;
+
+/**
+ * Draw a point-tier annotation: a vertical line at its time with a small
+ * flag carrying the label, so a run of close points stays readable.
+ */
+function drawPointMarker(ctx, manager, ann, x, y, height, isSelected, isHovered) {
+    const color = ann.color || '#cccccc';
+    ctx.save();
+    ctx.strokeStyle = isSelected ? '#FFD700' : color;
+    ctx.lineWidth = isSelected ? 3 : (isHovered ? 2.5 : 2);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y + height);
+    ctx.stroke();
+
+    ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'middle';
+    const label = ann.label || '';
+    const flagWidth = Math.min(ctx.measureText(label).width + 8, 120);
+    const flagHeight = Math.min(16, height);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, flagWidth, flagHeight);
+    if (isSelected) {
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, flagWidth, flagHeight);
+    }
+    ctx.fillStyle = manager._getContrastColor(color);
+    let text = label;
+    while (ctx.measureText(text).width > flagWidth - 8 && text.length > 1) {
+        text = text.slice(0, -1);
+    }
+    if (text !== label) text = text.slice(0, -1) + '…';
+    ctx.fillText(text, x + 4, y + flagHeight / 2);
+    ctx.restore();
+}
+
+/** Dashed line where a click on a point tier will place the point. */
+function drawPointPreview(ctx, x, y, height, color) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y + height);
+    ctx.stroke();
+    ctx.restore();
+}
+
 class TierView {
     constructor(manager, tierConfig, canvas) {
         this.manager = manager;
@@ -1679,6 +2026,14 @@ class TierView {
             // Check if within annotation bounds vertically
             if (y < 4 || y > this.canvas.height - 4) continue;
 
+            // A point is grabbed anywhere within a few pixels of its line.
+            if (this.tierConfig.point) {
+                if (Math.abs(x - x1) <= POINT_HIT_PX) {
+                    return { annotation: ann, type: 'point' };
+                }
+                continue;
+            }
+
             // Check start handle
             if (x >= x1 - 2 && x <= x1 + this.HANDLE_WIDTH) {
                 return { annotation: ann, type: 'start' };
@@ -1718,6 +2073,7 @@ class TierView {
                 this.canvas.style.cursor = 'ew-resize';
                 break;
             case 'body':
+            case 'point':
                 this.canvas.style.cursor = 'move';
                 break;
             default:
@@ -1763,8 +2119,8 @@ class TierView {
                     origEnd: part.annotation.end_time
                 };
                 this.canvas.style.cursor = 'ew-resize';
-            } else if (part.type === 'body') {
-                // Start moving the annotation
+            } else if (part.type === 'body' || part.type === 'point') {
+                // Start moving the annotation (a point moves as a whole)
                 this.dragState = {
                     type: 'move',
                     annotation: part.annotation,
@@ -1860,19 +2216,7 @@ class TierView {
             this.manager._renderAnnotationList();
 
             // Sync to Peaks.js if available
-            if (this.manager.peaks) {
-                try {
-                    const segment = this.manager.peaks.segments.getSegment(ann.id);
-                    if (segment) {
-                        segment.update({
-                            startTime: ann.start_time / 1000,
-                            endTime: ann.end_time / 1000
-                        });
-                    }
-                } catch (e) {
-                    // Segment might not exist
-                }
-            }
+            this.manager._syncAnnotationTimeToPeaks(ann);
 
             this.dragState = null;
             this._updateCursor();
@@ -1892,8 +2236,16 @@ class TierView {
             this.manager.selectionStart = null;
             this.manager.selectionEnd = null;
 
-            // Create annotation if selection is valid (minimum 0.05 seconds)
-            if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
+            if (this.tierConfig.point && endTime !== null) {
+                // A click on a point tier places a point where it lands.
+                if (this.manager.activeLabel) {
+                    this.manager.createAnnotation(
+                        this.tierConfig.name, endTime, endTime, this.manager.activeLabel);
+                } else {
+                    this.manager._showError('Please select a label first');
+                }
+            } else if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
+                // Create annotation if selection is valid (minimum 0.05 seconds)
                 const actualStart = Math.min(startTime, endTime);
                 const actualEnd = Math.max(startTime, endTime);
 
@@ -1974,7 +2326,7 @@ class TierView {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Draw background
-        this.ctx.fillStyle = '#fafafa';
+        this.ctx.fillStyle = themeColor('#fafafa', 'bg');
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Draw grid lines
@@ -2024,7 +2376,7 @@ class TierView {
         const duration = this.manager.mediaMetadata.duration;
         if (!duration) return;
 
-        this.ctx.strokeStyle = '#e0e0e0';
+        this.ctx.strokeStyle = themeColor('#e0e0e0', 'line');
         this.ctx.lineWidth = 1;
 
         // Draw line every second or more depending on zoom
@@ -2051,6 +2403,11 @@ class TierView {
         const isSelected = this.manager.selectedAnnotation?.id === ann.id;
         const isHovered = this.hoveredHandle?.annotation?.id === ann.id;
         const hoverType = isHovered ? this.hoveredHandle.type : null;
+
+        if (this.tierConfig.point) {
+            drawPointMarker(this.ctx, this.manager, ann, x1, y, height, isSelected, isHovered);
+            return;
+        }
 
         // Draw filled rectangle (main body)
         this.ctx.fillStyle = ann.color || '#cccccc';
@@ -2141,6 +2498,11 @@ class TierView {
         const labelData = tier?.labels?.find(l => l.name === this.manager.activeLabel);
         const color = labelData?.color || '#4ECDC4';
 
+        if (this.tierConfig.point) {
+            drawPointPreview(this.ctx, this._timeToX(endTime), 4, this.canvas.height - 8, color);
+            return;
+        }
+
         // Draw semi-transparent preview
         this.ctx.fillStyle = color + '66';  // Add alpha
         this.ctx.fillRect(x1, 4, x2 - x1, this.canvas.height - 8);
@@ -2167,6 +2529,11 @@ class ZoomedTimelineView {
         this.hoveredHandle = null;
         this.HANDLE_WIDTH = 10;
 
+        // Edge auto-scroll state (pan the zoom window when a drag reaches the edge)
+        this.autoScrollRaf = null;
+        this.lastMouseX = null;
+        this.EDGE_ZONE = 40;
+
         this._resizeCanvas();
         this._setupEventListeners();
     }
@@ -2192,6 +2559,14 @@ class ZoomedTimelineView {
             this.canvas.style.cursor = 'crosshair';
         });
         this.canvas.addEventListener('dblclick', (e) => this._handleDoubleClick(e));
+
+        // Finish a drag even if the mouse is released outside the canvas (common
+        // when dragging to the edge for auto-scroll).
+        window.addEventListener('mouseup', (e) => {
+            if (this.dragState || this.manager.isDragging) {
+                this._handleMouseUp(e);
+            }
+        });
     }
 
     /**
@@ -2233,6 +2608,13 @@ class ZoomedTimelineView {
                 // Check if in tier row vertically
                 if (y < tierY || y > tierY + tierHeight) continue;
 
+                if (tier.point) {
+                    if (Math.abs(x - x1) <= POINT_HIT_PX) {
+                        return { annotation: ann, tier: tier.name, type: 'point' };
+                    }
+                    continue;
+                }
+
                 // Check start handle
                 if (x >= x1 - 2 && x <= x1 + this.HANDLE_WIDTH) {
                     return { annotation: ann, tier: tier.name, type: 'start' };
@@ -2270,7 +2652,7 @@ class ZoomedTimelineView {
                     origEnd: part.annotation.end_time
                 };
                 this.canvas.style.cursor = 'ew-resize';
-            } else if (part.type === 'body') {
+            } else if (part.type === 'body' || part.type === 'point') {
                 this.dragState = {
                     type: 'move',
                     annotation: part.annotation,
@@ -2299,8 +2681,14 @@ class ZoomedTimelineView {
     _handleMouseMove(e) {
         const x = e.offsetX;
         const y = e.offsetY;
+        this.lastMouseX = x;
 
         if (this.dragState) {
+            // Resizing/creating near an edge pans the zoom window so the drag
+            // can cross the visible boundary.
+            if (this.dragState.type === 'resize-start' || this.dragState.type === 'resize-end') {
+                this._scheduleAutoScroll();
+            }
             const deltaX = x - this.dragState.startX;
             const deltaTime = (deltaX / this.canvas.width) * this.manager.zoomedViewDuration * 1000;
             const ann = this.dragState.annotation;
@@ -2336,6 +2724,7 @@ class ZoomedTimelineView {
 
         if (this.manager.isDragging) {
             this.manager.selectionEnd = this._xToTime(x);
+            this._scheduleAutoScroll();
             this.render();
             return;
         }
@@ -2344,15 +2733,91 @@ class ZoomedTimelineView {
         const part = this._getAnnotationPartAtPosition(x, y);
         this.hoveredHandle = part;
         if (part) {
-            this.canvas.style.cursor = part.type === 'body' ? 'move' : 'ew-resize';
+            this.canvas.style.cursor = (part.type === 'body' || part.type === 'point') ? 'move' : 'ew-resize';
         } else {
             this.canvas.style.cursor = 'crosshair';
         }
         this.render();
     }
 
+    /**
+     * Schedule an edge auto-scroll frame if a drag is active. Self-cancels
+     * when the pointer is not in an edge zone or the drag ends.
+     */
+    _scheduleAutoScroll() {
+        if (this.autoScrollRaf !== null) return;
+        this.autoScrollRaf = requestAnimationFrame(() => {
+            this.autoScrollRaf = null;
+            this._autoScrollTick();
+        });
+    }
+
+    _stopAutoScroll() {
+        if (this.autoScrollRaf !== null) {
+            cancelAnimationFrame(this.autoScrollRaf);
+            this.autoScrollRaf = null;
+        }
+    }
+
+    _autoScrollTick() {
+        const isCreating = this.manager.isDragging;
+        const isResizing = this.dragState &&
+            (this.dragState.type === 'resize-start' || this.dragState.type === 'resize-end');
+        if ((!isCreating && !isResizing) || this.lastMouseX == null) return;
+
+        const duration = this.manager.mediaMetadata.duration || 0;
+        if (!duration) return;
+
+        const w = this.canvas.width;
+        const edge = this.EDGE_ZONE;
+        let dir = 0;
+        let depth = 0;
+        if (this.lastMouseX < edge) {
+            dir = -1;
+            depth = (edge - this.lastMouseX) / edge;
+        } else if (this.lastMouseX > w - edge) {
+            dir = 1;
+            depth = (this.lastMouseX - (w - edge)) / edge;
+        }
+        if (dir === 0) return; // pointer left the edge zone; loop pauses
+
+        const viewDur = this.manager.zoomedViewDuration;
+        const maxStart = Math.max(0, duration - viewDur);
+        const step = dir * Math.min(1, depth) * viewDur * 0.03;
+        const newStart = Math.max(0, Math.min(maxStart, this.manager.zoomedViewStart + step));
+        if (newStart !== this.manager.zoomedViewStart) {
+            this.manager.zoomedViewStart = newStart;
+            this.manager._updateZoomedView();
+            this.manager._updateZoomedSlider();
+        }
+
+        // Extend the active drag to the pointer's absolute time in the new window.
+        const t = this._xToTime(this.lastMouseX); // seconds
+        if (isCreating) {
+            this.manager.selectionEnd = t;
+            this.render();
+        } else if (isResizing) {
+            const ann = this.dragState.annotation;
+            const tMs = t * 1000;
+            if (this.dragState.type === 'resize-start') {
+                ann.start_time = Math.max(0, Math.min(tMs, this.dragState.origEnd - 50));
+            } else {
+                const maxTime = duration * 1000;
+                ann.end_time = Math.min(maxTime, Math.max(tMs, this.dragState.origStart + 50));
+            }
+            this.render();
+            if (this.manager.tierViews[this.dragState.tier]) {
+                this.manager.tierViews[this.dragState.tier].render();
+            }
+        }
+
+        this._scheduleAutoScroll();
+    }
+
     _handleMouseUp(e) {
+        this._stopAutoScroll();
         if (this.dragState) {
+            this.manager._syncAnnotationTimeToPeaks(this.dragState.annotation);
             this.manager._saveData();
             this.manager._renderAnnotationList();
             this.manager._renderAllTiers();
@@ -2363,14 +2828,23 @@ class ZoomedTimelineView {
 
         if (this.manager.isDragging) {
             this.manager.isDragging = false;
-            const x = e.offsetX;
+            // A mouseup outside the canvas has no meaningful offsetX; fall back
+            // to the last tracked pointer position within the canvas.
+            const x = (e && e.target === this.canvas) ? e.offsetX : this.lastMouseX;
             const endTime = this._xToTime(x);
             const startTime = this.manager.selectionStart;
 
             this.manager.selectionStart = null;
             this.manager.selectionEnd = null;
 
-            if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
+            if (this.manager.isPointTier(this.manager.activeTier) && endTime !== null) {
+                if (this.manager.activeLabel) {
+                    this.manager.createAnnotation(
+                        this.manager.activeTier, endTime, endTime, this.manager.activeLabel);
+                } else {
+                    this.manager._showError('Please select a label first');
+                }
+            } else if (startTime !== null && endTime !== null && Math.abs(endTime - startTime) > 0.05) {
                 const actualStart = Math.min(startTime, endTime);
                 const actualEnd = Math.max(startTime, endTime);
 
@@ -2400,7 +2874,7 @@ class ZoomedTimelineView {
         const height = this.canvas.height;
 
         // Clear
-        ctx.fillStyle = '#f8f9fa';
+        ctx.fillStyle = themeColor('#f8f9fa', 'bg');
         ctx.fillRect(0, 0, width, height);
 
         const tiers = this.manager.config.tiers;
@@ -2412,11 +2886,11 @@ class ZoomedTimelineView {
             const y = i * tierHeight;
 
             // Alternating background
-            ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#f5f5f5';
+            ctx.fillStyle = themeColor(i % 2 === 0 ? '#ffffff' : '#f5f5f5', 'bg');
             ctx.fillRect(0, y, width, tierHeight);
 
             // Tier divider
-            ctx.strokeStyle = '#e0e0e0';
+            ctx.strokeStyle = themeColor('#e0e0e0', 'line');
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(0, y + tierHeight);
@@ -2482,7 +2956,7 @@ class ZoomedTimelineView {
         if (viewDuration > 30) interval = 5;
         if (viewDuration > 120) interval = 30;
 
-        ctx.strokeStyle = '#ddd';
+        ctx.strokeStyle = themeColor('#ddd', 'line');
         ctx.lineWidth = 1;
         ctx.fillStyle = '#999';
         ctx.font = '9px sans-serif';
@@ -2518,6 +2992,11 @@ class ZoomedTimelineView {
         const ctx = this.ctx;
         const isSelected = this.manager.selectedAnnotation?.id === ann.id;
         const isHovered = this.hoveredHandle?.annotation?.id === ann.id;
+
+        if (this.manager.isPointTier(tierName)) {
+            drawPointMarker(ctx, this.manager, ann, x1, y, height, isSelected, isHovered);
+            return;
+        }
 
         // Draw main body
         ctx.fillStyle = ann.color || '#cccccc';
@@ -2581,6 +3060,11 @@ class ZoomedTimelineView {
         const labelData = tier?.labels?.find(l => l.name === this.manager.activeLabel);
         const color = labelData?.color || '#4ECDC4';
 
+        if (tier && tier.point) {
+            drawPointPreview(ctx, this._timeToX(endTime), y, height, color);
+            return;
+        }
+
         ctx.fillStyle = color + '66';
         ctx.fillRect(x1, y, x2 - x1, height);
         ctx.strokeStyle = color;
@@ -2593,6 +3077,18 @@ class ZoomedTimelineView {
 
 // Export for use
 if (typeof window !== 'undefined') {
+    // Live collaborative sessions: show a teammate's answer without a reload
+    // (see collab.js applyWidget). collab.js has already written the answer
+    // into the hidden input; the manager redraws from it without saving.
+    window.potatoCollabWidgets = window.potatoCollabWidgets || {};
+    window.potatoCollabWidgets['tiered_annotation'] = {
+        apply(ctx) {
+            const form = ctx.form || document.getElementById(ctx.schema);
+            const m = form && form._tieredManager;
+            if (!m || typeof m.applyRemoteAnswer !== 'function') return false;
+            return m.applyRemoteAnswer(ctx.value) === true;
+        }
+    };
     window.TieredAnnotationManager = TieredAnnotationManager;
     window.TierView = TierView;
     window.ZoomedTimelineView = ZoomedTimelineView;

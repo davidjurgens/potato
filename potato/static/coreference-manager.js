@@ -28,12 +28,21 @@
 
             this.chains = [];  // Array of chain objects
             this.nextChainId = 1;
+            // Part of every new chain id, so two pages on one item (a live
+            // session) cannot both make "chain_3" and overwrite each other.
+            this.idNonce = Math.random().toString(36).slice(2, 8);
             this.activeChainId = null;
             this.selectedSpanIds = [];
 
             this._bindElements();
             this._bindEvents();
             this._loadExistingData();
+
+            // Sync the buttons to the (empty) selection. Without this they keep
+            // whatever the server rendered, which is how New Chain came up
+            // enabled on a page with nothing selected -- it looked live and did
+            // nothing when pressed.
+            this._updateButtonStates();
         }
 
         _bindElements() {
@@ -86,27 +95,263 @@
                     self._onSpanDeselected(e.detail.spanId);
                 }
             });
+
+            // Nothing in Potato dispatched those two events, so selectedSpanIds
+            // was never appended to, `hasSelection` was permanently false, and
+            // Add to Chain / Merge / Remove sat disabled however many mentions
+            // the annotator drew. The manager itself worked -- dispatching the
+            // event by hand from the console drove it correctly -- so the whole
+            // scheme was one missing input away from functioning.
+            //
+            // Collect the selection the way span_link already does: delegate on
+            // document, resolve the overlay with closest(), and dispatch. The
+            // events stay the seam, so anything else listening for them (and
+            // the span layer, if it ever emits them itself) still works.
+            this._bindSpanSelection();
+        }
+
+        /** Overlay elements this manager will accept clicks on. */
+        static get OVERLAY_SELECTOR() {
+            return '.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight';
+        }
+
+        _bindSpanSelection() {
+            var self = this;
+
+            // Kept as a reference so destroy() can remove it. An anonymous
+            // listener on `document` outlives the panel it belongs to, and the
+            // panel is rebuilt on every instance navigation.
+            this._clickHandler = function(e) {
+                // span_link owns the click while its link mode is active; it
+                // stops propagation, but capture order between two listeners on
+                // document is registration order, so check explicitly.
+                if (document.body.classList.contains('span-link-mode-active')) return;
+
+                var overlay = e.target.closest(CoreferenceManager.OVERLAY_SELECTOR);
+                if (!overlay) {
+                    var segment = e.target.closest('.span-highlight-segment');
+                    if (segment) overlay = segment.closest(CoreferenceManager.OVERLAY_SELECTOR);
+                }
+                if (!overlay || !overlay.dataset.annotationId) return;
+                if (self.spanSchema && overlay.dataset.schema !== self.spanSchema) return;
+
+                // preventDefault only. stopPropagation would starve any other
+                // manager listening on document -- a page with two coreference
+                // schemes over different span schemas is a normal config, and
+                // whichever one registered first would swallow every click.
+                //
+                // But exactly one manager may turn a click into an event.
+                // Two managers over the SAME span schema would otherwise each
+                // dispatch, and since both also listen, the second dispatch
+                // reads the state the first one just set and flips it back:
+                // one click, no net change.
+                if (e._corefHandled) return;
+                e._corefHandled = true;
+
+                e.preventDefault();
+                self._toggleSpan(overlay);
+            };
+            document.addEventListener('click', this._clickHandler, true);
+
+            // The chains and the spans load separately (/api/links,
+            // /api/spans), so the chain list can be drawn before the mentions
+            // it names exist, and each re-render of the spans replaces the
+            // overlays the chain colours were put on. Redraw once they are in.
+            this._spansRenderedHandler = function() {
+                if (self.chains.length) self._render();
+            };
+            document.addEventListener('potato:spansRendered', this._spansRenderedHandler);
+
+            this._makeSpansSelectable();
+
+            // Overlays are re-rendered on every span change and on instance
+            // navigation, and a fresh overlay comes back with the stylesheet's
+            // `pointer-events: none`. Without this, only the spans that existed
+            // when the manager booted were ever clickable.
+            var container = document.getElementById('span-overlays') || document.body;
+            this._overlayObserver = new MutationObserver(function() {
+                self._makeSpansSelectable();
+                self._pruneSelection();
+                self._syncSelectionVisuals();
+            });
+            this._overlayObserver.observe(container, {childList: true, subtree: true});
+        }
+
+        /**
+         * Overlays carry `pointer-events: none` so they do not block the drag
+         * that draws a span. A mention cannot be clicked until that is lifted.
+         */
+        _makeSpansSelectable() {
+            var self = this;
+            document.querySelectorAll(CoreferenceManager.OVERLAY_SELECTOR).forEach(function(overlay) {
+                if (self.spanSchema && overlay.dataset.schema !== self.spanSchema) return;
+                overlay.style.pointerEvents = 'auto';
+                overlay.style.cursor = 'pointer';
+                overlay.classList.add('coref-selectable');
+            });
+            document.querySelectorAll('.span-highlight-segment').forEach(function(segment) {
+                segment.style.pointerEvents = 'auto';
+            });
+        }
+
+        _toggleSpan(overlay) {
+            var spanId = overlay.dataset.annotationId;
+            var selected = this.selectedSpanIds.indexOf(spanId) !== -1;
+            // No class toggle here: the event updates selectedSpanIds, which
+            // calls _updateButtonStates, which paints. One source of truth.
+            document.dispatchEvent(new CustomEvent(selected ? 'spanDeselected' : 'spanSelected', {
+                detail: {
+                    spanId: spanId,
+                    schema: overlay.dataset.schema,
+                    label: overlay.dataset.label,
+                    text: overlay.textContent
+                }
+            }));
+        }
+
+        /**
+         * Drop selections whose overlay is gone.
+         *
+         * Navigating to the next instance replaces every overlay. Stale ids
+         * left in the selection would enable the chain buttons on an instance
+         * where nothing is selected, and then write a chain referring to
+         * mentions from the previous item.
+         */
+        _pruneSelection() {
+            var self = this;
+            var live = this.selectedSpanIds.filter(function(spanId) {
+                return !!document.querySelector(
+                    '[data-annotation-id="' + (window.CSS && CSS.escape
+                        ? CSS.escape(spanId) : spanId) + '"]');
+            });
+            if (live.length !== this.selectedSpanIds.length) {
+                this.selectedSpanIds = live;
+                this._updateButtonStates();
+            }
+        }
+
+        /**
+         * Detach from the document.
+         *
+         * The click listener and the MutationObserver both outlive the panel
+         * otherwise, and the panel is rebuilt on every instance navigation --
+         * so without this an annotator accumulates one live manager per item
+         * they have visited, each still dispatching selection events.
+         */
+        destroy() {
+            if (this._clickHandler) {
+                document.removeEventListener('click', this._clickHandler, true);
+                this._clickHandler = null;
+            }
+            if (this._spansRenderedHandler) {
+                document.removeEventListener('potato:spansRendered', this._spansRenderedHandler);
+                this._spansRenderedHandler = null;
+            }
+            if (this._overlayObserver) {
+                this._overlayObserver.disconnect();
+                this._overlayObserver = null;
+            }
         }
 
         _loadExistingData() {
-            if (!this.chainData || !this.chainData.value) return;
+            this._adoptLinks(this._parseInputValue());
+
+            // The hidden input is not populated server-side, so on a revisit it
+            // reads "[]" while the chains sit in the user's link annotations.
+            // Ask the server, the way span_link does.
+            this._loadFromServer();
+        }
+
+        /** Show the chains stored now (a teammate's change in a live session). */
+        reload() {
+            this._loadFromServer();
+        }
+
+        _parseInputValue() {
+            if (!this.chainData || !this.chainData.value) return [];
             try {
                 var data = JSON.parse(this.chainData.value);
-                if (!Array.isArray(data) || data.length === 0) return;
-
-                for (var i = 0; i < data.length; i++) {
-                    var link = data[i];
-                    this.chains.push({
-                        id: link.id || ('chain_' + this.nextChainId++),
-                        entityType: link.link_type || link.entity_type || '',
-                        spanIds: link.span_ids || [],
-                        color: link.color || this.colorPalette[this.chains.length % this.colorPalette.length]
-                    });
-                }
-                this._render();
+                return Array.isArray(data) ? data : [];
             } catch (e) {
-                console.warn('CoreferenceManager: Failed to load existing data', e);
+                console.warn('CoreferenceManager: Failed to parse chain data', e);
+                return [];
             }
+        }
+
+        _loadFromServer() {
+            var self = this;
+            var instanceId = document.getElementById('instance_id')?.value;
+            if (!instanceId) return;
+
+            fetch('/api/links/' + encodeURIComponent(instanceId))
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(payload) {
+                    if (!payload || !Array.isArray(payload.links)) return;
+                    // Only this scheme's links; one instance can carry several.
+                    var mine = payload.links.filter(function(link) {
+                        return link.schema === self.schemaName;
+                    });
+                    if (!mine.length) {
+                        // Nothing stored. On a reload (a teammate removed the
+                        // last chain) the page still shows the old ones.
+                        if (self.chains.length) {
+                            self.chains = [];
+                            self._savedChainIds = [];
+                            if (self.chainData) self.chainData.value = '[]';
+                            self._render();
+                        }
+                        return;
+                    }
+                    self.chains = [];
+                    self._adoptLinks(mine);
+                })
+                .catch(function(err) {
+                    console.warn('CoreferenceManager: failed to load chains', err);
+                });
+        }
+
+        /** Turn stored SpanLink records into chains and paint them. */
+        _adoptLinks(links) {
+            if (!Array.isArray(links) || links.length === 0) return;
+            if (links.some(function(l) { return l.prelabel; })) {
+                this.prelabelsOffered = true;
+            }
+
+            for (var i = 0; i < links.length; i++) {
+                var link = links[i];
+                var props = link.properties || {};
+                this.chains.push({
+                    id: link.id || ('chain_' + this.nextChainId++),
+                    entityType: link.link_type || link.entity_type || '',
+                    spanIds: link.span_ids || [],
+                    // A model's chain from /api/links, not yet stored.
+                    prelabel: !!link.prelabel,
+                    color: props.color || link.color
+                        || this.colorPalette[this.chains.length % this.colorPalette.length]
+                });
+            }
+
+            // Keep the next generated id clear of the ones just restored, or a
+            // new chain reuses an existing id and overwrites it on save.
+            var self = this;
+            this.chains.forEach(function(chain) {
+                var match = /^chain_(\d+)$/.exec(chain.id || '');
+                if (match) {
+                    self.nextChainId = Math.max(self.nextChainId, parseInt(match[1], 10) + 1);
+                }
+            });
+
+            // Seed the delete bookkeeping from what is already stored, and
+            // render. Deliberately no _save(): restoring is not a change, and
+            // writing here would POST the server's own data back to it on every
+            // page load.
+            this._savedChainIds = this.chains.map(function(chain) { return chain.id; });
+            if (this.chainData) {
+                var self2 = this;
+                this.chainData.value = JSON.stringify(
+                    this.chains.map(function(chain) { return self2._chainToLink(chain); }));
+            }
+            this._render();
         }
 
         _onSpanSelected(spanId) {
@@ -124,21 +369,52 @@
             this._updateButtonStates();
         }
 
+        /**
+         * What entity type a new chain should carry.
+         *
+         * In order: the annotator's explicit choice, then the label the
+         * chained mentions agree on, then nothing.
+         *
+         * The last step used to be `entityTypes[0]`, so a chain over two PLACE
+         * mentions was written to disk as PERSON -- whichever type happened to
+         * be listed first -- with no radio shown, no warning, and a widget that
+         * read "PERSON (2)". A coreference corpus built that way is typed
+         * wrong throughout and looks fine. An unset type renders as "Chain N",
+         * which is at least true.
+         */
+        _entityTypeForSelection() {
+            if (!this.entityTypes.length) return '';
+
+            var checked = this.container.querySelector(
+                'input[name="' + this.schemaName + '_entity_type"]:checked');
+            if (checked && checked.value) return checked.value;
+
+            var labels = [];
+            for (var i = 0; i < this.selectedSpanIds.length; i++) {
+                var id = this.selectedSpanIds[i];
+                var overlay = document.querySelector(
+                    '[data-annotation-id="' + (window.CSS && CSS.escape
+                        ? CSS.escape(id) : id) + '"]');
+                var label = overlay && overlay.dataset ? overlay.dataset.label : '';
+                if (label && labels.indexOf(label) === -1) labels.push(label);
+            }
+            // Only when the mentions agree, and only when the agreed label is
+            // one this scheme actually offers -- a span label from a different
+            // scheme is not an entity type.
+            if (labels.length === 1 && this.entityTypes.indexOf(labels[0]) !== -1) {
+                return labels[0];
+            }
+            return '';
+        }
+
         createChain() {
             if (this.selectedSpanIds.length === 0 && !this.allowSingletons) return;
             if (this.selectedSpanIds.length === 0) return;
 
-            // Get selected entity type
-            var entityType = '';
-            if (this.entityTypes.length > 0) {
-                var checkedRadio = this.container.querySelector(
-                    'input[name="' + this.schemaName + '_entity_type"]:checked'
-                );
-                entityType = checkedRadio ? checkedRadio.value : this.entityTypes[0];
-            }
+            var entityType = this._entityTypeForSelection();
 
             var chain = {
-                id: 'chain_' + this.nextChainId++,
+                id: 'chain_' + this.idNonce + '_' + this.nextChainId++,
                 entityType: entityType,
                 spanIds: this.selectedSpanIds.slice(),
                 color: this.colorPalette[(this.chains.length) % this.colorPalette.length]
@@ -292,6 +568,25 @@
             if (this.addToChainBtn) this.addToChainBtn.disabled = !(hasSelection && hasActiveChain);
             if (this.mergeBtn) this.mergeBtn.disabled = !(hasSelection && hasActiveChain);
             if (this.removeBtn) this.removeBtn.disabled = !hasSelection;
+
+            this._syncSelectionVisuals();
+        }
+
+        /**
+         * Reconcile the outline on each overlay against selectedSpanIds.
+         *
+         * Driven from state rather than toggled at the click, because the
+         * selection is also cleared in code -- createChain() and
+         * addSelectedToActiveChain() both empty it -- and a class toggled only
+         * on click stayed behind, leaving mentions outlined as selected while
+         * the panel's buttons had already gone back to disabled.
+         */
+        _syncSelectionVisuals() {
+            var selected = this.selectedSpanIds;
+            document.querySelectorAll(CoreferenceManager.OVERLAY_SELECTOR).forEach(function(overlay) {
+                var id = overlay.dataset.annotationId;
+                overlay.classList.toggle('coref-selected', !!id && selected.indexOf(id) !== -1);
+            });
         }
 
         _render() {
@@ -392,7 +687,7 @@
             for (var j = 0; j < this.chains.length; j++) {
                 var chain = this.chains[j];
                 for (var k = 0; k < chain.spanIds.length; k++) {
-                    var spanEl = document.querySelector('[data-span-id="' + chain.spanIds[k] + '"]');
+                    var spanEl = this._findSpanElement(chain.spanIds[k]);
                     if (spanEl) {
                         spanEl.classList.add(highlightClass);
                         spanEl.style.setProperty('--chain-color', chain.color);
@@ -404,36 +699,168 @@
             }
         }
 
+        /** The overlay for a span id, whichever attribute carries it. */
+        _findSpanElement(spanId) {
+            var escaped = (window.CSS && CSS.escape) ? CSS.escape(spanId) : spanId;
+            return document.querySelector('[data-annotation-id="' + escaped + '"]') ||
+                   document.querySelector('[data-span-id="' + escaped + '"]');
+        }
+
+        /**
+         * The words a mention marks.
+         *
+         * The chain list showed "(span entities_PLACE_26_39)" -- it looked
+         * mentions up by `data-span-id` while span-core writes
+         * `data-annotation-id`, so every lookup missed and every mention
+         * rendered as its internal id. Deciding whether two mentions corefer
+         * is the entire task, and the widget was showing offsets instead of
+         * words.
+         *
+         * An overlay is a positioned box, not the text, so the text comes from
+         * the span manager's own record of the span (the server's slice, or
+         * the selection it was drawn from), else from slicing the canonical
+         * string by the overlay's offsets -- by code point, the way the
+         * offsets are stored. It used to fall back to the element's own text,
+         * which only a reloaded page had: the server wrapped each stored span
+         * inline, so the list read "John Smith, He" after a reload and
+         * "(span sw_m1), (span sw_m2)" when the same spans arrived live.
+         */
         _getMentionTexts(spanIds) {
             var texts = [];
             for (var i = 0; i < spanIds.length; i++) {
-                var spanEl = document.querySelector('[data-span-id="' + spanIds[i] + '"]');
-                if (spanEl) {
-                    texts.push(spanEl.textContent || spanEl.innerText || '');
-                } else {
-                    texts.push('(span ' + spanIds[i] + ')');
-                }
+                texts.push(this._mentionText(spanIds[i]));
             }
             return texts;
         }
 
-        _save() {
-            if (!this.chainData) return;
+        _mentionText(spanId) {
+            var manager = window.spanManager;
+            var spans = (manager && typeof manager.getSpans === 'function')
+                ? manager.getSpans() : [];
+            for (var i = 0; i < spans.length; i++) {
+                if (spans[i] && spans[i].id === spanId &&
+                        typeof spans[i].text === 'string' && spans[i].text.trim()) {
+                    return spans[i].text.trim();
+                }
+            }
+            var el = this._findSpanElement(spanId);
+            if (el && el.dataset && el.dataset.start !== undefined) {
+                var start = parseInt(el.dataset.start, 10);
+                var end = parseInt(el.dataset.end, 10);
+                var strategies = (window.spanManager && window.spanManager.fieldStrategies) || {};
+                var strategy = strategies[el.dataset.targetField] ||
+                    (window.spanManager && window.spanManager.positioningStrategy);
+                if (strategy && typeof strategy.getCanonicalText === 'function' &&
+                    !isNaN(start) && !isNaN(end)) {
+                    var text = strategy.getCanonicalText();
+                    var slice = window.spanSliceByCodePoints
+                        ? window.spanSliceByCodePoints(text, start, end)
+                        : text.substring(start, end);
+                    if (slice && slice.trim()) return slice.trim();
+                }
+            }
+            return '(span ' + spanId + ')';
+        }
 
-            var data = [];
-            for (var i = 0; i < this.chains.length; i++) {
-                var chain = this.chains[i];
-                data.push({
-                    id: chain.id,
-                    schema: this.schemaName,
-                    link_type: chain.entityType || 'coreference',
-                    span_ids: chain.spanIds,
-                    direction: 'undirected',
-                    properties: { color: chain.color }
+        /** The SpanLink form of one chain. Same shape span_link posts. */
+        _chainToLink(chain) {
+            return {
+                id: chain.id,
+                schema: this.schemaName,
+                link_type: chain.entityType || 'coreference',
+                span_ids: chain.spanIds,
+                direction: 'undirected',
+                properties: { color: chain.color }
+            };
+        }
+
+        /**
+         * Persist the chains.
+         *
+         * This used to assign the hidden input's value and stop. That input
+         * carries neither the `schema`/`label_name` attributes nor the
+         * `annotation-input` class that syncAnnotationsFromDOM requires, so
+         * nothing ever picked the value up: every chain the annotator built was
+         * gone the moment they moved to the next item, and came back as
+         * "0 chains" on the way back.
+         *
+         * Chains are SpanLinks, and span_link already has a working round trip
+         * -- POST /updateinstance with `link_annotations`, DELETE
+         * /api/links/<instance>/<id>, GET /api/links/<instance>. Use it rather
+         * than inventing a second one. The input keeps its value for form
+         * submission and for anything reading the DOM.
+         */
+        /** Store the model's chains as the annotator's when they move on,
+         *  as span prelabels are; see SpanLinkManager.commitPrelabels. */
+        commitPrelabels() {
+            if (!this.chains.some(function(c) { return c.prelabel; })) return;
+            // A model's chain loses a mention whose span the annotator
+            // deleted, and goes when too few mentions are left.
+            var live = typeof window.potatoLiveSpanIds === 'function'
+                ? window.potatoLiveSpanIds() : null;
+            if (live) {
+                var minimum = this.allowSingletons ? 1 : 2;
+                this.chains = this.chains.filter(function(c) {
+                    if (!c.prelabel) return true;
+                    c.spanIds = c.spanIds.filter(function(id) { return live.has(id); });
+                    return c.spanIds.length >= minimum;
                 });
             }
+            return this._save(true);
+        }
 
-            this.chainData.value = JSON.stringify(data);
+        _save(committingPrelabels) {
+            if (!this.chainData) return;
+
+            var self = this;
+            // Saving stores every chain shown, a model's included.
+            this.chains.forEach(function(c) { c.prelabel = false; });
+            var links = this.chains.map(function(chain) { return self._chainToLink(chain); });
+            this.chainData.value = JSON.stringify(links);
+
+            var instanceId = document.getElementById('instance_id')?.value;
+            if (!instanceId) return;  // Phase page or preview: nothing to save against.
+
+            // Chains removed since the last save have to be deleted explicitly;
+            // POSTing the survivors only ever adds or updates.
+            var liveIds = {};
+            links.forEach(function(link) { liveIds[link.id] = true; });
+            (this._savedChainIds || []).forEach(function(id) {
+                if (!liveIds[id]) self._deleteChainOnServer(instanceId, id);
+            });
+            this._savedChainIds = Object.keys(liveIds);
+
+            if (links.length === 0) return;
+
+            var post = function() {
+                return fetch('/updateinstance', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        instance_id: instanceId,
+                        annotations: {},  // Required for frontend format detection
+                        link_annotations: links
+                    })
+                }).catch(function(err) {
+                    console.error('CoreferenceManager: failed to save chains', err);
+                });
+            };
+            // On an edit, the other schemes' prelabels first: the server
+            // offers none once the annotator has stored a chain (annotation.js).
+            if (committingPrelabels || typeof window.commitAllPrelabels !== 'function') {
+                return post();
+            }
+            return window.commitAllPrelabels().then(post, post);
+        }
+
+        /** Not `_deleteChain` -- that name is taken by the local-array removal
+         *  below, and a class body's later definition silently wins. */
+        _deleteChainOnServer(instanceId, chainId) {
+            fetch('/api/links/' + encodeURIComponent(instanceId) + '/' + encodeURIComponent(chainId),
+                  {method: 'DELETE'})
+                .catch(function(err) {
+                    console.error('CoreferenceManager: failed to delete chain', chainId, err);
+                });
         }
 
         _escapeHtml(str) {
@@ -449,11 +876,26 @@
     }
 
     // Auto-initialize on DOM ready
+    // Live managers, so the ones whose panel has been replaced can be detached.
+    var liveManagers = [];
+
     function initCoreferenceManagers() {
+        // Instance navigation re-renders the panel, so the container this
+        // manager was built around is gone while its document-level click
+        // listener is not. Drop those first, or an annotator accumulates one
+        // live manager per item visited and each still dispatches selection
+        // events.
+        liveManagers = liveManagers.filter(function(manager) {
+            if (document.contains(manager.container)) return true;
+            manager.destroy();
+            return false;
+        });
+
         var containers = document.querySelectorAll('.coref-container');
         for (var i = 0; i < containers.length; i++) {
             if (!containers[i]._coreferenceManager) {
                 containers[i]._coreferenceManager = new CoreferenceManager(containers[i]);
+                liveManagers.push(containers[i]._coreferenceManager);
             }
         }
     }

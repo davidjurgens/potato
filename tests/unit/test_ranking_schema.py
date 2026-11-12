@@ -67,8 +67,15 @@ class TestRankingSchema:
 
         assert "ranking-order-input" in html
 
-    def test_data_modified_true(self):
-        """Test that the hidden input has data-modified='true'."""
+    def test_not_marked_modified_until_the_annotator_reorders(self):
+        """The hidden input must not arrive claiming to hold an answer.
+
+        It used to render with `data-modified="true"` and the config order
+        already in it, which is what `syncAnnotationsFromDOM` reads: an
+        untouched ranking was stored for every item merely opened, and on a
+        return visit the same mechanism overwrote the annotator's real order
+        with the config order.
+        """
         scheme = {
             "name": "test_rank",
             "description": "Test",
@@ -78,7 +85,7 @@ class TestRankingSchema:
 
         html, _ = generate_ranking_layout(scheme)
 
-        assert 'data-modified="true"' in html
+        assert 'data-modified="true"' not in html
 
     def test_hidden_input_present(self):
         """Test that a hidden input element is present for storing order."""
@@ -93,8 +100,13 @@ class TestRankingSchema:
 
         assert 'type="hidden"' in html
 
-    def test_initial_order_is_comma_separated_labels(self):
-        """Test that the hidden input value is the comma-joined label list."""
+    def test_the_config_order_is_a_placeholder_not_a_value(self):
+        """The comma-joined label list is still rendered, on its own attribute.
+
+        `clearAllFormInputs()` reads `data-placeholder-order` to put the rows
+        back between instances. Keeping it in `value` is what made the config
+        order look like an answer.
+        """
         scheme = {
             "name": "test_rank",
             "description": "Test",
@@ -104,7 +116,8 @@ class TestRankingSchema:
 
         html, _ = generate_ranking_layout(scheme)
 
-        assert 'value="A,B,C"' in html
+        assert 'data-placeholder-order="A,B,C"' in html
+        assert 'value=""' in html
 
     def test_all_labels_present(self):
         """Test that all label names appear in the HTML."""

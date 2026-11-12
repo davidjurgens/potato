@@ -1,0 +1,3 @@
+{"id": "m1", "condition": "ambiguous", "sentence": "The horse raced past the barn fell to the ground.", "distractors": "x-x-x clock holly toward soft hint knew duty hope fuel."}
+{"id": "m2", "condition": "unambiguous", "sentence": "The horse that was raced past the barn fell to the ground.", "distractors": "x-x-x clock cried drew holly toward soft hint knew duty hope fuel."}
+{"id": "m3", "condition": "filler", "sentence": "The chef tasted the soup before serving it to the guests.", "distractors": "x-x-x ugly flora deal jump grew narrow sun on pile quite."}

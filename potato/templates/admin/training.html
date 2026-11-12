@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ ui_lang.training_page_title|default('Training') }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .tr-lede { color: var(--muted-foreground); font-size: 0.9375rem; max-width: 72ch;
+             line-height: 1.6; margin: 0 0 1.5rem; }
+  .tr-card { margin-bottom: 1.25rem; }
+  .tr-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .tr-row { display: flex; gap: 0.6rem; align-items: flex-end; flex-wrap: wrap; }
+  .tr-field { display: flex; flex-direction: column; gap: 0.2rem; }
+  .tr-field label { font-size: 0.75rem; font-weight: 600; color: var(--heading-color); }
+  .tr-field select, .tr-field input {
+    padding: 0.4rem 0.55rem; border: 1px solid var(--border);
+    border-radius: var(--radius); font: inherit; background: var(--background);
+    color: var(--foreground); min-height: 2.75rem; }
+  /* No focus styling here on purpose: `.shadcn-button:focus-visible` in
+     styles.css already covers the buttons and the browser default covers the
+     links. A page-local ring would only make this page's focus look different
+     from every other admin page. */
+  /* Wide tables scroll inside their own box rather than pushing the page
+     sideways: an admin on a narrow window could otherwise never reach the
+     later columns. */
+  .tr-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.tr-table { border-collapse: collapse; width: 100%; font-size: 0.875rem;
+                   margin-top: 0.75rem; }
+  table.tr-table th, table.tr-table td {
+    border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left;
+    white-space: nowrap; }
+  table.tr-table th { background: var(--muted); font-weight: 600; }
+  td.tr-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tr-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+  .tr-empty { color: var(--muted-foreground); font-style: italic; }
+  .tr-pill { font-size: 0.7rem; border-radius: var(--radius); padding: 0.05rem 0.45rem;
+             font-weight: 600; background: var(--muted); }
+  .tr-pill.ok      { background: hsl(140 45% 92%); color: hsl(140 45% 24%); }
+  .tr-pill.err     { background: hsl(0 65% 95%);   color: hsl(0 55% 34%); }
+  .tr-pill.run     { background: hsl(210 70% 93%); color: hsl(212 60% 30%); }
+  .tr-pill.cancel  { background: hsl(35 60% 93%);  color: hsl(28 55% 28%); }
+  .tr-status { font-size: 0.85rem; min-height: 1.2em; }
+  .tr-status.err { color: hsl(0 65% 45%); }
+  .tr-status.ok  { color: hsl(140 45% 32%); }
+  .tr-warn { background: hsl(40 80% 95%); color: hsl(28 60% 28%);
+             border: 1px solid hsl(40 70% 85%); border-radius: var(--radius);
+             padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-bottom: 1rem; }
+  .tr-progress { height: 0.5rem; background: var(--muted); border-radius: 3px;
+                 overflow: hidden; margin-top: 0.4rem; max-width: 26rem; }
+  .tr-progress > span { display: block; height: 100%; background: var(--primary);
+                        width: 0; transition: width 0.2s ease; }
+  .tr-note { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.35rem; }
+  .tr-params { margin-top: 0.75rem; max-width: 44rem; }
+  .tr-params textarea {
+    padding: 0.4rem 0.55rem; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--background);
+    color: var(--foreground); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem; min-height: 2.75rem; width: 100%; box-sizing: border-box;
+    resize: vertical; }
+  .tr-optional { font-weight: 400; color: var(--muted-foreground); }
+  .tr-unavailable { color: var(--muted-foreground); }
+  .tr-live { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+  /* The flex and button display rules here and in the shared stylesheet beat
+     the hidden attribute: a finished run kept its "running" badge, and Cancel
+     and Check showed with no run and on the local backend. */
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>{{ ui_lang.training_heading|default('Training') }}</h1>
+  <p class="tr-lede">
+    {{ ui_lang.training_lede|default('Fit a model on the annotations you already have, then send its
+    predictions back as prelabels for review. Each run records what it trained on and which items it
+    held out, so the score on this page is measured on data the model never saw.') }}
+  </p>
+
+  <section class="dashboard-card tr-card" aria-labelledby="run-h">
+    <h2 id="run-h">{{ ui_lang.training_start_heading|default('Start a run') }}</h2>
+
+    {% if not trainers %}
+      <p class="tr-empty">{{ ui_lang.training_no_trainers|default('No trainers are registered.') }}</p>
+    {% else %}
+    <div class="tr-row">
+      <div class="tr-field">
+        <label for="trainer-select">{{ ui_lang.training_trainer|default('Trainer') }}</label>
+        <select id="trainer-select">
+          {% for t in trainers %}
+            <option value="{{ t.name }}"
+                    data-available="{{ '1' if t.available and not t.config_problem else '0' }}"
+                    data-hint="{{ t.install_hint }}"
+                    data-reason="{{ t.unavailable_reason }}"
+                    data-ack="{{ '1' if t.licence_ack else '0' }}"
+                    data-licence="{{ t.licence }}"
+                    data-params="{{ t.param_names|join(', ') }}"
+                    data-defaults='{{ (trainer_params.get(t.name) or {})|tojson }}'
+                    {% if not t.available or t.config_problem %}disabled{% endif %}>
+              {{ t.name }}{% if not t.available %} — {{ ui_lang.training_not_installed|default('not installed') }}{% elif t.config_problem %} — {{ t.config_problem }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="tr-field">
+        <label for="schema-select">{{ ui_lang.training_schema|default('Schema') }}</label>
+        <select id="schema-select">
+          {% for s in schemas %}
+            <option value="{{ s.name }}" data-trainers="{{ s.trainers|join(',') }}"
+                    {% if not s.trainable %}disabled{% endif %}>
+              {{ s.name }} ({{ s.annotation_type }}){% if not s.trainable %} — {{ ui_lang.training_not_trainable|default('no trainer handles this') }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="tr-field">
+        <label for="backend-select">{{ ui_lang.training_backend|default('Runs on') }}</label>
+        <select id="backend-select">
+          {% for b in backends %}
+            <option value="{{ b.name }}" data-type="{{ b.type }}"
+                    {% if b.default %}selected{% endif %}>{{ b.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="shadcn-button shadcn-button-outline" id="check-btn"
+              type="button" hidden>{{ ui_lang.training_check|default('Check') }}</button>
+      <button class="shadcn-button" id="start-btn">{{ ui_lang.training_start|default('Train now') }}</button>
+      <button class="shadcn-button shadcn-button-outline" id="cancel-btn" hidden>{{ ui_lang.training_cancel|default('Cancel run') }}</button>
+    </div>
+    <p class="tr-note" id="trainer-note"></p>
+    <div class="tr-field tr-params">
+      <label for="params-input">{{ ui_lang.training_params|default('Parameters') }}
+        <span class="tr-optional">{{ ui_lang.training_params_optional|default('JSON, optional') }}</span></label>
+      <textarea id="params-input" rows="2" spellcheck="false" autocomplete="off"
+                aria-describedby="params-note" placeholder="{}"></textarea>
+      <p class="tr-note" id="params-note"></p>
+    </div>
+    <p class="tr-status" id="start-status" role="status" aria-live="polite"></p>
+    {% endif %}
+
+    <div id="live" class="tr-live" hidden>
+      <span class="tr-pill run" id="live-state">running</span>
+      <span class="tr-mono" id="live-step"></span>
+      <span class="tr-mono tr-empty" id="live-count"></span>
+    </div>
+    {#- A bare div conveys nothing to a screen reader, so the only signal a
+        non-sighted admin gets that a long run is progressing is silence. -#}
+    <div class="tr-progress" id="live-progress" hidden
+         role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="0"
+         aria-label="{{ ui_lang.training_progress_label|default('Training progress') }}"><span id="live-bar"></span></div>
+  </section>
+
+  {% if not writeback.get('schemas') %}
+  <div class="tr-warn">
+    {{ ui_lang.training_writeback_off|default('Predictions are stored but not shown to annotators. Name the schemas
+    under model_training.writeback.schemas to turn prelabels on — worth doing only once a run\'s held-out
+    score justifies it, because prelabels bias annotators toward accepting them.') }}
+  </div>
+  {% endif %}
+
+  <section class="dashboard-card tr-card" aria-labelledby="runs-h">
+    <h2 id="runs-h">{{ ui_lang.training_runs_heading|default('Runs') }}</h2>
+    {% if not runs %}
+      <p class="tr-empty">{{ ui_lang.training_no_runs|default('No runs yet.') }}</p>
+    {% else %}
+    <div class="tr-scroll">
+      <table class="tr-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ ui_lang.training_col_run|default('Run') }}</th>
+            <th scope="col">{{ ui_lang.training_col_status|default('Status') }}</th>
+            <th scope="col">{{ ui_lang.training_col_trainer|default('Trainer') }}</th>
+            <th scope="col">{{ ui_lang.training_col_backend|default('Ran on') }}</th>
+            <th scope="col">{{ ui_lang.training_col_schemas|default('Schemas') }}</th>
+            <th scope="col">{{ ui_lang.training_col_train|default('Train') }}</th>
+            <th scope="col">{{ ui_lang.training_col_val|default('Val') }}</th>
+            <th scope="col">{{ ui_lang.training_col_score|default('Held-out score') }}</th>
+            <th scope="col">{{ ui_lang.training_col_duration|default('Duration') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in runs %}
+          <tr>
+            <td><a class="tr-mono" href="{{ url_for('training.run_page', run_id=r.run_id) }}">{{ r.run_id }}</a></td>
+            <td>
+              <span class="tr-pill {{ 'ok' if r.status == 'success' else 'err' if r.status == 'error' else 'cancel' if r.status == 'cancelled' else 'run' }}">{{ r.status }}{% if r.status == 'waiting' and r.run_id in queue_positions %} #{{ queue_positions[r.run_id] }}{% endif %}</span>
+              {%- if r.status == 'waiting' %}
+              <button class="shadcn-button shadcn-button-outline tr-unqueue" type="button"
+                      data-run="{{ r.run_id }}">{{ ui_lang.training_cancel|default('Cancel run') }}</button>
+              {%- endif %}
+            </td>
+            <td>{{ r.trainer }}</td>
+            <td{% if r.host %} title="{{ r.host }}"{% endif %}>{{ r.backend or 'local' }}</td>
+            <td>{{ r.schema_names|join(', ') }}</td>
+            <td class="tr-num">{{ r.n_train }}</td>
+            <td class="tr-num">{{ r.n_val }}</td>
+            <td class="tr-num">
+              {#- Only a score measured on val or test goes here. Training-set
+                  accuracy used to fill this column, and a model scores well
+                  on the data it was fitted on whatever it learned. -#}
+              {%- set score = r.metrics.get('heldout_score') -%}
+              {%- if score is number %}<span title="{{ r.metrics.get('heldout_metric', '') }}">{{ '%.3f'|format(score) }}</span>{% else %}<span class="tr-empty">not scored</span>{% endif -%}
+            </td>
+            <td class="tr-num">
+              {%- if r.duration %}{{ '%.1fs'|format(r.duration) }}{% else %}<span class="tr-empty">—</span>{% endif -%}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="dashboard-card tr-card" aria-labelledby="cap-h">
+    <h2 id="cap-h">{{ ui_lang.training_trainers_heading|default('Trainers') }}</h2>
+    <div class="tr-scroll">
+      <table class="tr-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ ui_lang.training_col_name|default('Name') }}</th>
+            <th scope="col">{{ ui_lang.training_col_handles|default('Handles') }}</th>
+            <th scope="col">{{ ui_lang.training_col_modalities|default('Modalities') }}</th>
+            <th scope="col">{{ ui_lang.training_col_licence|default('Licence') }}</th>
+            <th scope="col">{{ ui_lang.training_col_available|default('Available') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for t in trainers %}
+          <tr>
+            <td class="tr-mono">{{ t.name }}</td>
+            <td>{{ t.kinds|join(', ') }}</td>
+            <td>{{ t.modalities|join(', ') }}</td>
+            <td>{{ t.licence }}{% if t.licence_ack %} <span class="tr-pill">{{ ui_lang.training_ack_required|default('confirm before use') }}</span>{% endif %}</td>
+            <td>
+              {%- if not t.available -%}
+                <span class="tr-unavailable">{{ t.install_hint or t.unavailable_reason or ui_lang.training_no|default('no') }}</span>
+              {%- elif t.config_problem -%}
+                <span class="tr-unavailable">{{ t.config_problem }}</span>
+              {%- else -%}
+                <span class="tr-pill ok">{{ ui_lang.training_yes|default('yes') }}</span>
+              {%- endif -%}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var startBtn   = document.getElementById("start-btn");
+  var cancelBtn  = document.getElementById("cancel-btn");
+  var statusEl   = document.getElementById("start-status");
+  var noteEl     = document.getElementById("trainer-note");
+  var trainerSel = document.getElementById("trainer-select");
+  var schemaSel  = document.getElementById("schema-select");
+  var backendSel = document.getElementById("backend-select");
+  var checkBtn   = document.getElementById("check-btn");
+  var live       = document.getElementById("live");
+  var liveState  = document.getElementById("live-state");
+  var liveStep   = document.getElementById("live-step");
+  var liveCount  = document.getElementById("live-count");
+  var progress   = document.getElementById("live-progress");
+  var bar        = document.getElementById("live-bar");
+
+  // "queued": a remote run waiting for its agent, or a SLURM job waiting
+  // for a node. It is in flight: it can be cancelled and the page polls it.
+  var ACTIVE = ["queued", "building", "running", "evaluating"];
+  var currentRun = null;
+  var timer = null;
+
+  function say(message, kind) {
+    if (!statusEl) { return; }
+    statusEl.textContent = message || "";
+    statusEl.className = "tr-status" + (kind ? " " + kind : "");
+  }
+
+  var paramsEl = document.getElementById("params-input");
+  var paramsNote = document.getElementById("params-note");
+  // Filled from model_training.trainer_params for the chosen trainer until
+  // the admin types in it; after that, switching trainer keeps their text.
+  var paramsEdited = false;
+  if (paramsEl) {
+    paramsEl.addEventListener("input", function () { paramsEdited = true; });
+  }
+
+  function describeParams(opt) {
+    if (!paramsEl) { return; }
+    var defaults = {};
+    try { defaults = JSON.parse(opt.dataset.defaults || "{}"); } catch (e) { defaults = {}; }
+    if (!paramsEdited) {
+      paramsEl.value = Object.keys(defaults).length ? JSON.stringify(defaults) : "";
+    }
+    // An example built from a parameter this trainer takes; a fixed one
+    // suggested {"lora": true} to trainers that refuse it.
+    var names = (opt.dataset.params || "").split(/,\s*/).filter(Boolean);
+    paramsEl.placeholder = names.length ? '{"' + names[0] + '": …}' : "{}";
+    if (paramsNote) {
+      paramsNote.textContent = opt.dataset.params
+        ? "Takes: " + opt.dataset.params + "." +
+          (Object.keys(defaults).length ? " Filled in from model_training.trainer_params." : "")
+        : "";
+    }
+  }
+
+  function readParams() {
+    var text = paramsEl ? paramsEl.value.trim() : "";
+    if (!text) { return {}; }
+    var value = JSON.parse(text);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Parameters must be a JSON object, such as {\"epochs\": 5}.");
+    }
+    return value;
+  }
+
+  function describeTrainer() {
+    if (!trainerSel || !noteEl) { return; }
+    var opt = trainerSel.options[trainerSel.selectedIndex];
+    if (!opt) { noteEl.textContent = ""; return; }
+    describeParams(opt);
+    if (opt.dataset.available !== "1") {
+      noteEl.textContent = opt.dataset.hint
+        ? "Not installed. " + opt.dataset.hint
+        : (opt.dataset.reason || "Not installed.");
+    } else if (opt.dataset.ack === "1") {
+      noteEl.textContent = "Licensed " + opt.dataset.licence +
+        ". You will be asked to confirm before the first run.";
+    } else {
+      noteEl.textContent = "";
+    }
+  }
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "same-origin",
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json().then(function (d) {
+      return {ok: r.ok, data: d};
+    }); });
+  }
+
+  function render(status) {
+    var running = status.state && ACTIVE.indexOf(status.state) >= 0;
+    live.hidden = !running;
+    cancelBtn.hidden = !running;
+    // A run started while one is in flight waits in the queue.
+    if (running && status.run_id) { currentRun = status.run_id; }
+
+    if (!running) {
+      progress.hidden = true;
+      if (status.state === "success") {
+        say("Run finished.", "ok");
+      } else if (status.state === "error") {
+        say((status.errors && status.errors[0]) || "The run failed.", "err");
+      } else if (status.state === "cancelled") {
+        say("Run cancelled.", "");
+      }
+      return;
+    }
+
+    liveState.textContent = status.state;
+    liveStep.textContent = status.step || "";
+    if (status.total) {
+      progress.hidden = false;
+      var pct = Math.min(100, Math.round((status.current / status.total) * 100));
+      bar.style.width = pct + "%";
+      progress.setAttribute("aria-valuenow", String(pct));
+      progress.setAttribute("aria-valuetext", pct + "% — " + (status.phase || status.state));
+      liveCount.textContent = status.current + " / " + status.total +
+        (status.phase ? " (" + status.phase + ")" : "");
+    } else {
+      progress.hidden = true;
+      liveCount.textContent = "";
+    }
+  }
+
+  function poll() {
+    fetch("{{ url_for('training.api_status') }}", {credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (status) {
+        render(status);
+        var running = status.state &&
+          ACTIVE.indexOf(status.state) >= 0;
+        if (!running && timer) {
+          clearInterval(timer);
+          timer = null;
+          // Reload so the runs table picks up the finished run.
+          setTimeout(function () { window.location.reload(); }, 1200);
+        }
+      })
+      .catch(function () { /* a dropped poll is not worth surfacing */ });
+  }
+
+  function watch() {
+    if (timer) { return; }
+    timer = setInterval(poll, 1500);
+    poll();
+  }
+
+  if (trainerSel) {
+    trainerSel.addEventListener("change", describeTrainer);
+  }
+
+  // Offer only the trainers that fit the chosen schema (its kind, and the
+  // project's modality); an installed trainer that does not fit is disabled
+  // rather than hidden, so the list reads the same for every schema.
+  var trainerChosen = false;
+  if (trainerSel) {
+    trainerSel.addEventListener("change", function () { trainerChosen = true; });
+  }
+  function syncTrainers() {
+    if (!trainerSel || !schemaSel) { return; }
+    var schemaOpt = schemaSel.options[schemaSel.selectedIndex];
+    var fits = schemaOpt ? (schemaOpt.dataset.trainers || "").split(",").filter(Boolean) : [];
+    var firstFit = null;
+    Array.prototype.forEach.call(trainerSel.options, function (opt) {
+      var installed = opt.dataset.available === "1";
+      var fit = fits.indexOf(opt.value) >= 0;
+      opt.disabled = !installed || !fit;
+      if (!opt.dataset.label) { opt.dataset.label = opt.textContent.trim(); }
+      opt.textContent = opt.dataset.label + (installed && !fit ? " (not for this schema)" : "");
+      if (installed && fit && firstFit === null) { firstFit = opt; }
+    });
+    var current = trainerSel.options[trainerSel.selectedIndex];
+    // Until someone picks a trainer, the default is chosen here, not by
+    // the menu's order: alphabetically, decision-calibrate came first, the
+    // trainer that makes one paid request per item.
+    if ((!current || current.disabled || !trainerChosen) && firstFit) {
+      // sklearn-text needs nothing installed, so it is the default when it fits.
+      var plain = Array.prototype.find.call(trainerSel.options, function (o) {
+        return o.value === "sklearn-text" && !o.disabled;
+      });
+      trainerSel.value = (plain || firstFit).value;
+    }
+    describeTrainer();
+  }
+  if (schemaSel) {
+    schemaSel.addEventListener("change", function () { syncTrainers(); say(""); });
+  }
+  syncTrainers();
+
+  function syncCheck() {
+    if (!backendSel || !checkBtn) { return; }
+    var opt = backendSel.options[backendSel.selectedIndex];
+    checkBtn.hidden = !opt || opt.dataset.type === "local";
+  }
+  if (backendSel) {
+    backendSel.addEventListener("change", function () { syncCheck(); say(""); });
+    syncCheck();
+  }
+  if (checkBtn) {
+    checkBtn.addEventListener("click", function () {
+      var name = backendSel.value;
+      checkBtn.disabled = true;
+      say("Checking " + name + "…");
+      post("{{ url_for('training.api_backends') }}/" +
+           encodeURIComponent(name) + "/check", {})
+        .then(function (res) {
+          var d = res.data || {};
+          var text = d.message || (res.ok ? "Reachable." : "Check failed.");
+          if (d.missing && d.missing.length) {
+            text += " Not installed there: " + d.missing.join(", ") + ".";
+          }
+          var unusable = (d.gpus || []).filter(function (g) { return g.supported === false; });
+          if (unusable.length) {
+            text += " Its torch has no kernels for " + unusable.map(function (g) {
+              return "GPU " + g.index + " (" + g.name + ")";
+            }).join(", ") + ", so runs skip " + (unusable.length === 1 ? "it." : "them.");
+          }
+          say(text, d.ok ? "ok" : "err");
+        })
+        .catch(function (err) { say("Check failed: " + err, "err"); })
+        .then(function () { checkBtn.disabled = false; });
+    });
+  }
+
+  if (startBtn) {
+    startBtn.addEventListener("click", function () {
+      var trainer = trainerSel && trainerSel.value;
+      var schema = schemaSel && schemaSel.value;
+      var backend = backendSel ? backendSel.value : null;
+      if (!trainer || !schema) {
+        say("Pick a trainer and a schema.", "err");
+        return;
+      }
+      var params;
+      try {
+        params = readParams();
+      } catch (err) {
+        say("Parameters: " + err.message, "err");
+        if (paramsEl) { paramsEl.focus(); }
+        return;
+      }
+      startBtn.disabled = true;
+      say("Starting…");
+
+      post("{{ url_for('training.api_start_run') }}",
+           {trainer: trainer, schemas: [schema], backend: backend, params: params})
+        .then(function (res) {
+          if (res.data && res.data.queued) {
+            say("Run " + res.data.run_id + " is waiting for the run in progress: " +
+                "number " + res.data.position + " in the queue.", "ok");
+            startBtn.disabled = false;
+            // The Runs table lists it, with a Cancel button.
+            setTimeout(function () { window.location.reload(); }, 1500);
+            return;
+          }
+          if (!res.ok || !res.data.started) {
+            if (res.data && res.data.needs_licence_ack) {
+              if (window.confirm(res.data.error + "\n\nProceed?")) {
+                return post("{{ url_for('training.api_start_run') }}",
+                            {trainer: trainer, schemas: [schema],
+                             backend: backend, params: params,
+                             accept_licence: true}).then(function (again) {
+                  if (again.ok && again.data.started) {
+                    currentRun = again.data.run_id;
+                    say("Started run " + currentRun + ".", "ok");
+                    watch();
+                  } else {
+                    say((again.data && again.data.error) || "Could not start.", "err");
+                    startBtn.disabled = false;
+                  }
+                });
+              }
+            }
+            say((res.data && res.data.error) || "Could not start the run.", "err");
+            startBtn.disabled = false;
+            return;
+          }
+          currentRun = res.data.run_id;
+          say("Started run " + currentRun + ".", "ok");
+          watch();
+        })
+        .catch(function (err) {
+          say("Could not start the run: " + err, "err");
+          startBtn.disabled = false;
+        });
+    });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", function () {
+      if (!currentRun) { return; }
+      cancelBtn.disabled = true;
+      post("{{ url_for('training.api_cancel', run_id='RUNID') }}".replace("RUNID", currentRun))
+        .then(function (res) {
+          say(res.data && res.data.cancelled
+              ? "Cancelling…" : ((res.data && res.data.error) || "Could not cancel."),
+              res.data && res.data.cancelled ? "" : "err");
+          cancelBtn.disabled = false;
+        });
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".tr-unqueue"), function (btn) {
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      post("{{ url_for('training.api_cancel', run_id='RUNID') }}".replace("RUNID", btn.dataset.run))
+        .then(function (res) {
+          if (res.data && res.data.cancelled) {
+            window.location.reload();
+          } else {
+            say((res.data && res.data.error) || "Could not cancel.", "err");
+            btn.disabled = false;
+          }
+        });
+    });
+  });
+
+  // Pick the poll back up if a run was already in flight when the page loaded.
+  var initial = {{ status|tojson }};
+  render(initial);
+  if (initial.state && ACTIVE.indexOf(initial.state) >= 0) {
+    currentRun = initial.run_id;
+    watch();
+  }
+})();
+</script>
+</body>
+</html>

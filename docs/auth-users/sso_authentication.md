@@ -11,6 +11,7 @@ Potato supports single sign-on (SSO) via OAuth 2.0 and OpenID Connect (OIDC). An
    - [GitHub](#github-oauth)
    - [HuggingFace](#huggingface-oauth)
    - [Generic OIDC](#generic-oidc-provider)
+   - [SAML 2.0 (institutional sign-in)](#saml-20-institutional-sign-in)
 4. [Configuration Reference](#configuration-reference)
 5. [Mixed Mode (SSO + Local Login)](#mixed-mode)
 6. [Security Considerations](#security-considerations)
@@ -234,26 +235,66 @@ Users must be members of the specified organization to log in. Potato checks org
 
 ### HuggingFace OAuth
 
-Allow users to log in with their HuggingFace account.
+Annotators sign in with their Hugging Face account.
 
-#### Prerequisites
+#### In a Hugging Face Space
 
-- A HuggingFace account
-- Create an OAuth application at [huggingface.co/settings/applications](https://huggingface.co/settings/applications)
-
-#### Configuration
+`potato deploy up config.yaml --provider huggingface --hf-oauth` sets this up
+(see [Deploying to a HuggingFace Space](../deployment/deploy-huggingface.md#signing-in-with-hugging-face)).
+By hand, add `hf_oauth: true` to the Space README's metadata. Hugging Face then
+creates the OAuth app and gives the Space its client id, secret and scopes, so
+the provider entry can be empty:
 
 ```yaml
 authentication:
   method: oauth
-  oauth:
-    provider: huggingface
-    client_id: "your-client-id"
-    client_secret: "your-client-secret"
-    identity_field: "preferred_username"
+  user_identity_field: sub
+  providers:
+    huggingface: {}
 ```
 
-The HuggingFace provider uses the `openid profile email` scopes by default and connects to HuggingFace's OIDC discovery endpoint automatically.
+Potato builds the callback URL from the Space's public host name
+(`SPACE_HOST`). On the Space's page on huggingface.co the app runs inside a
+frame, where browsers can drop the sign-in's cookies, so the sign-in button
+opens a new tab and annotating continues there.
+
+#### Anywhere else
+
+Create an OAuth application at
+[huggingface.co/settings/applications](https://huggingface.co/settings/applications)
+with the redirect URL `https://<your host>/auth/callback/huggingface`, then:
+
+```yaml
+authentication:
+  method: oauth
+  user_identity_field: sub
+  providers:
+    huggingface:
+      client_id: ${HF_OAUTH_CLIENT_ID}
+      client_secret: ${HF_OAUTH_CLIENT_SECRET}
+```
+
+Potato asks for the `openid profile` scopes. `user_identity_field: sub` keys
+each annotator on their Hugging Face account id, which stays the same when they
+rename themselves. A username can change, and a released one can be registered
+by someone else, who would then sign in as the old annotator and see their work.
+A profile has no email address unless the `email` scope is granted, and one
+without an email falls back to `sub` anyway.
+
+#### Optional: Restrict to a Hugging Face organization
+
+```yaml
+    huggingface:
+      allowed_org: my-lab
+```
+
+Potato then also asks for `read-memberships` and refuses anyone whose
+memberships do not include the organization. `allowed_org` is the
+organization's handle (the name in its URL) or its id; its display name is not
+accepted, because an organization's owners can set that to anything. In a Space, the scope must also be
+listed in the README (`hf_oauth_scopes: [read-memberships]`), and
+`hf_oauth_authorized_org: my-lab` makes Hugging Face refuse non-members before
+they reach Potato; `--hf-oauth-org my-lab` writes both.
 
 ---
 
@@ -338,16 +379,129 @@ authentication:
 
 ---
 
+### SAML 2.0 (institutional sign-in)
+
+Many universities and companies offer SAML rather than OpenID Connect:
+Shibboleth, ADFS, and the SAML apps in Okta and Microsoft Entra. With
+`method: saml`, annotators sign in at their institution's identity provider
+(IdP).
+
+#### Prerequisites
+
+SAML needs the `saml` extra, which builds against the system's libxmlsec1:
+
+```bash
+brew install libxmlsec1                  # macOS
+sudo apt-get install libxmlsec1-dev      # Debian/Ubuntu
+pip install 'potato-annotation[saml]'
+```
+
+The Docker image includes it when built with
+`--build-arg POTATO_EXTRAS=saml`.
+
+#### Configuration
+
+```yaml
+authentication:
+  method: saml
+  saml:
+    display_name: "University sign-in"
+    idp_metadata_url: https://idp.example.edu/idp/shibboleth
+    sp_base_url: https://annotate.example.edu
+    user_identity_attribute: urn:oid:1.3.6.1.4.1.5923.1.1.1.6   # eduPersonPrincipalName
+    required_attribute:
+      name: urn:oid:1.3.6.1.4.1.5923.1.1.1.1                    # eduPersonAffiliation
+      values: [member, student]
+secret_key: "${POTATO_SECRET_KEY}"
+```
+
+Give the IdP administrator Potato's service-provider metadata, served at
+`https://<your host>/saml/metadata`. It names the entity ID
+(`<sp_base_url>/saml/metadata`) and the assertion consumer service
+(`<sp_base_url>/saml/acs`). They will tell you which attributes they release.
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `idp_metadata_url` | One of three | The IdP's metadata (https only), fetched once, when first needed |
+| `idp_metadata_file` | One of three | The same metadata saved to a file |
+| `idp` | One of three | `entity_id`, `sso_url` and `x509cert` (PEM text or a file path), and `slo_url` for single logout |
+| `idp_entity_id` | No | Which entity to use when the metadata lists several |
+| `sp_base_url` | Behind a proxy | The public address Potato is reached at. Behind a proxy that ends TLS, Potato sees `http` and an internal host, and the IdP's response fails the destination check |
+| `sp_entity_id` | No | Default `<sp_base_url>/saml/metadata` |
+| `sp_cert_file`, `sp_key_file` | No | Sign the authentication requests, if the IdP asks for that, and decrypt encrypted assertions |
+| `want_assertions_encrypted` | No | Advertise the SP certificate for encryption in `/saml/metadata` and refuse unencrypted assertions. Needs `sp_cert_file` and `sp_key_file`. Without it an IdP reading the metadata does not encrypt, though an assertion the IdP encrypts anyway is still decrypted when a key is set |
+| `user_identity_attribute` | Usually | Attribute that becomes the Potato username, such as eduPersonPrincipalName. Without it the NameID is used, and a transient NameID (Shibboleth's default, new on every sign-in) is refused, because the same annotator would become a new user each time |
+| `required_attribute` | No | `{name, values}`: sign-in is refused unless the attribute holds one of the values |
+| `claim_attributes` | No | Attributes whose values become `group:<value>` SSO claims for role mapping |
+| `display_name` | No | The sign-in button's label |
+| `single_logout` | No | Default `true`: when the IdP has a logout service, signing out of Potato also ends the IdP session. `false` keeps sign-out local |
+
+#### What Potato checks
+
+Potato starts every sign-in itself and accepts a response only when:
+
+- the response or the assertion is signed with the certificate in the IdP's
+  metadata, using a non-deprecated algorithm (Shibboleth signs the response
+  by default; a response signed nowhere is refused);
+- it answers the request this browser started (`InResponseTo`); a response
+  the IdP sends unprompted (IdP-initiated sign-in) is refused;
+- it is meant for this service provider (audience and destination) and is
+  inside its validity window;
+- it has not been used before.
+
+`allow_local_login` and `auto_register` work as they do for OAuth.
+
+#### Single logout
+
+When the IdP's metadata names a logout service (`SingleLogoutService`, HTTP
+Redirect binding), or `idp.slo_url` is set, Potato adds its own logout service
+to `/saml/metadata` at `<sp_base_url>/saml/sls`, and signing out works both
+ways:
+
+- **Signing out of Potato** ends the Potato session, then sends the browser to
+  the IdP with a LogoutRequest naming the session it signed in with (NameID and
+  SessionIndex). The IdP sends the browser back to `/saml/sls`. The page says
+  whether the IdP confirmed it: a signed Success that answers Potato's request.
+  If the IdP never answers, the annotator is still signed out of Potato.
+- **Signing out at the IdP**, or of another service in the same IdP session,
+  brings the browser to `/saml/sls` with the IdP's LogoutRequest. Potato acts
+  only on a request signed with the IdP's certificate, and ends the session
+  only if the request names this browser's NameID (and SessionIndex, when it
+  gives one). Each request is accepted once; a replayed copy is refused. It then sends the IdP a LogoutResponse so the IdP can continue to
+  the next service.
+
+Many IdPs want the LogoutRequest signed. Set `sp_cert_file` and `sp_key_file`
+and Potato signs its LogoutRequests and LogoutResponses. Logout over the SOAP
+back channel is not supported. The IdP has to send the browser, which carries
+the session cookie Potato uses to find the session.
+
+#### HTTPS is required
+
+The IdP returns the browser to Potato with a form POST from its own site. The
+cookie that ties that POST to the sign-in this browser started must be
+`SameSite=None` to come along, and browsers keep such a cookie only over
+HTTPS. So SAML works over plain HTTP only when the IdP is on the same site,
+such as a test IdP on `localhost` with a different port. Over HTTPS the cookie
+is a `__Host-` cookie, so a subdomain sharing the parent domain cannot plant
+one of its own.
+
+The record of used assertions is kept in memory by each server process and
+starts empty after a restart. An assertion captured before a restart can
+therefore be used once more after it, until its `NotOnOrAfter` time, which the
+IdP sets (usually a few minutes after issue).
+
+---
+
 ## Configuration Reference
 
 ### Full Configuration Options
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `authentication.method` | string | `"in_memory"` | Set to `"oauth"` to enable SSO |
+| `authentication.method` | string | `"in_memory"` | Set to `"oauth"` or `"saml"` to enable SSO |
 | `authentication.providers` | dict | (required) | Provider configurations (see below) |
 | `authentication.user_identity_field` | string | `"email"` | Which OAuth field becomes the Potato username: `email`, `username`, `sub`, `name` |
-| `authentication.allow_local_login` | bool | `false` | Show local username/password form alongside SSO buttons |
+| `authentication.allow_local_login` | bool | `false` | Show local username/password form alongside SSO buttons. When `false`, `/register` answers 403 and local registration and password login are refused. An SSO identity never signs in with a password either way |
 | `authentication.auto_register` | bool | `true` | Auto-create Potato user on first OAuth login |
 | `secret_key` | string | (random) | **Must be stable for OAuth** — set via config or `POTATO_SECRET_KEY` env var |
 
@@ -368,6 +522,15 @@ authentication:
 | `client_id` | string | Yes | From GitHub Developer Settings |
 | `client_secret` | string | Yes | From GitHub Developer Settings |
 | `allowed_org` | string | No | Restrict to GitHub organization members |
+
+#### HuggingFace Provider
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `client_id` | string | Outside a Space | From huggingface.co/settings/applications; a Space supplies `OAUTH_CLIENT_ID` |
+| `client_secret` | string | Outside a Space | As above; a Space supplies `OAUTH_CLIENT_SECRET` |
+| `scopes` | list | No | Default: the Space's `OAUTH_SCOPES`, else `["openid", "profile"]` |
+| `allowed_org` | string | No | Restrict to members of a Hugging Face organization (adds `read-memberships`) |
 
 #### Generic OIDC Provider
 
@@ -451,7 +614,7 @@ This shows SSO buttons at the top of the login page with an "or" divider and the
 - Allow both institutional (SSO) and external (password) annotators
 - Development/testing with local accounts while production uses SSO
 
-> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset local passwords via the CLI (`potato reset-password`) or the admin API. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
+> **Note:** Local password accounts in mixed mode use per-user salted PBKDF2 hashing. Admins can reset a local (non-SSO) account's password with `potato reset-password` or the admin reset link (`POST /admin/create_reset_token`). An SSO identity has no password in Potato: its provider manages it, so a password reset for that username is refused. See [Password Management](password_management.md) for details on password security, reset flows, and user credential persistence.
 
 ---
 
@@ -582,7 +745,7 @@ A: Yes. Configure multiple providers under `authentication.providers` and each g
 A: They're treated as the same Potato user (when `user_identity_field: "email"`). Their annotations are unified under one identity.
 
 **Q: Can I switch from password-based to OAuth without losing existing annotations?**
-A: Yes, if the OAuth identity (email) matches existing usernames. Set `allow_local_login: true` during the transition period so both methods work.
+A: Yes, if the OAuth identity (email) matches existing usernames: annotations are keyed by username, so they carry over. Set `allow_local_login: true` during the transition so annotators who have not signed in with SSO yet can still use their passwords. Once someone signs in with SSO, that username is an SSO identity: password login and password resets no longer work for it, and they sign in through the provider from then on.
 
 **Q: Do I need HTTPS for local development?**
 A: No. OAuth providers allow `http://localhost` as a redirect URI for development. HTTPS is required only for production.

@@ -34,6 +34,7 @@ from .service import (
     register_change_listener,
     remove_code,
     rename_code,
+    split_code,
     update_code_fields,
 )
 from .codebook import Codebook
@@ -41,6 +42,22 @@ from .similar import derive_code_name, similar_code_names
 from . import revision
 from . import changelog
 from . import review
+from . import blocks
+from . import markdown
+from . import snapshots
+from . import events
+from . import distiller
+from . import content_service
+from .content_service import (
+    ContentError,
+    StaleContentError,
+    apply_content_proposal,
+    get_document,
+    get_scope,
+    propose_content_edit,
+    restore_snapshot,
+    save_scope,
+)
 from .changelog import propose_change
 from .revision import (
     all_stale_instances,
@@ -65,6 +82,7 @@ __all__ = [
     "move_under",
     "delete_code",
     "merge_codes",
+    "split_code",
     "update_code_fields",
     "touch_instances",
     "apply_code",
@@ -85,4 +103,19 @@ __all__ = [
     "changelog",
     "propose_change",
     "review",
+    # living-document layer
+    "blocks",
+    "markdown",
+    "snapshots",
+    "events",
+    "distiller",
+    "content_service",
+    "get_document",
+    "get_scope",
+    "save_scope",
+    "restore_snapshot",
+    "propose_content_edit",
+    "apply_content_proposal",
+    "ContentError",
+    "StaleContentError",
 ]

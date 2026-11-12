@@ -1,0 +1,172 @@
+{
+ "@context": "http://iiif.io/api/presentation/3/context.json",
+ "id": "https://example.org/iiif/book1/manifest.json",
+ "type": "Manifest",
+ "label": {
+  "en": [
+   "Account book (synthetic)"
+  ]
+ },
+ "summary": {
+  "en": [
+   "Two generated folios for trying IIIF import and export."
+  ]
+ },
+ "metadata": [
+  {
+   "label": {
+    "en": [
+     "Date"
+    ]
+   },
+   "value": {
+    "none": [
+     "1750"
+    ]
+   }
+  },
+  {
+   "label": {
+    "en": [
+     "Shelfmark"
+    ]
+   },
+   "value": {
+    "none": [
+     "MS Synthetic 1"
+    ]
+   }
+  }
+ ],
+ "items": [
+  {
+   "id": "https://example.org/iiif/book1/canvas/f1r",
+   "type": "Canvas",
+   "width": 1200,
+   "height": 1600,
+   "label": {
+    "en": [
+     "Folio 1r"
+    ]
+   },
+   "metadata": [
+    {
+     "label": {
+      "en": [
+       "Folio"
+      ]
+     },
+     "value": {
+      "none": [
+       "f1r"
+      ]
+     }
+    }
+   ],
+   "items": [
+    {
+     "id": "https://example.org/iiif/book1/canvas/f1r/page/p1",
+     "type": "AnnotationPage",
+     "items": [
+      {
+       "id": "https://example.org/iiif/book1/canvas/f1r/annotation/painting",
+       "type": "Annotation",
+       "motivation": "painting",
+       "body": {
+        "id": "images/f1r.png",
+        "type": "Image",
+        "format": "image/png",
+        "width": 600,
+        "height": 800
+       },
+       "target": "https://example.org/iiif/book1/canvas/f1r"
+      }
+     ]
+    }
+   ],
+   "annotations": [
+    {
+     "id": "https://example.org/iiif/book1/canvas/f1r/annotations/existing",
+     "type": "AnnotationPage",
+     "items": [
+      {
+       "id": "https://example.org/iiif/book1/canvas/f1r/annotations/existing/a1",
+       "type": "Annotation",
+       "motivation": "tagging",
+       "body": {
+        "type": "TextualBody",
+        "value": "initial",
+        "purpose": "tagging"
+       },
+       "target": "https://example.org/iiif/book1/canvas/f1r#xywh=120,120,200,200"
+      },
+      {
+       "id": "https://example.org/iiif/book1/canvas/f1r/annotations/existing/a2",
+       "type": "Annotation",
+       "motivation": "tagging",
+       "body": {
+        "type": "TextualBody",
+        "value": "text block",
+        "purpose": "tagging"
+       },
+       "target": {
+        "type": "SpecificResource",
+        "source": "https://example.org/iiif/book1/canvas/f1r",
+        "selector": {
+         "type": "SvgSelector",
+         "value": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 1600\"><polygon points=\"140,380 1060,380 1060,1440 140,1440\"/></svg>"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "https://example.org/iiif/book1/canvas/f1v",
+   "type": "Canvas",
+   "width": 1200,
+   "height": 1600,
+   "label": {
+    "en": [
+     "Folio 1v"
+    ]
+   },
+   "metadata": [
+    {
+     "label": {
+      "en": [
+       "Folio"
+      ]
+     },
+     "value": {
+      "none": [
+       "f1v"
+      ]
+     }
+    }
+   ],
+   "items": [
+    {
+     "id": "https://example.org/iiif/book1/canvas/f1v/page/p1",
+     "type": "AnnotationPage",
+     "items": [
+      {
+       "id": "https://example.org/iiif/book1/canvas/f1v/annotation/painting",
+       "type": "Annotation",
+       "motivation": "painting",
+       "body": {
+        "id": "images/f1v.png",
+        "type": "Image",
+        "format": "image/png",
+        "width": 600,
+        "height": 800
+       },
+       "target": "https://example.org/iiif/book1/canvas/f1v"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

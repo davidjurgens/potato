@@ -1,6 +1,6 @@
 # Inline Text Editing / Post-Edit
 
-The Text Edit schema enables annotators to directly edit displayed text while the system tracks changes. It computes a real-time diff showing insertions, deletions, and substitutions, along with edit distance metrics. Used for machine translation post-editing, grammar correction, text simplification, and paraphrase generation.
+The Text Edit schema lets annotators edit the displayed text directly, and records every change. It computes a real-time diff showing insertions, deletions, and substitutions, along with edit distance metrics. Used for machine translation post-editing, grammar correction, text simplification, and paraphrase generation.
 
 ## When to Use Text Edit
 
@@ -52,6 +52,10 @@ annotation_schemes:
   }
 }
 ```
+
+Pressing Next on a line left as it was saves it as accepted: `edited_text`
+equals `original_text` and both distances are 0. A line nobody reached has no
+record, so the two can be told apart.
 
 ## UI Description
 

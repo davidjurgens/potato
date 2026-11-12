@@ -101,530 +101,114 @@ class TestDatabaseManager:
                 DatabaseManager(config)
 
 
+class _DocumentStore:
+    """A stand-in for the two MySQL tables, behind the DatabaseManager API.
+
+    It answers only the statements MysqlUserState issues. The real-server
+    test, tests/server/test_testgap2_mysql.py, runs them against MySQL.
+    """
+
+    def __init__(self):
+        self.documents, self.history = {}, {}
+
+    def get_connection(self):
+        store = self
+
+        class Cursor:
+            def execute(self, sql, params=()):
+                self._rows = []
+                if sql.startswith("INSERT INTO user_state_documents"):
+                    store.documents[params[0]] = params[1]
+                elif sql.startswith("SELECT state_json"):
+                    doc = store.documents.get(params[0])
+                    self._rows = [(doc,)] if doc is not None else []
+                elif sql.startswith("SELECT action_json"):
+                    self._rows = [(a,) for _, a in sorted(store.history.get(params[0], {}).items())]
+                elif sql.startswith("SELECT user_id FROM user_state_documents"):
+                    self._rows = [(u,) for u in store.documents]
+                else:
+                    raise AssertionError("unexpected SQL: " + sql)
+
+            def executemany(self, sql, rows):
+                assert sql.startswith("INSERT INTO annotation_history_log")
+                for user, seq, action in rows:
+                    assert seq not in store.history.setdefault(user, {})
+                    store.history[user][seq] = action
+
+            def fetchone(self):
+                return self._rows[0] if self._rows else None
+
+            def fetchall(self):
+                return self._rows
+
+        class Conn:
+            def cursor(self):
+                return Cursor()
+
+            def commit(self):
+                pass
+
+        class Ctx:
+            def __enter__(self):
+                return Conn()
+
+            def __exit__(self, *exc):
+                return False
+        return Ctx()
+
+
 class TestMysqlUserState:
-    """Test the MysqlUserState class."""
+    """MysqlUserState is the file backend's state object stored in MySQL, so
+    what goes in must come back: every kind of answer, the history, and the
+    queue."""
 
     @pytest.fixture
-    def mock_db_manager(self):
-        """Create a mock database manager."""
-        mock_manager = Mock()
-        mock_connection = Mock()
-        mock_cursor = Mock()
-        mock_connection.cursor.return_value = mock_cursor
-
-        # Create a proper context manager mock
-        context_mock = Mock()
-        context_mock.__enter__ = Mock(return_value=mock_connection)
-        context_mock.__exit__ = Mock(return_value=None)
-        mock_manager.get_connection.return_value = context_mock
-
-        return mock_manager, mock_connection, mock_cursor
-
-    def test_init_creates_user_record(self, mock_db_manager):
-        """Test that user record is created on initialization."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.return_value = (0,)  # No existing user
-
-        user_state = MysqlUserState("test_user", mock_manager, 10)
-
-        # Verify user creation query was executed
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-        assert user_state.user_id == "test_user"
-        assert user_state.max_assignments == 10
-
-    def test_advance_to_phase(self, mock_db_manager):
-        """Test advancing to a new phase."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        user_state.advance_to_phase(UserPhase.ANNOTATION, "page1")
-
-        # Verify phase update query was executed
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-
-    def test_assign_instance(self, mock_db_manager):
-        """Test assigning an instance to a user."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.side_effect = [(0,), (0,), (-1,)]  # Not assigned, no existing assignments, current_index = -1
-
-        user_state = MysqlUserState("test_user", mock_manager)
-
-        # Create a mock item
-        mock_item = Mock()
-        mock_item.get_id.return_value = "item1"
-
-        user_state.assign_instance(mock_item)
-
-        # Verify assignment queries were executed
-        assert mock_cursor.execute.call_count >= 3
-        mock_conn.commit.assert_called()
-
-    def test_get_current_instance_index(self, mock_db_manager):
-        """Test getting current instance index."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.return_value = (2,)  # Current index = 2
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        index = user_state.get_current_instance_index()
-
-        assert index == 2
-        mock_cursor.execute.assert_called()
-
-    def test_goto_next_instance(self, mock_db_manager):
-        """Test moving to next instance."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.side_effect = [(0,)]  # Current index = 0 (first item)
-        mock_cursor.fetchall.return_value = [("item1",), ("item2",), ("item3",)]  # 3 items
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        result = user_state.goto_next_instance()
-
-        assert result is True
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-
-    def test_goto_prev_instance(self, mock_db_manager):
-        """Test moving to previous instance."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.return_value = (2,)  # Current index = 2
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        result = user_state.goto_prev_instance()
-
-        assert result is True
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-
-    def test_add_label_annotation(self, mock_db_manager):
-        """Test adding a label annotation."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.return_value = ("annotation", "page1")  # String values for database
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        label = Label("schema1", "label1")
-
-        user_state.add_label_annotation("item1", label, "value1")
-
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-
-    def test_add_span_annotation(self, mock_db_manager):
-        """Test adding a span annotation."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.return_value = ("annotation", "page1")  # String values for database
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        span = SpanAnnotation("schema1", "span1", "title1", 0, 10)
-
-        user_state.add_span_annotation("item1", span, True)
-
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-
-    def test_get_label_annotations(self, mock_db_manager):
-        """Test getting label annotations."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchall.return_value = [
-            ("schema1", "label1", "value1"),
-            ("schema1", "label2", "value2")
-        ]
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        annotations = user_state.get_label_annotations("item1")
-
-        assert len(annotations) == 2
-        mock_cursor.execute.assert_called()
-
-    def test_get_span_annotations(self, mock_db_manager):
-        """Test getting span annotations."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchall.return_value = [
-            ("schema1", "span1", "title1", 0, 10, None, None, None),
-            ("schema1", "span2", "title2", 20, 30, None, None, None)
-        ]
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        annotations = user_state.get_span_annotations("item1")
-
-        assert len(annotations) == 2
-        mock_cursor.execute.assert_called()
-
-    def test_get_annotation_count(self, mock_db_manager):
-        """Test getting annotation count."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchall.return_value = [(5,), (3,)]  # 5 label annotations, 3 span annotations
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        count = user_state.get_annotation_count()
-
-        assert count == 8  # Total unique instances with annotations
-        mock_cursor.execute.assert_called()
-
-    def test_clear_all_annotations(self, mock_db_manager):
-        """Test clearing all annotations."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        user_state.clear_all_annotations()
-
-        # Should execute 6 statements: 1 INSERT from __init__._ensure_user_exists + 5 DELETE statements
-        # (label_annotations, span_annotations, phase_annotations, behavioral_data, ai_hints)
-        assert mock_cursor.execute.call_count == 6
-        mock_conn.commit.assert_called()
-
-    def test_clear_instance_annotations_runs_four_deletes(self, mock_db_manager):
-        """clear_instance_annotations should issue one DELETE per per-instance table."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-
-        user_state.clear_instance_annotations("item1")
-
-        # 4 DELETEs: label_annotations, span_annotations, behavioral_data, ai_hints
-        assert mock_cursor.execute.call_count == 4
-        executed_sql = [call.args[0] for call in mock_cursor.execute.call_args_list]
-        for table in ("label_annotations", "span_annotations", "behavioral_data", "ai_hints"):
-            assert any(f"FROM {table}" in sql for sql in executed_sql), (
-                f"Expected DELETE from {table}, got: {executed_sql}"
-            )
-        # Every DELETE is parametrized with (user_id, instance_id)
-        for call in mock_cursor.execute.call_args_list:
-            assert call.args[1] == ("test_user", "item1")
-        mock_conn.commit.assert_called_once()
-
-    def test_unassign_instance_returns_false_when_not_assigned(self, mock_db_manager):
-        """If no row exists for (user, instance), return False without DELETE/UPDATE."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        mock_cursor.fetchone.side_effect = [None]  # No assignment row
-
-        result = user_state.unassign_instance("ghost_item")
-
-        assert result is False
-        # Only the SELECT should have been issued; no DELETE/UPDATE
-        assert mock_cursor.execute.call_count == 1
-        assert "SELECT assignment_order" in mock_cursor.execute.call_args_list[0].args[0]
-        mock_conn.commit.assert_not_called()
-
-    def test_unassign_instance_middle_item_shifts_orders(self, mock_db_manager):
-        """Removing an item shifts later assignment_orders down by 1."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # Sequence: removed_order=1, then current_instance_index=2, then count=2
-        mock_cursor.fetchone.side_effect = [(1,), (2,), (2,)]
-
-        result = user_state.unassign_instance("item_b")
-
-        assert result is True
-        executed = [(c.args[0], c.args[1]) for c in mock_cursor.execute.call_args_list]
-        # SELECT order
-        assert "SELECT assignment_order" in executed[0][0]
-        # DELETE
-        assert "DELETE FROM user_instance_assignments" in executed[1][0]
-        # SHIFT — orders > 1 get decremented
-        assert "SET assignment_order = assignment_order - 1" in executed[2][0]
-        assert executed[2][1] == ("test_user", 1)
-        # Final UPDATE of current_instance_index: current was 2, > removed_order=1 → 1
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (1, "test_user")
-        mock_conn.commit.assert_called_once()
-
-    def test_unassign_instance_empties_assignments_sets_index_to_minus_one(self, mock_db_manager):
-        """Last assignment removed → current_instance_index = -1."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # removed_order=0, current_index=0, count=0 after delete
-        mock_cursor.fetchone.side_effect = [(0,), (0,), (0,)]
-
-        result = user_state.unassign_instance("only_item")
-
-        assert result is True
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (-1, "test_user")
-
-    def test_unassign_instance_current_equals_removed_caps_at_last_index(self, mock_db_manager):
-        """If user was on the removed slot and it was the last, clamp to new last."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # 3 items, user at index 2 (the last), remove item at order 2
-        # After delete: count=2, removed_order=2, current_index=2
-        # Branch: current_index == removed_order → min(2, 1) = 1
-        mock_cursor.fetchone.side_effect = [(2,), (2,), (2,)]
-
-        result = user_state.unassign_instance("last_item")
-
-        assert result is True
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (1, "test_user")
-
-    def test_unassign_instance_removed_before_current_decrements(self, mock_db_manager):
-        """Removing an item before the current cursor decrements the index."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # 5 items, user at index 4, remove item at order 0
-        # current_index > removed_order (4 > 0) → new_index = 3
-        mock_cursor.fetchone.side_effect = [(0,), (4,), (4,)]
-
-        result = user_state.unassign_instance("first_item")
-
-        assert result is True
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (3, "test_user")
-
-    def test_unassign_instance_removed_after_current_leaves_index(self, mock_db_manager):
-        """Removing an item after the current cursor leaves the index unchanged."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # 5 items, user at index 1, remove item at order 3
-        # current_index < removed_order → min(1, 3) = 1
-        mock_cursor.fetchone.side_effect = [(3,), (1,), (4,)]
-
-        result = user_state.unassign_instance("later_item")
-
-        assert result is True
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (1, "test_user")
-
-    def test_assign_instance_at_index_returns_false_when_already_assigned(self, mock_db_manager):
-        """Duplicate assignment short-circuits without DELETE/INSERT/UPDATE."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # SELECT COUNT for already-assigned → (1,)
-        mock_cursor.fetchone.side_effect = [(1,)]
-
-        item = Mock(); item.get_id.return_value = "dup_item"
-        result = user_state.assign_instance_at_index(item, 0)
-
-        assert result is False
-        # Only the duplicate-check SELECT should run.
-        assert mock_cursor.execute.call_count == 1
-        mock_conn.commit.assert_not_called()
-
-    def test_assign_instance_at_index_inserts_and_shifts(self, mock_db_manager):
-        """Insert at index 1 with current cursor at 2 must shift later orders
-        and bump the cursor to 3."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # Sequence: not assigned (0,), count=3, current_index=2
-        mock_cursor.fetchone.side_effect = [(0,), (3,), (2,)]
-
-        item = Mock(); item.get_id.return_value = "new_item"
-        result = user_state.assign_instance_at_index(item, 1)
-
-        assert result is True
-        executed = [c.args[0] for c in mock_cursor.execute.call_args_list]
-        assert any("SET assignment_order = assignment_order + 1" in q for q in executed)
-        assert any("INSERT INTO user_instance_assignments" in q for q in executed)
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (3, "test_user")
-        mock_conn.commit.assert_called_once()
-
-    def test_assign_instance_at_index_after_cursor_leaves_cursor(self, mock_db_manager):
-        """Insert at index 2 with current cursor at 0 must leave the cursor."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # Sequence: not assigned, count=3, current_index=0
-        mock_cursor.fetchone.side_effect = [(0,), (3,), (0,)]
-
-        item = Mock(); item.get_id.return_value = "later_item"
-        assert user_state.assign_instance_at_index(item, 2) is True
-
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (0, "test_user")
-
-    def test_assign_instance_at_index_empty_state_sets_cursor_to_zero(self, mock_db_manager):
-        """Insert into empty user (cursor = -1) must move cursor to 0."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        mock_cursor.execute.reset_mock()
-        mock_conn.commit.reset_mock()
-        # Sequence: not assigned, count=0, current_index=-1
-        mock_cursor.fetchone.side_effect = [(0,), (0,), (-1,)]
-
-        item = Mock(); item.get_id.return_value = "first_item"
-        assert user_state.assign_instance_at_index(item, 0) is True
-
-        update_idx_call = next(c for c in mock_cursor.execute.call_args_list
-                               if "UPDATE user_states SET current_instance_index" in c.args[0])
-        assert update_idx_call.args[1] == (0, "test_user")
-
-    def test_assign_instance_at_index_out_of_range_raises(self, mock_db_manager):
-        """Index past the end of the ordering must raise IndexError."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        # Sequence: not assigned, count=2
-        mock_cursor.fetchone.side_effect = [(0,), (2,)]
-
-        item = Mock(); item.get_id.return_value = "bad_index"
-        with pytest.raises(IndexError):
-            user_state.assign_instance_at_index(item, 5)
-
-    def test_unassign_instance_invalidates_cache(self, mock_db_manager):
-        """After a successful unassign, cached index/ordering must be cleared."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-
-        user_state = MysqlUserState("test_user", mock_manager)
-        # Prime the cache with a fake value to confirm it's wiped
-        user_state._current_instance_index_cache = 7
-        user_state._instance_ordering_cache = ["a", "b"]
-        mock_cursor.fetchone.side_effect = [(1,), (1,), (2,)]
-
-        user_state.unassign_instance("item_b")
-
-        assert user_state._current_instance_index_cache is None
-        assert user_state._instance_ordering_cache is None
-
-    def test_hint_operations(self, mock_db_manager):
-        """Test AI hint operations."""
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        mock_cursor.fetchone.side_effect = [(1,), ("hint text",)]  # Hint exists, hint content
-
-        user_state = MysqlUserState("test_user", mock_manager)
-
-        # Test hint exists
-        exists = user_state.hint_exists("item1")
-        assert exists is True
-
-        # Test get hint
-        hint = user_state.get_hint("item1")
-        assert hint == "hint text"
-
-        # Test cache hint
-        user_state.cache_hint("item2", "new hint")
-        mock_cursor.execute.assert_called()
-        mock_conn.commit.assert_called()
-
-
-class TestMysqlUserStateIntegration:
-    """Integration tests comparing MySQL and InMemory UserState behavior."""
-
-    def test_identical_behavior_basic_operations(self):
-        """Test that MySQL and InMemory UserState have identical basic behavior."""
-        # This test would require a real database connection
-        # For now, we'll test the interface compatibility
-        pass
-
-    def test_annotation_persistence_comparison(self):
-        """Test that annotations are persisted identically between implementations."""
-        # This test would require a real database connection
-        # For now, we'll test the interface compatibility
-        pass
-
-
-class TestMysqlBackendReclaimSmoke:
-    """End-to-end smoke test for the QC-block reclaim flow against a real
-    MysqlUserState instance (with mocked DB). Acts as a tripwire for future
-    code in the reclaim path that direct-accesses InMemoryUserState-only
-    attributes like assigned_instance_ids or instance_id_ordering."""
-
-    @pytest.fixture
-    def mock_db_manager(self):
-        mock_manager = Mock()
-        mock_connection = Mock()
-        mock_cursor = Mock()
-        mock_connection.cursor.return_value = mock_cursor
-        context_mock = Mock()
-        context_mock.__enter__ = Mock(return_value=mock_connection)
-        context_mock.__exit__ = Mock(return_value=None)
-        mock_manager.get_connection.return_value = context_mock
-        return mock_manager, mock_connection, mock_cursor
-
-    def test_blocked_user_reclaim_works_against_mysql_user_state(self, mock_db_manager, monkeypatch):
-        """The QC-block helper must run through MysqlUserState without hitting
-        AttributeError on InMemoryUserState-only attributes."""
-        from potato import routes
-        from potato.item_state_management import ItemStateManager
-
-        mock_manager, mock_conn, mock_cursor = mock_db_manager
-        user_state = MysqlUserState("blocked_mysql_user", mock_manager)
-
-        # Drive the SQL responses for the whole reclaim sequence with one
-        # assigned item and no annotations:
-        #   get_assigned_instance_ids (fetchall) -> [("item_z",)]
-        #   has_annotated (fetchall)            -> [(0,), (0,)]
-        #   unassign SELECT order               -> (0,)
-        #   get_current_instance_index SELECT   -> (0,)
-        #   SELECT COUNT(*) post-delete         -> (0,)
-        mock_cursor.fetchall.side_effect = [
-            [("item_z",)],   # get_assigned_instance_ids
-            [(0,), (0,)],    # has_annotated UNION counts
-        ]
-        mock_cursor.fetchone.side_effect = [
-            (0,),  # unassign: removed_order
-            (0,),  # unassign: current_instance_index
-            (0,),  # unassign: post-delete COUNT
-        ]
-
-        item_manager = ItemStateManager(
-            {"assignment_strategy": "fixed_order", "max_annotations_per_item": 1}
-        )
-        item_manager.add_items({"item_z": {"id": "item_z", "text": "z"}})
-        # Pretend the user was tracked as an annotator candidate (matches what
-        # assign_instances_to_user would have set up in production).
-        item_manager.instance_annotators["item_z"].add("blocked_mysql_user")
-
-        class StubUSM:
-            def save_user_state(self, _us):
-                return None
-
-        monkeypatch.setattr(routes, "get_item_state_manager", lambda: item_manager)
-        monkeypatch.setattr(routes, "get_user_state_manager", lambda: StubUSM())
-
-        # The call below would raise AttributeError on the pre-refactor reclaim
-        # path that touched user_state.assigned_instance_ids directly.
-        reclaimed = routes._reclaim_blocked_user_assignments(
-            "blocked_mysql_user",
-            user_state,
-            current_instance_id="item_z",
-        )
-
-        assert reclaimed == ["item_z"]
-        # Verify both per-instance DELETEs (clear_instance_annotations) and
-        # the unassign UPDATE/DELETE all ran against the mock cursor.
-        executed = [c.args[0] for c in mock_cursor.execute.call_args_list]
-        assert any("DELETE FROM label_annotations" in q for q in executed)
-        assert any("DELETE FROM user_instance_assignments" in q for q in executed)
-        assert any("UPDATE user_states SET current_instance_index" in q for q in executed)
+    def items(self):
+        import potato.item_state_management as ism_mod
+        previous = ism_mod.ITEM_STATE_MANAGER
+        ism_mod.ITEM_STATE_MANAGER = None
+        ism = ism_mod.init_item_state_manager({})
+        ism.add_items({"i1": {"id": "i1", "text": "x"}})
+        yield ism
+        ism_mod.ITEM_STATE_MANAGER = previous
+
+    def test_a_saved_state_loads_back_unchanged(self, items):
+        from potato.annotation_history import AnnotationHistoryManager
+        db = _DocumentStore()
+        state = MysqlUserState("u1", 5, db_manager=db)
+        state.advance_to_phase(UserPhase.ANNOTATION, None)
+        state.assign_instance(Item("i1", {"text": "x"}))
+        state.add_label_annotation("i1", Label("s", "a"), "a")
+        state.add_label_annotation("i1", Label("score", "slider"), 0)
+        state.add_span_annotation("i1", SpanAnnotation("ent", "X", "X", 2, 5, id="sp1",
+                                                       target_field="text", kb_id="Q1",
+                                                       kb_source="wikidata", kb_label="One"), True)
+        state.add_annotation_action(AnnotationHistoryManager.create_action(
+            user_id="u1", instance_id="i1", action_type="add_label", schema_name="s",
+            label_name="a", old_value=None, new_value="a"))
+        state.save()
+        state.save()   # a second save must not repeat the history
+
+        loaded = MysqlUserState.load_from_db("u1", db)
+        assert loaded.to_json() == state.to_json()
+        assert len(loaded.annotation_history) == 1
+        span = next(iter(loaded.get_span_annotations("i1")))
+        assert (span.get_id(), span.get_target_field(), span.get_kb_id()) == ("sp1", "text", "Q1")
+        assert loaded.get_label_annotations("i1")[Label("score", "slider")] == 0
+
+    def test_an_unknown_user_is_not_created_by_looking(self):
+        db = _DocumentStore()
+        assert MysqlUserState.load_from_db("nobody", db) is None
+        assert MysqlUserState.stored_user_ids(db) == []
+
+    def test_the_annotation_count_is_items_not_rows(self):
+        state = MysqlUserState("u1", db_manager=_DocumentStore())
+        state.advance_to_phase(UserPhase.ANNOTATION, None)
+        for iid in ("a", "b", "c"):
+            state.add_label_annotation(iid, Label("s", "x"), "x")
+        for iid in ("a", "b"):
+            state.add_span_annotation(iid, SpanAnnotation("e", "X", "X", 0, 1), True)
+        assert state.get_annotation_count() == 3
 
 
 class TestDatabaseConfiguration:

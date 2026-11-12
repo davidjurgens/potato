@@ -59,6 +59,26 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+from potato.trace_converter.converters.claude_code_session import (
+    looks_like_session_transcript,
+    parse_sessions,
+)
+
+#: Human-readable names for the session metadata keys.
+_METADATA_LABELS = {
+    "session_id": "Session",
+    "cwd": "Working directory",
+    "git_branch": "Git branch",
+    "cli_version": "Claude Code version",
+    "model": "Model",
+    "input_tokens": "Input tokens",
+    "output_tokens": "Output tokens",
+    "cache_creation_input_tokens": "Cache write tokens",
+    "cache_read_input_tokens": "Cache read tokens",
+    "abandoned_branch_records": "Messages on abandoned branches",
+    "thinking_blocks": "Thinking blocks (text not persisted by the CLI)",
+}
+
 from ..base import BaseTraceConverter, CanonicalTrace
 
 
@@ -120,6 +140,14 @@ class ClaudeCodeConverter(BaseTraceConverter):
 
     def convert(self, data: Any, options: Optional[Dict] = None) -> List[CanonicalTrace]:
         options = options or {}
+
+        # A real Claude Code session file is one session spread over many
+        # rows, not one trace per row. Reading it as the latter produced one
+        # empty trace per line and raised nothing.
+        if looks_like_session_transcript(data):
+            return self._convert_session_transcript(
+                data if isinstance(data, list) else [data])
+
         traces = data if isinstance(data, list) else [data]
         results = []
 
@@ -129,6 +157,63 @@ class ClaudeCodeConverter(BaseTraceConverter):
             results.append(self._convert_item(item, len(results)))
 
         return results
+
+    def _convert_session_transcript(self, rows: list) -> List[CanonicalTrace]:
+        """Convert on-disk Claude Code session transcripts."""
+        traces = []
+        for session in parse_sessions(rows):
+            messages = session["messages"]
+            if not messages:
+                # Refuse to hand back an empty trace: the caller pointed at a
+                # transcript and would otherwise get a blank annotation item
+                # with no indication anything went wrong.
+                raise ValueError(
+                    f"Claude Code session {session['session_id'] or '<unknown>'} "
+                    "contains no user or assistant messages. If this file came "
+                    "from a newer CLI, its record shape may have changed."
+                )
+
+            structured_turns = self._enrich_tool_calls(
+                self._extract_from_messages(messages))
+            metadata = session["metadata"]
+
+            metadata_table = [
+                {"Property": _METADATA_LABELS.get(key, key), "Value": str(value)}
+                for key, value in metadata.items() if value not in (None, "")
+            ]
+            file_count, tool_count = self._count_files_and_tools(structured_turns)
+            if file_count:
+                metadata_table.append(
+                    {"Property": "Files touched", "Value": str(file_count)})
+            if tool_count:
+                metadata_table.append(
+                    {"Property": "Tool calls", "Value": str(tool_count)})
+
+            extra: Dict[str, Any] = {"structured_turns": structured_turns}
+            sidechains = session.get("sidechains") or []
+            if sidechains:
+                # Sub-agent work is a different agent's transcript; kept beside
+                # the session rather than merged into its assistant turns.
+                extra["sidechain_runs"] = [
+                    {"run_id": run["run_id"],
+                     "structured_turns": self._enrich_tool_calls(
+                         self._extract_from_messages(run["messages"]))}
+                    for run in sidechains
+                ]
+                metadata_table.append({
+                    "Property": "Sub-agent runs",
+                    "Value": str(len(sidechains)),
+                })
+
+            traces.append(CanonicalTrace(
+                id=session["session_id"] or f"claude_code_session_{len(traces)}",
+                task_description=session["task_description"],
+                conversation=self._flatten_to_conversation(structured_turns),
+                agent_name=str(metadata.get("model", "")),
+                metadata_table=metadata_table,
+                extra_fields=extra,
+            ))
+        return traces
 
     def _convert_item(self, item: dict, index: int) -> CanonicalTrace:
         """Convert a single trace item."""
@@ -444,6 +529,12 @@ class ClaudeCodeConverter(BaseTraceConverter):
 
     def detect(self, data: Any) -> bool:
         """Detect if data is a coding agent trace."""
+        # An actual Claude Code session file. This returned False before, so
+        # the converter named after the tool did not recognise the tool's own
+        # output; auto-detection fell through to a generic converter.
+        if looks_like_session_transcript(data):
+            return True
+
         items = data if isinstance(data, list) else [data]
         if not items:
             return False

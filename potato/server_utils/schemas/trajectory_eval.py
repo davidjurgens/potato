@@ -31,6 +31,32 @@ DEFAULT_SEVERITIES = [
 ]
 
 
+def _normalize_error_types(error_types: Any) -> List[Dict[str, Any]]:
+    """Coerce ``error_types`` into a list of ``{"name", "subtypes"}`` dicts.
+
+    Tolerates the natural shorthand of a plain list of strings
+    (``error_types: [foo, bar]``) and dicts that use ``label`` instead of
+    ``name``, so a reasonable config can't blow up the layout generator with an
+    opaque ``'str' object has no attribute 'get'``.
+    """
+    normalized: List[Dict[str, Any]] = []
+    if not isinstance(error_types, (list, tuple)):
+        return normalized
+    for et in error_types:
+        if isinstance(et, str):
+            normalized.append({"name": et, "subtypes": []})
+        elif isinstance(et, dict):
+            name = et.get("name", et.get("label", ""))
+            if not name:
+                continue
+            subtypes = et.get("subtypes", []) or []
+            if not isinstance(subtypes, (list, tuple)):
+                subtypes = [subtypes]
+            normalized.append({"name": str(name), "subtypes": [str(s) for s in subtypes]})
+        # silently skip anything else (None, ints, …) rather than crash
+    return normalized
+
+
 def generate_trajectory_eval_layout(
     annotation_scheme: Dict[str, Any],
 ) -> Tuple[str, List[Tuple[str, str]]]:
@@ -57,7 +83,7 @@ def _generate_internal(
     steps_key = annotation_scheme.get("steps_key", "steps")
     step_text_key = annotation_scheme.get("step_text_key", "action")
     correctness_options = annotation_scheme.get("correctness_options", DEFAULT_CORRECTNESS)
-    error_types = annotation_scheme.get("error_types", [])
+    error_types = _normalize_error_types(annotation_scheme.get("error_types", []))
     severities = annotation_scheme.get("severities", DEFAULT_SEVERITIES)
     show_score = annotation_scheme.get("show_score", True)
     max_score = annotation_scheme.get("max_score", 100)
@@ -119,7 +145,9 @@ def _generate_internal(
     if show_score:
         score_html = f"""
             <div class="traj-score" id="{escape_html_content(schema_name)}-score">
-                Score: <strong id="{escape_html_content(schema_name)}-score-value">{max_score}</strong> / {max_score}
+                Score: <strong id="{escape_html_content(schema_name)}-score-value">{max_score}</strong> / {max_score}<span
+                    class="traj-score-note" id="{escape_html_content(schema_name)}-score-note"
+                    role="status" aria-live="polite"></span>
             </div>"""
 
     esc_schema = escape_html_content(schema_name)
@@ -214,16 +242,20 @@ def _generate_internal(
 
             container.innerHTML = '';
             steps.forEach(function(step, idx) {{
+                /* _appendStepCard attaches this card's handlers itself; a
+                   sweep over the container afterwards bound every one of them
+                   a second time. */
                 _appendStepCard(container, step, idx);
             }});
-            attachStepHandlers();
         }}
 
         /* ---- render a single step card ---- */
         function _buildStepCardHtml(step, idx) {{
             var stepText = typeof step === 'string'
                 ? step
-                : (step[CONFIG.step_text_key] || step.action_type || JSON.stringify(step));
+                : (step[CONFIG.step_text_key] || step.text || step.content
+                   || step.reasoning || step.thought || step.action_type
+                   || JSON.stringify(step));
             // Include the thought if available (VLM chain-of-thought)
             var thoughtHtml = '';
             if (step.thought) {{
@@ -283,6 +315,16 @@ def _generate_internal(
 
         /* ---- event handlers ---- */
         function _attachSingleCardHandlers(card, idx) {{
+            /* Bind once per card. The correctness handler is a TOGGLE: it
+               clears the value when clicked on the value already stored. So a
+               card whose handlers were bound twice ran set-then-clear on a
+               single click and recorded nothing at all — the button never even
+               kept its `selected` class. That is what a second bind did here
+               for real, so the guard stays even though the duplicate call it
+               was covering has been removed. */
+            if (card.dataset.trajHandlersBound === 'true') return;
+            card.dataset.trajHandlersBound = 'true';
+
             card.querySelectorAll('.traj-correctness-btn').forEach(function(btn) {{
                 btn.addEventListener('click', function() {{
                     var value = btn.getAttribute('data-value');
@@ -300,10 +342,18 @@ def _generate_internal(
                         btn.classList.add('selected');
                     }}
                     var errorDiv = document.getElementById(SCHEMA + '-error-' + idx);
+                    var hideErrors = (value === 'correct' || !state.steps[idx].correctness);
                     if (errorDiv) {{
-                        errorDiv.style.display = (value === 'correct' || !state.steps[idx].correctness) ? 'none' : 'block';
+                        errorDiv.style.display = hideErrors ? 'none' : 'block';
                     }}
+                    /* A step the annotator has just called correct must not
+                       keep the severity they picked while it was wrong: the
+                       panel holding that radio is hidden, so nothing on screen
+                       says the deduction is still there, and the score came
+                       back 95/100 for a trajectory with no errors in it. */
+                    if (hideErrors) clearErrorFields(card, idx);
                     updateStepStatus(idx);
+                    updateScore();
                     saveState();
                 }});
             }});
@@ -339,13 +389,84 @@ def _generate_internal(
             }});
         }}
 
-        function attachStepHandlers() {{
-            var container = document.getElementById(SCHEMA + '-steps');
-            if (!container) return;
-            container.querySelectorAll('.traj-step-card').forEach(function(card) {{
-                var idx = parseInt(card.getAttribute('data-step-index'), 10);
-                _attachSingleCardHandlers(card, idx);
+        /* Wipe the error taxonomy for a step that is no longer an error, in
+           the state AND on screen, so a later re-mark starts clean. */
+        function clearErrorFields(card, idx) {{
+            var state = getState();
+            var s = state.steps[idx];
+            if (s) {{
+                delete s.severity;
+                delete s.error_type;
+                delete s.error_subtype;
+                delete s.rationale;
+            }}
+            if (!card) return;
+            card.querySelectorAll('.traj-severity-group input[type="radio"]')
+                .forEach(function(r) {{ r.checked = false; }});
+            card.querySelectorAll('.traj-error-type')
+                .forEach(function(sel) {{ sel.value = ''; }});
+            card.querySelectorAll('.traj-rationale')
+                .forEach(function(ta) {{ ta.value = ''; }});
+        }}
+
+        /* What is still missing, in the annotator's terms.
+           `required` on this scheme was satisfied by the first button clicked,
+           because the per-input test sees one hidden input holding JSON and
+           asks only whether it is non-empty. Worse, the score is computed from
+           severities alone: five steps marked `incorrect` with no severity
+           chosen published "100 / 100" and stored score: 100. */
+        function declareCompleteness() {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            var state = ensureSteps();
+            var total = state.steps.length;
+            if (!total) {{ form.removeAttribute('data-incomplete-reason'); return; }}
+            var judged = 0, needSeverity = [];
+            state.steps.forEach(function(s, i) {{
+                if (!s || !s.correctness) return;
+                judged++;
+                if (s.correctness !== 'correct' && !s.severity) {{
+                    needSeverity.push(i + 1);
+                }}
             }});
+            var bits = [];
+            if (judged < total) bits.push(judged + ' of ' + total + ' steps judged');
+            if (needSeverity.length) {{
+                /* No parentheses: the validator wraps the whole reason in its
+                   own, and a nested pair reads as a typo on screen. */
+                bits.push('no severity chosen on step ' + needSeverity.join(', '));
+            }}
+            if (bits.length) form.setAttribute('data-incomplete-reason', bits.join('; '));
+            else form.removeAttribute('data-incomplete-reason');
+            return bits.length > 0;
+        }}
+
+        /* One entry per rendered card, in order.
+
+           The cards are the truth about how many steps this instance has;
+           `state.steps` is not. `clearAllFormInputs` resets _trajState to
+           {{steps: []}} on every instance change without re-running
+           buildStepCards, so after the reset the array is empty and grows only
+           where the annotator happens to click -- which made "4 of 4 judged"
+           read as "1 of 1" after one click, and left JSON holes (serialized as
+           nulls) when the first click landed on step 3. */
+        function ensureSteps() {{
+            var state = getState();
+            var container = document.getElementById(SCHEMA + '-steps');
+            var cards = container
+                ? container.querySelectorAll('.traj-step-card').length : 0;
+            for (var i = 0; i < cards; i++) {{
+                if (!state.steps[i]) state.steps[i] = {{ step_index: i, correctness: null }};
+            }}
+            return state;
+        }}
+
+        /* The deduction for one step. A severity only counts against a step
+           the annotator actually called wrong. */
+        function stepPenalty(s) {{
+            if (!s || !s.severity || s.correctness === 'correct') return 0;
+            var sev = CONFIG.severities.find(function(sv) {{ return sv.name === s.severity; }});
+            return sev ? Math.abs(sev.weight) : 0;
         }}
 
         function updateStepStatus(idx) {{
@@ -366,30 +487,43 @@ def _generate_internal(
             if (!CONFIG.show_score) return;
             var scoreEl = document.getElementById(SCHEMA + '-score-value');
             if (!scoreEl) return;
-            var state = getState();
-            var penalty = 0;
+            var state = ensureSteps();
+            var penalty = 0, unscored = 0;
             state.steps.forEach(function(s) {{
-                if (s.severity) {{
-                    var sev = CONFIG.severities.find(function(sv) {{ return sv.name === s.severity; }});
-                    if (sev) penalty += Math.abs(sev.weight);
-                }}
+                penalty += stepPenalty(s);
+                if (s && s.correctness && s.correctness !== 'correct' && !s.severity) unscored++;
             }});
+            /* Say the number is provisional rather than publishing it as a
+               verdict: a step marked wrong with no severity yet deducts
+               nothing, and "100 / 100" over five wrong steps is the worst
+               thing this widget could print. */
             scoreEl.textContent = Math.max(0, CONFIG.max_score - penalty);
+            var noteEl = document.getElementById(SCHEMA + '-score-note');
+            if (noteEl) {{
+                noteEl.textContent = unscored
+                    ? ' — not final: ' + unscored + ' step'
+                      + (unscored === 1 ? '' : 's') + ' marked wrong with no severity yet'
+                    : '';
+            }}
         }}
 
         /* ---- persistence ---- */
         function saveState() {{
-            var state = getState();
+            var state = ensureSteps();
             var score = CONFIG.max_score;
-            state.steps.forEach(function(s) {{
-                if (s.severity) {{
-                    var sev = CONFIG.severities.find(function(sv) {{ return sv.name === s.severity; }});
-                    if (sev) score -= Math.abs(sev.weight);
-                }}
-            }});
+            state.steps.forEach(function(s) {{ score -= stepPenalty(s); }});
             score = Math.max(0, score);
 
-            var data = JSON.stringify({{ steps: state.steps, score: score }});
+            var incomplete = declareCompleteness();
+            /* `score` is exported and read as a number. Publishing one while
+               steps are unjudged or a wrong step has no severity would export
+               a figure the annotator never agreed to, so it is withheld and
+               `score_complete` says why. */
+            var data = JSON.stringify({{
+                steps: state.steps,
+                score: incomplete ? null : score,
+                score_complete: !incomplete
+            }});
             var input = document.getElementById(SCHEMA).querySelector('.trajectory-eval-data-input');
             if (input) {{
                 input.value = data;
@@ -480,6 +614,11 @@ def _generate_internal(
             if (hadServerData) {{
                 restoreVisualState();
             }}
+            /* Declare the shortfall on arrival, not only on the first click:
+               a restored trajectory with an unjudged step has to gate Next
+               the moment the page settles. */
+            declareCompleteness();
+            updateScore();
         }}
 
         if (document.readyState === 'complete') {{

@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 9001
 annotation_task_name: Simple Text Box Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-text-box/
-output_annotation_format: csv
+export_annotation_format: csv
 annotation_codebook_url: ''
 data_files:
 - data/toy-example.json

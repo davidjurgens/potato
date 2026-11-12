@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # RAG Pipeline Evaluation Example
 #
 # This example demonstrates evaluation of Retrieval-Augmented Generation (RAG)
@@ -20,7 +21,7 @@ item_properties:
 # Task directory
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Instance Display Configuration
 instance_display:

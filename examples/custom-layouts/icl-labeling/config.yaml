@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # ICL (In-Context Learning) Labeling Example
 #
 # This example demonstrates AI-assisted labeling using high-confidence human
@@ -29,7 +30,7 @@
 # Output directory
 "task_dir": "."
 "output_annotation_dir": "annotation_output/icl-labeling-example"
-"output_annotation_format": "jsonl"
+"export_annotation_format": "jsonl"
 
 "site_dir": "default"
 
@@ -103,6 +104,4 @@
       - "name": "negative"
         "description": "Expresses negative sentiment, frustration, dissatisfaction"
         "key_value": "3"
-    "display_config":
-      "label_display": "name_and_description"
 

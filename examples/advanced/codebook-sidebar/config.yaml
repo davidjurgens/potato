@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Codebook sidebar — a long, per-label reference next to the labels themselves
+#
+# A codebook whose entries are per-label — definition, inclusion criteria,
+# exclusion criteria, examples, counter-examples — does not want to be a wall of
+# prose in an instructions banner. It wants to sit beside the labels, so the
+# annotator can open the entry for the code they are hesitating over.
+#
+# Two surfaces work together here, and it is worth being precise about which
+# does what:
+#
+#   The Codebook TRAY  — a button on the right edge of the annotation screen.
+#                        It lists every code and links to the full document.
+#                        Under `codebook_mode: fixed` it is a NAVIGATION panel:
+#                        the per-code inline editor is the only thing that shows
+#                        block content in the tray, and it is gated on edit
+#                        permission, so a fixed-mode annotator sees code names
+#                        plus "Open full codebook".
+#   The /codebook PAGE — the reader. Every code with its short definition,
+#                        definition, use-when, avoid-when, examples,
+#                        counter-examples and keywords, plus a revision counter.
+#
+#   codebook_mode: fixed        -> read-only reference. Annotators consult the
+#                                  codebook; only the config and the CLI change
+#                                  it. This is what a codebook with an approved
+#                                  version number wants.
+#   codebook_mode: extensible   -> annotators may ADD codes, not restructure.
+#   codebook_mode: open         -> annotators may add/rename/recolor/merge, and
+#                                  the tray gains an inline "quick definition"
+#                                  editor per code.
+#                                  See examples/advanced/codebook-example/.
+#
+# The entries themselves are seeded by seed_codebook.py — run it once before
+# starting the server (see README). Without it the tray lists bare label names
+# with no definitions, which is the default when a codebook is seeded from YAML.
+#
+# Run from the repo root:
+#   python examples/advanced/codebook-sidebar/seed_codebook.py
+#   python potato/flask_server.py start examples/advanced/codebook-sidebar/config.yaml -p 8000
+
+annotation_task_name: "Politeness — Codebook Sidebar"
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+annotation_codebook_url: ''
+
+data_files:
+- data/politeness.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+# Read-only: the tray is a reference, not an editing surface. The composer and
+# the rename/delete controls are hidden, and the mutation endpoints return 403.
+codebook_mode: fixed
+
+# A short reminder on the annotation screen; the long form lives in the tray.
+annotation_instructions: |
+  <p>Rate how the message lands on the person receiving it. Open the
+  <strong>Codebook</strong> tray on the right for the full entry on any
+  label — definition, when to use it, when not to, and worked examples.</p>
+
+annotation_schemes:
+# `codebook: true` sources this scheme's labels from the project codebook
+# instead of from static YAML. The `labels:` below seed the codebook on first
+# run; after that the codebook is the source of truth.
+- annotation_type: radio
+  name: politeness
+  description: How polite is this workplace message?
+  codebook: true
+  labels:
+  - Polite
+  - Neutral
+  - Impolite
+  sequential_key_binding: true
+
+site_dir: default

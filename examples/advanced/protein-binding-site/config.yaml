@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Marking binding-site residues on protein structures.
+#
+# The structure is drawn in 3Dmol.js as a cartoon coloured by model confidence
+# (pLDDT, read from the B-factor column). Clicking a residue in the 3D view,
+# or in the residue table under it, selects it; selected residues are drawn as
+# sticks. The residue table also works from the keyboard and in a browser
+# without WebGL.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/protein-binding-site/config.yaml -p 8000
+#
+# The structures are synthetic (ideal backbone geometry, invented pLDDT).
+# Regenerate them with:
+#   python examples/advanced/protein-binding-site/generate_structures.py
+
+port: 8000
+annotation_task_name: "Binding-site residues"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/structures.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+instance_display:
+  fields:
+    - key: note
+      type: text
+      label: "Task"
+    - key: structure
+      type: protein_structure
+      label: "Structure"
+      display_options:
+        # 3dmol is committed with Potato. `engine: molstar` uses Mol*
+        # instead, after `potato vendor fetch molstar`.
+        engine: 3dmol
+        height: 440
+        # Colour the cartoon by the B-factor column read as pLDDT, in the
+        # four AlphaFold bands.
+        plddt: true
+        # An item field holding a PAE image, shown beside the structure.
+        pae_field: pae
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: viewer_selection
+    name: binding_site
+    description: "Select the residues that form the binding site"
+    viewer_field: structure
+    labels:
+      - "zinc ligand"
+      - "interface"
+    min_selections: 1
+    max_selections: 12
+    label_requirement:
+      required: true
+    instructions: >-
+      Choose a label, then click residues in the 3D view or the residue table.
+      Click a selected residue again to remove it.
+
+  - annotation_type: radio
+    name: site_confidence
+    description: "How clear is the site in this model?"
+    labels:
+      - name: "Clear"
+        key_value: "1"
+      - name: "Plausible"
+        key_value: "2"
+      - name: "Unsupported"
+        key_value: "3"

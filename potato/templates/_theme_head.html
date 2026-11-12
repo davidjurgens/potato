@@ -1,0 +1,69 @@
+{# Light or dark, decided before the first paint so a dark page never flashes
+   white. ui.theme forces one; otherwise the annotator's last choice, else the
+   browser's preference. data-bs-theme carries it to Bootstrap 5.3.
+   data-theme-mode tells static/theme.js whether the toggle is allowed.
+   Without JavaScript the page is light: the meta below says so. #}
+<meta name="color-scheme" content="{{ 'dark' if ui_theme | default('auto') == 'dark' else 'light' }}">
+<script>
+(function () {
+    var mode = {{ (ui_theme | default('auto')) | tojson }};
+    var theme = mode;
+    if (theme !== 'light' && theme !== 'dark') {
+        try { theme = window.localStorage.getItem('potato-theme'); } catch (e) { theme = null; }
+        if (theme !== 'light' && theme !== 'dark') {
+            theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark' : 'light';
+        }
+    }
+    var root = document.documentElement;
+    root.setAttribute('data-theme', theme);
+    root.setAttribute('data-bs-theme', theme);
+    root.setAttribute('data-theme-mode', mode);
+    // light-dark() in the component stylesheets reads color-scheme, so it
+    // follows the chosen theme rather than the operating system.
+    root.style.colorScheme = theme;
+})();
+
+// The canvas twin of light-dark(): canvases paint resolved colours, so a
+// light fill stays light in the dark theme unless the drawing code asks.
+// potatoThemeColor(colour, role) returns `colour` in the light theme and, in
+// the dark one, a dark twin of the same hue -- role 'bg' darkens a light
+// fill, 'text' lightens dark text, 'line' turns a light rule mid-dark --
+// computed exactly as the stylesheets' twins were. Anything it does not
+// apply to comes back unchanged. Canvases redraw on 'potato:themechange'.
+window.potatoThemeColor = function (colour, role) {
+    if (document.documentElement.getAttribute('data-theme') !== 'dark') return colour;
+    var named = {white: '#ffffff', black: '#000000'};
+    var hex = named[String(colour).toLowerCase()] || String(colour);
+    var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex);
+    if (!m) return colour;
+    var h = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1];
+    var r = parseInt(h.slice(0, 2), 16) / 255, g = parseInt(h.slice(2, 4), 16) / 255,
+        b = parseInt(h.slice(4, 6), 16) / 255;
+    var lin = function (c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    var y = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, hue = 0, s = 0;
+    if (max !== min) {
+        var d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        hue = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? ((b - r) / d + 2) : ((r - g) / d + 4);
+        hue /= 6;
+    }
+    var target, scale;
+    if (role === 'bg' && y > 0.5) { target = Math.max(0.09, Math.min(0.2, 0.10 + (1 - l) * 0.6)); scale = 0.55; }
+    else if (role === 'text' && y < 0.2) { target = Math.max(0.76, Math.min(0.9, 0.9 - l * 0.4)); scale = 0.75; }
+    else if (role === 'line' && y > 0.5) { target = 0.3; scale = 0.4; }
+    else return colour;
+    s = Math.min(1, s * scale);
+    var q = target < 0.5 ? target * (1 + s) : target + s - target * s, p = 2 * target - q;
+    var ch = function (t) {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+    };
+    var out = [ch(hue + 1 / 3), ch(hue), ch(hue - 1 / 3)];
+    return '#' + out.map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join('');
+};
+</script>

@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Simple Survey Demo Configuration
 # This example demonstrates using standard survey instruments in prestudy/poststudy phases
 
 annotation_task_name: Survey Instruments Demo
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:

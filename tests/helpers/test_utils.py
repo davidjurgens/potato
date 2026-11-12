@@ -8,6 +8,7 @@ within the tests/ directory structure to comply with path security requirements.
 
 import os
 import json
+import warnings
 import yaml
 import tempfile
 import uuid
@@ -108,7 +109,7 @@ def create_test_config(
         "persist_sessions": kwargs.get("persist_sessions", False),
         "debug": kwargs.get("debug", False),
         "port": kwargs.get("port", 8000),
-        "host": kwargs.get("host", "0.0.0.0"),
+        "host": kwargs.get("host", "127.0.0.1"),
         "secret_key": kwargs.get("secret_key", "test-secret-key"),
         "session_lifetime_days": kwargs.get("session_lifetime_days", 1),
         "user_config": kwargs.get("user_config", default_user_config),
@@ -116,13 +117,34 @@ def create_test_config(
 
     # Add optional kwargs that are passed through
     optional_fields = [
-        "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
+        "max_annotations_per_user", "assignment_strategy",
         "random_seed", "admin_api_key", "max_annotations_per_item",
-        "icl_labeling", "adjudication", "mace", "list_as_text"
+        "icl_labeling", "adjudication", "mace", "list_as_text",
+        "keystroke_logging", "annotation_telemetry",
+        "num_annotators_per_item", "per_annotator_quota",
+        "quality_control", "gold_standards", "attention_checks",
     ]
     for field in optional_fields:
         if field in kwargs:
             config[field] = kwargs[field]
+
+    # Anything not recognised is DROPPED, which silently produces a server that
+    # is not configured the way the test says it is — and a test that passes for
+    # the wrong reason. Warn loudly rather than swallowing it; add the key to
+    # ``optional_fields`` above (or pass it via ``additional_config``) to fix.
+    _known = set(optional_fields) | {
+        "annotation_task_name", "item_properties", "site_dir",
+        "alert_time_each_instance", "require_password", "authentication",
+        "persist_sessions", "debug", "port", "host", "secret_key",
+        "session_lifetime_days", "user_config", "phases", "additional_config",
+    }
+    for unknown in sorted(set(kwargs) - _known):
+        warnings.warn(
+            f"create_test_config ignored unknown option {unknown!r}; the test "
+            f"server will NOT be configured with it. Add it to optional_fields "
+            f"or pass it inside additional_config.",
+            stacklevel=2,
+        )
 
     # Support multi-phase workflows in tests
     if "phases" in kwargs:
@@ -631,6 +653,68 @@ def create_audio_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
         annotation_schemes,
         data_files=[data_file],
         item_properties={"id_key": "id", "text_key": "audio_url"},
+        **kwargs
+    )
+
+    return config_file, data_file
+
+
+def create_video_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with video (temporal segment) annotation support.
+
+    Mirrors create_audio_annotation_config. The Flask test server serves the
+    local test clip from the /test-video/ route (see FlaskTestServer).
+
+    Args:
+        test_dir: Directory to create the config in
+        **kwargs: Additional config options
+            - use_local_video: If True (default), use the local test clip.
+            - with_prompt: If True, add a real transcript/prompt to the item text
+                           (text_key stays audio/video url unless prompt_as_text set).
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    use_local_video = kwargs.pop('use_local_video', True)
+
+    if use_local_video:
+        # WebM (VP9/Opus): plays in Playwright's bundled Chromium, which lacks H.264.
+        video_url = "/test-video/test_video_6s.webm"
+    else:
+        video_url = "https://www.w3schools.com/html/mov_bbb.mp4"
+
+    test_data = [
+        {"id": "video_001", "video_url": video_url},
+        {"id": "video_002", "video_url": video_url},
+        {"id": "video_003", "video_url": video_url},
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data, filename="video_data.jsonl")
+
+    annotation_schemes = [
+        {
+            "annotation_type": "video_annotation",
+            "name": "video_segmentation",
+            "description": "Segment the video by content type",
+            "mode": "segment",
+            "labels": [
+                {"name": "intro", "color": "#4ECDC4", "key_value": "1"},
+                {"name": "main", "color": "#FF6B6B", "key_value": "2"},
+                {"name": "outro", "color": "#95A5A6", "key_value": "3"},
+            ],
+            "timeline_height": 70,
+            "overview_height": 40,
+            "zoom_enabled": True,
+            "playback_rate_control": True,
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        item_properties={"id_key": "id", "text_key": "video_url"},
         **kwargs
     )
 

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# IIIF manifest: one item per canvas, existing canvas annotations as pre-annotations
+#
+# Made with:
+#   potato import -f iiif -i examples/image/iiif-manifest/source/manifest.json \
+#       -o examples/image/iiif-manifest
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/image/iiif-manifest/config.yaml -p 8000
+#
+# Export the regions as IIIF annotation pages attached to a copy of the manifest:
+#   python -m potato.export -c examples/image/iiif-manifest/config.yaml -f iiif_annotations \
+#       -o /tmp/iiif-out --option base_url=https://example.org/iiif-out/
+
+port: 8000
+annotation_task_name: IIIF manifest (two folios)
+task_dir: .
+output_annotation_dir: annotation_output/
+data_files:
+- data/manifest.jsonl
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+site_dir: default
+instance_display:
+  fields:
+  - key: text
+    type: text
+    label: Canvas
+pre_annotation:
+  enabled: true
+  field: predictions
+  allow_modification: true
+annotation_schemes:
+- annotation_type: image_annotation
+  name: regions
+  description: Check and correct the imported regions
+  source_field: image_url
+  tools:
+  - bbox
+  - polygon
+  labels:
+  - initial
+  - text block
+  zoom_enabled: true
+  pan_enabled: true

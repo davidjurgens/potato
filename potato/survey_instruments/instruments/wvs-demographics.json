@@ -13,7 +13,7 @@
     {
       "name": "wvs_age",
       "description": "What is your age?",
-      "annotation_type": "textbox",
+      "annotation_type": "text",
       "label_requirement": {"required": true}
     },
     {

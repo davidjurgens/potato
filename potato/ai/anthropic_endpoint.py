@@ -1,14 +1,20 @@
 """
 Anthropic AI endpoint implementation.
 
-This module provides integration with Anthropic's Claude API for LLM inference.
+Integration with Anthropic's Claude API for LLM inference.
 """
 
 from typing import Dict, List
 import anthropic
-from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
+from .ai_endpoint import (BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities,
+                          json_schema_instruction)
 
-DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
+# Claude 3.5 Sonnet stood here until 2026-09-05. It is retired, so the
+# default failed outright, and it was also unpriced: the spend cap binds
+# only models in potato.ai.cost.PRICE_TABLE, and "claude-3-5-sonnet-..."
+# matches no row, so a study that never set a model had no cap at all.
+# Both properties are requirements of a default, not nice-to-haves.
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_HINT_PROMPT = '''
     You are assisting a user with an annotation task.
         The annotation instruction is : {description}
@@ -67,12 +73,15 @@ class AnthropicEndpoint(BaseAIEndpoint):
         """Get the default keyword prompt for Anthropic."""
         return DEFAULT_KEYWORD_PROMPT
 
-    def query(self, prompt: str) -> str:
+    def query(self, prompt: str, output_format=None) -> str:
         """
         Send a query to Anthropic Claude and return the response.
 
         Args:
             prompt: The prompt to send to the model
+            output_format: Pydantic model for a JSON reply, or None for free
+                text. The Messages API has no schema parameter, so the schema
+                goes in the prompt and the caller parses the text.
 
         Returns:
             The model's response as a string
@@ -85,8 +94,14 @@ class AnthropicEndpoint(BaseAIEndpoint):
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user",
+                           "content": prompt + json_schema_instruction(output_format)}]
             )
+            self._warn_if_truncated(response.stop_reason)
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                self._note_usage(getattr(usage, "input_tokens", None),
+                                 getattr(usage, "output_tokens", None))
             return response.content[0].text
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic request failed: {e}")
@@ -113,6 +128,7 @@ class AnthropicEndpoint(BaseAIEndpoint):
                 kwargs["system"] = system_text
 
             response = self.client.messages.create(**kwargs)
+            self._warn_if_truncated(response.stop_reason, where="chat reply")
             return response.content[0].text
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic chat request failed: {e}")

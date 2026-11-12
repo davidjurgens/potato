@@ -1,0 +1,68 @@
+/* Timed trials (trial-timing.js). The page arrives with the stimulus hidden
+   (body.potato-trial-pending) so it never flashes before the fixation; it is
+   hidden with visibility, not display, so revealing it does not reflow. */
+.potato-trial-pending .instance-area,
+.potato-trial-stimulus-off .instance-area {
+    visibility: hidden;
+}
+.potato-trial-hide-responses #annotation-forms {
+    visibility: hidden;
+}
+.potato-trial-keys-only #next-btn {
+    visibility: hidden;
+}
+.potato-trial .instance-area {
+    position: relative;
+    min-height: 6rem;
+}
+.potato-trial-fixation {
+    display: none;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    line-height: 1;
+    /* Shown while its parent, the stimulus area, is hidden. */
+    visibility: visible;
+}
+.potato-trial-fixating .potato-trial-fixation {
+    display: flex;
+}
+.potato-trial-keys {
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--muted-foreground, #555);
+    white-space: pre;
+    margin: 0.5rem 0 1rem;
+}
+
+/* Word-by-word presentation (trial_timing.presentation). The item's own
+   rendering is replaced by the reading line while the trial runs. */
+.potato-trial-presenting .instance-area > :not(#potato-trial-reading):not(#potato-trial-fixation) {
+    display: none;
+}
+.potato-trial-reading {
+    min-height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 1rem;
+    font-size: 1.4rem;
+    line-height: 1.6;
+}
+.potato-trial-reading-moving_window,
+.potato-trial-reading-cumulative {
+    /* Monospace, so the masks keep the words' shapes and the line never moves. */
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    /* Block, not flex: a flex row drops the spaces between the words. */
+    display: block;
+    white-space: pre-wrap;
+}
+.potato-trial-reading-centered { font-size: 2rem; }
+.potato-trial-reading-maze { justify-content: space-around; font-size: 1.8rem; }
+.potato-trial-maze-word { min-width: 8ch; text-align: center; }
+.potato-trial-maze-error { outline: 3px solid var(--destructive, #dc2626); outline-offset: 4px; }
+.potato-trial-question { margin: 0; font-family: inherit; font-size: 1.2rem; text-align: center;
+                         white-space: normal; width: 100%; }

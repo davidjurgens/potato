@@ -1,0 +1,654 @@
+{
+  "agent-chat.js": {
+    "sha256": "210674014068214f",
+    "version": "1"
+  },
+  "ai_assistant_manager.js": {
+    "sha256": "fb2b60e0da253743",
+    "version": "6"
+  },
+  "annotation.js": {
+    "sha256": "0298adc0ab006ee4",
+    "version": "63"
+  },
+  "annotation_critique.js": {
+    "sha256": "8c0e8764bdd834f1",
+    "version": "4"
+  },
+  "annotation_telemetry.js": {
+    "sha256": "4f6d34d46702ff1f",
+    "version": "2"
+  },
+  "audio-annotation.css": {
+    "sha256": "f81f3a2e240ff3ea",
+    "version": "6"
+  },
+  "audio-annotation.js": {
+    "sha256": "2a3dddb55fdfadee",
+    "version": "13"
+  },
+  "audio-dialogue.css": {
+    "sha256": "141904f6914ed5e2",
+    "version": "5"
+  },
+  "audio-dialogue.js": {
+    "sha256": "b2738a5168ffaa33",
+    "version": "3"
+  },
+  "authenticity_tracker.js": {
+    "sha256": "74683d23cccaa4b7",
+    "version": "3"
+  },
+  "boundary-probe.js": {
+    "sha256": "75c624a0f877f90e",
+    "version": "6"
+  },
+  "chemistry/chem-toolkits.js": {
+    "sha256": "b67b0685dd3687ab",
+    "version": "1"
+  },
+  "chemistry/chemical-structure.js": {
+    "sha256": "3eff8464a4bd2943",
+    "version": "4"
+  },
+  "chemistry/chemistry.css": {
+    "sha256": "7f790d5cca397c31",
+    "version": "1"
+  },
+  "chemistry/molecule-viewer.js": {
+    "sha256": "a32462a437505afc",
+    "version": "1"
+  },
+  "codebook.js": {
+    "sha256": "9f237a0593ab59da",
+    "version": "19"
+  },
+  "coding-trace.css": {
+    "sha256": "4bca924e005a6ca3",
+    "version": "2"
+  },
+  "collab.js": {
+    "sha256": "8b5cb9d2a048c8a9",
+    "version": "7"
+  },
+  "conversation-tree.js": {
+    "sha256": "b49f094d2ff6e06a",
+    "version": "5"
+  },
+  "coreference-manager.js": {
+    "sha256": "ad4e328a2bd4b00e",
+    "version": "10"
+  },
+  "css/agent-chat.css": {
+    "sha256": "3bba41a852d6913f",
+    "version": "2"
+  },
+  "css/boundary.css": {
+    "sha256": "f53c04d1f22adff3",
+    "version": "5"
+  },
+  "css/codebook.css": {
+    "sha256": "ba44244f906c48d8",
+    "version": "15"
+  },
+  "css/collab.css": {
+    "sha256": "44cc69ddd80324af",
+    "version": "3"
+  },
+  "css/conversation-tree.css": {
+    "sha256": "7299fa164ab8f394",
+    "version": "3"
+  },
+  "css/coreference.css": {
+    "sha256": "b3704beda0bdee9d",
+    "version": "3"
+  },
+  "css/entity-linking.css": {
+    "sha256": "5a6827066378f64d",
+    "version": "2"
+  },
+  "css/format-displays.css": {
+    "sha256": "5af93dd5f5e6a668",
+    "version": "4"
+  },
+  "css/live-agent.css": {
+    "sha256": "4a5a3f9110f42db8",
+    "version": "2"
+  },
+  "css/llm-chat-sidebar.css": {
+    "sha256": "975c3e0c64f160f7",
+    "version": "2"
+  },
+  "css/memos.css": {
+    "sha256": "b9d1e9677ee3bb62",
+    "version": "6"
+  },
+  "css/object-attributes.css": {
+    "sha256": "871f05a62d8612ee",
+    "version": "1"
+  },
+  "css/search.css": {
+    "sha256": "487866acbf1d3c23",
+    "version": "3"
+  },
+  "css/thinkaloud.css": {
+    "sha256": "de53b4e35a2f57e2",
+    "version": "1"
+  },
+  "css/tiered-annotation.css": {
+    "sha256": "ff1d8cdb58619c62",
+    "version": "3"
+  },
+  "css/tracking.css": {
+    "sha256": "54510457266d1f9d",
+    "version": "2"
+  },
+  "css/triage.css": {
+    "sha256": "86f82390686aedcc",
+    "version": "2"
+  },
+  "css/truth-serum.css": {
+    "sha256": "02c79d937977c083",
+    "version": "1"
+  },
+  "deepzoom-viewer.js": {
+    "sha256": "0a1d929044b5af5d",
+    "version": "2"
+  },
+  "depth-viewer.css": {
+    "sha256": "e8775174ac8f510c",
+    "version": "3"
+  },
+  "depth-viewer.js": {
+    "sha256": "dd95701e4bf3ead7",
+    "version": "2"
+  },
+  "device-routing.js": {
+    "sha256": "002b5c354867e2db",
+    "version": "4"
+  },
+  "display-logic.css": {
+    "sha256": "e74030575f27db93",
+    "version": "1"
+  },
+  "display-logic.js": {
+    "sha256": "2920a731dbc5cea9",
+    "version": "7"
+  },
+  "document-bbox.css": {
+    "sha256": "d8710e81e67457ae",
+    "version": "2"
+  },
+  "document-bbox.js": {
+    "sha256": "b0e461a9c2a184a6",
+    "version": "4"
+  },
+  "ego-network.css": {
+    "sha256": "a3db8bce7fd37a83",
+    "version": "1"
+  },
+  "ego-network.js": {
+    "sha256": "2c0287a51919d52a",
+    "version": "2"
+  },
+  "entity-linking.js": {
+    "sha256": "eedd2b523e32bb54",
+    "version": "4"
+  },
+  "episode-timeline.css": {
+    "sha256": "7a4f9db2b01a4f68",
+    "version": "3"
+  },
+  "episode-timeline.js": {
+    "sha256": "6902a9941afb699b",
+    "version": "5"
+  },
+  "event-annotation.css": {
+    "sha256": "72e6096527ab3ad2",
+    "version": "2"
+  },
+  "event-annotation.js": {
+    "sha256": "4d39acc143ac5bf1",
+    "version": "7"
+  },
+  "floating-panel-utils.js": {
+    "sha256": "16e0b90c890792b8",
+    "version": "6"
+  },
+  "free-list.css": {
+    "sha256": "4f89ee4ac620e196",
+    "version": "1"
+  },
+  "free-list.js": {
+    "sha256": "9b4ba17c8c38b807",
+    "version": "2"
+  },
+  "geo-annotation.css": {
+    "sha256": "cbc22a29fb133a3b",
+    "version": "1"
+  },
+  "geo-annotation.js": {
+    "sha256": "0cc88793e45bb2f7",
+    "version": "5"
+  },
+  "grounding-eval.css": {
+    "sha256": "6f947831b1b92db6",
+    "version": "2"
+  },
+  "grounding-eval.js": {
+    "sha256": "f981caacffccdb2a",
+    "version": "4"
+  },
+  "image-annotation.css": {
+    "sha256": "4b620abc809b8aa0",
+    "version": "20"
+  },
+  "image-annotation.js": {
+    "sha256": "a71c089967180248",
+    "version": "64"
+  },
+  "incentive-elicitation.css": {
+    "sha256": "20183e12b6f6efa0",
+    "version": "1"
+  },
+  "incentive-elicitation.js": {
+    "sha256": "4c638a71f6aaddd4",
+    "version": "3"
+  },
+  "instance-display.js": {
+    "sha256": "988116a8c543522b",
+    "version": "6"
+  },
+  "instance-fields.js": {
+    "sha256": "cb1f0a5360129790",
+    "version": "1"
+  },
+  "interaction_tracker.js": {
+    "sha256": "eb93cf5ba62dd572",
+    "version": "5"
+  },
+  "interlinear-gloss.css": {
+    "sha256": "c57dfa21a0362de4",
+    "version": "1"
+  },
+  "interlinear-gloss.js": {
+    "sha256": "ab8b7148ee224275",
+    "version": "2"
+  },
+  "interval-label.js": {
+    "sha256": "56f2d9b2d080ef2a",
+    "version": "4"
+  },
+  "js/pdf-viewer.js": {
+    "sha256": "64b0d86af915fb89",
+    "version": "1"
+  },
+  "js/pdfjs-loader.js": {
+    "sha256": "a03661d0428901c5",
+    "version": "1"
+  },
+  "keystroke_tracker.js": {
+    "sha256": "39b68a580e71b1e4",
+    "version": "1"
+  },
+  "label-visibility.js": {
+    "sha256": "cd90e8806852a329",
+    "version": "2"
+  },
+  "listening-test.css": {
+    "sha256": "99044b653e677013",
+    "version": "5"
+  },
+  "listening-test.js": {
+    "sha256": "2e8386b6d842be76",
+    "version": "4"
+  },
+  "live-agent-viewer.js": {
+    "sha256": "9f44f03c600dd2f9",
+    "version": "3"
+  },
+  "live-coding-agent-viewer.js": {
+    "sha256": "4e3e4daffd673849",
+    "version": "1"
+  },
+  "llm-chat-sidebar.js": {
+    "sha256": "5da18161a8320499",
+    "version": "1"
+  },
+  "mask-buffer.js": {
+    "sha256": "707a6ff7071fa865",
+    "version": "1"
+  },
+  "memos.js": {
+    "sha256": "a374c68de86d58cd",
+    "version": "8"
+  },
+  "microscopy.css": {
+    "sha256": "c0f261877a8efdcf",
+    "version": "1"
+  },
+  "microscopy.js": {
+    "sha256": "658609753a50783e",
+    "version": "2"
+  },
+  "multi-agent-discussion.css": {
+    "sha256": "69ce41d19ea43bb4",
+    "version": "2"
+  },
+  "multi-agent-discussion.js": {
+    "sha256": "03a62e40820b5bf4",
+    "version": "1"
+  },
+  "multi-document-event.css": {
+    "sha256": "9310512ecbbf0cc0",
+    "version": "3"
+  },
+  "multi-document-event.js": {
+    "sha256": "ace347a9dfb6889d",
+    "version": "8"
+  },
+  "object-attributes.js": {
+    "sha256": "3d2caba2c3ef1d3a",
+    "version": "3"
+  },
+  "ontology-picker.css": {
+    "sha256": "819b90a67bda92bd",
+    "version": "1"
+  },
+  "ontology-picker.js": {
+    "sha256": "3051bc053500f9a3",
+    "version": "1"
+  },
+  "option_highlight_manager.js": {
+    "sha256": "bb9254e571a8ecf9",
+    "version": "2"
+  },
+  "pdf-annotation.css": {
+    "sha256": "515f9f99f1787051",
+    "version": "2"
+  },
+  "pdf-bbox.js": {
+    "sha256": "1a49bb2d579323fb",
+    "version": "4"
+  },
+  "pdf-link-mode.css": {
+    "sha256": "a2f3698e96b00223",
+    "version": "2"
+  },
+  "pdf-link-mode.js": {
+    "sha256": "3f6e8969e0d06d39",
+    "version": "5"
+  },
+  "peaks-range-select.js": {
+    "sha256": "a24dae28e18fe906",
+    "version": "2"
+  },
+  "pointcloud/pc-calibration.js": {
+    "sha256": "c592330881d09edc",
+    "version": "1"
+  },
+  "pointcloud/pc-mpr.js": {
+    "sha256": "7b9ff3d7f69f9dc4",
+    "version": "1"
+  },
+  "pointcloud/pc-octree.js": {
+    "sha256": "11e79ec8beef3418",
+    "version": "1"
+  },
+  "pointcloud/pc-paint.js": {
+    "sha256": "7d3524ce0b21bd17",
+    "version": "1"
+  },
+  "pointcloud/pc-sequence.js": {
+    "sha256": "fa5c42a5ad6489dc",
+    "version": "4"
+  },
+  "pointcloud/pc-viewer.css": {
+    "sha256": "0a15ab95d0299c96",
+    "version": "9"
+  },
+  "pointcloud/pc-viewer.js": {
+    "sha256": "1e0249f1655f1fb2",
+    "version": "21"
+  },
+  "pointcloud/pc-wire.js": {
+    "sha256": "63b2cecee7f6dd3d",
+    "version": "3"
+  },
+  "potato-math.css": {
+    "sha256": "0d04b37801995e47",
+    "version": "1"
+  },
+  "potato-math.js": {
+    "sha256": "1d95906e01c0a56c",
+    "version": "1"
+  },
+  "region-caption.css": {
+    "sha256": "c151ae630d94fed9",
+    "version": "2"
+  },
+  "region-caption.js": {
+    "sha256": "f8cdf9a4439717c6",
+    "version": "7"
+  },
+  "rollout-eval.css": {
+    "sha256": "6440ece9f7609138",
+    "version": "4"
+  },
+  "rollout-eval.js": {
+    "sha256": "15ea6bf5c5b9d4ba",
+    "version": "9"
+  },
+  "run-tree.js": {
+    "sha256": "074d3ccc44b64809",
+    "version": "1"
+  },
+  "search.js": {
+    "sha256": "ff965e1f0cc1fb95",
+    "version": "5"
+  },
+  "segment-questions.js": {
+    "sha256": "b36087cf0e27b508",
+    "version": "1"
+  },
+  "segmentation/gdino-session.js": {
+    "sha256": "2462eba97632fd34",
+    "version": "2"
+  },
+  "segmentation/model-session.js": {
+    "sha256": "6f24e03976b0c518",
+    "version": "2"
+  },
+  "segmentation/sam-preprocess.js": {
+    "sha256": "4104e5d1fb9b99cc",
+    "version": "1"
+  },
+  "segmentation/sam-session.js": {
+    "sha256": "ac0a14ce530bcecb",
+    "version": "6"
+  },
+  "segmentation/sam-tool.js": {
+    "sha256": "03ab38561b135f99",
+    "version": "2"
+  },
+  "segmentation/text-prompt-tool.js": {
+    "sha256": "6bd3856093c5e809",
+    "version": "2"
+  },
+  "segmentation/wordpiece.js": {
+    "sha256": "3c1799186e9d88fd",
+    "version": "1"
+  },
+  "span-core.js": {
+    "sha256": "b8fb13631a3ba376",
+    "version": "29"
+  },
+  "span-link-manager.js": {
+    "sha256": "88486d857b704d5f",
+    "version": "20"
+  },
+  "span-link-styles.css": {
+    "sha256": "2cd95f97873ba162",
+    "version": "6"
+  },
+  "span-styles.css": {
+    "sha256": "d726248d79c4d2a9",
+    "version": "4"
+  },
+  "span-touch.js": {
+    "sha256": "c35d731585c1f6b9",
+    "version": "2"
+  },
+  "spectrogram-annotation.css": {
+    "sha256": "fbda4f80d5d79b34",
+    "version": "1"
+  },
+  "spectrogram-annotation.js": {
+    "sha256": "db6f759cc1fc2fbd",
+    "version": "6"
+  },
+  "spreadsheet-display.css": {
+    "sha256": "b7ae8488ab879d3c",
+    "version": "2"
+  },
+  "styles.css": {
+    "sha256": "5ea100ea5463c15f",
+    "version": "43"
+  },
+  "thinkaloud.js": {
+    "sha256": "cfad75fe88b69eb4",
+    "version": "2"
+  },
+  "tiered-annotation.js": {
+    "sha256": "afe28e6b941d9b7d",
+    "version": "8"
+  },
+  "time-series.css": {
+    "sha256": "9388df58cfa8a1ed",
+    "version": "2"
+  },
+  "tracking-interpolation.js": {
+    "sha256": "da8bd01cf9b79b92",
+    "version": "2"
+  },
+  "tracking-ui.js": {
+    "sha256": "973575f22169cf34",
+    "version": "18"
+  },
+  "triad-design.js": {
+    "sha256": "7c52f0b30650ce18",
+    "version": "1"
+  },
+  "triad-test.css": {
+    "sha256": "c16c791ada4df28b",
+    "version": "1"
+  },
+  "triad-test.js": {
+    "sha256": "857b2b15ac7b35f8",
+    "version": "3"
+  },
+  "triage.js": {
+    "sha256": "13b3030e037cff17",
+    "version": "3"
+  },
+  "trial-timing.css": {
+    "sha256": "7ab6c55cda611aee",
+    "version": "3"
+  },
+  "trial-timing.js": {
+    "sha256": "1b3ef897ff84ff5f",
+    "version": "3"
+  },
+  "truth-serum.js": {
+    "sha256": "9795b4dd43262680",
+    "version": "2"
+  },
+  "turn-annotations.css": {
+    "sha256": "184dcadf5ee32b10",
+    "version": "2"
+  },
+  "turn-annotations.js": {
+    "sha256": "b280dd8f61d97c48",
+    "version": "2"
+  },
+  "video-annotation.css": {
+    "sha256": "d7271aa5b46047d0",
+    "version": "4"
+  },
+  "video-annotation.js": {
+    "sha256": "e16485ba37c0447b",
+    "version": "27"
+  },
+  "viewers/fits-cutout.css": {
+    "sha256": "f3e20dfd67fa36ca",
+    "version": "1"
+  },
+  "viewers/fits-cutout.js": {
+    "sha256": "afbb83b4f6e707ef",
+    "version": "1"
+  },
+  "viewers/genome-locus.js": {
+    "sha256": "64bd704779263288",
+    "version": "3"
+  },
+  "viewers/peak-picking.js": {
+    "sha256": "14226076dedb2d89",
+    "version": "3"
+  },
+  "viewers/protein-structure.js": {
+    "sha256": "136fef029f936ee7",
+    "version": "1"
+  },
+  "viewers/spectrum.css": {
+    "sha256": "ec6c01c063d27646",
+    "version": "2"
+  },
+  "viewers/spectrum.js": {
+    "sha256": "cf168886d58fc841",
+    "version": "2"
+  },
+  "viewers/time-series.js": {
+    "sha256": "e0afaec7619d0f31",
+    "version": "1"
+  },
+  "viewers/viewer-framework.css": {
+    "sha256": "b3c0b5d8f0dca40d",
+    "version": "1"
+  },
+  "viewers/viewer-framework.js": {
+    "sha256": "c0093d8e28a0d54f",
+    "version": "1"
+  },
+  "viewers/viewer-selection.js": {
+    "sha256": "a2f51e9bfcc5e2e6",
+    "version": "2"
+  },
+  "visual_ai_assistant.js": {
+    "sha256": "f388e903a142dc96",
+    "version": "11"
+  },
+  "volume-annotation.css": {
+    "sha256": "ad56ba440cdc2213",
+    "version": "1"
+  },
+  "volume-annotation.js": {
+    "sha256": "49720b1be8c4e320",
+    "version": "5"
+  },
+  "web-agent-overlays.js": {
+    "sha256": "ba2cd17c89c458af",
+    "version": "1"
+  },
+  "web-agent-playback.js": {
+    "sha256": "30dbaa8d788547fe",
+    "version": "2"
+  },
+  "web-agent-recorder.js": {
+    "sha256": "3344eeff539f2cef",
+    "version": "1"
+  },
+  "web-agent-viewer.js": {
+    "sha256": "ff6c36b304093aa5",
+    "version": "2"
+  }
+}

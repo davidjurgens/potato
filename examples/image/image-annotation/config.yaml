@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Simple Image Annotation Example
 #
 # This example demonstrates how to set up an image annotation task
@@ -12,7 +13,7 @@ task_dir: .
 port: 8000
 annotation_task_name: Object Detection Demo
 output_annotation_dir: annotation_output/simple-image-annotation/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data file containing image URLs
 data_files:

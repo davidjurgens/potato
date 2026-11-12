@@ -1,0 +1,4099 @@
+"""
+Human- and machine-readable documentation for Potato's config keys.
+
+`KNOWN_CONFIG_KEYS` in `config_module.py` is the authoritative list of key
+*names* -- it is what `validate_unknown_keys()` checks typos against -- but it
+carries no other information. Its values are `None`, a `set` of sub-key names,
+or a nested `dict`, and that shape is load-bearing for the recursive walk, so
+there is nowhere in it to put a type, a default, or a sentence of prose.
+
+This module supplies that missing half as a parallel table keyed by **dotted
+path**, which is what lets nested keys be documented at all: `_object_schema()`
+in `config_schema.py` emitted a bare `{}` for every sub-key, so
+`attention_checks.failure_handling` had no type and no description anywhere in
+the published JSON Schema.
+
+Consumers:
+
+    config_schema.build_config_schema()      -> description / type / default / examples
+    scripts/generate_config_reference.py     -> the Description and Default columns
+    potato/mcp_server/                       -> the describe_config_key tool
+
+Coverage is a ratchet rather than a requirement: `tests/unit/test_config_key_docs.py`
+tolerates the keys that were already undocumented when this table was introduced
+but fails on any *new* key that arrives without an entry, so the gap can only
+shrink.
+
+Usage:
+    from potato.server_utils.config_key_docs import get_key_doc, iter_key_docs
+    doc = get_key_doc("attention_checks.frequency")
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterator, Optional, Tuple
+
+
+class _Unset:
+    """Sentinel distinguishing 'no default' from a default of None/False/0."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<unset>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+UNSET = _Unset()
+
+
+@dataclass(frozen=True)
+class ConfigKeyDoc:
+    """What a config key is for, and what shape it takes.
+
+    Attributes:
+        summary: One line, no trailing period needed. Written for someone --
+            or something -- deciding whether this is the key they want.
+        type: JSON Schema type name, or several joined by "|" for the keys that
+            genuinely accept more than one shape -- `num_annotators_per_item` is
+            an integer or a per-category mapping, and `phases` is a list or an
+            ordered mapping. Must not contradict `_OPTIONAL_INT_FIELDS` or
+            `_OPTIONAL_BOOL_FIELDS` in config_module, which remain the authority
+            for the keys they cover. Use "any" when nothing useful can be said.
+        default: The value the server behaves as if it saw. `UNSET` when the key
+            has no meaningful default or the default is computed.
+        required: True only for keys `validate_yaml_structure()` insists on.
+        category: Grouping for the generated reference. Owning it here keeps
+            a new key from silently landing in the "Other" bucket.
+        example: A short illustrative value.
+        see_also: Related dotted paths.
+        minimum, maximum: The inclusive range the server enforces for a
+            number, so an editor flags what `validate` would refuse.
+    """
+
+    summary: str
+    type: str = "any"
+    default: Any = UNSET
+    required: bool = False
+    category: str = "Other"
+    example: Any = None
+    see_also: Tuple[str, ...] = field(default_factory=tuple)
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+
+
+_D = ConfigKeyDoc
+
+# Category labels. `scripts/generate_config_reference.py` decides the order they
+# are printed in; membership is decided here, next to each key.
+CORE = "Core / Required"
+DATA = "Data Sources"
+ANNOT = "Annotation"
+AUTH = "Authentication / Login"
+SERVER = "Server"
+QC = "Quality Control"
+AI = "AI Support"
+UI = "UI & Layout"
+ASSIGN = "Assignment & Sessions"
+FEATURES = "Advanced Features"
+CONTENT = "Content"
+DEBUG = "Debug / Logging"
+INTEG = "External Integrations"
+# Labels that already existed as sections in the generated reference (they were
+# spelled out in CATEGORY_ORDER in scripts/generate_config_reference.py before
+# this table reached their keys). Mirrored here so a documented key keeps the
+# section it has always printed in rather than migrating on the first edit.
+QDA = "Qualitative Coding (QDA)"
+ANNOT_FEAT = "Annotation Features"
+MEDIA = "Media"
+PUBLISHING = "Publishing & Export"
+AGENT = "Agent"
+AGENT_EVAL = "Agent Evaluation Suite"
+WORKFLOW = "Workflow & Phases"
+
+
+CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
+    # ---------------------------------------------------------------- core --
+    "annotation_task_name": _D(
+        "Display name for the task, shown in the browser title and the header",
+        type="string", required=True, category=CORE, example="Sentiment Annotation",
+    ),
+    "task_dir": _D(
+        "Root directory every other relative path in this config resolves "
+        "against, and the boundary path validation refuses to escape",
+        type="string", required=True, category=CORE, example=".",
+        see_also=("output_annotation_dir",),
+    ),
+    "output_annotation_dir": _D(
+        "Directory annotations, user state and exports are written to",
+        type="string", required=True, category=CORE, example="annotation_output/",
+    ),
+    "output_annotation_format": _D(
+        "Deprecated, and read as `export_annotation_format` at load time with "
+        "a warning (`json` becomes `jsonl`, since no exporter is called "
+        "`json`). It will stop being read in a later release, so rename it. "
+        "Annotations are stored as "
+        "`<output_annotation_dir>/<user>/user_state.json` whatever it says; "
+        "this key never changed that",
+        type="string", default="", category=CORE, example="jsonl",
+        see_also=("export_annotation_format", "output_annotation_dir"),
+    ),
+    "item_properties": _D(
+        "Maps the fields of your data file onto the roles Potato needs: which "
+        "field is the identifier and which holds the text to annotate",
+        type="object", required=True, category=CORE,
+    ),
+    "item_properties.id_key": _D(
+        "Field holding each item's unique identifier",
+        type="string", required=True, category=CORE, example="id",
+    ),
+    "item_properties.text_key": _D(
+        "Field holding the text shown to the annotator",
+        type="string", required=True, category=CORE, example="text",
+    ),
+    "item_properties.category_key": _D(
+        "Field holding a category label, used by category-based assignment",
+        type="string", category=CORE, see_also=("assignment_strategy",),
+    ),
+    "item_properties.private_keys": _D(
+        "Item fields the annotator's browser never receives: left out of the "
+        "page's item data and the instance-data APIs, and kept in exports. Use "
+        "it for fields such as the model behind each response in a blind "
+        "pairwise comparison",
+        type="array", category=CORE, example=["model_a", "model_b"],
+        see_also=("item_properties.text_key",),
+    ),
+    "item_properties.kwargs": _D(
+        "Extra per-item fields to carry through to the display layer",
+        type="object", category=CORE,
+    ),
+    "text_as_image": _D(
+        "Render each item's text to a PNG so annotators cannot copy or paste it",
+        type="boolean|object", default=False, category=QC,
+        example=True,
+        see_also=("item_properties.text_key",),
+    ),
+    "text_as_image.enabled": _D(
+        "Turn the picture on, when text_as_image is written as a mapping",
+        type="boolean", default=True, category=QC,
+    ),
+    "text_as_image.font_size": _D(
+        "Point size of the text in the picture",
+        type="integer", default=18, category=QC, example=20,
+    ),
+    "text_as_image.max_width": _D(
+        "Width of the picture in CSS pixels",
+        type="integer", default=900, category=QC, example=800,
+    ),
+    "text_as_image.font_path": _D(
+        "A .ttf or .otf font for the picture, relative to task_dir. Without "
+        "it, Potato tries DejaVu Sans, Arial, then Liberation Sans, then "
+        "Pillow's ASCII-only default",
+        type="string", category=QC, example="fonts/DejaVuSans.ttf",
+    ),
+    "task_description": _D(
+        "Short description of the task, shown to annotators",
+        type="string", category=CORE,
+    ),
+    "annotation_task_description": _D(
+        "Longer task description; falls back to task_description when absent",
+        type="string", category=CORE,
+    ),
+
+    # ---------------------------------------------------------------- data --
+    "data_files": _D(
+        "Input data files. JSON, JSONL, CSV and TSV are all accepted; JSON may "
+        "be either an array of objects or one object per line",
+        type="array", category=DATA, example=["data/items.json"],
+        see_also=("data_directory", "data_sources"),
+    ),
+    "data_directory": _D(
+        "Load every data file in a directory instead of listing them",
+        type="string", category=DATA, see_also=("watch_data_directory",),
+    ),
+    "data_directory_encoding": _D(
+        "Text encoding used to read files under data_directory",
+        type="string", default="utf-8", category=DATA,
+    ),
+    "data_sources": _D(
+        "Remote or live inputs (url, s3, huggingface, google_sheets, database, "
+        "google_drive, dropbox, file), optionally polled for new rows",
+        type="array", category=DATA,
+    ),
+    "watch_data_directory": _D(
+        "Rescan data_directory while the server runs and pick up new files",
+        type="boolean", default=False, category=DATA,
+        see_also=("watch_poll_interval",),
+    ),
+    "watch_poll_interval": _D(
+        "Seconds between rescans when watch_data_directory is on",
+        type="number", default=5.0, category=DATA,
+    ),
+    "partial_loading": _D(
+        "Load items lazily rather than reading every file at startup",
+        type="object", category=DATA,
+    ),
+    "data_cache": _D(
+        "Cache for remote data sources",
+        type="object", category=DATA,
+    ),
+    "data_cache.enabled": _D("Turn the remote-source cache on", type="boolean", category=DATA),
+    "data_cache.ttl_seconds": _D(
+        "How long a cached fetch stays fresh", type="integer", category=DATA,
+    ),
+    "data_cache.max_size_mb": _D(
+        "Cache size ceiling in megabytes", type="integer", category=DATA,
+    ),
+    "serve_raw_medical_files": _D(
+        "Let /media/ hand out DICOM and NIfTI files as-is. Off by default: "
+        "their headers carry patient information that volume_annotation's "
+        "display_tags filter withholds. When on, they are served without "
+        "sign-in like other /media/ files",
+        type="boolean", default=False, category=MEDIA,
+        see_also=("media_directory",),
+    ),
+    "media_directory": _D(
+        "Directory served at /media/, so data files can reference local images, "
+        "audio and video by relative path instead of an external URL",
+        type="string", default="media", category=DATA,
+    ),
+
+    # ---------------------------------------------------------- annotation --
+    "annotation_schemes": _D(
+        "The questions annotators answer. Each entry needs an annotation_type "
+        "from the schema registry plus a name and description",
+        type="array", category=ANNOT,
+    ),
+    "phases": _D(
+        "Per-phase configuration. Either a list of phase objects or a mapping "
+        "with an `order` key. Page types: consent, prestudy, instructions, "
+        "training, annotation and poststudy, plus the runtime pages jspsych, "
+        "headphone_check and external (oTree, Empirica, hosted surveys). "
+        "`counterbalance` (a list of {pages, method: random | latin_square}) "
+        "orders groups of pages per participant. Phase-level "
+        "annotation_schemes replace the top-level list rather than adding to "
+        "it",
+        type="array|object", category=ANNOT,
+    ),
+    "surveyflow": _D(
+        "Potato 1.x survey pages. Not read in 2.x, and named at boot if set; "
+        "survey pages go under `phases`",
+        type="object", category=ANNOT,
+    ),
+    "training": _D(
+        "Qualification phase annotators must pass before real items",
+        type="object", category=ANNOT,
+    ),
+    "pre_annotation": _D(
+        "Seed annotations to show as a starting point for each item",
+        type="object", category=ANNOT,
+    ),
+
+    # ---------------------------------------------------------------- auth --
+    "user_config": _D(
+        "Who may log in", type="object", category=AUTH,
+    ),
+    "user_config.allow_all_users": _D(
+        "Let anyone register and annotate, rather than only listed users",
+        type="boolean", default=True, category=AUTH,
+    ),
+    "user_config.users": _D(
+        "Allowlist of usernames, used when allow_all_users is false",
+        type="array", category=AUTH,
+    ),
+    "authentication": _D(
+        "Identity provider settings for SSO and database-backed accounts",
+        type="object", category=AUTH,
+    ),
+    "authentication.method": _D(
+        "Which backend holds accounts: in_memory (the default), database, "
+        "oauth, saml or clerk",
+        type="string", default="in_memory", category=AUTH, example="database",
+        see_also=("authentication.user_config_path", "authentication.database_url"),
+    ),
+    "authentication.user_config_path": _D(
+        "JSONL file of registered accounts, one {username, password} object per "
+        "line, with the password stored as salt$hash. Under the default "
+        "in_memory backend this is the ONLY thing that makes accounts survive a "
+        "restart: unset, registrations live in memory and every annotator loses "
+        "their login when the server stops, while their annotations remain in "
+        "output_annotation_dir. Set it on anything an annotator will come back to",
+        type="string", category=AUTH, example="user_config.json",
+        see_also=("authentication.method", "user_config.allow_all_users"),
+    ),
+    "authentication.database_url": _D(
+        "SQLAlchemy URL for the database backend; falls back to the "
+        "POTATO_DB_CONNECTION environment variable",
+        type="string", category=AUTH, example="sqlite:///potato_users.db",
+        see_also=("authentication.method",),
+    ),
+    "authentication.allow_local_login": _D(
+        "Keep username/password registration available alongside SSO",
+        type="boolean", category=AUTH,
+    ),
+    "authentication.auto_register": _D(
+        "Create an account the first time an SSO identity signs in",
+        type="boolean", category=AUTH,
+    ),
+    "authentication.saml": _D(
+        "SAML 2.0 sign-in through an institution's identity provider (method: "
+        "saml). Keys: display_name; one of idp_metadata_url (https), "
+        "idp_metadata_file or idp {entity_id, sso_url, x509cert, slo_url}; "
+        "sp_base_url, sp_entity_id, sp_cert_file + sp_key_file, name_id_format; "
+        "user_identity_attribute (default: the NameID, refused when "
+        "transient); required_attribute {name, values}; claim_attributes; "
+        "want_assertions_encrypted; single_logout (default true: signing out "
+        "also ends the IdP session when the IdP has a logout service)",
+        type="object", category=AUTH, see_also=("authentication.method",),
+    ),
+    "authentication.providers": _D(
+        "OAuth provider settings, keyed by provider name",
+        type="object", category=AUTH,
+    ),
+    "authentication.allowed_domains": _D(
+        "Email domains permitted to sign in through SSO",
+        type="array", category=AUTH, example=["umich.edu"],
+    ),
+    "authentication.allowed_domain": _D(
+        "Single-domain form of allowed_domains",
+        type="string", category=AUTH,
+        see_also=("authentication.allowed_domains",),
+    ),
+    "authentication.allowed_org": _D(
+        "Organization permitted to sign in through SSO",
+        type="string", category=AUTH,
+    ),
+    "authentication.user_identity_field": _D(
+        "Which claim from the identity provider becomes the Potato username",
+        type="string", category=AUTH, example="email",
+    ),
+    "login": _D(
+        "Login mode. type: password, url_direct, or none",
+        type="object", category=AUTH,
+    ),
+    "login.type": _D(
+        "How annotators identify themselves",
+        type="string", category=AUTH, example="password",
+    ),
+    "login.url_argument": _D(
+        "Query parameter carrying the user id under url_direct login",
+        type="string", category=AUTH, example="PROLIFIC_PID",
+    ),
+    "require_password": _D(
+        "Require a password at login", type="boolean", category=AUTH,
+    ),
+    "require_no_password": _D(
+        "Accept a username with no password", type="boolean", category=AUTH,
+    ),
+    "secret_key": _D(
+        "Flask session signing key. Set this for any deployment that must keep "
+        "sessions valid across restarts",
+        type="string", category=AUTH,
+    ),
+    "admin_api_key": _D(
+        "Shared key for the admin API, sent as the X-API-Key header. Generated "
+        "and persisted to {task_dir}/admin_api_key.txt when unset",
+        type="string", category=AUTH,
+    ),
+    "rbac": _D(
+        "Role assignments and SSO role mapping", type="object", category=AUTH,
+    ),
+    "user_roles": _D(
+        "Per-user quota and role overrides", type="object", category=AUTH,
+    ),
+
+    # -------------------------------------------------------------- server --
+    "port": _D(
+        "Port to listen on. The -p flag overrides this",
+        type="integer", default=8000, category=SERVER,
+    ),
+    "host": _D(
+        "Interface to bind. 0.0.0.0 exposes the server beyond localhost",
+        type="string", default="localhost", category=SERVER,
+    ),
+    "session_timeout_minutes": _D(
+        "How long a signed-in session may sit idle before the server clears "
+        "it. The clock restarts on every request, so it bounds inactivity, not "
+        "the length of a shift",
+        type="integer", default=480, category=SERVER,
+    ),
+    "server": _D(
+        "Nested port/host/debug block, an alternative to the top-level keys",
+        type="object", category=SERVER,
+    ),
+    "site_dir": _D(
+        "Directory holding the HTML templates for this task",
+        type="string", category=SERVER,
+    ),
+    "site_file": _D(
+        "Specific template file to render the annotation page with",
+        type="string", category=SERVER,
+    ),
+    "base_html_template": _D(
+        "Ignored. Every page renders through the built-in "
+        "base_template_v2.html, so nothing reads this key -- `potato "
+        "validate` reports it",
+        type="string", category=SERVER,
+    ),
+    "persist_sessions": _D(
+        "Keep annotator sessions across a server restart",
+        type="boolean", default=False, category=SERVER,
+    ),
+    "session_lifetime_days": _D(
+        "Days before a persisted session expires",
+        type="integer", default=2, category=SERVER,
+    ),
+    "session_cookie_samesite": _D(
+        "SameSite attribute of the session cookie: Lax, Strict or None. Unset "
+        "means Lax, except on crowd deployments, where the browser default is "
+        "kept so a task embedded in the platform's frame keeps its session. "
+        "None requires session_cookie_secure",
+        type="string", example="Lax", category=SERVER,
+    ),
+    "session_cookie_secure": _D(
+        "Send the session cookie over HTTPS only. Turn on when the server is "
+        "reached over HTTPS",
+        type="boolean", default=False, category=SERVER,
+    ),
+    "customjs": _D(
+        "Enable custom JavaScript injection", type="boolean", category=SERVER,
+    ),
+    "customjs_hostname": _D(
+        "Hostname custom JavaScript is served from", type="string", category=SERVER,
+    ),
+
+    # ----------------------------------------------------------- assignment --
+    "assignment_strategy": _D(
+        "How items are handed out: random, fixed_order, active_learning, "
+        "max_diversity, least_annotated, category_based, diversity_clustering, "
+        "batch, priority, model_review, psychometric or engine (the labeling "
+        "engine's human requests) or llm_confidence (least-confident prelabel "
+        "first, items with no prelabel last)",
+        type="string", default="fixed_order", category=ASSIGN,
+    ),
+    "automatic_assignment": _D(
+        "Potato 1.x assignment block. Not read, and named at boot if set; use "
+        "`assignment_strategy`, `num_annotators_per_item` and "
+        "`max_annotations_per_user`",
+        type="object", category=ASSIGN,
+    ),
+    "max_annotations_per_user": _D(
+        "Cap on how many dataset items one annotator may receive. Left unset, "
+        "the cap is the number of items loaded, so every annotator is offered "
+        "the whole corpus; -1 is explicit unlimited, which is what a dynamic "
+        "data source needs for items added after boot to be assignable. "
+        "Injected attention checks and gold items do not count against it",
+        type="integer", default=-1, category=ASSIGN,
+    ),
+    "max_annotations_per_item": _D(
+        "Cap on how many annotators may label one item. -1 means unlimited",
+        type="integer", default=-1, category=ASSIGN,
+    ),
+    "num_annotators_per_item": _D(
+        "Target annotators per item. Either a plain count or a mapping carrying "
+        "`default` plus overlap-sampling and adaptive-boost rules. Unset (with "
+        "no max_annotations_per_item) or 0 means unlimited; a negative count "
+        "is refused",
+        type="integer|object", category=ASSIGN, example=3,
+    ),
+    "min_annotators_per_instance": _D(
+        "DEPRECATED spelling of num_annotators_per_item, and read as it. "
+        "It named a coverage floor that was parsed and never consulted, so "
+        "a study asking for three annotators an item collected an unlimited "
+        "number. Setting it alongside num_annotators_per_item or "
+        "max_annotations_per_item with a different value is refused",
+        type="integer", category=ASSIGN,
+    ),
+    "alert_time_each_instance": _D(
+        "Seconds an annotator may spend on one item before being warned. The "
+        "default is effectively no limit",
+        type="integer", default=10000000, category=ASSIGN,
+    ),
+    "max_session_seconds": _D(
+        "Hard limit on one annotation session", type="integer", category=ASSIGN,
+    ),
+    "batch_assignment": _D(
+        "Split items into named groups and assign whole batches",
+        type="object", category=ASSIGN,
+    ),
+    "batch_assignment.group_by_condition": _D(
+        "A `conditions` factor whose levels name the auto-assigned groups. Each "
+        "participant gets the group of their assigned level, so each condition "
+        "can carry its own items",
+        type="string", category=ASSIGN, see_also=("conditions",),
+    ),
+    "batch_assignment.randomize_within_list": _D(
+        "Give each participant their group's items in their own order, seeded "
+        "per participant, instead of file order",
+        type="boolean", default=False, category=ASSIGN,
+        see_also=("batch_assignment.group_by_condition",),
+    ),
+    "random_seed": _D(
+        "Seed for assignment shuffling, so an ordering can be reproduced",
+        type="integer", category=ASSIGN,
+    ),
+
+    # ------------------------------------------------------ quality control --
+    "attention_checks": _D(
+        "Insert items with a known answer to detect inattentive annotators",
+        type="object", category=QC,
+    ),
+    "attention_checks.enabled": _D("Turn attention checks on", type="boolean", category=QC),
+    "attention_checks.items_file": _D(
+        "File holding the attention-check items", type="string", category=QC,
+    ),
+    "attention_checks.frequency": _D(
+        "Insert a check every N items", type="integer", category=QC,
+    ),
+    "attention_checks.probability": _D(
+        "Chance of inserting a check, as an alternative to frequency",
+        type="number", category=QC,
+    ),
+    "attention_checks.min_response_time": _D(
+        "Responses faster than this many seconds count as a failure",
+        type="number", category=QC,
+    ),
+    "attention_checks.failure_handling": _D(
+        # Declared `string|object` and the validator refuses a string outright.
+        # There is nothing a bare action name could mean that omitting the
+        # block does not already do, so the registry is what changes.
+        "Warn and block thresholds, and the messages shown at each",
+        type="object", category=QC,
+    ),
+    "attention_checks.geometry_iou_tolerance": _D(
+        "Overlap a drawn answer must reach to count as correct, as a fraction",
+        type="number", category=QC,
+    ),
+    "gold_standards": _D(
+        "Items with known labels, used to score annotators",
+        type="object", category=QC,
+    ),
+    "gold_standards.enabled": _D("Turn gold standards on", type="boolean", category=QC),
+    "gold_standards.items_file": _D("File holding the gold items", type="string", category=QC),
+    "gold_standards.mode": _D("How gold items are surfaced", type="string", category=QC),
+    "gold_standards.frequency": _D("Insert a gold item every N items", type="integer", category=QC),
+    "gold_standards.accuracy": _D(
+        "Accuracy an annotator must hold to keep going. A bare fraction, or a "
+        "mapping with `min_threshold` and `evaluation_count`",
+        type="number|object", category=QC,
+    ),
+    "gold_standards.auto_promote": _D(
+        "Promote annotators who pass to the full task. A flag, or a mapping with "
+        "`min_annotators` and `agreement_threshold`",
+        type="boolean|object", category=QC,
+    ),
+    "ai_support.image_key": _D(
+        "Item field holding the image, when the item also carries text. Without "
+        "it a vision endpoint only ever sees `item_properties.text_key`",
+        type="string", category=AI,
+    ),
+    "item_properties.image_key": _D(
+        "Item field holding the image, the counterpart of `text_key`. "
+        "`ai_support.image_key` overrides it",
+        type="string", category=CORE,
+    ),
+    "gold_standards.feedback": _D(
+        "What an annotator is told after a gold item. A mapping with "
+        "`show_correct_answer` and `show_explanation`; both off means silent "
+        "scoring",
+        type="object", category=QC,
+    ),
+    "gold_standards.geometry_iou_tolerance": _D(
+        "Overlap a drawn answer must reach to count as correct, as a fraction",
+        type="number", category=QC,
+    ),
+    "gold_standards_file": _D(
+        "Gold items file, the flat alternative to the gold_standards block",
+        type="string", category=QC,
+    ),
+    "quality_control": _D(
+        "Aggregate quality thresholds and actions", type="object", category=QC,
+    ),
+    "agreement_metrics": _D(
+        "Which inter-annotator agreement measures the admin pages compute",
+        type="object", category=QC,
+    ),
+    "adjudication": _D(
+        "Resolve disagreements through an adjudication queue",
+        type="object", category=QC,
+    ),
+    "adjudication.include_machine_annotators": _D(
+        "Let declared tools and models into the queue as participants, so a "
+        "person resolves what they disagreed about. Off by default, which "
+        "leaves an existing queue unchanged",
+        type="boolean", default=False, category=QC,
+        see_also=("machine_annotators",),
+    ),
+    "adjudication.min_human_annotations": _D(
+        "How many people an item needs before it can be adjudicated, counted "
+        "separately from the participant total. Zero is deliberate: several "
+        "tools and no human annotator is a valid queue, because the "
+        "adjudicator is the person in that design",
+        type="integer", default=0, category=QC,
+        see_also=("machine_annotators", "adjudication"),
+    ),
+    "require_fully_annotated": _D(
+        "Refuse to advance until every scheme on the page has an answer",
+        type="boolean", category=QC,
+    ),
+
+    # ------------------------------------------------------------------ ai --
+    "ai_support": _D(
+        "Model-backed label suggestions shown alongside each item",
+        type="object", category=AI,
+    ),
+    "ai_support.enabled": _D(
+        "Turn AI assistance on. Without an endpoint that starts, the boot log "
+        "says so and no assistant appears",
+        type="boolean", default=False, category=AI,
+    ),
+    "ai_support.holdout": _D(
+        "A randomized no-assistance comparison group: a share of (annotator, "
+        "item) pairs see no AI assistance at all, so /admin can report whether "
+        "the assistance changed the answers",
+        type="object", category=AI,
+    ),
+    "ai_support.holdout.fraction": _D(
+        "Share of (annotator, item) pairs that get no AI assistance, from 0 to 1",
+        type="number", default=0, category=AI, minimum=0, maximum=1,
+    ),
+    "ai_support.holdout.salt": _D(
+        "Changes which pairs are held out. Keep it fixed for the life of a study",
+        type="string", default="", category=AI,
+    ),
+    "ai_support.endpoint_type": _D(
+        "Which backend to talk to, required when ai_support is enabled: "
+        "openai, openai_vision, anthropic, anthropic_vision, gemini, "
+        "huggingface, ollama, ollama_vision, openrouter (or open_router), "
+        "vllm, yolo. The decision models laya and systemone are refused here "
+        "(they cannot write text; use them in solo_mode.labeling_models or as "
+        "a labeling_engine decision source), and so are sam and sam3",
+        type="string", category=AI, example="vllm",
+    ),
+    "ai_support.ai_config": _D(
+        "Everything about the model itself: model, base_url, api_key, "
+        "max_tokens, temperature, timeout, include. One level deeper than the "
+        "obvious guess — ai_support.model is not read",
+        type="object", category=AI,
+    ),
+    "ai_support.ai_config.model": _D(
+        "Model name as the backend spells it",
+        type="string", category=AI, example="gpt-4o",
+    ),
+    "ai_support.ai_config.base_url": _D(
+        "An OpenAI-compatible server to use instead of the vendor's: vLLM, "
+        "SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes api_key "
+        "optional, because self-hosted servers do not have one",
+        type="string", category=AI, example="http://localhost:8000/v1",
+    ),
+    "ai_support.ai_config.api_key": _D(
+        "Key for a commercial endpoint. Not needed when base_url points at a "
+        "self-hosted server; openai and openai_vision also read OPENAI_API_KEY "
+        "from the environment",
+        type="string", category=AI,
+    ),
+    "ai_support.ai_config.max_tokens": _D(
+        "Cap on the reply. The multi-label formats (a rationale or a keyword "
+        "set for every label) need several hundred; below that the reply is "
+        "cut off and the assistant renders empty",
+        type="integer", default=800, category=AI, example=800,
+    ),
+    "ai_support.ai_config.temperature": _D(
+        "Sampling temperature, 0 to 2", type="number", default=0.1, category=AI,
+    ),
+    "ai_support.ai_config.timeout": _D(
+        "Seconds to wait for the model. Left out, each endpoint applies its "
+        "own: 30 for openai, anthropic, gemini, huggingface, vllm and "
+        "openrouter, 60 for ollama and the openai/anthropic vision endpoints, "
+        "120 for ollama_vision. There is no single default to quote here",
+        type="integer", category=AI, example=120,
+    ),
+    "ai_support.ai_config.include": _D(
+        "Which schemes get assistants. Off by default: without it every "
+        "assistant button is absent and the page renders an empty ai-help div",
+        type="object", category=AI,
+    ),
+    "ai_support.ai_config.include.all": _D(
+        "Show assistants on every scheme. This is the switch most authors "
+        "want, and nothing warns when it is missing",
+        type="boolean", default=False, category=AI, example=True,
+    ),
+    "ai_support.ai_config.include.special_include": _D(
+        "Per-page, per-scheme assistant list, keyed page number -> annotation "
+        "id -> list of assistant names. Use instead of include.all to show "
+        "assistants on some schemes only",
+        type="object", category=AI,
+    ),
+    "ai_support.ai_config_file": _D(
+        "Path to a separate YAML file holding the endpoint settings, so keys "
+        "stay out of the repo. Its keys are merged FLAT into ai_config, so the "
+        "file holds model/base_url/api_key directly — a nested ai_config: "
+        "block inside it becomes ai_config.ai_config and is ignored. "
+        "endpoint_type is the one key lifted to the ai_support level. A "
+        "missing file disables AI support with a warning, which "
+        "`validate --strict` treats as an error",
+        type="string", category=AI, example="ai-config.yaml",
+    ),
+    "ai_support.ai_config.api_base": _D(
+        "Older spelling of base_url, accepted by the openai_vision endpoint",
+        type="string", category=AI, see_also=("ai_support.ai_config.base_url",),
+    ),
+    "ai_support.ai_config.enabled": _D(
+        "Read by the visual endpoints as a per-endpoint off switch, leaving the "
+        "rest of ai_support in place",
+        type="boolean", default=True, category=AI,
+    ),
+    "ai_support.ai_config.detail": _D(
+        "How much of the image the model is charged for: low, high or auto "
+        "(openai_vision)",
+        type="string", default="auto", category=AI,
+    ),
+    "ai_support.ai_config.json_mode": _D(
+        "Ask the server to constrain output to JSON. Servers without "
+        "constrained decoding reject it; the endpoint notices and retries "
+        "without, so this rarely needs setting (openai_vision)",
+        type="boolean", default=True, category=AI,
+    ),
+    "ai_support.ai_config.max_image_size": _D(
+        "Longest edge, in pixels, an image is downscaled to before it is sent",
+        type="integer", category=AI,
+    ),
+    "ai_support.ai_config.think": _D(
+        "Let a reasoning model emit its thinking block. Off keeps the reply to "
+        "the answer (vllm)",
+        type="boolean", default=False, category=AI,
+    ),
+    "ai_support.ai_config.classes": _D(
+        "Detection classes to keep, by name. Anything else the detector finds "
+        "is dropped (yolo)",
+        type="array", category=AI,
+    ),
+    "ai_support.ai_config.custom_classes": _D(
+        "Open-vocabulary class names for a detector that accepts them, instead "
+        "of its trained label set",
+        type="array", category=AI,
+    ),
+    "ai_support.ai_config.confidence_threshold": _D(
+        "Lowest detection score kept", type="number", category=AI,
+    ),
+    "ai_support.ai_config.iou_threshold": _D(
+        "Overlap above which two detections are treated as the same object",
+        type="number", category=AI,
+    ),
+    "ai_support.ai_config.device": _D(
+        "Where a local model runs: cpu, cuda, mps",
+        type="string", category=AI,
+    ),
+    "ai_support.ai_config.max_frames": _D(
+        "Most frames sampled from a video for one request",
+        type="integer", category=AI,
+    ),
+    "ai_support.ai_config.default_video_fps": _D(
+        "Frame rate assumed when a video does not declare one",
+        type="number", category=AI,
+    ),
+    "ai_support.cache_config": _D(
+        "Disk cache and prefetch for model replies, so an annotator does not "
+        "wait for a generation the study has already paid for",
+        type="object", category=AI,
+    ),
+    "chat_support": _D(
+        "In-task chat with a model", type="object", category=AI,
+    ),
+    "chat_support.system_prompt": _D(
+        "Overrides what the chat assistant is told. Takes a `template` string, "
+        "which may interpolate `task_name`, `task_description`, "
+        "`annotation_labels`, `instance_text` and `instance_id`. The default "
+        "carries all of those and instructs the model not to name a label",
+        type="object", category=AI,
+    ),
+    "active_learning": _D(
+        "Order items by model uncertainty", type="object", category=AI,
+        see_also=("assignment_strategy",),
+    ),
+    "active_learning.enabled": _D(
+        "Turn active learning on. Also set `assignment_strategy: "
+        "active_learning`, or nothing reorders",
+        type="boolean", default=False, category=AI,
+    ),
+    "active_learning.classifier": _D(
+        "The model that scores unlabeled items. `{name: ...}`, optionally with "
+        "`hyperparameters`. `name` takes a short name (`logistic`, "
+        "`random_forest`, `svm`) or a fully qualified import path such as "
+        "`sklearn.linear_model.LogisticRegression`",
+        type="object", category=AI,
+    ),
+    "active_learning.vectorizer": _D(
+        "How items become features. `{name: ...}`, optionally with "
+        "`hyperparameters`. `name` takes `tfidf`, `count` or "
+        "`sentence-transformers`, or a fully qualified import path",
+        type="object", category=AI,
+    ),
+    "active_learning.min_annotations_per_instance": _D(
+        "How many annotations an item needs before it can be training data",
+        type="integer", default=1, category=AI,
+    ),
+    "active_learning.min_instances_for_training": _D(
+        "How many labeled items must exist before the first fit. Below this "
+        "the cold-start strategy decides the order",
+        type="integer", default=10, category=AI,
+    ),
+    "active_learning.max_instances_to_reorder": _D(
+        "Cap on how many unlabeled items are ranked per pass. They are "
+        "sampled, not taken from the head of the file",
+        type="integer", category=AI,
+    ),
+    "active_learning.update_frequency": _D(
+        "Retrain after this many new annotations",
+        type="integer", default=5, category=AI,
+    ),
+    "active_learning.resolution_strategy": _D(
+        "How several annotators\' labels become one training label: "
+        "majority_vote, first, or unanimous",
+        type="string", default="majority_vote", category=AI,
+    ),
+    "active_learning.random_sample_percent": _D(
+        "Fraction of each reordered batch left random, so the queue keeps "
+        "exploring instead of only exploiting the model",
+        type="number", default=0.2, category=AI,
+    ),
+    "active_learning.schema_names": _D(
+        "Which schemes are learned. Defaults to every scheme with something "
+        "learnable to predict",
+        type="array", category=AI,
+    ),
+    "active_learning.database": _D(
+        "Ignored. Run history is recorded through the project database and "
+        "needs no configuration",
+        type="object", category=AI,
+    ),
+    "active_learning.model_persistence": _D(
+        "Save fitted models to disk: `{enabled, save_directory, "
+        "retention_count}`",
+        type="object", category=AI,
+    ),
+    "active_learning.llm": _D(
+        "Use a model rather than a classifier for cold start and confidence: "
+        "`{enabled, endpoint_url, model_name}`",
+        type="object", category=AI,
+    ),
+    "active_learning.query_strategy": _D(
+        "What \"informative\" means: uncertainty, diversity, badge, bald or "
+        "hybrid",
+        type="string", default="uncertainty", category=AI,
+    ),
+    "active_learning.hybrid_weights": _D(
+        "Weights for `query_strategy: hybrid`. Must sum to 1.0",
+        type="object", default={"uncertainty": 0.7, "diversity": 0.3},
+        category=AI,
+    ),
+    "active_learning.cold_start_strategy": _D(
+        "How items are ordered before the first fit: random or llm",
+        type="string", default="random", category=AI,
+    ),
+    "active_learning.confidence_method": _D(
+        "How an LLM\'s confidence is read: logprobs, verbalized or "
+        "consistency",
+        type="string", category=AI,
+    ),
+    "active_learning.classifier_params": _D(
+        "Extra keyword arguments passed to the classifier constructor",
+        type="object", category=AI,
+    ),
+    "active_learning.vectorizer_params": _D(
+        "Extra keyword arguments passed to the vectorizer constructor. A YAML "
+        "list for `ngram_range` is coerced to the tuple sklearn wants",
+        type="object", category=AI,
+    ),
+    "active_learning.calibrate_probabilities": _D(
+        "Calibrate the fitted model\'s probabilities, and keep the "
+        "calibration only when it measurably helps",
+        type="boolean", default=True, category=AI,
+    ),
+    "active_learning.bald_params": _D(
+        "Ensemble size and bootstrap fraction for `query_strategy: bald`",
+        type="object", default={"n_estimators": 5, "bootstrap_fraction": 0.8},
+        category=AI,
+    ),
+    "active_learning.use_icl_ensemble": _D(
+        "Blend in-context-learning predictions into the ranking",
+        type="boolean", default=False, category=AI,
+    ),
+    "active_learning.icl_ensemble_params": _D(
+        "How the ICL weight decays as real annotations accumulate",
+        type="object", category=AI,
+    ),
+    "active_learning.annotation_routing": _D(
+        "Not read: nothing routes items on model confidence, and the key is "
+        "named at boot if set. Accepting machine labels above a confidence "
+        "is a `labeling_engine` contract",
+        type="boolean", default=False, category=AI,
+    ),
+    "active_learning.routing_thresholds": _D(
+        "Not read; see `annotation_routing`",
+        type="object", category=AI,
+    ),
+    "active_learning.classifier_name": _D(
+        "Flat form of `classifier.name`",
+        type="string", default="sklearn.linear_model.LogisticRegression",
+        category=AI, see_also=("active_learning.classifier",),
+    ),
+    "active_learning.classifier_kwargs": _D(
+        "Flat form of `classifier.hyperparameters`; merged with "
+        "`classifier_params`",
+        type="object", category=AI, see_also=("active_learning.classifier",),
+    ),
+    "active_learning.vectorizer_name": _D(
+        "Flat form of `vectorizer.name`",
+        type="string",
+        default="sklearn.feature_extraction.text.TfidfVectorizer",
+        category=AI, see_also=("active_learning.vectorizer",),
+    ),
+    "active_learning.vectorizer_kwargs": _D(
+        "Flat form of `vectorizer.hyperparameters`; merged with "
+        "`vectorizer_params`",
+        type="object", category=AI, see_also=("active_learning.vectorizer",),
+    ),
+    "active_learning.cold_start_batch_size": _D(
+        "How many unannotated items `cold_start_strategy: llm` samples for "
+        "the LLM to score",
+        type="integer", default=20, category=AI,
+    ),
+    "active_learning.model_persistence_enabled": _D(
+        "Flat form of `model_persistence.enabled`",
+        type="boolean", default=False, category=AI,
+        see_also=("active_learning.model_persistence",),
+    ),
+    "active_learning.model_save_directory": _D(
+        "Flat form of `model_persistence.save_directory`",
+        type="string", category=AI,
+        see_also=("active_learning.model_persistence",),
+    ),
+    "active_learning.model_retention_count": _D(
+        "Flat form of `model_persistence.retention_count`",
+        type="integer", default=2, category=AI,
+        see_also=("active_learning.model_persistence",),
+    ),
+    "active_learning.llm_enabled": _D(
+        "Flat form of `llm.enabled`",
+        type="boolean", default=False, category=AI,
+        see_also=("active_learning.llm",),
+    ),
+    "active_learning.llm_config": _D(
+        "Flat form of the `llm` block",
+        type="object", category=AI, see_also=("active_learning.llm",),
+    ),
+    "active_learning.verification_sample_rate": _D(
+        "Not read, and named at boot if set. The auto-label spot-check rate "
+        "is `icl_labeling.verification.sample_rate`",
+        type="number", category=AI,
+    ),
+
+    "icl_labeling": _D(
+        "In-context-learning labeler that builds few-shot prompts from "
+        "high-confidence annotations already collected. Configured in four "
+        "nested blocks, not as flat keys",
+        type="object", category=AI,
+    ),
+    "icl_labeling.enabled": _D(
+        "Turn the labeler on", type="boolean", default=False, category=AI,
+    ),
+    "icl_labeling.example_selection": _D(
+        "Which annotations become few-shot examples",
+        type="object", category=AI,
+    ),
+    "icl_labeling.example_selection.min_agreement_threshold": _D(
+        "How much annotators must agree before an item can be an example",
+        type="number", default=0.8, category=AI,
+    ),
+    "icl_labeling.example_selection.min_annotators_per_instance": _D(
+        "How many annotators an item needs before it can be an example. The "
+        "default of 2 makes the labeler inert on a study with "
+        "`num_annotators_per_item: 1` -- no item can ever qualify",
+        type="integer", default=2, category=AI,
+    ),
+    "icl_labeling.example_selection.max_examples_per_schema": _D(
+        "Cap on few-shot examples per scheme",
+        type="integer", default=10, category=AI,
+    ),
+    "icl_labeling.example_selection.refresh_interval_seconds": _D(
+        "How often the example set is rebuilt from new annotations",
+        type="integer", default=300, category=AI,
+    ),
+    "icl_labeling.llm_labeling": _D(
+        "When and how much the model labels", type="object", category=AI,
+    ),
+    "icl_labeling.llm_labeling.batch_size": _D(
+        "Instances per labeling batch", type="integer", default=20,
+        category=AI,
+    ),
+    "icl_labeling.llm_labeling.trigger_threshold": _D(
+        "New annotations needed before a batch runs", type="integer",
+        default=5, category=AI,
+    ),
+    "icl_labeling.llm_labeling.confidence_threshold": _D(
+        "Predictions below this are not kept", type="number", default=0.7,
+        category=AI,
+    ),
+    "icl_labeling.llm_labeling.batch_interval_seconds": _D(
+        "Minimum wait between batches", type="integer", default=600,
+        category=AI,
+    ),
+    "icl_labeling.llm_labeling.max_total_labels": _D(
+        "Hard cap on how many instances the model may label in total",
+        type="integer", category=AI,
+    ),
+    "icl_labeling.llm_labeling.max_unlabeled_ratio": _D(
+        "Largest share of the unlabeled pool the model may take",
+        type="number", default=0.5, category=AI,
+    ),
+    "icl_labeling.llm_labeling.pause_on_low_accuracy": _D(
+        "Stop labeling when verification says the model is wrong too often",
+        type="boolean", default=True, category=AI,
+    ),
+    "icl_labeling.llm_labeling.min_accuracy_threshold": _D(
+        "The accuracy below which labeling pauses", type="number",
+        default=0.7, category=AI,
+    ),
+    "icl_labeling.verification": _D(
+        "Blind human checking of the model\'s labels",
+        type="object", category=AI,
+    ),
+    "icl_labeling.verification.enabled": _D(
+        "Route a sample of model labels to annotators", type="boolean",
+        default=True, category=AI,
+    ),
+    "icl_labeling.verification.sample_rate": _D(
+        "Share of model-labeled instances sent for checking", type="number",
+        default=0.2, category=AI,
+    ),
+    "icl_labeling.verification.selection_strategy": _D(
+        "Which of them to check: low_confidence or random", type="string",
+        default="low_confidence", category=AI,
+    ),
+    "icl_labeling.verification.mix_with_regular_assignments": _D(
+        "Hand verification items out through the normal assignment queue, "
+        "rather than only on request",
+        type="boolean", default=True, category=AI,
+    ),
+    "icl_labeling.verification.assignment_mix_rate": _D(
+        "Share of assignments that are verification items, when they are "
+        "mixed in",
+        type="number", default=0.2, category=AI,
+    ),
+    "icl_labeling.persistence": _D(
+        "Where predictions are written", type="object", category=AI,
+    ),
+    "icl_labeling.persistence.predictions_file": _D(
+        "Filename for the stored predictions, under the output directory",
+        type="string", default="icl_predictions.json", category=AI,
+    ),
+
+    # ------------------------------------------------------------------ ui --
+    "instance_display": _D(
+        "How each item is rendered: one entry per field, with a type drawn from "
+        "the display registry (text, image, audio, video, ...)",
+        type="object", category=UI,
+    ),
+    "ui": _D(
+        "Interface toggles. `ui.theme` (auto | light | dark, default auto) "
+        "sets the annotator pages' theme: auto follows the browser and shows a "
+        "toggle; light or dark gives every annotator that theme",
+        type="object", category=UI),
+    "ui_config": _D("Additional interface settings", type="object", category=UI),
+    "ui_language": _D(
+        "Interface language code", type="string", default="en", category=UI,
+    ),
+    # /admin/iaa agreement-drift strings. Every OTHER ui_language.* key
+    # predates the coverage ratchet and sits on the legacy exemption list;
+    # new ones are documented here so the published JSON Schema, the config
+    # reference and describe_config_key all know about them.
+    "ui_language.catalog_to_training_button": _D(
+        "Label of the Catalog button that pins a slice's items to the train "
+        "split of later training runs",
+        type="string", default="Train on these", category=UI,
+    ),
+    "ui_language.catalog_to_training_title": _D(
+        "Tooltip of the Catalog's Train on these button",
+        type="string", category=UI,
+    ),
+    "ui_language.catalog_status_pinning": _D(
+        "Catalog status line while a slice is being pinned for training",
+        type="string", default="Pinning…", category=UI,
+    ),
+    "ui_language.catalog_status_pinned_mid": _D(
+        "Catalog status line after pinning, between the count of new items "
+        "and the total",
+        type="string", category=UI,
+    ),
+    "ui_language.catalog_status_pinned_total": _D(
+        "Catalog status line after pinning, after the total pinned count",
+        type="string", default="pinned in all", category=UI,
+    ),
+    "ui_language.catalog_builtin": _D(
+        "Marker beside a built-in slice, such as model-found-nothing, on the "
+        "Catalog page",
+        type="string", default="built-in", category=UI,
+    ),
+    "ui_language.jump_unannotated_label": _D(
+        "Caption between the header's jump-to-unlabeled buttons (shown at "
+        "1200px and wider)",
+        type="string", default="Unlabeled", category=UI,
+    ),
+    "ui_language.dark_mode": _D(
+        "Label of the light/dark toggle on annotator pages",
+        type="string", default="Dark mode", category=UI,
+    ),
+    "ui_language.sign_in_opens_new_tab": _D(
+        "Note under the single sign-on buttons when the login page is shown "
+        "inside another site's frame, where sign-in opens in a new tab",
+        type="string", default="Sign-in opens in a new tab.", category=UI,
+    ),
+    "ui_language.image_to_annotate": _D(
+        "Heading above an item whose text field embeds an image",
+        type="string", default="Image to Annotate:", category=UI,
+    ),
+    "ui_language.iaa_drift_title": _D(
+        "Heading of the agreement-over-time section on /admin/iaa",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_note": _D(
+        "Sentence explaining what a window is and how it is scored",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_recalibrate": _D(
+        "Label on the prompt raised when agreement falls below baseline",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_below_baseline": _D(
+        "Phrase following the percentage in the re-calibration prompt",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_baseline": _D(
+        "Row label for the whole-project agreement figure",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_th_window": _D(
+        "Short column prefix for a window, e.g. the W in W1, W2",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_sparse": _D(
+        "Note on a window holding too few items to judge",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_codebook_changes": _D(
+        "Label preceding the list of codebook revisions on the timeline",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_approx": _D(
+        "Marks a codebook revision whose date was inferred rather than recorded",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_untimed": _D(
+        "Note about items with no timestamp, which cannot be placed on the "
+        "timeline",
+        type="string", category=UI,
+    ),
+    "layout": _D(
+        "How the annotation questions are arranged on the page: a grid, "
+        "collapsible groups, an explicit order, and responsive breakpoints. "
+        "Without it every scheme stacks full-width in config order",
+        type="object", category=UI,
+        see_also=("layout.grid", "layout.groups", "layout.order"),
+    ),
+    "layout.grid": _D(
+        "Grid the question forms are laid out in",
+        type="object", category=UI, example={"columns": 2, "gap": "1rem"},
+    ),
+    "layout.grid.columns": _D(
+        "Columns in the form grid, 1 to 6. A scheme spans one unless its own "
+        "layout.columns says otherwise",
+        type="integer", default=2, category=UI,
+    ),
+    "layout.grid.gap": _D(
+        "CSS gap between forms, as a string", type="string", default="1rem",
+        category=UI, example="0.75rem",
+    ),
+    "layout.grid.row_gap": _D(
+        "CSS gap between rows, when it should differ from gap",
+        type="string", category=UI, example="0.75rem",
+    ),
+    "layout.grid.align_items": _D(
+        "Vertical alignment within a row: start, center, end or stretch",
+        type="string", default="start", category=UI,
+    ),
+    "layout.groups": _D(
+        "Collapsible titled sections, each holding named schemes. The way to "
+        "keep a long question list navigable",
+        type="array", category=UI,
+        see_also=("layout.order",),
+    ),
+    "layout.groups.id": _D(
+        "Identifier for the group, unique within layout.groups. Required",
+        type="string", category=UI, required=True,
+    ),
+    "layout.groups.schemas": _D(
+        "Names of the annotation schemes this group holds, in the order they "
+        "should appear. Required, non-empty, and every name must be a real "
+        "scheme -- an unknown one fails validation",
+        type="array", category=UI, required=True,
+    ),
+    "layout.groups.title": _D(
+        "Heading shown on the group", type="string", category=UI,
+    ),
+    "layout.groups.description": _D(
+        "Line of explanation under the group heading",
+        type="string", category=UI,
+    ),
+    "layout.groups.collapsible": _D(
+        "Let annotators fold the group away", type="boolean", category=UI,
+    ),
+    "layout.groups.collapsed_default": _D(
+        "Start the group folded. Only sensible for questions most items do "
+        "not need, since a folded question is one annotators skip",
+        type="boolean", category=UI,
+    ),
+    "layout.groups.background_color": _D(
+        "CSS colour for this group, overriding the alternating default",
+        type="string", category=UI, example="#f8f9fc",
+    ),
+    "layout.order": _D(
+        "Scheme names in the order they should appear, overriding config order",
+        type="array", category=UI,
+    ),
+    "layout.breakpoints": _D(
+        "Viewport widths, in pixels, where the grid reduces",
+        type="object", category=UI, example={"mobile": 480, "tablet": 768},
+    ),
+    "layout.breakpoints.mobile": _D(
+        "Below this width the grid collapses to one column",
+        type="integer", default=480, category=UI,
+    ),
+    "layout.breakpoints.tablet": _D(
+        "Below this width column spans are reduced",
+        type="integer", default=768, category=UI,
+    ),
+    "layout.styling": _D(
+        "Colours, padding and alignment for groups and forms",
+        type="object", category=UI,
+        see_also=("layout.grid",),
+    ),
+    "layout.styling.align_items": _D(
+        "Vertical alignment of forms inside a group: start, center, end or "
+        "stretch",
+        type="string", default="start", category=UI,
+    ),
+    "layout.styling.content_align": _D(
+        "Horizontal alignment of the content inside a form: left, center or "
+        "right",
+        type="string", default="left", category=UI,
+    ),
+    "layout.styling.group_background_odd": _D(
+        "Background colour for odd-numbered groups",
+        type="string", default="#fafafa", category=UI,
+    ),
+    "layout.styling.group_background_even": _D(
+        "Background colour for even-numbered groups",
+        type="string", default="#f8f9fc", category=UI,
+    ),
+    "layout.styling.group_padding": _D(
+        "CSS padding inside a group", type="string", default="0.5rem 0.75rem",
+        category=UI,
+    ),
+    "layout.styling.form_padding": _D(
+        "CSS padding inside one question form", type="string",
+        default="0.375rem 0.5rem", category=UI,
+    ),
+    "task_layout": _D(
+        "Custom HTML for the annotation form area", type="string", category=UI,
+    ),
+    "base_css": _D("Extra stylesheet to load", type="string", category=UI),
+    "hide_navbar": _D("Hide the top navigation bar", type="boolean", category=UI),
+    "list_as_text": _D(
+        "How a list-valued field is laid out. Sub-keys: "
+        "text_list_prefix_type (alphabet, number, bullet or none), "
+        "horizontal, alternating_shading. `true` turns it on with the "
+        "defaults",
+        type="object", category=UI,
+        example={"text_list_prefix_type": "number", "alternating_shading": True},
+    ),
+    "horizontal_key_bindings": _D(
+        "Lay keyboard shortcut hints out horizontally", type="boolean", category=UI,
+    ),
+    "jumping_to_id_disabled": _D(
+        "Remove the jump-to-item control", type="boolean", category=UI,
+    ),
+    "format_handling": _D(
+        "How rich text and markup in item fields are rendered",
+        type="object", category=UI,
+    ),
+
+    # ------------------------------------------------------------- content --
+    "annotation_instructions": _D(
+        "Instructions shown on every annotation page, as inline text; a filename here renders as that filename", type="string", category=CONTENT,
+    ),
+    "credentials": _D(
+        "How credentials in the config are resolved before use",
+        type="object", category=SERVER,
+        example={"env_substitution": True, "env_file": ".env"},
+    ),
+    "credentials.env_substitution": _D(
+        "Expand ${VAR} references in config values from the environment",
+        type="boolean", default=True, category=SERVER,
+    ),
+    "credentials.env_file": _D(
+        "Path to a .env file loaded before substitution",
+        type="string", category=SERVER,
+    ),
+    "annotation_codebook_url": _D(
+        "Link to an external codebook, shown to annotators",
+        type="string", category=CONTENT,
+    ),
+    "custom_footer_html": _D("HTML appended to every page", type="string", category=CONTENT),
+    "header_file": _D(
+        "Ignored. The header template path is no longer configurable, and "
+        "nothing reads this key -- `potato validate` reports it",
+        type="string", category=CONTENT,
+    ),
+    "header_logo": _D("Logo image shown in the header", type="string", category=CONTENT),
+    "completion_code": _D(
+        "Code shown when an annotator finishes, for crowdsourcing payout",
+        type="string", category=CONTENT,
+    ),
+    "keyword_highlights_file": _D(
+        "File of keywords to highlight in item text. A CSV or TSV with a "
+        "`keyword` header column (plus optional label, schema, color) is the "
+        "documented form; one keyword per line, and JSON/JSONL/YAML holding a "
+        "keyword list, an object list or a {keyword: label} map, are read too. "
+        "A `*` in a keyword matches any run of word characters. See "
+        "docs/administration/productivity.md",
+        type="string", category=CONTENT, example="keywords.csv",
+    ),
+    "keyword_highlight_settings": _D(
+        "Styling for keyword highlights", type="object", category=CONTENT,
+    ),
+    "highlight_linebreaks": _D(
+        "Make line breaks visible in item text", type="boolean", category=CONTENT,
+    ),
+
+    # -------------------------------------------------------- integrations --
+    "crowdsourcing": _D(
+        "Crowd platform integration (Prolific, MTurk and others)",
+        type="object", category=INTEG,
+    ),
+    "mcp": _D(
+        "Model Context Protocol control surface, letting an agent query and "
+        "control this running task. Off unless every tool is named explicitly",
+        type="object", category=INTEG, see_also=("debug",),
+    ),
+    "mcp.enabled": _D(
+        "Register the /api/mcp/* endpoints. Without this they do not exist",
+        type="boolean", default=False, category=INTEG,
+    ),
+    "mcp.tools": _D(
+        "Allowlist of tool names an agent may call. Empty grants nothing, and "
+        "an unrecognized name fails at startup rather than warning",
+        type="array", category=INTEG,
+    ),
+    "mcp.destructive": _D(
+        "Second, separate opt-in for tools that discard work. A destructive "
+        "tool must appear here and in mcp.tools, and callers must pass "
+        "confirm: true",
+        type="array", category=INTEG, see_also=("mcp.tools",),
+    ),
+    "mcp.scope": _D(
+        "Limits on what agents may touch, e.g. `users` to restrict which "
+        "annotators they can act on",
+        type="object", category=INTEG,
+    ),
+    "mcp.auth": _D(
+        "Where per-agent tokens live. `tokens_file` defaults to "
+        "mcp_tokens.json under task_dir",
+        type="object", category=INTEG,
+    ),
+    "mcp.audit_log": _D(
+        "File recording every MCP call and refusal, one JSON object per line",
+        type="string", default="mcp_audit.jsonl", category=INTEG,
+    ),
+    "mcp.allow_debug": _D(
+        "Permit the MCP surface on a debug server. Off by default: debug "
+        "opens admin pages without a key to requests from this machine, and a "
+        "tunnel or proxy on it that adds no forwarding header passes every "
+        "caller through as local",
+        type="boolean", default=False, category=INTEG, see_also=("debug",),
+    ),
+    "trace_ingestion": _D(
+        "Accept agent traces posted to /api/traces/*",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.enabled": _D(
+        "Register the trace webhook endpoints", type="boolean", default=False,
+        category=INTEG,
+    ),
+    "trace_ingestion.api_key": _D(
+        "Shared secret for the trace webhooks, accepted as either "
+        "Authorization: Bearer or X-API-Key",
+        type="string", category=INTEG,
+    ),
+    "trace_ingestion.allow_unauthenticated": _D(
+        "Accept trace posts with no api_key set. Off by default: without it the "
+        "webhook endpoints reject every request rather than running open",
+        type="boolean", default=False, category=INTEG,
+        see_also=("trace_ingestion.api_key",),
+    ),
+    "trace_ingestion.sources": _D(
+        "Upstream trace sources to poll", type="array", category=INTEG,
+    ),
+    "trace_ingestion.notify_annotators": _D(
+        "Push newly ingested traces to connected annotators",
+        type="boolean", category=INTEG,
+    ),
+    "trace_ingestion.writeback": _D(
+        "Send each ingested trace's merged answers back to Langfuse (as scores) "
+        "or LangSmith (as feedback), with the annotator count and agreement",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.writeback.trigger": _D(
+        "When to send: fully_annotated (once min_annotators have answered) or "
+        "adjudicated (only after an adjudication decision). An adjudication is "
+        "sent in either mode",
+        type="string", default="fully_annotated",
+        example="adjudicated", category=INTEG,
+    ),
+    "trace_ingestion.writeback.score_prefix": _D(
+        "Scores are named <score_prefix>.<scheme name>",
+        type="string", default="potato", category=INTEG,
+    ),
+    "trace_ingestion.writeback.min_annotators": _D(
+        "Annotators a trace needs before it is sent. Defaults to the study's "
+        "per-item cap, or 2 when there is none",
+        type="integer", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse": _D(
+        "Langfuse host and the environment variables holding its keys. The "
+        "host and keys default to a configured langfuse source's",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.host": _D(
+        "Langfuse base URL", type="string", default="https://cloud.langfuse.com",
+        category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.public_key_env": _D(
+        "Environment variable holding the Langfuse public key",
+        type="string", default="LANGFUSE_PUBLIC_KEY", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.secret_key_env": _D(
+        "Environment variable holding the Langfuse secret key",
+        type="string", default="LANGFUSE_SECRET_KEY", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langfuse.score_configs": _D(
+        "Attach a Langfuse score config to each categorical or numeric score, "
+        "creating it from the scheme's labels if missing. Multiselect and text "
+        "schemes never get one",
+        type="boolean", default=False, category=INTEG,
+    ),
+    "trace_ingestion.writeback.langsmith": _D(
+        "LangSmith API URL and the environment variable holding its key",
+        type="object", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langsmith.api_url": _D(
+        "LangSmith API base URL", type="string",
+        default="https://api.smith.langchain.com", category=INTEG,
+    ),
+    "trace_ingestion.writeback.langsmith.api_key_env": _D(
+        "Environment variable holding the LangSmith API key",
+        type="string", default="LANGSMITH_API_KEY", category=INTEG,
+    ),
+    "agent_proxy": _D(
+        "Run an agent as the subject of annotation. This block only configures "
+        "the backend -- to put the chat on the page, add an `instance_display` "
+        "field of `type: interactive_chat`, which renders the panel the "
+        "annotator talks to. Connection settings (api_key, base_url, model) "
+        "may be written directly in the block or under `ai_config` inside it, "
+        "as the other model-backed blocks take them; a `base_url` pointing at "
+        "an OpenAI-compatible server needs no key. Set `enabled: false` to "
+        "turn it off without deleting the block",
+        type="object", category=INTEG,
+        see_also=("instance_display", "ai_support"),
+        example={"type": "openai",
+                 "ai_config": {"model": "gpt-4o-mini"}},
+    ),
+    "database": _D("Database connection for item or user storage", type="object", category=INTEG),
+
+    # ------------------------------------------------------------- debug ---
+    "debug": _D(
+        "Run in debug mode. Admin pages open without a key for requests from "
+        "this machine, and with debug_phase every visitor is signed in as a "
+        "shared debug_user, so it must never be set on a deployed server",
+        type="boolean", default=False, category=DEBUG,
+        see_also=("admin_api_key",),
+    ),
+    "debug_phase": _D(
+        "Jump straight to a workflow phase, for UI debugging",
+        type="string", category=DEBUG, example="annotation",
+    ),
+    "ui_debug": _D(
+        "Print browser-side debug logging to the console",
+        type="boolean", default=False, category=DEBUG,
+    ),
+    "debug_log": _D(
+        "Which halves of the debug logging to turn on: all, ui, server or none. "
+        "The --debug-log flag writes this key",
+        type="string", category=DEBUG, example="server",
+        see_also=("ui_debug", "server_debug"),
+    ),
+    "server_debug": _D(
+        "Backend debug logging. Note that only the phase pages (consent, "
+        "instructions, surveys) read this key; the annotation page asks the "
+        "logging module, which is driven by debug_log/verbose/debug",
+        type="boolean", default=False, category=DEBUG,
+        see_also=("debug_log",),
+    ),
+    "verbose": _D(
+        "Raise the log level. --verbose writes this key",
+        type="boolean", default=False, category=DEBUG,
+    ),
+    "very_verbose": _D(
+        "Raise the log level further; equivalent to debug for logging purposes, "
+        "without debug's effect on authentication. --veryVerbose writes this key",
+        type="boolean", default=False, category=DEBUG, see_also=("debug",),
+    ),
+
+    # ----------------------------------------------------------------- qda --
+    "qda_mode": _D(
+        "Qualitative data analysis mode. Turning it on moves the defaults for "
+        "memos, the codebook and case grouping together, rather than each "
+        "being switched on separately",
+        type="object", category=QDA,
+        see_also=("codebook", "annotation_ui", "cases"),
+    ),
+    "qda_mode.enabled": _D(
+        "Master switch for QDA mode", type="boolean", default=False, category=QDA,
+    ),
+    "qda_mode.memos": _D(
+        "Whether the Notes sidebar starts open under QDA mode: it does when "
+        "`enabled` and `show_sidebar_by_default` (both default true) are both "
+        "true. It does not switch memos on or off; annotation_ui.memos does",
+        type="object", category=QDA, see_also=("annotation_ui.memos",),
+    ),
+    "qda_mode.codebook": _D(
+        "QDA codebook settings. `mode` (default open) sets the codebook mode "
+        "under QDA mode; codebook_mode and codebook.mode take precedence over "
+        "it. `enabled` is informational, reported by /qda/status and read by "
+        "nothing else. Sub-keys of qda_mode are not recursed into, so an "
+        "unrecognized block is carried through for forward compatibility -- "
+        "and a typo passes silently",
+        type="object", category=QDA, see_also=("codebook",),
+    ),
+    "codebook": _D(
+        "The shared label set a scheme opts into with a scheme-level "
+        "`codebook: true`, edited from /codebook and stored per project",
+        type="object", category=QDA, see_also=("codebook_mode",),
+    ),
+    "codebook.enabled": _D(
+        "Force the codebook on or off. Left unset it turns itself on when a "
+        "scheme sets `codebook: true`, or under qda_mode/solo_mode",
+        type="boolean", category=QDA,
+    ),
+    "codebook.mode": _D(
+        "Who may change codes: fixed, extensible (annotators may add) or open "
+        "(annotators may add and edit)",
+        type="string", category=QDA, example="extensible",
+        see_also=("codebook_mode",),
+    ),
+    "codebook.distiller": _D(
+        "What the distilled, prompt-facing view of the codebook contains: "
+        "include, include_types, include_doc_sections, scope, procedure, max_chars",
+        type="object", category=QDA,
+    ),
+    "codebook_mode": _D(
+        "Top-level shorthand for codebook.mode, and the value that wins when "
+        "both are set. Unset it resolves to open under qda_mode/solo_mode and "
+        "fixed otherwise. A crowd backend force-locks fixed: any "
+        "crowdsourcing.provider except expert (including a name Potato does "
+        "not recognize), a top-level mturk/prolific block, or login.type "
+        "mturk/prolific. login.type: url_direct on its own does NOT lock -- "
+        "it warns, because anyone with the link can self-register",
+        type="string", category=QDA, example="open",
+        see_also=("codebook.mode", "crowdsourcing"),
+    ),
+    "codebook_invivo_key": _D(
+        "Key that opens the in-vivo 'code from selection' composer while text "
+        "is selected in a codebook-backed span scheme. Only the first character "
+        "is used",
+        type="string", default="i", category=QDA, see_also=("codebook",),
+    ),
+    "annotation_ui": _D(
+        "Annotation-surface toggles that are not gated on QDA mode",
+        type="object", category=QDA,
+    ),
+    "annotation_ui.memos": _D(
+        "Show the memo sidebar. Unset means off in standard mode and on under "
+        "qda_mode/solo_mode; set explicitly it wins either way",
+        type="boolean", category=QDA, see_also=("qda_mode.memos",),
+    ),
+    "annotation_ui.visibility": _D(
+        "Visibility a new memo gets: private or shared. Anything else falls "
+        "back to private",
+        type="string", default="private", category=QDA,
+    ),
+    "cases": _D(
+        "Group instances into units of analysis -- a participant, an interview "
+        "-- so codes can be counted per case rather than per item",
+        type="object", category=QDA, see_also=("qda_mode", "sessions"),
+    ),
+    "cases.enabled": _D(
+        "Turn case grouping on or off explicitly. Unset, it follows qda_mode",
+        type="boolean", category=QDA,
+    ),
+    "cases.key": _D(
+        "Item field to group on. Unset, detection scans participant_id, "
+        "respondent_id and case_id",
+        type="string", category=QDA, example="participant_id",
+    ),
+    "cases.auto_detect": _D(
+        "Scan loaded items for cases at startup. Set false to skip detection; "
+        "no cases are then created, since no page or HTTP endpoint assigns "
+        "them (only the Python function potato.cases.assign_instance does)",
+        type="boolean", default=True, category=QDA,
+    ),
+    "cases.attributes": _D(
+        "Item fields lifted onto the case so they can be crosstabbed",
+        type="array", category=QDA,
+    ),
+    "search": _D(
+        "Full-text search over loaded items, backed by SQLite FTS5. Admin "
+        "search is read-only and always available; annotator search-and-claim "
+        "is a separate opt-in",
+        type="object", category=QDA,
+    ),
+    "search.enabled": _D(
+        "Build the search index at startup", type="boolean", default=True, category=QDA,
+    ),
+    "search.backend": _D(
+        "Index backend. fts5 is the only one built in; any other name disables "
+        "search with a warning",
+        type="string", default="fts5", category=QDA,
+    ),
+    "search.max_instances": _D(
+        "Ceiling on how many instances are indexed",
+        type="integer", default=100000, category=QDA,
+    ),
+    "search.annotator_claim": _D(
+        "Let annotators search the corpus and add matching items to the end "
+        "of their queue. Claims count toward max_annotations_per_user. "
+        "Refused at startup when combined with a sampling-dependent assignment "
+        "strategy, overlap (more than one annotator per item), attention "
+        "checks or gold standards, ICL labeling, adjudication, or a "
+        "crowdsourcing backend, since self-selection breaks each of them. "
+        "Allowed under qda_mode/solo_mode; qda_mode with overlap logs a "
+        "warning",
+        type="boolean", default=False, category=QDA,
+        see_also=("assignment_strategy", "num_annotators_per_item"),
+    ),
+
+    # ---------------------------------------------------- advanced features --
+    "psychometrics": _D(
+        "Live IRT. Fits item difficulty and annotator ability as labels arrive, "
+        "so labels carry error bars and confident items can stop early",
+        type="object", category=FEATURES, see_also=("assignment_strategy",),
+    ),
+    "psychometrics.enabled": _D(
+        "Fit the model and serve the dashboard. Adaptive routing additionally "
+        "needs assignment_strategy: psychometric",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "psychometrics.schema": _D(
+        "Scheme the model scores. Defaults to the first radio or likert scheme",
+        type="string", category=FEATURES,
+    ),
+    "psychometrics.refit_interval": _D(
+        "Refit once this many new labels have arrived since the last fit",
+        type="integer", default=5, category=FEATURES,
+    ),
+    "psychometrics.min_observations": _D(
+        "Cold-start gate: routing falls back to random until this many labels "
+        "exist, so early assignments build the overlap the model needs",
+        type="integer", default=20, category=FEATURES,
+    ),
+    "psychometrics.min_annotators_per_item": _D(
+        "Floor before an item may be stopped early, however confident the posterior",
+        type="integer", default=2, category=FEATURES,
+    ),
+    "psychometrics.confidence_threshold": _D(
+        "Posterior probability at which an item counts as resolved. Outside "
+        "0.5-1.0 it is ignored and 0.95 used",
+        type="number", default=0.95, category=FEATURES,
+    ),
+    "psychometrics.cost_per_judgment": _D(
+        "Cost of one judgment, used to price the saved judgments on the dashboard",
+        type="number", category=FEATURES,
+    ),
+    "psychometrics.include_machine_annotators": _D(
+        "Score declared machine raters alongside people. Off by default so an "
+        "existing study's estimates do not move when a machine annotator is "
+        "declared. On, the model fits an ability per annotation tool and a "
+        "difficulty per item from disagreement alone, with no gold labels -- "
+        "but tools sharing a reference database make correlated errors, which "
+        "inflates the apparent ability of the majority cluster",
+        type="boolean", default=False, category=FEATURES,
+        see_also=("machine_annotators",),
+    ),
+    "psychometrics.discrimination_flag_threshold": _D(
+        "Items whose ability-versus-correctness correlation falls below this "
+        "are flagged as likely codebook bugs",
+        type="number", default=-0.2, category=FEATURES,
+    ),
+    "mace": _D(
+        "MACE competence estimation: infers per-annotator reliability and a "
+        "predicted label per item from the disagreement pattern alone",
+        type="object", category=FEATURES, see_also=("agreement_metrics",),
+    ),
+    "mace.enabled": _D("Run MACE", type="boolean", default=False, category=FEATURES),
+    "mace.min_annotations_per_item": _D(
+        "Items with fewer annotators than this are left out of the fit",
+        type="integer", default=3, category=FEATURES,
+    ),
+    "mace.min_items": _D(
+        "Refuse to fit until this many eligible items exist",
+        type="integer", default=5, category=FEATURES,
+    ),
+    "mace.trigger_every_n": _D(
+        "Refit after this many new annotations", type="integer", default=10,
+        category=FEATURES,
+    ),
+    "mace.num_restarts": _D(
+        "EM restarts; the best-scoring run is kept", type="integer", default=10,
+        category=FEATURES,
+    ),
+    "mace.num_iters": _D(
+        "EM iterations per restart", type="integer", default=50, category=FEATURES,
+    ),
+    "rooms": _D(
+        "Multiplayer rooms at /rooms: live norming sessions, adjudication "
+        "huddles and shadowing over a shared event log",
+        type="object", category=FEATURES,
+    ),
+    "rooms.enabled": _D(
+        "Register the /rooms surface", type="boolean", default=False, category=FEATURES,
+    ),
+    "rooms.who_can_create": _D(
+        "Who may open a room: any member, or admin only",
+        type="string", default="any", category=FEATURES,
+    ),
+    "rooms.persist_votes": _D(
+        "Write a room's final vote into each member's own annotations",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "rooms.poll_interval_ms": _D(
+        "How often clients poll for room events. Clamped to 500-30000",
+        type="integer", default=1500, category=FEATURES,
+    ),
+    "rooms.max_members": _D(
+        "Members allowed in one room. Clamped to 2-100",
+        type="integer", default=12, category=FEATURES,
+    ),
+    "rooms.schema": _D(
+        "Scheme members vote on. Defaults to the first radio or likert scheme; "
+        "with neither present, rooms disable themselves",
+        type="string", category=FEATURES,
+    ),
+    "collab": _D(
+        "Live collaborative sessions at /collab: a team labels the same items "
+        "together, sharing one answer stored under a team user",
+        type="object", category=FEATURES, see_also=("rooms",),
+    ),
+    "collab.enabled": _D(
+        "Register the /collab surface and start configured teams",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "collab.who_can_create": _D(
+        "Who may start a session from the lobby: any signed-in user, or admin only",
+        type="string", default="any", category=FEATURES,
+    ),
+    "collab.max_members": _D(
+        "Members allowed in one lobby session. Clamped to 2-50",
+        type="integer", default=8, category=FEATURES, minimum=2, maximum=50,
+    ),
+    "collab.default_mode": _D(
+        "follow: members go where the leader goes until they move on their own; "
+        "free: no leader, everyone moves independently",
+        type="string", default="follow", category=FEATURES,
+    ),
+    "collab.conflict_policy": _D(
+        "What happens when two members change the same thing: lww keeps the "
+        "later save and tells the member it replaced; reject keeps the earlier "
+        "value, saves the rest of the later save, and shows that member the "
+        "teammate's value",
+        type="string", default="lww", category=FEATURES,
+    ),
+    "collab.require_signoff": _D(
+        "An item counts as done only when every active member has marked it "
+        "ready; any later change to the item clears the marks",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "collab.blind_first": _D(
+        "Members answer each item on their own (stored under their own user) "
+        "before the team's shared answer opens; schemes everyone agreed on "
+        "start the team answer",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "collab.sync_view": _D(
+        "In follow mode, followers on the leader's item also follow the "
+        "leader's scroll position and audio/video playhead",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "collab.exclude_members_from_solo": _D(
+        "Keep a team's items out of its members' own annotation queues, so one "
+        "person does not give both a solo and a team answer for an item",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "collab.transport": _D(
+        "poll: pages ask for new events on a timer; sse: the server pushes them "
+        "over a held connection (each holds a server thread)",
+        type="string", default="poll", category=FEATURES,
+    ),
+    "collab.poll_interval_ms": _D(
+        "How often a visible session page polls for events. Clamped to 250-30000",
+        type="integer", default=1000, category=FEATURES, minimum=250, maximum=30000,
+    ),
+    "collab.hidden_poll_interval_ms": _D(
+        "How often a page in a background tab polls. Clamped to 1000-120000",
+        type="integer", default=5000, category=FEATURES, minimum=1000, maximum=120000,
+    ),
+    "collab.sse": _D(
+        "Server push limits: max_streams open at once (over it, pages poll) and "
+        "max_stream_seconds before a stream is closed and reopened",
+        type="object", category=FEATURES,
+        example={"max_streams": 3, "max_stream_seconds": 25},
+    ),
+    "collab.max_items": _D(
+        "Most items one session may hold. Clamped to 1-100000",
+        type="integer", default=500, category=FEATURES, minimum=1, maximum=100000,
+    ),
+    "collab.teams": _D(
+        "Teams the study sets up: each has an id, members, an optional leader, "
+        "items as a list of ids, {count: N} or {group: <batch group>}, and "
+        "optional blind_first / require_signoff overrides",
+        type="array", category=FEATURES,
+        example=[{"id": "red", "members": ["ana", "ben"], "leader": "ana",
+                  "items": {"count": 20}}],
+    ),
+    "pocket": _D(
+        "Pocket Mode: the phone-sized annotation surface at /pocket, served as "
+        "a PWA with an offline queue",
+        type="object", category=FEATURES,
+    ),
+    "pocket.enabled": _D(
+        "Register the /pocket surface", type="boolean", default=False, category=FEATURES,
+    ),
+    "pocket.batch_size": _D(
+        "Items per batch request, which is also the offline queue depth. "
+        "Clamped to 1-200",
+        type="integer", default=25, category=FEATURES,
+    ),
+    "pocket.auto_redirect": _D(
+        "Send phones and tablets that open /annotate to /pocket, when every "
+        "scheme in the task is touch-capable. `?desktop=1` opts back out",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "truth_serum": _D(
+        "Surprisingly-popular scoring. Each annotator also predicts how many "
+        "others will pick the same label, and an answer that beats its own "
+        "predicted popularity wins over the majority",
+        type="object", category=FEATURES,
+    ),
+    "truth_serum.enabled": _D(
+        "Ask the prediction question", type="boolean", default=False, category=FEATURES,
+    ),
+    "truth_serum.schema": _D(
+        "Scheme whose labels get popularity predictions. Defaults to the first "
+        "radio scheme; with none, predictions stay inactive",
+        type="string", category=FEATURES,
+    ),
+    "truth_serum.question": _D(
+        "Prompt shown above the prediction slider",
+        type="string", category=FEATURES,
+        example="What percentage of other annotators will choose the same label as you?",
+    ),
+    "truth_serum.min_annotators": _D(
+        "Predictions needed on an item before a surprisingly-popular verdict is "
+        "computed. Values below 2 are raised to 2",
+        type="integer", default=3, category=FEATURES,
+    ),
+    "thinkaloud": _D(
+        "Think-aloud mode: local speech-to-text over spoken rationales, plus "
+        "rule-based detection of spoken label phrases",
+        type="object", category=FEATURES,
+    ),
+    "thinkaloud.enabled": _D(
+        "Record and transcribe rationales", type="boolean", default=False,
+        category=FEATURES,
+    ),
+    "thinkaloud.schema": _D(
+        "Scheme whose labels may be committed by voice. Defaults to the first "
+        "radio scheme",
+        type="string", category=FEATURES,
+    ),
+    "thinkaloud.stt": _D(
+        "Speech-to-text backend: faster_whisper (local), mock (tests), or auto",
+        type="string", default="auto", category=FEATURES,
+    ),
+    "thinkaloud.model": _D(
+        "Whisper model size for the faster_whisper backend",
+        type="string", default="tiny.en", category=FEATURES,
+    ),
+    "thinkaloud.chunk_seconds": _D(
+        "Recorder restart interval. Each chunk is a complete audio file so it "
+        "can be decoded on its own. Clamped to 2-30",
+        type="integer", default=6, category=FEATURES,
+    ),
+    "thinkaloud.stems": _D(
+        "Override the accepted label-phrase stem patterns",
+        type="array", category=FEATURES,
+    ),
+    "thinkaloud.fillers": _D(
+        "Filler lexicon behind the hesitation signal",
+        type="array", category=FEATURES, example=["um", "uh", "hmm"],
+    ),
+    "thinkaloud.require_spoken_label": _D(
+        "Nudge on Next when no label was committed by voice",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "thinkaloud.language": _D(
+        "Language hint passed to Whisper", type="string", default="en", category=FEATURES,
+    ),
+    "math": _D(
+        "Render LaTeX math ($...$, $$...$$, \\(...\\), \\[...\\]) in item text, "
+        "display fields and process_reward / trajectory_eval steps with KaTeX. "
+        "Span targets are left as source",
+        type="object", category=UI, see_also=("instance_display",),
+        example={"enabled": True},
+    ),
+    "math.enabled": _D(
+        "Turn math rendering on. Off by default, so text with dollar signs is "
+        "unchanged unless a project asks for it",
+        type="boolean", default=False, category=UI,
+    ),
+    "math.delimiters": _D(
+        "Which delimiters start math: any of $$, $, \\(, \\[. Drop $ for text "
+        "with prices in it",
+        type="array", default=["$$", "$", "\\(", "\\["], category=UI,
+        example=["$$", "\\(", "\\["],
+    ),
+    "math.fields": _D(
+        "instance_display field keys to render. Default: every field that is "
+        "not a span target",
+        type="array", category=UI, example=["problem", "solution"],
+    ),
+    "math.macros": _D(
+        "KaTeX macros available in every expression, as name -> expansion",
+        type="object", default={}, category=UI,
+        example={"\\R": "\\mathbb{R}"},
+    ),
+    "keystroke_logging": _D(
+        "Content-blind typing dynamics on free-text fields -- when someone "
+        "pauses, revises or pastes, never which keys -- and the "
+        "composed/transcribed/pasted detection built on them",
+        type="object", category=FEATURES, see_also=("annotation_telemetry",),
+    ),
+    "keystroke_logging.enabled": _D(
+        "Record typing dynamics. Off by default: it records how annotators "
+        "produce free text, so it is opt-in rather than something a project "
+        "acquires by upgrading Potato",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "keystroke_logging.fidelity": _D(
+        "How much is kept: off, summary (per-response statistics only), or "
+        "events (raw streams as well)",
+        type="string", default="events", category=FEATURES,
+    ),
+    "keystroke_logging.include_schemas": _D(
+        "Schemes to record. Empty means every free-text field",
+        type="array", default=[], category=FEATURES,
+    ),
+    "keystroke_logging.exclude_schemas": _D(
+        "Schemes to leave alone", type="array", default=[], category=FEATURES,
+    ),
+    "keystroke_logging.store_events": _D(
+        "Write raw event streams to the typing store. Does nothing at summary "
+        "fidelity, which the loader warns about",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "keystroke_logging.classify_paste_source": _D(
+        "Try to tell a paste from outside the page from one that only moved "
+        "text within it",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "keystroke_logging.idle_session_ms": _D(
+        "Gap that ends one typing session and starts the next",
+        type="integer", default=30000, category=FEATURES,
+    ),
+    "keystroke_logging.flush_interval_ms": _D(
+        "How often the browser posts its buffered events",
+        type="integer", default=5000, category=FEATURES,
+    ),
+    "keystroke_logging.pause_thresholds_ms": _D(
+        "Pause buckets the summary counts against. Must be positive integers",
+        type="array", default=[500, 1000, 2000, 5000, 10000], category=FEATURES,
+    ),
+    "keystroke_logging.disclose_to_annotators": _D(
+        "Show the recording notice. Turning it off collects typing dynamics "
+        "silently, which your consent documents and ethics approval have to cover",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "keystroke_logging.disclosure_text": _D(
+        "Replace the default notice. Must be non-empty; omit it to keep the default",
+        type="string", category=FEATURES,
+    ),
+    "keystroke_logging.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere the script is not loaded and the server "
+        "drops its posts. Omit it to record on every page. The recording "
+        "notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
+    ),
+    "keystroke_logging.detection": _D(
+        "Rule-based flags: `enabled`, `calibrate`, `on_external_insert` "
+        "(allow, warn, block or flag) and `thresholds`. Thresholds are scored "
+        "server-side and withheld from the browser, which would otherwise tell "
+        "an annotator exactly how slowly to paste to stay under the flag",
+        type="object", category=FEATURES,
+    ),
+    "annotation_telemetry": _D(
+        "The drawing-process analogue of keystroke_logging: content-blind "
+        "telemetry on geometry schemas -- when someone draws, zooms, revises "
+        "and accepts AI suggestions, never what or where -- and the "
+        "rubber-stamping screening built on it",
+        type="object", category=FEATURES, see_also=("keystroke_logging",),
+    ),
+    "annotation_telemetry.enabled": _D(
+        "Record drawing dynamics", type="boolean", default=False, category=FEATURES,
+    ),
+    "annotation_telemetry.fidelity": _D(
+        "How much is kept: off, summary (per-annotation statistics only), or "
+        "events (raw streams as well)",
+        type="string", default="events", category=FEATURES,
+    ),
+    "annotation_telemetry.include_schemas": _D(
+        "Schemes to record. Empty means every geometry schema",
+        type="array", default=[], category=FEATURES,
+    ),
+    "annotation_telemetry.exclude_schemas": _D(
+        "Schemes to leave alone", type="array", default=[], category=FEATURES,
+    ),
+    "annotation_telemetry.store_events": _D(
+        "Write raw event streams. Does nothing at summary fidelity",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "annotation_telemetry.idle_ms": _D(
+        "Gap above which the annotator is charged to idle rather than active "
+        "time. Two minutes rather than something tighter, because studying a "
+        "hard image is real work that produces no events at all",
+        type="integer", default=120000, category=FEATURES,
+    ),
+    "annotation_telemetry.flush_interval_ms": _D(
+        "How often the browser posts its buffered events",
+        type="integer", default=10000, category=FEATURES,
+    ),
+    "annotation_telemetry.disclose_to_annotators": _D(
+        "Show the recording notice", type="boolean", default=True, category=FEATURES,
+    ),
+    "annotation_telemetry.disclosure_text": _D(
+        "Replace the default notice", type="string", category=FEATURES,
+    ),
+    "annotation_telemetry.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere the script is not loaded and the server "
+        "drops its posts. Omit it to record on every page. The recording "
+        "notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
+    ),
+    "annotation_telemetry.detection": _D(
+        "Rubber-stamping detection: `enabled`, `calibrate` and `thresholds`",
+        type="object", category=FEATURES,
+    ),
+    "conditions": _D(
+        "Between-subjects conditions. Each participant is assigned one cell "
+        "(one level of every factor) on arrival and keeps it. Page `show_when` "
+        "rules and question `display_logic` can test `condition.<factor>`",
+        type="object", category=ASSIGN, see_also=("phases",),
+    ),
+    "conditions.factors": _D(
+        "Factor name to list of levels, e.g. `{feedback: [none, immediate]}`. "
+        "Several factors form a full factorial design unless `cells` lists a subset",
+        type="object", category=ASSIGN,
+    ),
+    "conditions.assignment": _D(
+        "How a cell is chosen: `balanced` (fewest participants, by weight), "
+        "`random` (seeded per participant) or `round_robin` (arrival order)",
+        type="string", default="balanced", category=ASSIGN,
+    ),
+    "conditions.balance_on": _D(
+        "What `balanced` counts: everyone `assigned`, or participants who "
+        "`completed` without being screened out plus those still in progress "
+        "(see in_progress_minutes), so dropouts are replaced",
+        type="string", default="assigned", category=ASSIGN,
+    ),
+    "conditions.in_progress_minutes": _D(
+        "With `balance_on: completed`, how long after assignment or last "
+        "activity an unfinished participant still counts toward their cell. "
+        "0 counts finishers only",
+        type="number", default=60, category=ASSIGN, minimum=0,
+    ),
+    "conditions.max_per_cell": _D(
+        "Skip a cell once it has this many participants. When every cell is "
+        "full, the least-filled one is still assigned and a warning is logged",
+        type="integer", category=ASSIGN, minimum=1,
+    ),
+    "conditions.cells": _D(
+        "Explicit cells (a subset of the full factorial), each a mapping of "
+        "factor to level with an optional `weight`",
+        type="array", category=ASSIGN,
+    ),
+    "trial_timing": _D(
+        "Run each annotation item as a timed trial: fixation, stimulus "
+        "duration, response deadline and keys mapped to labels, with the "
+        "reaction time measured from the frame the stimulus appeared. For "
+        "frame-critical or auditory paradigms use a `type: jspsych` phase",
+        type="object", category=FEATURES, see_also=("phases",),
+    ),
+    "trial_timing.enabled": _D(
+        "Turn timed trials on", type="boolean", default=False, category=FEATURES,
+    ),
+    "trial_timing.fixation_ms": _D(
+        "Fixation cross before each stimulus, in ms. 0 for none",
+        type="integer", default=0, category=FEATURES, minimum=0,
+    ),
+    "trial_timing.fixation_symbol": _D(
+        "What the fixation shows", type="string", default="+", category=FEATURES,
+    ),
+    "trial_timing.stimulus_duration_ms": _D(
+        "Hide the stimulus after this many ms. Omit to keep it up until the response",
+        type="integer", category=FEATURES, minimum=1,
+    ),
+    "trial_timing.trial_duration_ms": _D(
+        "Response deadline in ms from onset. A trial that runs out is recorded "
+        "as a timeout and the item advances with no answer. Omit for no deadline",
+        type="integer", category=FEATURES, minimum=1,
+    ),
+    "trial_timing.iti_ms": _D(
+        "Minimum blank interval between one response and the next fixation, in ms. "
+        "Page loading counts toward it",
+        type="integer", default=0, category=FEATURES, minimum=0,
+    ),
+    "trial_timing.response": _D(
+        "`schema` (a radio or likert scheme), `keys` (key to label, e.g. "
+        "`{f: word, j: nonword}`) and `allow_mouse`",
+        type="object", category=FEATURES,
+    ),
+    "trial_timing.item_overrides": _D(
+        "Per-item timing read from item fields, e.g. `{stimulus_duration_ms: soa_ms}`",
+        type="object", category=FEATURES,
+    ),
+    "trial_timing.disable_back_navigation": _D(
+        "Hide Previous during a timed task, so no stimulus is shown twice",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "trial_timing.show_response_options": _D(
+        "Show the scheme's options during the trial. Defaults to true only "
+        "when `response.allow_mouse` is on",
+        type="boolean", category=FEATURES,
+    ),
+    "trial_timing.presentation": _D(
+        "Show the item's text one region at a time and record each region's "
+        "reading time: `mode` (moving_window, centered, cumulative or maze), "
+        "`field`, `region_separator`, `advance_key`, `question_field`, and for "
+        "the maze `distractor_field`, `maze_keys` and `on_error`. With it, "
+        "`response` (the comprehension question) is optional",
+        type="object", category=FEATURES,
+    ),
+    "authenticity": _D(
+        "Page-level, content-blind authenticity paradata on every task type: "
+        "leaving the page, copying the item, pasting text that did not come "
+        "from the page, a narrowed window, and automation signals. Counts and "
+        "durations only -- copied and pasted text never leaves the browser",
+        type="object", category=FEATURES,
+        see_also=("keystroke_logging", "interaction_tracking"),
+    ),
+    "authenticity.enabled": _D(
+        "Record authenticity paradata", type="boolean", default=False,
+        category=FEATURES,
+    ),
+    "authenticity.flush_interval_ms": _D(
+        "How often the browser posts the current item's running totals",
+        type="integer", default=10000, category=FEATURES,
+    ),
+    "authenticity.min_away_ms": _D(
+        "Absences from the page shorter than this are not counted",
+        type="integer", default=1000, category=FEATURES,
+    ),
+    "authenticity.track_pointer": _D(
+        "Record pointer movement totals and clicks that land with no movement "
+        "in between. false removes the pointermove listener",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "authenticity.disclose_to_annotators": _D(
+        "Show the recording notice", type="boolean", default=True, category=FEATURES,
+    ),
+    "authenticity.disclosure_text": _D(
+        "Replace the default notice with your own wording",
+        type="string", category=FEATURES,
+    ),
+    "authenticity.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere the script is not loaded and the server "
+        "drops its posts. Omit it to record on every page. The recording "
+        "notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
+    ),
+    "authenticity.detection": _D(
+        "Server-side flags: `enabled` and `thresholds` (keys such as "
+        "`away_from_task.min_events`, `copy_then_away.min_away_ms`). "
+        "Thresholds are never sent to the browser",
+        type="object", category=FEATURES,
+    ),
+    "interaction_tracking": _D(
+        "The general behavioural tracker (clicks, focus, scroll, shortcut "
+        "keys) that feeds the admin Behavioral tab. On by default",
+        type="object", category=FEATURES, see_also=("authenticity",),
+    ),
+    "interaction_tracking.enabled": _D(
+        "Record the click, focus, scroll and key stream. When false, item "
+        "loads, saves, navigation and an activity mark with no target or "
+        "detail are still "
+        "recorded, so time per item (Throughput tab, adjudication, dashboard) "
+        "keeps working. AI-assistant usage and the annotation change trail are "
+        "recorded either way",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "interaction_tracking.disclose_to_annotators": _D(
+        "Show a notice that page interaction is recorded",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "interaction_tracking.disclosure_text": _D(
+        "Replace the default notice with your own wording",
+        type="string", category=FEATURES,
+    ),
+    "interaction_tracking.phases": _D(
+        "Record only on these phases: phase types (consent, prestudy, "
+        "instructions, training, annotation, poststudy) or phase names from "
+        "`phases.order`. Elsewhere items keep only the timing marks, as with "
+        "`enabled: false`, so time per item still works, and consent and "
+        "survey pages keep nothing. Omit it to record on every page. The "
+        "recording notice stays on every page",
+        type="array", category=FEATURES, see_also=("phases",),
+    ),
+    "annotator_dashboard": _D(
+        "Read-only progress page at /progress. Shows project totals and the "
+        "requesting annotator's own stats, never another annotator's identity. "
+        "A bare `true` is accepted as shorthand for `{enabled: true}`",
+        type="boolean|object", default=False, category=FEATURES,
+    ),
+    "annotator_dashboard.enabled": _D(
+        "Serve /progress", type="boolean", default=False, category=FEATURES,
+    ),
+    "annotator_dashboard.show_project_progress": _D(
+        "Show project-wide totals", type="boolean", default=True, category=FEATURES,
+    ),
+    "annotator_dashboard.show_personal_progress": _D(
+        "Show the requesting annotator's own counts",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "annotator_dashboard.show_active_annotators": _D(
+        "Show how many annotators are currently active",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "category_assignment": _D(
+        "Route items to annotators by the item's category, optionally gated on "
+        "a qualification the annotator earned in training",
+        type="object", category=FEATURES,
+        see_also=("item_properties.category_key", "assignment_strategy"),
+    ),
+    "category_assignment.enabled": _D(
+        "Turn category routing on. Also gates the qualification scoring that "
+        "runs when someone finishes training",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "category_assignment.category_key": _D(
+        "Item field holding the category. Must be a non-empty string",
+        type="string", category=FEATURES, example="topic",
+    ),
+    "category_assignment.qualification": _D(
+        "How training performance becomes a per-category qualification: "
+        "`source` (training, prestudy or both), `threshold` (0-1, default 0.7) "
+        "and `min_questions` (default 1)",
+        type="object", category=FEATURES, see_also=("training",),
+    ),
+    "category_assignment.fallback": _D(
+        "What an annotator with no matching qualification is given",
+        type="string", default="uncategorized", category=FEATURES,
+    ),
+    "category_assignment.dynamic": _D(
+        "Probabilistic expertise routing, which learns who is good at what from "
+        "agreement instead of a fixed qualification. Carries its own `enabled`",
+        type="object", category=FEATURES,
+    ),
+    "category_assignment.dynamic.enabled": _D(
+        "Turn expertise routing on. Starts a background worker that scores "
+        "annotations against consensus",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "category_assignment.dynamic.min_annotations_for_consensus": _D(
+        "How many annotators must have answered an item before it is used to "
+        "score anyone. Below this the item is skipped, not counted as agreement",
+        type="integer", default=2, category=FEATURES,
+    ),
+    "category_assignment.dynamic.agreement_method": _D(
+        "How consensus is decided: `majority_vote`, `super_majority` (two "
+        "thirds) or `unanimous`",
+        type="string", default="majority_vote", category=FEATURES,
+    ),
+    "category_assignment.dynamic.learning_rate": _D(
+        "How far one agreement or disagreement moves a score, as an "
+        "exponential moving average. Scores start at the neutral 0.5",
+        type="number", default=0.1, category=FEATURES,
+    ),
+    "category_assignment.dynamic.update_interval_seconds": _D(
+        "Seconds between scoring passes. The default is the difference between "
+        "routing that responds within a session and routing that does not",
+        type="integer", default=60, category=FEATURES,
+    ),
+    "category_assignment.dynamic.base_probability": _D(
+        "Floor on the routing probability of any category, so an annotator who "
+        "scores badly in one is still sent some of it",
+        type="number", default=0.1, category=FEATURES,
+    ),
+    "diversity_ordering": _D(
+        "Embed and cluster the corpus, then serve items round-robin across "
+        "clusters so an annotator sees the range of the data early",
+        type="object", category=FEATURES, see_also=("assignment_strategy",),
+    ),
+    "diversity_ordering.enabled": _D(
+        "Turn diversity ordering on. assignment_strategy: diversity_clustering "
+        "turns it on regardless",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "diversity_ordering.model_name": _D(
+        "Sentence-transformer model used for the embeddings",
+        type="string", default="all-MiniLM-L6-v2", category=FEATURES,
+    ),
+    "diversity_ordering.num_clusters": _D(
+        "Clusters to build, when auto_clusters is off",
+        type="integer", default=10, category=FEATURES,
+    ),
+    "diversity_ordering.items_per_cluster": _D(
+        "Target items per cluster used to size an automatic k",
+        type="integer", default=20, category=FEATURES,
+    ),
+    "diversity_ordering.auto_clusters": _D(
+        "Pick the cluster count from the corpus size instead of num_clusters",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "diversity_ordering.prefill_count": _D(
+        "How many items are ordered ahead of the annotator",
+        type="integer", default=100, category=FEATURES,
+    ),
+    "diversity_ordering.batch_size": _D(
+        "Embedding batch size", type="integer", default=32, category=FEATURES,
+    ),
+    "diversity_ordering.recluster_threshold": _D(
+        "Fractional corpus growth that triggers a recluster",
+        type="number", default=1.0, category=FEATURES,
+    ),
+    "diversity_ordering.preserve_visited": _D(
+        "Keep an item in its place in the order once it has been seen",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "diversity_ordering.trigger_ai_prefetch": _D(
+        "Warm AI suggestions for the items about to be served",
+        type="boolean", default=True, category=FEATURES, see_also=("ai_support",),
+    ),
+    "diversity_ordering.cache_dir": _D(
+        "Where computed embeddings are cached", type="string", category=FEATURES,
+    ),
+    "embedding_visualization": _D(
+        "2D embedding scatter of the corpus on the admin dashboard, coloured by "
+        "label",
+        type="object", category=FEATURES, see_also=("embeddings",),
+    ),
+    "embedding_visualization.enabled": _D(
+        "Compute and serve the plot", type="boolean", default=False, category=FEATURES,
+    ),
+    "embedding_visualization.sample_size": _D(
+        "Items sampled into the plot", type="integer", category=FEATURES,
+    ),
+    "embedding_visualization.include_all_annotated": _D(
+        "Always include annotated items, on top of the sample",
+        type="boolean", category=FEATURES,
+    ),
+    "embedding_visualization.embedding_model": _D(
+        "Text embedding model", type="string", category=FEATURES,
+    ),
+    "embedding_visualization.image_embedding_model": _D(
+        "Image embedding model, for image tasks", type="string", category=FEATURES,
+    ),
+    "embedding_visualization.umap": _D(
+        "UMAP projection parameters", type="object", category=FEATURES,
+    ),
+    "embedding_visualization.label_source": _D(
+        "Which label colours the points: mace or majority",
+        type="string", default="mace", category=FEATURES, see_also=("mace",),
+    ),
+    "embeddings": _D(
+        "The project-wide embedder shared by the corpus map, diversity ordering "
+        "and duplicate detection. `backend` (auto by default), plus `model`, "
+        "`source_field`, `cache_dir`, `media_root`; anything else is passed "
+        "through to the backend. A custom backend needs `entrypoint` "
+        "('module.path:callable') or `endpoint` (an HTTP URL)",
+        type="object", category=FEATURES,
+        see_also=("corpus_map", "diversity_ordering"),
+    ),
+    "bws_config": _D(
+        "Best-worst scaling. Builds the tuples annotators compare and scores the "
+        "results into a ranking. Its presence is what enables BWS",
+        type="object", category=FEATURES, see_also=("ibws_config",),
+    ),
+    "bws_config.tuple_size": _D(
+        "Items shown per comparison", type="integer", category=FEATURES, example=4,
+    ),
+    "bws_config.num_tuples": _D(
+        "Tuples generated in total, or null to derive the count from "
+        "min_item_appearances",
+        type="any", category=FEATURES, see_also=("bws_config.min_item_appearances",),
+    ),
+    "bws_config.min_item_appearances": _D(
+        "Times each item must appear across the tuples",
+        type="integer", category=FEATURES,
+    ),
+    "bws_config.seed": _D(
+        "Seed for tuple generation, so a design can be reproduced",
+        type="integer", category=FEATURES, see_also=("random_seed",),
+    ),
+    "bws_config.scoring": _D(
+        "Scoring block; `method` selects the estimator (counting by default)",
+        type="object", category=FEATURES,
+    ),
+    "ibws_config": _D(
+        "Iterative best-worst scaling: re-generates tuples each round, "
+        "concentrating comparisons where the ranking is still uncertain",
+        type="object", category=FEATURES, see_also=("bws_config",),
+    ),
+    "ibws_config.tuple_size": _D(
+        "Items shown per comparison", type="integer", category=FEATURES,
+    ),
+    "ibws_config.max_rounds": _D(
+        "Rounds before the process stops, or null to run until every bucket is "
+        "terminal",
+        type="any", category=FEATURES,
+    ),
+    "ibws_config.tuples_per_item_per_round": _D(
+        "How often each item is compared in one round",
+        type="integer", category=FEATURES,
+    ),
+    "ibws_config.scoring_method": _D(
+        "Estimator used to turn comparisons into scores",
+        type="string", category=FEATURES,
+    ),
+    "ibws_config.seed": _D(
+        "Seed for tuple generation", type="integer", category=FEATURES,
+    ),
+    "boundary_probing": _D(
+        "Boundary Lab. After a label is chosen, shows counterfactual edits of "
+        "the item and asks whether they flip it -- which maps the decision "
+        "boundary and exports as a contrast set",
+        type="object", category=FEATURES,
+    ),
+    "boundary_probing.enabled": _D(
+        "Show probes", type="boolean", default=False, category=FEATURES,
+    ),
+    "boundary_probing.schema": _D(
+        "Scheme whose labels are probed. Defaults to the first radio scheme",
+        type="string", category=FEATURES,
+    ),
+    "boundary_probing.probes_per_item": _D(
+        "Probes per (instance, label), counting the invariance probe",
+        type="integer", default=3, category=FEATURES,
+    ),
+    "boundary_probing.include_invariance": _D(
+        "Include a meaning-preserving paraphrase probe. A paraphrase that flips "
+        "the label is the quality-control signal this exists to catch",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "boundary_probing.sources": _D(
+        "Ordered generation tiers -- precomputed, llm, rules. Earlier tiers win "
+        "and later ones fill the remaining slots",
+        type="array", default=["precomputed", "llm", "rules"], category=FEATURES,
+    ),
+    "boundary_probing.precomputed_key": _D(
+        "Item field holding precomputed counterfactuals, a list of "
+        "`{text, kind: flip|invariance}`",
+        type="string", default="counterfactuals", category=FEATURES,
+    ),
+    "boundary_probing.rationale_on_flip": _D(
+        "Ask for a short written reason when the annotator says a probe flips "
+        "their label",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "boundary_probing.debounce_ms": _D(
+        "Delay between choosing a label and fetching probes",
+        type="integer", default=900, category=FEATURES,
+    ),
+    "boundary_probing.ai_support": _D(
+        "Endpoint override for the llm tier; falls back to the global ai_support "
+        "block",
+        type="object", category=FEATURES, see_also=("ai_support",),
+    ),
+    "consensus_aggregation": _D(
+        "Parameters of the `consensus` export: vote fractions per answer, point "
+        "clusters and consensus boxes across annotators",
+        type="object", category=PUBLISHING, see_also=("export_annotation_format",),
+    ),
+    "consensus_aggregation.agreement_threshold": _D(
+        "Share of classifiers the top answer needs for an item to be marked "
+        "retired; for multiselect, each option must be ticked or left unticked "
+        "by at least this share",
+        type="number", default=0.8, category=PUBLISHING, maximum=1,
+    ),
+    "consensus_aggregation.min_classifiers": _D(
+        "Items with fewer classifiers than this are marked needs_review",
+        type="integer", default=2, category=PUBLISHING, minimum=1,
+    ),
+    "consensus_aggregation.schemes": _D(
+        "Scheme names to aggregate; default every radio, select, likert, "
+        "multiselect, slider, number and image_annotation scheme",
+        type="array", category=PUBLISHING, example=["T0", "T1"],
+    ),
+    "consensus_aggregation.points": _D(
+        "DBSCAN parameters for clustering image_annotation points",
+        type="object", category=PUBLISHING,
+    ),
+    "consensus_aggregation.points.eps": _D(
+        "Neighbourhood radius for point clustering, in the unit eps_unit names",
+        type="number", default=0.02, category=PUBLISHING,
+    ),
+    "consensus_aggregation.points.eps_unit": _D(
+        "`fraction` (x as a share of the width, y of the height) or `pixels` "
+        "(needs the image size)",
+        type="string", default="fraction", category=PUBLISHING, example="pixels",
+    ),
+    "consensus_aggregation.points.min_samples": _D(
+        "Points within eps (the point itself included) needed to form a cluster",
+        type="integer", default=2, category=PUBLISHING, minimum=1,
+    ),
+    "consensus_aggregation.boxes": _D(
+        "Parameters for grouping bounding boxes across annotators",
+        type="object", category=PUBLISHING,
+    ),
+    "consensus_aggregation.boxes.iou_threshold": _D(
+        "Least IoU between any two boxes in one consensus group",
+        type="number", default=0.5, category=PUBLISHING, maximum=1,
+    ),
+    "corpus_map": _D(
+        "Multi-document corpus map: embed, cluster, project with UMAP and build "
+        "a KNN graph, then give annotators a 2D navigation surface at /corpus. "
+        "The heavy compute is lazy and never runs at boot",
+        type="object", category=FEATURES, see_also=("embeddings",),
+    ),
+    "corpus_map.enabled": _D(
+        "Register the corpus map", type="boolean", default=False, category=FEATURES,
+    ),
+    "corpus_map.build_on_start": _D(
+        "Build the map as soon as items load, rather than on first request",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "corpus_map.embedding_model": _D(
+        "Model used to embed documents",
+        type="string", default="all-MiniLM-L6-v2", category=FEATURES,
+    ),
+    "corpus_map.clustering": _D(
+        "Clustering parameters", type="object", category=FEATURES,
+    ),
+    "corpus_map.umap": _D("UMAP projection parameters", type="object", category=FEATURES),
+    "corpus_map.knn": _D(
+        "Neighbour-graph parameters; `k` defaults to 10",
+        type="object", category=FEATURES,
+    ),
+    "corpus_map.cluster_labeling": _D(
+        "How clusters get their human-readable names",
+        type="object", category=FEATURES,
+    ),
+    "corpus_map.sample_size": _D(
+        "Documents sampled into the map", type="integer", category=FEATURES,
+    ),
+    "event_template": _D(
+        "Cross-document event registry: admin-defined slots that annotators "
+        "fill with evidence drawn from many documents",
+        type="object", category=FEATURES, see_also=("corpus_map",),
+    ),
+    "event_template.enabled": _D(
+        "Register the event surface", type="boolean", default=False, category=FEATURES,
+    ),
+    "event_template.name": _D(
+        "Name of the template, shown in the UI",
+        type="string", default="event_template", category=FEATURES,
+    ),
+    "event_template.allow_annotator_create": _D(
+        "Let annotators create new events, not only fill existing ones",
+        type="boolean", default=True, category=FEATURES,
+    ),
+    "event_template.seed_events": _D(
+        "Events to pre-create when the registry is first written. Either the "
+        "events themselves or a path to a JSON file of them. Seeding is "
+        "id-idempotent, so an existing event is never clobbered",
+        type="array|string", category=FEATURES,
+    ),
+    "event_template.slots": _D(
+        "The slots each event carries", type="array", category=FEATURES,
+    ),
+    "analytics": _D(
+        "Cost and latency analytics over ingested traces: optional per-model "
+        "pricing, and the thresholds that raise a regression alert",
+        type="object", category=FEATURES, see_also=("trace_ingestion",),
+    ),
+    "analytics.pricing": _D(
+        "Per-model token pricing used to turn token counts into money",
+        type="object", category=FEATURES,
+    ),
+    "analytics.thresholds": _D(
+        "Fractional increases that trip an alert: cost_per_trace (0.5), "
+        "avg_latency_ms (0.3), and error_rate as absolute percentage points (0.05)",
+        type="object", category=FEATURES,
+    ),
+
+    # ------------------------------------------------- workflow and phases --
+    "machine_annotators": _D(
+        "Declare raters that are tools or models rather than people, so "
+        "agreement, adjudication and the IRT engine can separate them from "
+        "human annotators instead of counting them as people",
+        type="object", category=QC,
+        see_also=("adjudication", "psychometrics", "agreement_metrics"),
+    ),
+    "machine_annotators.enabled": _D(
+        "Read the roster and record declared participants as machines",
+        type="boolean", default=False, category=QC,
+    ),
+    "machine_annotators.require_declaration": _D(
+        "Refuse annotations from an undeclared machine. Off by default, and "
+        "turning it on adds a check to the login routes",
+        type="boolean", default=False, category=QC,
+    ),
+    "machine_annotators.annotators": _D(
+        "One entry per machine rater: `id` (the user id it annotates under), "
+        "`kind` (tool or llm), and optionally `tool`, `model`, "
+        "`endpoint_type`, `version`, `database_version` and `run_date`. The "
+        "version fields are what let a later re-run be told apart from a "
+        "reference database that changed underneath it",
+        type="array", category=QC,
+        example=[{"id": "prokka", "kind": "tool", "version": "1.14.6",
+                  "database_version": "2023-05", "run_date": "2024-11-03"}],
+    ),
+    "triage": _D(
+        "Rank items by a priority signal so failures, thumbs-down feedback and "
+        "low scores get annotated first. Scoring runs as items are added, so it "
+        "covers traces ingested at runtime as well as loaded files",
+        type="object", category=WORKFLOW, see_also=("assignment_strategy",),
+    ),
+    "triage.enabled": _D(
+        "Score items into a priority", type="boolean", default=False, category=WORKFLOW,
+    ),
+    "triage.order": _D(
+        "Queue direction: desc serves the highest priority first",
+        type="string", default="desc", category=WORKFLOW,
+    ),
+    "triage.default_priority": _D(
+        "Priority given to items no rule matched",
+        type="number", default=0, category=WORKFLOW,
+    ),
+    "triage.show_badge": _D(
+        "Show the matching rule's badge on the item",
+        type="boolean", default=True, category=WORKFLOW,
+    ),
+    "triage.signal_field": _D(
+        "Item field read as a numeric priority when no rule matches",
+        type="string", category=WORKFLOW, example="score",
+    ),
+    "triage.invert_signal": _D(
+        "Negate signal_field, for scores where lower is worse",
+        type="boolean", default=False, category=WORKFLOW,
+    ),
+    "triage.rules": _D(
+        "Rules of `when` (the shared condition grammar) plus priority and an "
+        "optional badge; the highest-priority match wins. Leaving both this and "
+        "signal_field unset installs built-in rules for errored agents, "
+        "thumbs-down feedback and scores below 0.5",
+        type="array", category=WORKFLOW,
+    ),
+    "review_mode": _D(
+        "Hotkey review queue. Once the current item is complete the page moves "
+        "on by itself, which turns keyboard-labelled schemes into press-key-"
+        "and-advance",
+        type="object", category=WORKFLOW,
+    ),
+    "review_mode.enabled": _D(
+        "Turn review mode on", type="boolean", default=False, category=WORKFLOW,
+    ),
+    "review_mode.auto_advance": _D(
+        "Advance without being asked. Set false to keep review mode on but "
+        "navigate by hand",
+        type="boolean", default=True, category=WORKFLOW,
+    ),
+    "review_mode.advance_on": _D(
+        "What counts as complete: `complete` (every scheme on the page has a "
+        "value) or `required` (the required-validated ones do)",
+        type="string", default="complete", category=WORKFLOW,
+        see_also=("require_fully_annotated",),
+    ),
+    "review_mode.delay_ms": _D(
+        "Pause between completion and advancing",
+        type="integer", default=350, category=WORKFLOW,
+    ),
+    "review_workflow": _D(
+        "Reviewer routing and the kanban board at /admin/review. Keeps its own "
+        "state per instance (pending, in_review, needs_second, adjudication, "
+        "done) alongside the annotations",
+        type="object", category=WORKFLOW, see_also=("adjudication",),
+    ),
+    "review_workflow.enabled": _D(
+        "Register the review board", type="boolean", default=False, category=WORKFLOW,
+    ),
+    "review_workflow.reviewers": _D(
+        "Reviewer pool that round-robin rules draw from",
+        type="array", category=WORKFLOW,
+    ),
+    "review_workflow.auto_enroll": _D(
+        "Enroll every loaded instance at startup. Set false to enroll by hand",
+        type="boolean", default=True, category=WORKFLOW,
+    ),
+    "review_workflow.routing": _D(
+        "First-match rules of `when` (the shared condition grammar) plus "
+        "`state`, `priority`, and either `assign_to` or `round_robin`",
+        type="array", category=WORKFLOW,
+    ),
+    "prestudy": _D(
+        "Legacy pre-study screening block. Not read, and named at boot if "
+        "set; add a phase with `type: prestudy` under `phases`",
+        type="object", category=WORKFLOW, see_also=("phases",),
+    ),
+
+    # ---------------------------------------------- assignment and sessions --
+    "per_annotator_quota": _D(
+        "Per-annotator workload caps: `default`, plus `by_user` and "
+        "`by_user_role` overrides. Any other sub-key is rejected at load rather "
+        "than ignored",
+        type="object", category=ASSIGN,
+        see_also=("max_annotations_per_user", "user_roles"),
+    ),
+    "scheme_sets": _D(
+        "Named, reusable lists of annotation schemes. A batch_assignment group "
+        "names one in its `schemes` key to give that cohort its own questions",
+        type="object", category=ASSIGN,
+        see_also=("batch_assignment", "annotation_schemes"),
+    ),
+    "sessions": _D(
+        "Group items into sessions by session_id or thread_id and score the "
+        "whole session at /sessions. Schemes opt in with `session_level: true`",
+        type="object", category=ASSIGN, see_also=("cases",),
+    ),
+    "sessions.enabled": _D(
+        "Build sessions at startup", type="boolean", default=False, category=ASSIGN,
+    ),
+    "sessions.key": _D(
+        "Item field holding the session id. Unset, detection tries session_id "
+        "then thread_id, looking inside `metadata` as well as at the top level",
+        type="string", category=ASSIGN, example="thread_id",
+    ),
+    "sessions.attributes": _D(
+        "Item fields lifted onto the session", type="array", category=ASSIGN,
+    ),
+    "assignment_hold_minutes": _D(
+        "When an annotator would otherwise get no work, items other annotators "
+        "hold are handed out anyway, and both keep them. With this set, items "
+        "the holder has not reached move to the new annotator instead, and an "
+        "item the holder has been shown stays theirs while they were given it "
+        "or saved anything within this many minutes; after that it moves too. "
+        "Use it with "
+        "overlap_sample, where sharing held items double-codes more than the "
+        "design asks",
+        type="number", category=ASSIGN, minimum=0,
+        see_also=("instance_reclaim", "num_annotators_per_item"),
+    ),
+    "instance_reclaim": _D(
+        "Take assignments back from annotators who abandoned them so the items "
+        "can go out again. `enabled` (false) and `timeout_hours` (24), plus "
+        "optional `stale`, `manual`, `quality_control` and `prolific` sections "
+        "each carrying `preserve_completed_annotations`",
+        type="object", category=ASSIGN, see_also=("max_session_seconds",),
+    ),
+    "solo_mode": _D(
+        "Single-coder loop. An LLM labels the corpus, you review where it is "
+        "least sure, and the prompt is refined from your corrections",
+        type="object", category=ASSIGN, see_also=("active_learning", "codebook"),
+    ),
+    "solo_mode.enabled": _D(
+        "Turn solo mode on", type="boolean", default=False, category=ASSIGN,
+    ),
+    "solo_mode.labeling_models": _D(
+        "Endpoints that label the corpus. Each is endpoint_type plus model, and "
+        "optionally api_key, base_url, max_tokens, temperature, think, timeout. "
+        "A decision model (endpoint_type systemone or laya) labels radio, "
+        "select, likert and slider schemes in one pass and needs a generative "
+        "model under revision_models",
+        type="array", category=ASSIGN,
+    ),
+    "solo_mode.revision_models": _D(
+        "Endpoints used to revise the prompt. Defaults to labeling_models",
+        type="array", category=ASSIGN,
+    ),
+    "solo_mode.embedding": _D(
+        "Embedder for diversity and textbox similarity; `model_name` defaults "
+        "to all-MiniLM-L6-v2",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.uncertainty": _D(
+        "How model uncertainty is estimated: `strategy` "
+        "(direct_confidence, direct_uncertainty, token_entropy, "
+        "sampling_diversity) and a `sampling_diversity` block",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.thresholds": _D(
+        "The stopping and agreement thresholds -- including "
+        "end_human_annotation_agreement (0.90) and minimum_validation_sample "
+        "(50) -- plus the per-scheme-type match tolerances",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.instance_selection": _D(
+        "Weights that decide what you are shown next: low_confidence_weight "
+        "(0.4), diversity_weight (0.3), random_weight (0.2), "
+        "disagreement_weight (0.1), and the opt-in edge_case_rule, cartography "
+        "and llm_predicted weights. A `curriculum` block (enabled: false, "
+        "warmup_items: 20, ramp_items: 30, difficulty_signal: confidence, "
+        "window: 5) shows the easiest items first and then ramps up the "
+        "difficulty",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.batches": _D(
+        "Batch sizes for LLM labeling: llm_labeling_batch (50) and "
+        "max_parallel_labels (200)",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.prompt_optimization": _D(
+        "Automatic prompt search: enabled (true), find_smallest_model, "
+        "target_accuracy (0.85), optimization_interval_seconds, and the "
+        "accuracy/length/consistency weights",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.edge_case_rules": _D(
+        "Rules distilled from your corrections and applied before the model",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.labeling_functions": _D(
+        "Programmatic labeling functions run alongside the model",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.confidence_routing": _D(
+        "Where an item goes by confidence band: auto-accept, review, or human",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.confusion_analysis": _D(
+        "Confusion-pair analysis over model-versus-human disagreements",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.suggestions": _D(
+        "When the annotator sees the LLM's suggestion: display (before_label, "
+        "after_label or blind_sample), blind_rate (0.2) and "
+        "minimum_blind_sample (20). Agreement is split into blind and shown, "
+        "and the handoff to the LLM reads blind agreement once there is enough",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.cache": _D(
+        "Reuse the stored reply for an identical labeling call: enabled "
+        "(true). Kept in state_dir",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.gold": _D(
+        "Items with known answers for scoring prompt versions: file (JSON, "
+        "JSONL, CSV or TSV inside the project), id_key (id), label_key "
+        "(label), and text_key for items outside the corpus",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.jury": _D(
+        "Several models vote on each item and the plurality label wins: "
+        "enabled (false), models (two or more), early_stop (true). Not with "
+        "confidence_routing",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.suggestions.display": _D(
+        "before_label shows the LLM's suggestion before the annotator answers; "
+        "after_label never does, and a disagreement then opens the resolution "
+        "page; blind_sample hides it on a blind_rate fraction of items",
+        type="string", default="before_label", category=ASSIGN,
+        example="blind_sample",
+    ),
+    "solo_mode.suggestions.blind_rate": _D(
+        "Fraction of items labelled without the suggestion under blind_sample. "
+        "Which items is fixed per study, so a reload keeps them blind",
+        type="number", default=0.2, category=ASSIGN,
+    ),
+    "solo_mode.suggestions.minimum_blind_sample": _D(
+        "Blind comparisons needed before the handoff to the LLM reads blind "
+        "agreement. Under after_label and blind_sample the handoff waits for them",
+        type="integer", default=20, category=ASSIGN,
+    ),
+    "solo_mode.cache.enabled": _D(
+        "Reuse the stored reply for a labeling call with the same model, "
+        "temperature, prompt, item and response schema. Turn off to measure "
+        "run-to-run variation",
+        type="boolean", default=True, category=ASSIGN,
+    ),
+    "solo_mode.gold.file": _D(
+        "Gold-label file inside the project: JSON, JSONL, CSV or TSV",
+        type="string", category=ASSIGN, example="data/gold.jsonl",
+    ),
+    "solo_mode.gold.id_key": _D(
+        "Field holding the item id; it matches the corpus's id_key",
+        type="string", default="id", category=ASSIGN,
+    ),
+    "solo_mode.gold.label_key": _D(
+        "Field holding the known answer", type="string", default="label",
+        category=ASSIGN,
+    ),
+    "solo_mode.gold.text_key": _D(
+        "Field holding the item text, for gold items that are not in the corpus",
+        type="string", category=ASSIGN,
+    ),
+    "solo_mode.jury.enabled": _D(
+        "Label each item by a vote of jury.models instead of the first "
+        "labeling model that answers",
+        type="boolean", default=False, category=ASSIGN,
+    ),
+    "solo_mode.jury.models": _D(
+        "Two or more endpoints, in the same shape as labeling_models",
+        type="array", category=ASSIGN,
+    ),
+    "solo_mode.jury.early_stop": _D(
+        "Skip the remaining jurors once their votes could not change the "
+        "winner. Not applied to multiselect",
+        type="boolean", default=True, category=ASSIGN,
+    ),
+    "solo_mode.state_dir": _D(
+        "Where solo-mode state is persisted", type="string", category=ASSIGN,
+    ),
+    # === labeling_engine ===================================================
+    "labeling_engine": _D(
+        "Machines label the corpus and human labels calibrate and certify them. "
+        "Each source's predictions are kept per version, every human request "
+        "records how its item was sampled, and contracts state the quality "
+        "guarantee the accepted labels must meet",
+        type="object", category=AI, see_also=("solo_mode", "machine_annotators"),
+    ),
+    "labeling_engine.enabled": _D(
+        "Turn the labeling engine on", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.schemas": _D(
+        "Scheme names the engine labels. Unset means every scheme it supports",
+        type="array", category=AI,
+    ),
+    "labeling_engine.sources": _D(
+        "Machine labelers. Each has an `id` and a `kind` (llm, vlm, decision, "
+        "detector, asr, trained, lf, jury, judge, static, fixture, simulator), "
+        "plus endpoint_type, model, base_url, api_key, temperature, max_tokens, "
+        "prompt and `confidence` (method auto, verbalized, k_sample, logprob or "
+        "native) as the kind needs",
+        type="array", category=AI,
+    ),
+    "labeling_engine.cascade": _D(
+        "Source ids tried in order. An item a tier is not confident enough "
+        "about goes to the next, and after the last one to a human. Defaults "
+        "to the first source",
+        type="array", category=AI,
+    ),
+    "labeling_engine.contracts": _D(
+        "Quality targets. Each has `kind` (selective_risk, ppi, "
+        "no_worse_than_human, budget_first, distributional, threshold_legacy), "
+        "`schema` and `confidence` (0.9), plus the kind's own keys: `error` "
+        "and `per_class` for selective_risk, `estimand`, `by` and `max_width` for "
+        "ppi, "
+        "`epsilon` for no_worse_than_human, `human_labels` or `human_usd` for "
+        "budget_first, `max_distance` and `groups_by` for distributional, "
+        "`threshold` for threshold_legacy",
+        type="array", category=AI,
+    ),
+    "labeling_engine.humans": _D(
+        "Who labels for the engine and how their labels are sampled",
+        type="object", category=AI,
+    ),
+    "labeling_engine.humans.pools": _D(
+        "Any of team, crowd and solo", type="array", default=["team"], category=AI,
+    ),
+    "labeling_engine.humans.dev_fraction": _D(
+        "Share of calibration labels used to fit calibrators and choose "
+        "thresholds. The rest are held out to test the contract",
+        type="number", default=0.5, category=AI,
+    ),
+    "labeling_engine.humans.calibration_rate": _D(
+        "Fraction of items drawn at random for blind calibration, or `auto` to "
+        "let the planner size the sample from the contracts",
+        type="number|string", default="auto", category=AI,
+    ),
+    "labeling_engine.humans.min_calibration_per_class": _D(
+        "Calibration labels each predicted class needs before a per-class "
+        "contract is tested", type="integer", default=10, category=AI,
+    ),
+    "labeling_engine.humans.audit_rate": _D(
+        "Fraction of auto-accepted labels sent back to a human, blind, to "
+        "watch for drift", type="number", default=0.02, category=AI,
+    ),
+    "labeling_engine.humans.overlap": _D(
+        "Fraction of the calibration sample sent to overlap_k people instead "
+        "of one, for the human-human baseline and the no_worse_than_human "
+        "contract", type="number", default=0.0, category=AI,
+    ),
+    "labeling_engine.humans.overlap_k": _D(
+        "People per item on the overlap share of the calibration sample. The "
+        "no_worse_than_human contract needs at least 3",
+        type="integer", default=3, category=AI,
+    ),
+    "labeling_engine.humans.truth": _D(
+        "How several people's labels on one item become the label the contracts "
+        "test against: majority, or dawid_skene to weight each rater by their "
+        "estimated reliability. An adjudicated label always wins",
+        type="string", default="majority", category=AI,
+    ),
+    "labeling_engine.humans.verify_visibility": _D(
+        "Whether the machine label is shown on verify requests (shown or "
+        "blind). Calibration, certification and audit requests are always "
+        "blind", type="string", default="shown", category=AI,
+    ),
+    "labeling_engine.humans.distribution_k": _D(
+        "Human labels per item for a distributional contract",
+        type="integer", default=5, category=AI,
+    ),
+    "labeling_engine.crowd": _D(
+        "Crowd recruitment for the crowd pool. Only Prolific is supported",
+        type="object", category=AI,
+    ),
+    "labeling_engine.crowd.provider": _D(
+        "Crowd provider", type="string", default="prolific", category=AI,
+    ),
+    "labeling_engine.crowd.study_id": _D(
+        "The Prolific study the engine adds places to", type="string", category=AI,
+    ),
+    "labeling_engine.crowd.reward_usd": _D(
+        "Reward per participant, used to cost places against budgets.human_usd",
+        type="number", category=AI,
+    ),
+    "labeling_engine.crowd.per_worker_quota": _D(
+        "Requests one participant is expected to complete",
+        type="integer", default=20, category=AI,
+    ),
+    "labeling_engine.budgets": _D(
+        "Spending limits: `model_usd`, `human_usd` and `human_labels`",
+        type="object", category=AI,
+    ),
+    "labeling_engine.budgets.model_usd": _D(
+        "Most the engine may spend on model calls, in US dollars",
+        type="number", category=AI,
+    ),
+    "labeling_engine.budgets.human_usd": _D(
+        "Most the engine may spend on crowd work, in US dollars. Required "
+        "before features.crowd_live_spend can be turned on",
+        type="number", category=AI,
+    ),
+    "labeling_engine.budgets.human_labels": _D(
+        "Most human labels the engine may request", type="number", category=AI,
+    ),
+    "labeling_engine.runtime": _D(
+        "How model calls are run", type="object", category=AI,
+    ),
+    "labeling_engine.runtime.batch_size": _D(
+        "Items per committed chunk", type="integer", default=32, category=AI,
+    ),
+    "labeling_engine.runtime.concurrency": _D(
+        "Concurrent calls per endpoint unless a source sets its own",
+        type="integer", default=4, category=AI,
+    ),
+    "labeling_engine.runtime.cache": _D(
+        "Reuse a stored reply when the same source version is asked the same "
+        "question", type="boolean", default=True, category=AI,
+    ),
+    "labeling_engine.runtime.retries": _D(
+        "Extra attempts for a call that timed out, lost its connection or got a "
+        "429 or 5xx. Each attempt is logged", type="integer", default=2, category=AI,
+    ),
+    "labeling_engine.runtime.planner_interval": _D(
+        "Seconds between planner passes in a running server",
+        type="number", default=30, category=AI,
+    ),
+    "labeling_engine.runtime.hold_minutes": _D(
+        "Minutes a person may hold a request without answering before it goes back "
+        "to the pool",
+        type="number", default=60, category=AI,
+    ),
+    "labeling_engine.features": _D(
+        "Optional parts of the engine: all off by default except drift",
+        type="object", category=AI,
+    ),
+    "labeling_engine.features.distill": _D(
+        "Train a cheaper model on human and certified labels and add it as the "
+        "first tier", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.optimize": _D(
+        "Each planner pass scores every subset of the cascade on dev labels and "
+        "reports the cheapest that keeps the contracts' coverage; nothing is "
+        "applied", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.drift": _D(
+        "Suspend auto-acceptance when audit labels show accuracy has fallen "
+        "(set false to only report a breach)",
+        type="boolean", default=True, category=AI,
+    ),
+    "labeling_engine.features.crowd_recruit": _D(
+        "Work out how many crowd places open requests need. Without "
+        "crowd_live_spend this only reports what it would do",
+        type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.crowd_live_spend": _D(
+        "Let the engine add crowd places and spend money, within "
+        "budgets.human_usd", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.pii_redaction": _D(
+        "Mask personal data in text sent to remote models and record what was "
+        "masked", type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.features.payload_capture": _D(
+        "Keep the full prompt and reply of each model call next to the call "
+        "log. Off by default because it stores item text",
+        type="boolean", default=False, category=AI,
+    ),
+    "labeling_engine.redaction": _D(
+        "PII redaction settings: `categories` to mask", type="object", category=AI,
+    ),
+    "labeling_engine.redaction.categories": _D(
+        "What to mask: email, url, ip, card, ssn, phone, handle (default: all)",
+        type="array", category=AI,
+    ),
+    "labeling_engine.distill": _D(
+        "Distillation settings: `trainer`, `min_labels`, `every`, "
+        "`include_silver`",
+        type="object", category=AI,
+    ),
+    "labeling_engine.distill.trainer": _D(
+        "A trainer from potato/training", type="string", default="sklearn-text",
+        category=AI,
+    ),
+    "labeling_engine.distill.min_labels": _D(
+        "Train only once this many labels exist", type="integer", default=200,
+        category=AI,
+    ),
+    "labeling_engine.distill.every": _D(
+        "Retrain when the label count has grown by this factor", type="number",
+        default=2.0, category=AI,
+    ),
+    "labeling_engine.distill.include_silver": _D(
+        "Also train on machine labels a contract certified", type="boolean",
+        default=True, category=AI,
+    ),
+    "labeling_engine.distill.modality": _D(
+        "What the distilled model reads: text, image (each item's image file, "
+        "through CLIP embeddings), or auto (image when most items name an "
+        "image file)", type="string", default="auto", category=AI,
+        example="image",
+    ),
+    "labeling_engine.distill.image_field": _D(
+        "The item field holding the image, when it is not the text_key",
+        type="string", category=AI,
+    ),
+    # === model_training =====================================================
+    "model_training": _D(
+        "Train models on the study's annotations from the admin Training page, "
+        "and optionally publish their predictions back as prelabels",
+        type="object", category=AI, see_also=("labeling_engine",),
+    ),
+    "model_training.enabled": _D(
+        "Turn model training on", type="boolean", default=False, category=AI,
+    ),
+    "model_training.queue_max": _D(
+        "Runs that may wait behind the one in progress. A start from the "
+        "Training page or the API while a run is in progress joins the queue; "
+        "beyond this many it is refused",
+        type="integer", default=10, category=AI,
+    ),
+    "model_training.retain_runs": _D(
+        "Finished runs kept in the run ledger. Older runs are dropped from it "
+        "unless their predictions are still stored; run directories stay on "
+        "disk", type="integer", default=5, category=AI,
+    ),
+    "model_training.grace_seconds": _D(
+        "Seconds a cancelled run is given to exit before it is killed",
+        type="integer", default=20, category=AI,
+    ),
+    "model_training.split_seed": _D(
+        "Seed for the train/validation/test split", type="integer", default=0,
+        category=AI,
+    ),
+    "model_training.splits": _D(
+        "Split fractions as a mapping of train, val and test. Unset, 0.7 / "
+        "0.15 / 0.15. Membership is a seeded hash of the instance id, so it "
+        "is stable across runs",
+        type="object", default={"train": 0.7, "val": 0.15, "test": 0.15},
+        category=AI, example={"train": 0.8, "val": 0.1, "test": 0.1},
+    ),
+    "model_training.aggregation": _D(
+        "How several annotators' labels become one training label",
+        type="string", default="consensus", category=AI,
+    ),
+    "model_training.auto_retrain": _D(
+        "Retrain as annotations arrive: `enabled`, `trainer`, `schemas`, "
+        "`min_interval_s` (default 600, seconds since the last run), "
+        "`update_frequency` (default 25, new annotations since the last run), "
+        "`params` (passed to the trainer) and `accept_licence` (true to "
+        "confirm the licence of a trainer that asks, such as "
+        "`ultralytics-detect`)",
+        type="object", category=AI,
+    ),
+    "model_training.max_wall_seconds": _D(
+        "Time limit for one run", type="number", category=AI,
+    ),
+    "model_training.max_ram_mb": _D(
+        "Memory limit for one run", type="number", category=AI,
+    ),
+    "model_training.device": _D(
+        "auto, cpu, cuda or mps", type="string", default="auto", category=AI,
+    ),
+    "model_training.num_threads": _D(
+        "CPU threads for one run", type="integer", category=AI,
+    ),
+    "model_training.backend": _D(
+        "Backend runs use unless one is chosen on the Training page: `local` "
+        "or a name under `model_training.backends`",
+        type="string", default="local", category=AI,
+    ),
+    "model_training.backends": _D(
+        "Named places to run training. `type: ssh` (Potato connects, copies "
+        "its code and starts the agent; keys `host`, `user`, `port`, "
+        "`identity_file`, `python`, `gpus`, `min_free_gpu_mb`, `remote_dir`, "
+        "`fetch_artifacts`, `max_artifact_mb`, `keep_remote`, `ssh_options`, "
+        "`env`, `packages`, `num_threads`, `connect_timeout_s`) or "
+        "`type: agent` (a `potato training agent` started by hand), or "
+        "`type: slurm` (the agent runs on a cluster's login node and submits "
+        "the worker with sbatch; the ssh keys except `gpus` and `packages`, "
+        "plus `job_python`, `gres`, `time`, `nice`, `partition`, "
+        "`cpus_per_task`, `mem`, `sbatch_options`, `prelude`, "
+        "`poll_interval_s`, `exit_grace_s`, `job_name`; `remote_dir` is required and must "
+        "be shared with the compute nodes). All take `heartbeat_timeout_s` "
+        "and `queue_timeout_s`",
+        type="object", category=AI,
+    ),
+    "model_training.trainer_params": _D(
+        "Parameter defaults per trainer, such as `hf-text-classification: "
+        "{model_name: ..., lora: true}`. A run's own parameters override "
+        "them. Names a trainer does not take are refused",
+        type="object", category=AI,
+    ),
+    "model_training.max_predictions_mb": _D(
+        "Largest predictions upload accepted from a remote agent",
+        type="number", default=512, category=AI,
+    ),
+    "model_training.writeback": _D(
+        "Publish a run's predictions as prelabels", type="object", category=AI,
+    ),
+    "model_training.tiling": _D(
+        "Cut whole-slide and other large images into tiles when a detection "
+        "or segmentation bundle is built, and merge the tile predictions back "
+        "into one prediction per image", type="object", category=AI,
+    ),
+    "model_training.tiling.enabled": _D(
+        "auto tiles slide formats and images whose longer side is at least "
+        "auto_min_side; true tiles every image; false never tiles",
+        type="string", default="auto", category=AI,
+    ),
+    "model_training.tiling.auto_min_side": _D(
+        "Longer side, in pixels, from which auto tiles an image",
+        type="integer", default=4096, category=AI,
+    ),
+    "model_training.tiling.tile_size": _D(
+        "Side of a tile in the pixels the trainer sees", type="integer",
+        default=1024, category=AI,
+    ),
+    "model_training.tiling.overlap": _D(
+        "Pixels shared by neighbouring tiles, at most half of tile_size. An "
+        "object larger than this can be found in pieces", type="integer",
+        default=128, category=AI,
+    ),
+    "model_training.tiling.downsample": _D(
+        "Full-resolution pixels per tile pixel; 4 trains a 40x slide at 10x",
+        type="number", default=1.0, category=AI,
+    ),
+    "model_training.tiling.mpp": _D(
+        "Microns per tile pixel, from the slide's own resolution; overrides "
+        "downsample when the slide records one", type="number", category=AI,
+    ),
+    "model_training.tiling.background": _D(
+        "Empty tiles sampled per tile with an object, as negatives. Assumes "
+        "every object on an annotated image was drawn; set 0 when slides are "
+        "annotated sparsely", type="number", default=0.25, category=AI,
+    ),
+    "model_training.tiling.max_predict_tiles": _D(
+        "Most tiles predicted on per image; the ones with the most tissue "
+        "are kept", type="integer", default=2000, category=AI,
+    ),
+    "model_training.tiling.min_visible": _D(
+        "Share of an object that must be inside a tile to train on it there",
+        type="number", default=0.4, category=AI,
+    ),
+    "model_training.tiling.tissue_threshold": _D(
+        "Share of a slide tile that must be tissue to predict on it",
+        type="number", default=0.05, category=AI,
+    ),
+    "model_training.writeback.schemas": _D(
+        "Schemes whose predictions are published", type="array", category=AI,
+    ),
+    "model_training.writeback.min_confidence": _D(
+        "Predictions below this confidence are not published",
+        type="number", default=0.0, category=AI,
+    ),
+    "model_training.writeback.field": _D(
+        "Item field the prelabels are written to", type="string",
+        default="predictions", category=AI,
+    ),
+    "model_training.writeback.include_unlabeled": _D(
+        "Also predict on, and prelabel, the items nobody has labelled yet "
+        "(otherwise only the held-out val and test items get predictions)",
+        type="boolean", default=False, category=AI,
+    ),
+    "solo_mode.refinement_loop": _D(
+        "The automatic refine-evaluate-keep cycle over the labeling prompt",
+        type="object", category=ASSIGN,
+    ),
+    "solo_mode.refinement_loop.enabled": _D(
+        "Run the refinement cycle", type="boolean", category=ASSIGN,
+    ),
+    "solo_mode.refinement_loop.trigger_interval": _D(
+        "New human labels between cycles", type="integer", category=ASSIGN,
+    ),
+    "solo_mode.refinement_loop.max_cycles": _D(
+        "Cycles before the loop stops", type="integer", category=ASSIGN,
+    ),
+    "solo_mode.refinement_loop.require_approval": _D(
+        "Hold a candidate prompt until it is approved, rather than adopting it",
+        type="boolean", category=ASSIGN,
+        see_also=("solo_mode.refinement_loop.auto_apply_suggestions",),
+    ),
+    "solo_mode.refinement_loop.auto_apply_suggestions": _D(
+        "Adopt a winning candidate prompt without asking",
+        type="boolean", category=ASSIGN,
+    ),
+    "solo_mode.refinement_loop.dry_run": _D(
+        "Score candidates but never adopt one", type="boolean", category=ASSIGN,
+    ),
+    "item_store": _D(
+        "Where item payloads live. `backend` is memory (the default) or paged; "
+        "paged writes to `path` -- .item_cache.sqlite under the output "
+        "directory when unset -- and keeps `cache_size` items resident. An "
+        "unknown backend warns and falls back to memory rather than refusing "
+        "to start",
+        type="object", category=DATA, see_also=("partial_loading",),
+    ),
+    "item_store.backend": _D(
+        "memory or paged", type="string", default="memory", category=DATA,
+    ),
+    "item_store.path": _D(
+        "SQLite file the paged backend uses", type="string", category=DATA,
+    ),
+    "item_store.cache_size": _D(
+        "Items the paged backend keeps in memory", type="integer", category=DATA,
+    ),
+
+    # -------------------------------------------------- annotation features --
+    "auto_redirect_on_completion": _D(
+        "Send annotators to the crowd platform's completion URL when they "
+        "finish, instead of leaving them on the done page",
+        type="boolean", default=False, category=ANNOT_FEAT,
+        see_also=("crowdsourcing", "completion_code"),
+    ),
+    "auto_redirect_delay": _D(
+        "Milliseconds on the completion page before that redirect fires",
+        type="integer", default=5000, category=ANNOT_FEAT,
+        see_also=("auto_redirect_on_completion",),
+    ),
+    "allow_phase_back_navigation": _D(
+        "Let annotators go back to an earlier workflow phase. Off by default, "
+        "so consent and training cannot be revisited and re-answered",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+    "export_annotation_format": _D(
+        "Formats the periodic auto-export writes, as a list (a bare string is "
+        "accepted). Empty means no auto-export",
+        type="array|string", default=[], category=ANNOT_FEAT,
+        see_also=("auto_export_interval", "output_annotation_format"),
+    ),
+    "auto_export_interval": _D(
+        "Seconds between automatic exports",
+        type="integer", default=60, category=ANNOT_FEAT,
+        see_also=("export_annotation_format",),
+    ),
+    "export_include_phase_data": _D(
+        "Include consent, instruction and survey responses in exports. Off by "
+        "default: survey answers are usually where the PII is",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+    "export_include_typing_dynamics": _D(
+        "Write typing_dynamics.csv, the per-field keystroke features and "
+        "writing-process verdicts. Off by default: they describe identifiable "
+        "annotators",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+    "export_include_authenticity": _D(
+        "Write authenticity.csv, the per-item page-leave, copy, paste and "
+        "automation paradata with its verdict. Off by default for the same "
+        "reason",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+    "export_include_annotation_changes": _D(
+        "Write annotation_changes.csv, the timestamped record of every answer "
+        "revision. Off by default: it is far larger than the annotations and "
+        "carries interaction detail not every study wants to distribute",
+        type="boolean", default=False, category=ANNOT_FEAT,
+    ),
+
+    # --------------------------------------------------------------- media --
+    "audio_annotation": _D(
+        "Server-side waveform service backing audio_annotation schemes. Only "
+        "read when the task actually has one",
+        type="object", category=MEDIA,
+    ),
+    "audio_annotation.waveform_cache_dir": _D(
+        "Where precomputed waveforms are cached. Relative paths resolve against "
+        "task_dir; unset it is waveform_cache/ there",
+        type="string", category=MEDIA,
+    ),
+    "audio_annotation.waveform_look_ahead": _D(
+        "Clips whose waveforms are precomputed ahead of the annotator",
+        type="integer", default=5, category=MEDIA,
+    ),
+    "audio_annotation.waveform_cache_max_size": _D(
+        "Waveforms kept in the cache", type="integer", default=100, category=MEDIA,
+    ),
+    "audio_annotation.client_fallback_max_duration": _D(
+        "Seconds of audio the browser may decode itself when the server has no "
+        "waveform ready",
+        type="integer", default=1800, category=MEDIA,
+    ),
+
+    # ---------------------------------------------------------- integration --
+    "mturk": _D(
+        "Amazon Mechanical Turk. Needs `enabled: true` and `config_file_path` "
+        "pointing at the credentials YAML, plus boto3 installed. MTurk closed "
+        "to new customers in July 2026 and the loader says so on startup",
+        type="object", category=INTEG, see_also=("crowdsourcing", "prolific"),
+    ),
+    "huggingface_backup": _D(
+        "Mirror the annotation directory to a Hugging Face dataset repo on a "
+        "schedule. Needs `enabled` and `repo_id`; the token comes from `token` (env "
+        "substitution is applied) or HF_TOKEN, and `schedule_minutes` sets the "
+        "cadence. A misconfiguration logs an error and lets the server run",
+        type="object", category=INTEG, see_also=("output_annotation_dir",),
+    ),
+    "backup": _D(
+        "Mirror collected data off the host and restore it into an empty task "
+        "at boot. `sinks` lists `{type: huggingface, repo_id}` and/or "
+        "`{type: s3, bucket, prefix, region, endpoint_url}`; credentials come "
+        "from the sink (env substitution applied), HF_TOKEN, or "
+        "POTATO_S3_ACCESS_KEY_ID / POTATO_S3_SECRET_ACCESS_KEY. Copies the "
+        "annotation directory and `.backup` snapshots of project.sqlite and "
+        "datasets.sqlite. Supersedes `huggingface_backup`",
+        type="object", category=INTEG,
+        see_also=("huggingface_backup", "output_annotation_dir"),
+    ),
+    "backup.sinks": _D(
+        "Where to send the backup. Each entry has a `type` of `huggingface` or "
+        "`s3`; with several, restore reads the first that holds data",
+        type="array", category=INTEG,
+    ),
+    "backup.schedule_minutes": _D(
+        "Minutes between backup cycles", type="number", default=5, category=INTEG,
+    ),
+    "backup.restore_on_boot": _D(
+        "When the output directory is empty at start, download the latest "
+        "backup into it before any annotator state loads. Never overwrites "
+        "local data",
+        type="boolean", default=True, category=INTEG,
+    ),
+    "backup.enabled": _D(
+        "Set false to keep the block but turn the backup off",
+        type="boolean", default=True, category=INTEG,
+    ),
+    "webhooks": _D(
+        "Post task events to external URLs as they happen",
+        type="object", category=INTEG,
+    ),
+    "webhooks.enabled": _D(
+        "Dispatch webhooks", type="boolean", default=False, category=INTEG,
+    ),
+    "webhooks.endpoints": _D(
+        "Endpoints to post to, and which events each one wants",
+        type="array", category=INTEG,
+    ),
+
+    # ------------------------------------------------------------ publishing --
+    "publish": _D(
+        "Dataset publishing options: `default_target` (archive, huggingface or "
+        "zenodo) and an `options` block covering which splits are included, "
+        "aggregation, min_annotators, PII scrubbing, media bundling and file "
+        "format. Publishing works with none of this set",
+        type="object", category=PUBLISHING, see_also=("dataset_metadata",),
+    ),
+    "dataset_metadata": _D(
+        "Descriptive metadata for the generated dataset card and Zenodo "
+        "deposit: license, authors, citation, keywords, version, funding, "
+        "related_links, tags, task_categories. Title and description fall back "
+        "to the task's own name and description",
+        type="object", category=PUBLISHING, see_also=("publish",),
+    ),
+
+    # ---------------------------------------------------------------- agent --
+    "live_agent": _D(
+        "Run a live agent inside the annotation page, so annotators judge a "
+        "conversation as it happens rather than a recorded trace. Its presence "
+        "enables the feature, and an instance_display field of type live_agent "
+        "renders it",
+        type="object", category=AGENT, see_also=("agent_proxy", "instance_display"),
+    ),
+    "live_coding_agent": _D(
+        "Same idea for a coding agent: runs the agent against a repository and "
+        "streams its tool calls into a live_coding_agent display field",
+        type="object", category=AGENT, see_also=("live_agent",),
+    ),
+    "live_coding_agent.backend_type": _D(
+        "Which agent backend drives the session: ollama_tool_use, "
+        "anthropic_tool_use, openai_tool_use, claude_sdk",
+        type="string", default="ollama_tool_use", category=AGENT,
+    ),
+    "live_coding_agent.ai_config": _D(
+        "Model settings passed to the backend (model name, endpoint, API key). "
+        "Server-side only: a request cannot override it, because it carries "
+        "credentials",
+        type="object", category=AGENT,
+    ),
+    "live_coding_agent.working_dir": _D(
+        "Repository the agent works on. Copied per session into a sandbox "
+        "workspace rather than used in place, so agent edits never touch it",
+        type="string", default=".", category=AGENT,
+    ),
+    "live_coding_agent.max_turns": _D(
+        "Stop the agent loop after this many turns",
+        type="integer", default=50, category=AGENT,
+    ),
+    "live_coding_agent.system_prompt": _D(
+        "Extra system prompt prepended to the agent's instructions",
+        type="string", default="", category=AGENT,
+    ),
+    "live_coding_agent.sandbox_mode": _D(
+        "Boundary the agent's tool calls run inside: container (Docker or "
+        "Podman), bubblewrap (Linux hosts without a container runtime), or "
+        "trusted (no isolation, requires "
+        "acknowledge_untrusted_code_execution). The former docker, worktree "
+        "and direct modes are deprecated aliases; worktree never provided "
+        "isolation",
+        type="string", default="container", category=AGENT,
+        see_also=("live_coding_agent.acknowledge_untrusted_code_execution",),
+    ),
+    "live_coding_agent.container_cli": _D(
+        "Container tool to drive: docker or podman. Rootless Podman needs no "
+        "root daemon",
+        type="string", default="docker", category=AGENT,
+    ),
+    "live_coding_agent.container_runtime": _D(
+        "Alternative container runtime, passed straight through as --runtime. "
+        "Use runsc for gVisor (syscall interception in userspace) or kata for "
+        "a hardware VM boundary. Unset uses the daemon default",
+        type="string", category=AGENT,
+    ),
+    "live_coding_agent.sandbox_image": _D(
+        "Image the sandbox container runs. Point this at your own image to "
+        "give the agent more tooling; pin a digest if you need reproducibility",
+        type="string", default="python:3.12-slim", category=AGENT,
+    ),
+    "live_coding_agent.sandbox_network": _D(
+        "Container network mode. Left at none the agent cannot reach the "
+        "network, so it cannot exfiltrate what it reads",
+        type="string", default="none", category=AGENT,
+    ),
+    "live_coding_agent.sandbox_user": _D(
+        "uid:gid the sandboxed tools run as. Defaults to nobody",
+        type="string", default="65534:65534", category=AGENT,
+    ),
+    "live_coding_agent.sandbox_memory": _D(
+        "Memory limit for the sandbox container, in Docker syntax",
+        type="string", default="512m", category=AGENT,
+    ),
+    "live_coding_agent.sandbox_cpus": _D(
+        "CPU limit for the sandbox container",
+        type="number", default=1, category=AGENT,
+    ),
+    "live_coding_agent.sandbox_pids_limit": _D(
+        "Maximum processes inside the sandbox container, which caps fork bombs",
+        type="integer", default=128, category=AGENT,
+    ),
+    "live_coding_agent.sandbox_root": _D(
+        "Directory holding per-session workspace copies. Defaults to a "
+        ".potato-sandboxes directory beside working_dir",
+        type="string", category=AGENT,
+    ),
+    "live_coding_agent.acknowledge_untrusted_code_execution": _D(
+        "Required alongside sandbox_mode: trusted. Confirms you accept that "
+        "annotator-editable tool calls, including arbitrary shell commands, "
+        "run directly on this host as the Potato user",
+        type="boolean", default=False, category=AGENT,
+        see_also=("live_coding_agent.sandbox_mode",),
+    ),
+
+    # ----------------------------------------------------- agent evaluation --
+    "datasets": _D(
+        "Versioned evaluation datasets and experiment runs, served at /datasets",
+        type="object", category=AGENT_EVAL,
+    ),
+    "datasets.enabled": _D(
+        "Register the datasets surface", type="boolean", default=False,
+        category=AGENT_EVAL,
+    ),
+    "datasets.storage": _D(
+        "Where datasets are stored: file or sqlite. Anything else falls back to file",
+        type="string", default="file", category=AGENT_EVAL,
+    ),
+    "automation": _D(
+        "Rules engine over incoming items: filter, sample, then act",
+        type="object", category=AGENT_EVAL, see_also=("triage",),
+    ),
+    "automation.enabled": _D(
+        "Run the rules", type="boolean", default=False, category=AGENT_EVAL,
+    ),
+    "automation.rules": _D(
+        "Rules of `when` (the shared condition grammar), an optional sample "
+        "rate, and the actions to take on a match",
+        type="array", category=AGENT_EVAL,
+    ),
+    "curation": _D(
+        "Semantic curation (the Catalog): an embedding index over items, "
+        "similarity search, and saved slices that stay live as data arrives",
+        type="object", category=AGENT_EVAL, see_also=("embeddings", "search"),
+    ),
+    "curation.enabled": _D(
+        "Register the catalog", type="boolean", default=False, category=AGENT_EVAL,
+    ),
+    "curation.model_name": _D(
+        "Embedding model", type="string", default="all-MiniLM-L6-v2",
+        category=AGENT_EVAL,
+    ),
+    "curation.embed_on_ingest": _D(
+        "Embed each item as it arrives. Off by default because it adds boot "
+        "time and memory",
+        type="boolean", default=False, category=AGENT_EVAL,
+    ),
+    "curation.text_key": _D(
+        "Item field to embed. Empty means the item's text field",
+        type="string", default="", category=AGENT_EVAL,
+        see_also=("item_properties.text_key",),
+    ),
+    "plugins": _D(
+        "Installed plugins to load, by name. A plugin adds annotation or "
+        "display types; `potato plugins` lists the installed ones. Plugins "
+        "run as Python inside the server, so only listed ones load",
+        type="array", category=FEATURES,
+    ),
+    "grid_view": _D(
+        "A page at /annotate/grid that labels many items at once for one "
+        "radio, multiselect or triage scheme: select tiles, press a label",
+        type="object", category=UI,
+    ),
+    "grid_view.enabled": _D("Serve the grid page", type="boolean", default=False, category=UI),
+    "grid_view.scheme": _D(
+        "The radio, multiselect or triage scheme the grid labels. Other schemes are "
+        "answered on the normal page",
+        type="string", category=UI,
+    ),
+    "grid_view.page_size": _D(
+        "Items per grid page, from the annotator's own assignment",
+        type="integer", default=24, category=UI,
+    ),
+    "validation": _D(
+        "Settings read by `potato validate`, not by the running server",
+        type="object", category=DEBUG,
+    ),
+    "validation.acknowledge": _D(
+        "Warnings this study expects, so `validate --strict` stops failing on "
+        "them. Each entry is a piece of a warning's text, at least 12 "
+        "characters long; a warning containing it is listed as acknowledged "
+        "and not counted. An entry that matches no warning is itself reported, "
+        "so an acknowledgement that has gone stale does not hide the next "
+        "problem. The server still logs these warnings at boot",
+        type="array", default=[], category=DEBUG,
+        example=["assignment_strategy: engine serves only the engine's requests"],
+    ),
+    "arena": _D(
+        "Multi-model arena: send one prompt to several providers and collect "
+        "side-by-side preferences",
+        type="object", category=AGENT_EVAL,
+    ),
+    "arena.enabled": _D(
+        "Register the arena", type="boolean", default=False, category=AGENT_EVAL,
+    ),
+    "arena.models": _D(
+        "Models to fan out to. Each is endpoint_type plus model, with optional "
+        "label, base_url, temperature and ai_config",
+        type="array", category=AGENT_EVAL,
+    ),
+    "ai_budget": _D(
+        "Cost estimate and spend cap for AI actions. The complaint about "
+        "commercial platforms is not the price but the surprise -- credits "
+        "consumed by auto-labelling and discovered at export time",
+        type="object", category=AI, see_also=("ai_support",),
+    ),
+    "ai_budget.cap_usd": _D(
+        "Dollar ceiling for this project's AI spend. A run projected to cross "
+        "it is refused BEFORE it starts rather than halted partway, so it does "
+        "not leave a part-labelled dataset and a bill for it. Binds only a "
+        "model Potato can price: an unpriced model logs a warning and runs, "
+        "because a dollar ceiling has no dollar figure to compare against",
+        type="number", category=AI, example=25.0,
+    ),
+    "ai_budget.prices": _D(
+        "Per-model prices, USD per million tokens, as "
+        "{model_substring: [input, output]}. Merged over the built-in table "
+        "and matched by the same longest-substring rule, so a family name or "
+        "one dated snapshot both work. A table shipped in a release is stale "
+        "the moment a vendor ships a model, and an unpriced model means "
+        "cap_usd does not bind; this prices one without waiting for a release",
+        type="object", category=AI, see_also=("ai_budget.cap_usd",),
+    ),
+    "calibration": _D(
+        "Agreement drift tracking and the re-calibration prompt on /admin/iaa. "
+        "Agreement is scored per time window so a fall in recent work is "
+        "visible, instead of averaging into one whole-project number",
+        type="object", category=QC, see_also=("num_annotators_per_item",),
+    ),
+    "calibration.enabled": _D(
+        "Compute the agreement timeline. Costs one extra IAA pass per window, "
+        "so it can be turned off on very large projects",
+        type="boolean", default=True, category=QC,
+    ),
+    "calibration.windows": _D(
+        "How many time windows the timeline is cut into",
+        type="integer", default=6, category=QC,
+    ),
+    "calibration.window_by": _D(
+        "'count' gives every window the same number of items, 'time' the same "
+        "duration. Equal-count is the default because a study that ran in "
+        "bursts leaves equal-duration windows empty, and an empty window has "
+        "no agreement rather than low agreement",
+        type="string", default="count", category=QC,
+    ),
+    "calibration.drop_threshold": _D(
+        "Relative fall below the project baseline that raises the "
+        "re-calibration prompt, e.g. 0.15 for 15%",
+        type="number", default=0.15, category=QC,
+    ),
+    "judge_alignment": _D(
+        "LLM-as-judge alignment: score items with a judge, compare against the "
+        "humans, and track the agreement across prompt versions",
+        type="object", category=AGENT_EVAL, see_also=("judge_calibration", "ai_support"),
+    ),
+    "judge_alignment.enabled": _D(
+        "Turn the judge on", type="boolean", default=False, category=AGENT_EVAL,
+    ),
+    "judge_alignment.ai_support": _D(
+        "Endpoint the judge uses; falls back to the global ai_support block. "
+        "Several evaluators read this same override",
+        type="object", category=AGENT_EVAL, see_also=("ai_support",),
+    ),
+    "judge_alignment.schemas": _D(
+        "Per-scheme judge settings, keyed by scheme name. The keys present are "
+        "also an allow-list: only radio, select and likert schemes named here "
+        "get judged. Omit it to judge every categorical scheme",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_alignment.few_shot": _D(
+        "Few-shot examples added to the judge prompt",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_alignment.inline": _D(
+        "Show the judge's prediction beside the item while annotating. "
+        "`enabled` turns it on; without `compute_on_demand` it only shows "
+        "predictions an admin already ran",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_calibration": _D(
+        "Judge calibration: auto-label a sample with one or more judges, have "
+        "humans re-label the same items blind, and report the agreement and "
+        "calibration curve",
+        type="object", category=AGENT_EVAL, see_also=("judge_alignment",),
+    ),
+    "judge_calibration.enabled": _D(
+        "Register the calibration surface", type="boolean", default=False,
+        category=AGENT_EVAL,
+    ),
+    "judge_calibration.prompt": _D(
+        "Prompt given to the judge", type="string", default="", category=AGENT_EVAL,
+    ),
+    "judge_calibration.models": _D(
+        "Judge models to run and compare", type="array", category=AGENT_EVAL,
+    ),
+    "judge_calibration.k_samples": _D(
+        "Samples per item, used to measure the judge's own consistency",
+        type="integer", default=5, category=AGENT_EVAL,
+    ),
+    "judge_calibration.max_items": _D(
+        "Hard cap on items labeled", type="integer", category=AGENT_EVAL,
+    ),
+    "judge_calibration.fraction": _D(
+        "Fraction of the corpus to label, as an alternative to max_items",
+        type="number", category=AGENT_EVAL,
+    ),
+    "judge_calibration.sampling": _D(
+        "How the calibration sample is drawn: strategy (random), stratify_by, "
+        "sample_size (200), seed (42)",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_calibration.human": _D(
+        "The human side: num_raters (1) and how gold is formed (`gold`, single "
+        "by default)",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_calibration.schemas": _D(
+        "Schemes to calibrate", type="array", category=AGENT_EVAL,
+    ),
+    "judge_calibration.calibration": _D(
+        "Calibration-curve settings; `n_bins` defaults to 10",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_calibration.output": _D(
+        "Where the report goes: `dir` (judge_calibration_output) and a `files` "
+        "block naming the labels, JSON report and HTML report",
+        type="object", category=AGENT_EVAL,
+    ),
+    "judge_calibration.state_dir": _D(
+        "Run state directory. Unset it is .judge_calibration under the output "
+        "directory",
+        type="string", category=AGENT_EVAL,
+    ),
+    "cot_segmentation": _D(
+        "Split a long chain-of-thought string into labelable steps once, at "
+        "load time, so the cot_trace display and the process_reward scheme read "
+        "the same cached list",
+        type="object", category=AGENT_EVAL,
+    ),
+    "cot_segmentation.source_key": _D(
+        "Item field holding the reasoning string. Required whenever the block "
+        "is present",
+        type="string", required=False, category=AGENT_EVAL, example="reasoning",
+    ),
+    "cot_segmentation.target_key": _D(
+        "Item field the step list is written to. Point the display's and "
+        "scheme's `steps_key` at this",
+        type="string", default="cot_steps", category=AGENT_EVAL,
+    ),
+    "cot_segmentation.strategy": _D(
+        "How to split: blank_line, numbered, markers, sentence, llm, or auto. "
+        "llm needs an ai_support or judge_alignment endpoint and falls back to "
+        "the heuristics if it cannot reach one",
+        type="string", default="auto", category=AGENT_EVAL,
+        see_also=("ai_support", "judge_alignment"),
+    ),
+    "cot_segmentation.min_step_chars": _D(
+        "Steps shorter than this are merged into the previous one",
+        type="integer", category=AGENT_EVAL,
+    ),
+    "cot_segmentation.max_steps": _D(
+        "Hard cap on steps per item, which keeps pathological input from reaching "
+        "the UI",
+        type="integer", category=AGENT_EVAL,
+    ),
+    "cot_segmentation.markers": _D(
+        "Separator strings for the markers strategy",
+        type="array", category=AGENT_EVAL,
+    ),
+    "cot_segmentation.sentences_per_step": _D(
+        "Sentences grouped into one step by the sentence strategy",
+        type="integer", category=AGENT_EVAL,
+    ),
+    "cot_segmentation.llm_max_chars": _D(
+        "Characters of reasoning sent to the model under the llm strategy",
+        type="integer", category=AGENT_EVAL,
+    ),
+
+    # ---------------------------------------------------------- incentives --
+    "incentives": _D(
+        "Bonus payments for price_list, bdm and belief_elicitation answers. "
+        "Computed after the participant finishes, from the stored answers, by "
+        "the `incentives` export and the admin route "
+        "/admin/api/crowd/incentive_bonuses; never paid automatically",
+        type="object", category=INTEG, see_also=("crowdsourcing",),
+    ),
+    "incentives.enabled": _D(
+        "Compute bonuses: turns on the `incentives` export and the admin "
+        "route",
+        type="boolean", default=False, category=INTEG,
+    ),
+    "incentives.currency": _D(
+        "Currency label written to bonuses.csv. Prolific pays in the study's "
+        "own currency",
+        type="string", default="USD", category=INTEG,
+    ),
+    "incentives.rules": _D(
+        "One rule per paid scheme: `scheme`, `method` (mpl_random_row, bdm or "
+        "bsr), an optional `name`, and the method's keys -- bdm: `endowment`, "
+        "`draw: {min, max, step}` or `price_field`, `item_value` or "
+        "`value_field`; bsr: `prize` and `outcome_field` or `outcome`",
+        type="array", category=INTEG,
+    ),
+    "incentives.pay": _D(
+        "one_random_item pays one decision drawn at random from all of a "
+        "participant's paid decisions; all (or its alias sum) pays the sum "
+        "of every decision",
+        type="string", default="one_random_item", category=INTEG,
+    ),
+    "incentives.max_bonus": _D(
+        "Upper limit on one participant's bonus. A capped total is marked in "
+        "bonuses.csv",
+        type="number", category=INTEG,
+    ),
+    "incentives.seed": _D(
+        "Private text mixed into every draw. Without it the draws follow from "
+        "the user id and rule name alone, which anyone with the code could "
+        "compute in advance; keep it out of public repositories",
+        type="string", category=INTEG,
+    ),
+    "incentives.only_finished": _D(
+        "Draw and pay only for participants who reached the end of the study",
+        type="boolean", default=True, category=INTEG,
+    ),
+
+    # ------------------------------------------------------------ schedule --
+    "schedule": _D(
+        "Sessions after the regular flow: waves, experience-sampling prompts "
+        "and Delphi rounds, computed per participant at enrolment (when they "
+        "finish the regular flow). See docs/workflow/scheduling.md",
+        type="object", category=WORKFLOW, see_also=("notifications",),
+    ),
+    "schedule.timezone": _D(
+        "IANA time zone used when the participant's browser reports none",
+        type="string", default="UTC", category=WORKFLOW, example="Europe/London",
+    ),
+    "schedule.seed": _D(
+        "Text mixed into the random prompt times, so a plan can be recomputed",
+        type="string", default="", category=WORKFLOW,
+    ),
+    "schedule.poll_seconds": _D(
+        "How often the background loop sends due messages and closes rounds",
+        type="number", default=30, category=WORKFLOW, minimum=1, maximum=3600,
+    ),
+    "schedule.scheduler": _D(
+        "Run the background loop. Off, nothing is sent until an admin presses "
+        "Send due messages now (or calls /admin/api/schedule/tick)",
+        type="boolean", default=True, category=WORKFLOW,
+    ),
+    "schedule.waves": _D(
+        "Follow-up sessions: name, title, offset (after enrolment), optional at "
+        "(local clock time), window, questions or questions_file, reminders, "
+        "completion_code, intro",
+        type="array", category=WORKFLOW,
+    ),
+    "schedule.experience_sampling": _D(
+        "Repeated short prompts: days, start_day, daily_window, signal "
+        "{per_day, min_gap} or interval {every} / {times}, expires_after, "
+        "questions or questions_file, reminders. See "
+        "docs/workflow/experience_sampling.md",
+        type="object", category=WORKFLOW,
+    ),
+    "schedule.delphi": _D(
+        "Delphi rounds: items or items_file, scale, comments, max_rounds, "
+        "round_length, gap, start, stop {iqr_at_most, median_change_at_most, "
+        "changed_share_below}, min_panel, reminders. See docs/workflow/delphi.md",
+        type="object", category=WORKFLOW,
+    ),
+    "notifications": _D(
+        "Messages for scheduled sessions: channels (log, smtp, twilio, "
+        "prolific), base_url, dry_run, contact consent and templates. "
+        "Credentials come from environment variables only",
+        type="object", category=INTEG, see_also=("schedule",),
+    ),
+    "notifications.dry_run": _D(
+        "Render and log every message without delivering it",
+        type="boolean", default=False, category=INTEG,
+    ),
+    "notifications.base_url": _D(
+        "Public address used in resume links. Required for any channel other "
+        "than log unless dry_run is on",
+        type="string", category=INTEG, example="https://study.example.org",
+    ),
+    "notifications.channels": _D(
+        "List of channels: {type: log}, {type: smtp, host, port, security, "
+        "from, username_env, password_env}, {type: twilio, account_sid_env, "
+        "auth_token_env, from_number or messaging_service_sid_env}, "
+        "{type: prolific, token_env, study_id}",
+        type="array", category=INTEG,
+    ),
+    "notifications.contact": _D(
+        "consent {question, value}: the phase-page question whose answer allows "
+        "contact (required with any channel); delete_after_study (default true)",
+        type="object", category=INTEG,
+    ),
+    "notifications.templates": _D(
+        "Override subject/body per message kind (before_open, open, reminder, "
+        "prompt, delphi_round) with {study}, {session}, {opens}, {closes}, "
+        "{time_left}, {link}, {stop_link}",
+        type="object", category=INTEG,
+    ),
+
+    # ------------------------------------------------------------- internal --
+    "config_file": _D(
+        "Path to the config file being run. Written by the loader from the "
+        "command line, not something to set yourself; task_dir falls back to "
+        "its directory",
+        type="string", category=SERVER, see_also=("task_dir",),
+    ),
+}
+
+
+def get_key_doc(path: str) -> Optional[ConfigKeyDoc]:
+    """Documentation for one dotted config path, or None if undocumented."""
+    return CONFIG_KEY_DOCS.get(path)
+
+
+def iter_key_docs() -> Iterator[Tuple[str, ConfigKeyDoc]]:
+    """Every documented path, in sorted order."""
+    for path in sorted(CONFIG_KEY_DOCS):
+        yield path, CONFIG_KEY_DOCS[path]
+
+
+def documented_paths() -> set:
+    """The set of dotted paths this table covers."""
+    return set(CONFIG_KEY_DOCS)
+
+
+def json_schema_type(doc: ConfigKeyDoc):
+    """The `type` value to emit in JSON Schema: a string, a list, or None."""
+    if not doc.type or doc.type == "any":
+        return None
+    parts = [p.strip() for p in doc.type.split("|") if p.strip()]
+    if not parts:
+        return None
+    return parts[0] if len(parts) == 1 else parts
+
+
+def category_for(path: str, fallback: str = "Other") -> str:
+    """Category a key belongs to, for the generated reference."""
+    doc = CONFIG_KEY_DOCS.get(path)
+    return doc.category if doc else fallback

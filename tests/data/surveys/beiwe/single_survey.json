@@ -1,0 +1,80 @@
+﻿{
+  "content": [
+    {
+      "question_id": "5a170000-0000-4000-8000-000000000001",
+      "question_type": "info_text_box",
+      "question_text": "Please answer about the last 24 hours.",
+      "display_if": null
+    },
+    {
+      "question_id": "5a170000-0000-4000-8000-000000000002",
+      "question_type": "slider",
+      "question_text": "How is your mood right now?",
+      "min": "0",
+      "max": "10",
+      "display_if": null
+    },
+    {
+      "question_id": "5a170000-0000-4000-8000-000000000003",
+      "question_type": "radio_button",
+      "question_text": "Did you sleep well last night?",
+      "answers": [
+        {
+          "text": "Yes"
+        },
+        {
+          "text": "No"
+        },
+        {
+          "text": "Not sure"
+        }
+      ],
+      "display_if": null
+    },
+    {
+      "question_id": "5a170000-0000-4000-8000-000000000004",
+      "question_type": "free_response",
+      "text_field_type": "NUMERIC",
+      "question_text": "How many hours did you sleep?",
+      "display_if": {
+        "==": [
+          "5a170000-0000-4000-8000-000000000003",
+          1
+        ]
+      }
+    },
+    {
+      "question_id": "5a170000-0000-4000-8000-000000000005",
+      "question_type": "checkbox",
+      "question_text": "What did you do today?",
+      "answers": [
+        {
+          "text": "Exercise"
+        },
+        {
+          "text": "Work"
+        },
+        {
+          "text": "Socialize"
+        },
+        {
+          "text": "Rest"
+        }
+      ],
+      "display_if": null
+    }
+  ],
+  "settings": {
+    "randomize": false
+  },
+  "survey_type": "tracking_survey",
+  "timings": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+  ]
+}

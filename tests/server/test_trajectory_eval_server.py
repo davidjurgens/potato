@@ -111,17 +111,22 @@ class TestTrajectoryEvalServer:
             "score": 95,
         })
 
-        # Save annotation
+        # Save annotation using the same wire format the real frontend emits:
+        # the trajectory_eval hidden input is an `.annotation-input` whose value
+        # is collected by syncAnnotationsFromDOM and serialized by saveAnnotations
+        # as "<schema>:<label>" (annotation.js). Both schema and label are the
+        # scheme name for this single-input schema.
         resp = session.post(
             f"{self.server.base_url}/updateinstance",
             json={
                 "instance_id": "trace_001",
                 "annotations": {
-                    "step_evaluation": {"step_evaluation": annotation_data}
+                    "step_evaluation:step_evaluation": annotation_data
                 },
             },
         )
         assert resp.status_code == 200
+        assert resp.json().get("status") != "error", resp.text
 
         # Retrieve
         resp = session.get(

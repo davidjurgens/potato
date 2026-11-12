@@ -44,6 +44,20 @@ EXAMPLE_CONFIGS = discover_example_configs()
 EXAMPLE_IDS = [config_id(c) for c in EXAMPLE_CONFIGS]
 
 
+def test_the_example_sweep_found_something_to_check():
+    """Six parametrized suites below run once per example config, and pytest
+    SKIPS rather than fails when that collection is empty. So a moved or
+    renamed `examples/` directory turns every example check in this file into a
+    skipped placeholder and leaves the run green.
+
+    Asserted at module level rather than inside those tests, because a check in
+    the loop body does not run when the loop is empty.
+    """
+    assert len(EXAMPLE_CONFIGS) >= 20, (
+        f"only {len(EXAMPLE_CONFIGS)} example configs found under "
+        f"{EXAMPLES_DIR}; every check below would silently skip")
+
+
 class TestExampleSelfContained:
     """Every example must have all referenced data files present."""
 

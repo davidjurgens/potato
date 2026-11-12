@@ -6,8 +6,8 @@ For most NLP projects, the right design is the textbook recipe:
 > One annotator handles most items, with two or three annotators overlapping
 > on a 5 to 10 percent sample to monitor quality.
 
-This page explains how to express that and several related patterns through
-the `num_annotators_per_item` and `per_annotator_quota` config blocks.
+That design, and several related ones, are expressed through the
+`num_annotators_per_item` and `per_annotator_quota` config blocks.
 
 ## The canonical config key
 
@@ -59,6 +59,34 @@ assignment logic transparently treats them as high-coverage.
 When `stratify_by` is set, the fraction is applied **per stratum**, so every
 category contributes proportionally to the overlap sample.
 
+### Keep coders off each other's held items
+
+When an annotator would otherwise get no work, Potato hands out items other
+annotators hold but have not submitted, so nobody is stranded by someone who
+closed the tab. With `fixed_order`, the first coder holds most of the dataset,
+so the second coder, after the overlap items, is given the first coder's
+unfinished items and double-codes far more than the design asks. In one run a
+study that asked for 15 double-coded items got 41.
+
+```yaml
+assignment_hold_minutes: 30
+```
+
+With this set, an annotator who runs out of work is given items other
+annotators hold but have not reached yet, and those items leave the first
+annotator's queue, so they move rather than get coded twice. An item the holder
+has already been shown stays with them while they keep working: it is theirs
+if they were given it, or saved anything, within that many minutes. Once they
+have been gone longer, it moves to the next annotator who needs work, and the
+holder no longer has it when they come back.
+
+When every remaining item is on someone's screen, an annotator who arrives is
+told that the items are taken and to try again later. So is one who finishes
+the item in front of them while the rest are held: they stay in the study, and
+Check again gives them an item once a holder has been inactive for that long. Leave the setting unset
+to keep the default: nobody is sent away with no work, and held items are
+shared.
+
 ## Adaptive boost
 
 Adaptive boost expands the cap on an item whose early annotators disagreed.
@@ -67,12 +95,47 @@ When `register_annotator` records an annotation:
 1. If `adaptive.enabled` is true, the item already has at least 2 annotations,
    and its current cap is less than `boost_to`,
 2. The disagreement score (ratio of distinct labels per schema across the
-   item's annotators, max over schemas) is recomputed,
+   item's annotators, max over schemas) is recomputed. An annotator who saved
+   the item but left a question blank counts as giving a different answer
+   from one who answered it; free-text questions are not compared. Pairwise
+   answers are compared in data order (see
+   [Presentation order](presentation_order.md#pairwise-is-different)),
 3. If the score crosses `disagreement_threshold`, the item's cap is raised
    to `boost_to`, the item is removed from `completed_instance_ids`, and it
    re-enters the assignment queue.
 
-The boost is one-shot per item.
+The score is recomputed on every save, autosaves included. If a later save
+brings the answers back into agreement (a misclick the annotator corrected,
+say) and nobody beyond the original cap has annotated or been handed the item
+yet, the boost is withdrawn. Once an extra annotator has the item, the boost
+stays.
+
+### `min_annotators_per_instance` is a deprecated name for the cap
+
+`min_annotators_per_instance` sets the same thing `num_annotators_per_item`
+sets: how many annotators an item collects. It used to be read from the
+config and then never consulted, so a study that asked for three
+annotators an item collected an unlimited number, and nothing in the
+output said the number had been discarded.
+
+It is now read as the cap. If you set it alone, items retire at that
+number where before they did not retire at all, so check any running
+study that uses it. Setting it alongside `num_annotators_per_item` or
+`max_annotations_per_item` with a different value is refused at load:
+two numbers for one setting is a question only you can answer.
+
+Rename it to `num_annotators_per_item`, which is the canonical spelling.
+
+### `num_annotators_per_item.min` is not enforced
+
+The nested `min` is read and never consulted. Inside a mapping that also
+carries `default`, it reads as the floor to that ceiling, so
+`{min: 3, default: 5}` looks like it brackets coverage between two
+numbers. It does not &mdash; you get the ceiling, and the study can end
+with items at a single annotator. The server warns at load if you set it.
+
+Use `default` for the coverage you want. An item retires when it reaches
+that number, so the cap and the target are the same value.
 
 ## Per-annotator quota
 
@@ -100,6 +163,13 @@ user_roles:
 Resolution: `by_user[uid]` → `by_user_role[user_roles[uid]]` →
 `default` → legacy `max_annotations_per_user`.
 
+Read that order as a chain of first-match-wins, not a chain of ceilings.
+Setting `default` means `max_annotations_per_user` is never reached for
+any annotator: the two keys compose only when `default` is absent, and
+the server warns at load if you set both. A quota of `0` is legal and
+means that account is served nothing — the annotator gets a page saying
+so rather than the completion page.
+
 ## Adjudication auto-routing
 
 When the adjudication block is enabled, overlap-sample items that reach their
@@ -126,10 +196,152 @@ Once overlap-sample items saturate, agreement statistics are available at
 |---|---|
 | nominal (radio, single-label multiselect, triage) | percent agreement, Cohen's κ, Fleiss' κ, Krippendorff's α (nominal) |
 | ordinal (likert, confidence, semantic_differential, range_slider, VAS) | weighted κ (linear, quadratic), Spearman's ρ, Krippendorff's α (ordinal) |
-| continuous (slider, number, multirate, constant_sum, soft_label) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
+| continuous (slider, number) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
+| matrix (multirate, constant_sum, soft_label, bws, multi-dimension pairwise) | the nominal, ordinal or continuous set above, once per sub-answer and once pooled |
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
-| ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
+| ranking (ranking) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
+| geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
+| temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+For nominal schemes, percent agreement is the share of annotator pairs that
+chose the same label, averaged over items. Cohen's κ is computed for each pair
+of annotators on the items that pair both answered, then averaged over pairs, so
+it needs no item that every annotator rated. Heterogeneous coverage often has
+none. A pair whose shared items all carry one label has no defined κ and is left
+out of the average. The JSON report carries the same value under
+`pairwise_cohen_kappa` too, for scripts written against that name.
+
+An item is scored only once it reaches its **full** cap, not as soon as it has
+two annotators, because a partly-annotated item's agreement moves as the rest
+arrive. With `num_annotators_per_item: 3` and two annotators finished, every
+schema reports null.
+
+That output used to be identical to a study nobody had touched. The report now
+carries `n_items_below_cap`, counting items with two or more annotators that
+are still short, and `/admin/iaa` says so above the tables — so "not yet" and
+"nothing" are legible apart.
+
+### Schemas that hold several answers at once
+
+A `multirate` asks N questions on one scale; `constant_sum` and `soft_label`
+spread a quantity over N options. The unit a reader cares about is the
+sub-answer, so each row is scored on its own and then pooled:
+
+```json
+"handling": {
+  "kind": "matrix",
+  "metrics": {
+    "Reproducibility": {"alpha_ordinal": 1.0,   "n_items": 4},
+    "Customer tone":   {"alpha_ordinal": 0.774, "n_items": 4},
+    "Urgency":         {"alpha_ordinal": 0.741, "n_items": 4},
+    "pooled":          {"alpha_ordinal": 0.820, "n_items": 12},
+    "n_rows": 3, "scale": "ordinal"
+  }
+}
+```
+
+`pooled` is the headline, and its unit is the (item, row) pair — four items
+rated on three rows is twelve judgements, not four. It is the number ten
+separate likert schemes would have given you. The per-row numbers are the
+reason to prefer the compact widget: "they agree about urgency and not about
+tone" is the finding, and a pooled 0.4 hides it.
+
+`scale` says which set was used. It is read from the stored values rather than
+the declared type, because a multirate over `[Low, Medium, High]` is ordinal
+over label names while `constant_sum` stores points.
+
+`bws` and a `multi_dimension` pairwise are the same shape with a third scale.
+BWS stores a best and a worst pick; multi-dimension pairwise stores one pick per
+dimension. Both hold item names, which have no order, so they are scored as
+`nominal` per sub-answer. Reporting them as a ranking, which is what Potato did
+before v2.8.3, put a weighted κ on categories where a two-step disagreement does
+not exist.
+
+### Schema types that store the answer in the value
+
+Most schema types put the answer in the *key*: a radio stores
+`{"positive": true}` and a likert stores `{"5": "5"}`, so the option's name is
+what was chosen. A handful invert that and store one fixed key whose value
+carries the whole answer:
+
+| Type | Stored as |
+|---|---|
+| `hierarchical_multiselect` | `{"selected_labels": "Annotation,People,Experts"}` |
+| `ranking` | `{"rank_order": "Cost,Agreement,Accuracy"}` |
+| `card_sort` | `{"<schema>": "{\"Group A\": [\"card1\"]}"}` |
+| `conjoint` | `{"<schema>": "2"}` |
+| `pairwise` (binary) | `{"selection": "A"}` |
+| `pairwise` (scale) | `{"scale_value": "-2"}` |
+
+Before v2.8.3 the agreement code read all of these the first way, which returned
+the key name for every annotator on every item. A taxonomy study reported a
+perfect mean Jaccard of 1.0 no matter what anyone selected, because every set
+gathered as `{"selected_labels"}`. Recompute any of these against a current
+build; the earlier numbers do not describe your data.
+
+A `card_sort` is compared as the set of (group, card) placements rather than the
+set of group names. Every annotator sees the same groups, so group names would
+agree perfectly by construction.
+
+### Ordering a scale of word labels
+
+Every ordinal measure needs to know that `Serious` sits between `Minor` and
+`Critical`. Potato takes that from the schema's own `labels` list, so write the
+scale in order:
+
+```yaml
+- annotation_type: likert
+  name: severity
+  labels: [Trivial, Minor, Serious, Critical, Blocker]
+```
+
+Without a `labels` block the label names are sorted instead, which is only
+right when they sort into their own order — `[Low, Medium, High]` sorts to
+High &lt; Low &lt; Medium, and a one-step disagreement is then scored as a
+two-step one.
+
+### Agreement over drawn and timed annotations
+
+Boxes, polygons, masks, points, and audio/video segments are compared by
+**overlap**, not equality — two annotators never produce byte-identical
+geometry. Objects are paired across annotators with the Hungarian algorithm at a
+0.5 IoU threshold (the Pascal VOC / COCO detection convention), and four numbers
+are reported because annotators disagree in distinguishable ways:
+
+| Metric | Question it answers |
+|---|---|
+| `mean_agreement` | Overall, penalizing both sloppy boundaries and missed objects. This is the number adjudication routes on. |
+| `mean_matched_iou` | *Given* both annotators found the object, do they agree where it is? |
+| `detection_f1` | Did they find the same objects at all? |
+| `mean_object_count_diff` | The crudest signal, and often the first to move. |
+
+Reading them together is the point. High `mean_matched_iou` with low
+`detection_f1` means your annotators draw well but miss things — a coverage
+problem, fixed with better instructions. The reverse means they find everything
+but trace it carelessly — a precision problem, fixed with training.
+
+An item where **both** annotators marked nothing is counted, not scored. It
+appears as `n_empty_pairs` beside `n_scored_pairs`, and the four measures are
+computed over the scored pairs alone — the same convention COCO-style AP uses
+for an image with no ground truth and no predictions. Two blank answers are not
+evidence of agreement, and treating them as a perfect pair gave a task where
+nobody drew anything a `detection_f1` of 1.0. When nothing was scored at all,
+the measures read `n/a` with a note saying why.
+
+!!! note "Why not Krippendorff's α over IoU?"
+
+    Because IoU distance is bounded in [0, 1], randomly paired shapes saturate
+    at distance ≈ 1, expected disagreement collapses to ≈ 1, and α degenerates
+    to `1 − mean distance` — the chance correction does no work. Worse, it
+    misleads: Braylan, Alonso & Lease
+    ([WWW 2022](https://arxiv.org/abs/2212.09503)) measured α ranking L2 (0.687)
+    *above* IoU (0.505) and GIoU (0.507) on bounding boxes, inverting the
+    ordering their distribution-based measures give. α remains sound for
+    detection and classification agreement, where a real base rate exists.
+
+Free-text schemas are **omitted** from the report rather than scored. Absent is
+honest; a number would not be.
 
 Set `?format=html` for the rendered table:
 

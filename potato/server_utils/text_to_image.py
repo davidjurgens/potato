@@ -1,0 +1,364 @@
+"""Render instance text to a PNG so the page never carries the text itself.
+
+Set ``text_as_image: true`` in the config and an annotator sees a picture of the
+instance instead of the words. "Select all", "copy" and "view source" then yield
+nothing to paste into a chatbot, because the text never reaches the browser. An
+annotator can still retype the instance or run OCR on the picture, so this
+raises the cost of the shortcut rather than removing it.
+
+The server renders the PNG and inlines it as a ``data:`` URI. The markup is
+built here from PIL output and a base64 payload, so no annotation content
+reaches the attribute. The template marks it safe for that reason.
+
+A span scheme cannot run beside this feature. Every span scheme anchors its
+annotations to character offsets in the plain text, and the feature removes
+that text. ``validate_text_as_image_config`` refuses the combination at
+startup, because the failure is otherwise silent: the annotator sees a picture,
+selects nothing, and the study collects empty spans. ``SPAN_SCHEME_TYPES``
+below is the list it checks.
+
+One cost remains, and no check can remove it: a screen reader gets nothing. The
+alt text stays generic on purpose, because real alt text would put the words
+back into the page.
+"""
+
+from __future__ import annotations
+
+import base64
+import html
+import io
+import logging
+import re
+from functools import lru_cache
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+#: Rendered at twice the requested size and displayed at half, so the text stays
+#: sharp on a high-density screen.
+_SCALE = 2
+
+#: A light card holds the instance text, so the picture matches it.
+_BACKGROUND = "#ffffff"
+_FOREGROUND = "#111111"
+
+DEFAULTS: Dict[str, int] = {"font_size": 18, "max_width": 900}
+
+#: Fonts tried, by file name, when the config names no ``font_path``. Pillow
+#: looks these up in the system font folders. Pillow's own default font
+#: (Aileron) has ASCII glyphs only, so ü, ß, „ or – come out as boxes. It is
+#: the last resort. DejaVu Sans is on most Linux systems and in the Docker
+#: image, Arial on Windows (arial.ttf) and macOS (Arial.ttf), Liberation Sans
+#: on Red Hat systems. Pillow matches the file name case-sensitively.
+FALLBACK_FONTS = ("DejaVuSans.ttf", "arial.ttf", "Arial.ttf",
+                  "LiberationSans-Regular.ttf")
+
+#: instance_display field types that show no copyable item text: media,
+#: charts and viewers. The picture never replaces an instance_display field, so
+#: the validator warns about every other type, including a type it does not
+#: know. A list of the text types instead would miss each new trace or chat
+#: display. ``gallery`` is not here: it shows captions.
+NON_TEXT_DISPLAY_TYPES = frozenset({
+    "image", "image_region", "video", "audio", "depth_map", "fits_cutout",
+    "spectrum", "time_series", "molecule", "protein_structure", "genome_locus",
+})
+
+#: Schemes that anchor annotations to character offsets in the instance text.
+#: The feature removes that text, so the two cannot work together.
+SPAN_SCHEME_TYPES = frozenset({
+    "span",
+    "span_link",
+    "error_span",
+    "coreference",
+    "event_annotation",
+    "extractive_qa",
+    "context_attribution",
+    "multi_document_event",
+})
+
+
+def settings(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return the resolved options, or None when the feature is off.
+
+    Accepts ``text_as_image: true`` and the mapping form::
+
+        text_as_image:
+          enabled: true
+          font_size: 20
+          max_width: 800
+          font_path: fonts/DejaVuSans.ttf
+
+    ``font_path`` is in the result only when the config sets it.
+    """
+    raw = config.get("text_as_image")
+    if raw is True:
+        return dict(DEFAULTS)
+    if not isinstance(raw, dict) or not raw.get("enabled", True):
+        return None
+    resolved: Dict[str, Any] = dict(DEFAULTS)
+    for key in DEFAULTS:
+        value = raw.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            resolved[key] = value
+    if isinstance(raw.get("font_path"), str) and raw["font_path"]:
+        resolved["font_path"] = raw["font_path"]
+    return resolved
+
+
+#: Displays that own the page themselves. The instance-text box is not what the
+#: annotator reads on these, so the feature stays out of their way.
+MEDIA_SCHEME_TYPES = frozenset({
+    "video_annotation",
+    "audio_annotation",
+    "image_annotation",
+})
+
+
+def _tiered_plays_media(scheme: Dict[str, Any]) -> bool:
+    """Whether a tiered_annotation scheme drives a media player.
+
+    Read ``media_type`` the way the schema does: it defaults to ``audio`` and is
+    case-insensitive. Leaving it out still gives an audio player.
+    """
+    return str(scheme.get("media_type") or "audio").lower() in {"audio", "video"}
+
+
+def applies(config: Dict[str, Any],
+            annotation_schemes: Any) -> Optional[Dict[str, Any]]:
+    """Return the options when the picture replaces the text here, else None.
+
+    The shared template shows the instance text in its own box only when no
+    media display and no ``instance_display`` block owns the page. On those
+    projects the text box is a hidden fallback, not the thing the annotator
+    reads, so a picture there would help nobody.
+    """
+    options = settings(config)
+    if options is None or "instance_display" in config:
+        return None
+    for scheme in annotation_schemes or ():
+        if not isinstance(scheme, dict):
+            continue
+        kind = scheme.get("annotation_type")
+        if kind in MEDIA_SCHEME_TYPES:
+            return None
+        if kind == "tiered_annotation" and _tiered_plays_media(scheme):
+            return None
+    return options
+
+
+def media_showing_text(config: Dict[str, Any],
+                       annotation_schemes: Any) -> List[str]:
+    """Audio and video schemes whose page still shows the item text in a box.
+
+    ``applies`` leaves these projects alone, on the premise that the text box is
+    a hidden fallback. It is hidden only when the item text is the media path.
+    When the scheme names a media field and ``text_key`` is some other field,
+    the page shows that field next to the player, so a project that turned the
+    feature on would still hand out every word. An ``instance_display`` block
+    owns the page and hides the box.
+
+    A scheme that names no media field is skipped: the player then reads the
+    media path from the item text, so the text is the path and the box is
+    hidden. ``tiered_annotation`` is the one scheme with a default field.
+    """
+    if "instance_display" in config:
+        return []
+    text_key = (config.get("item_properties") or {}).get("text_key", "text")
+    exposed = []
+    for scheme in annotation_schemes or ():
+        if not isinstance(scheme, dict):
+            continue
+        kind = scheme.get("annotation_type")
+        if kind == "tiered_annotation" and _tiered_plays_media(scheme):
+            media_field = scheme.get("source_field") or "audio_url"
+        elif kind in {"audio_annotation", "video_annotation"}:
+            media_field = (scheme.get("source_field") or scheme.get("video_key")
+                           or scheme.get("audio_key"))
+        else:
+            continue
+        if media_field and media_field != text_key:
+            exposed.append(scheme.get("name") or kind)
+    return sorted(exposed)
+
+
+def span_schemes(annotation_schemes: Any) -> List[str]:
+    """Configured scheme types that need the plain text in the DOM."""
+    return sorted({
+        scheme.get("annotation_type")
+        for scheme in annotation_schemes or ()
+        if isinstance(scheme, dict)
+        and scheme.get("annotation_type") in SPAN_SCHEME_TYPES
+    })
+
+
+def schemes_reading_removed_fields(annotation_schemes: Any,
+                                  text_key: str) -> List[str]:
+    """Scheme names that point at a data field the feature removes.
+
+    A scheme names the field it reads with an attribute of its own:
+    ``source_field`` for text_edit, ``items_field`` for card_sort,
+    ``profiles_field`` for conjoint, and about thirty more across the registry.
+    Tracking that list would go stale on the next schema, so this checks the
+    VALUES instead. Any ``*_field`` or ``*_key`` attribute whose value names a
+    field ``without_text`` drops is a scheme that would read an absent field.
+    """
+    removed = removed_fields(text_key)
+    conflicts = []
+    for scheme in annotation_schemes or ():
+        if not isinstance(scheme, dict):
+            continue
+        for attribute, value in scheme.items():
+            if (isinstance(attribute, str)
+                    and attribute.endswith(("_field", "_key"))
+                    and isinstance(value, str)
+                    and value in removed):
+                label = scheme.get("name") or scheme.get("annotation_type") or "?"
+                conflicts.append(f"{label} ({attribute}: {value})")
+                break
+    return sorted(conflicts)
+
+
+def removed_fields(text_key: str) -> frozenset:
+    """The item-record fields the feature blanks."""
+    return frozenset({"displayed_text", "text", text_key})
+
+
+def without_text(record: Any, text_key: str) -> Dict[str, Any]:
+    """Copy ``record`` without the fields that carry the instance text.
+
+    The page embeds the item record as JSON for dynamic schemas. That JSON
+    would hand back every word the picture just hid.
+    """
+    if not isinstance(record, dict):
+        return {}
+    dropped = removed_fields(text_key)
+    return {k: v for k, v in record.items() if k not in dropped}
+
+
+def hides_text(config: Dict[str, Any]) -> bool:
+    """True when the annotator must not get the item text from any endpoint.
+
+    The page is not the only carrier. ``/api/current_instance``,
+    ``/api/instance_data`` and ``/api/spans/<id>`` return the item as JSON, so
+    an annotator can open one in a new tab and copy the words from there.
+    """
+    return applies(config, config.get("annotation_schemes") or []) is not None
+
+
+def record_for_annotator(config: Dict[str, Any], record: Any) -> Any:
+    """``record`` as an annotator-facing endpoint may return it."""
+    if not hides_text(config):
+        return record
+    text_key = (config.get("item_properties") or {}).get("text_key", "text")
+    return without_text(record, text_key)
+
+
+def to_plain(markup: str) -> str:
+    """Strip HTML from the displayed text but keep the paragraph breaks.
+
+    ``instance_plain_text`` collapses every run of whitespace, newlines
+    included, because span offsets need one flat string. A picture reads better
+    with its paragraphs intact, so this keeps them.
+    """
+    if not markup:
+        return ""
+    text = re.sub(r"<br\s*/?>", "\n", markup, flags=re.IGNORECASE)
+    text = re.sub(r"</(?:p|div|li|tr|h[1-6])\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _wrap(text: str, font, width: int) -> List[str]:
+    """Break text into lines that fit inside ``width`` pixels."""
+    lines: List[str] = []
+    for paragraph in text.split("\n"):
+        if not paragraph.strip():
+            lines.append("")
+            continue
+        current = ""
+        for word in paragraph.split():
+            candidate = f"{current} {word}" if current else word
+            if font.getlength(candidate) <= width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+                current = ""
+            # A single word can be wider than the image (a long URL, a hash).
+            # Break it by character so no text is lost off the right edge.
+            while font.getlength(word) > width:
+                cut = 1
+                while cut < len(word) and font.getlength(word[: cut + 1]) <= width:
+                    cut += 1
+                lines.append(word[:cut])
+                word = word[cut:]
+            current = word
+        if current:
+            lines.append(current)
+    return lines or [""]
+
+
+@lru_cache(maxsize=32)
+def load_font(size: int, font_path: Optional[str] = None):
+    """Return ``(font, name)``: the font to draw with and what it is.
+
+    ``font_path`` wins when set; an unreadable file raises ``OSError``, which
+    the validator reports at startup. Without it, the first of
+    ``FALLBACK_FONTS`` that Pillow finds is used, then Pillow's ASCII-only
+    default. ``name`` is None for that last case, so a caller can warn.
+    """
+    from PIL import ImageFont
+
+    if font_path:
+        return ImageFont.truetype(font_path, size), font_path
+    for name in FALLBACK_FONTS:
+        try:
+            return ImageFont.truetype(name, size), name
+        except OSError:
+            continue
+    return ImageFont.load_default(size=size), None
+
+
+@lru_cache(maxsize=512)
+def render_png(text: str, font_size: int, max_width: int,
+               font_path: Optional[str] = None) -> bytes:
+    """Render ``text`` to PNG bytes. Cached, because a page reload repeats it."""
+    from PIL import Image, ImageDraw
+
+    font, _ = load_font(font_size * _SCALE, font_path)
+    width = max_width * _SCALE
+    padding = 12 * _SCALE
+    line_height = int(font_size * _SCALE * 1.45)
+
+    lines = _wrap(text, font, width - 2 * padding)
+    height = padding * 2 + line_height * len(lines)
+
+    image = Image.new("RGB", (width, height), _BACKGROUND)
+    draw = ImageDraw.Draw(image)
+    for index, line in enumerate(lines):
+        draw.text((padding, padding + index * line_height), line,
+                  font=font, fill=_FOREGROUND)
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue()
+
+
+def image_html(markup: str, options: Dict[str, Any]) -> str:
+    """Return the <img> that replaces the instance text, or "" if there is none."""
+    text = to_plain(markup)
+    if not text:
+        return ""
+    png = render_png(text, options["font_size"], options["max_width"],
+                     options.get("font_path"))
+    payload = base64.b64encode(png).decode("ascii")
+    return (
+        f'<img src="data:image/png;base64,{payload}" '
+        f'alt="The text for this item, shown as an image" '
+        f'style="max-width:100%;width:{options["max_width"]}px;'
+        f'user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;" '
+        f'draggable="false" oncontextmenu="return false;">'
+    )

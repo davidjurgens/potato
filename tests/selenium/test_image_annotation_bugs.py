@@ -214,13 +214,36 @@ class ImageAnnotationTestBase(unittest.TestCase):
             time.sleep(0.1)
 
     def _create_bounding_box(self, x_offset=100, y_offset=100, width=100, height=80):
-        """Create a bounding box on the canvas using mouse actions."""
-        canvas = self.driver.find_element(By.CLASS_NAME, "upper-canvas")
+        """
+        Create a bounding box on the canvas using mouse actions.
 
+        Offsets are given from the canvas TOP-LEFT, which is the intuitive
+        reading, and converted here. Selenium 4's
+        ``move_to_element_with_offset`` measures from the element CENTRE, so
+        passing top-left-style offsets walked the pointer off the canvas and
+        raised MoveTargetOutOfBoundsException — which looked like a mask/zoom
+        product failure but was purely a harness bug.
+
+        The start point and size are clamped to the canvas so a test can never
+        fail for being a few pixels outside the element.
+        """
+        canvas = self.driver.find_element(By.CLASS_NAME, "upper-canvas")
+        size = canvas.size
+        cw, ch = size["width"], size["height"]
+
+        # Keep the whole drag inside the element, with a small margin.
+        margin = 5
+        start_x = max(margin, min(x_offset, cw - margin - 1))
+        start_y = max(margin, min(y_offset, ch - margin - 1))
+        width = max(10, min(width, cw - margin - start_x))
+        height = max(10, min(height, ch - margin - start_y))
+
+        # Convert top-left offsets to the centre-relative form Selenium wants.
         actions = ActionChains(self.driver)
-        actions.move_to_element_with_offset(canvas, x_offset, y_offset)
+        actions.move_to_element_with_offset(
+            canvas, int(start_x - cw / 2), int(start_y - ch / 2))
         actions.click_and_hold()
-        actions.move_by_offset(width, height)
+        actions.move_by_offset(int(width), int(height))
         actions.release()
         actions.perform()
 
@@ -365,6 +388,12 @@ class TestImageAnnotationPersistenceBug(ImageAnnotationTestBase):
 
         # Navigate to next instance
         next_btn = self.driver.find_element(By.ID, "next-btn")
+        # Scroll it into view first. The annotation page is taller than a
+        # laptop viewport, so Next can sit below the fold and a bare .click()
+        # raises ElementClickInterceptedException — a harness failure that
+        # looks like a navigation bug.
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", next_btn)
         next_btn.click()
 
         # Wait for page to reload and new instance to load
@@ -417,6 +446,12 @@ class TestImageAnnotationPersistenceBug(ImageAnnotationTestBase):
 
         # Navigate to next instance
         next_btn = self.driver.find_element(By.ID, "next-btn")
+        # Scroll it into view first. The annotation page is taller than a
+        # laptop viewport, so Next can sit below the fold and a bare .click()
+        # raises ElementClickInterceptedException — a harness failure that
+        # looks like a navigation bug.
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", next_btn)
         next_btn.click()
 
         WebDriverWait(self.driver, 10).until(

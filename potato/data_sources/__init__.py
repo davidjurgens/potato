@@ -1,7 +1,7 @@
 """
 Data Sources Module
 
-This module provides extensible data loading from various sources including
+Extensible data loading from various sources including
 local files, URLs, cloud storage (Google Drive, Dropbox, S3), databases,
 and other remote sources.
 
@@ -39,6 +39,7 @@ from potato.data_sources.base import (
     DataSource,
     SourceType,
     SourceConfig,
+    LiveRow,
 )
 
 from potato.data_sources.credentials import (
@@ -66,6 +67,7 @@ __all__ = [
     "DataSource",
     "SourceType",
     "SourceConfig",
+    "LiveRow",
     # Credential management
     "CredentialManager",
     "substitute_env_vars",

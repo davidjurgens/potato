@@ -1,6 +1,14 @@
 # AI-Assisted In-Context Learning (ICL) Labeling
 
-Potato's ICL labeling feature enables AI-assisted annotation by using high-confidence human annotations as in-context examples to guide an LLM in labeling remaining data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
+ICL labeling feeds the LLM your highest-confidence human annotations as in-context examples, then has it label the rest of the data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
+
+> **Successor in 2.11:** the [labeling engine](../labeling-engine/overview.md)
+> does this job with an `llm` source and a contract (`threshold_legacy` for this
+> page's fixed-confidence rule, `selective_risk` beside it). `icl_labeling`
+> still works in 2.11 and is planned for removal in 3.0.
+> `potato label migrate-config config.yaml --out config-engine.yaml` writes the
+> equivalent `labeling_engine` block; see
+> [Migrating to the labeling engine](../labeling-engine/migration.md).
 
 ## Overview
 
@@ -100,6 +108,18 @@ icl_labeling:
 | `min_annotators_per_instance` | 2 | Minimum number of annotations required |
 | `max_examples_per_schema` | 10 | Maximum examples per schema in prompts |
 | `refresh_interval_seconds` | 300 | How often to refresh example pool |
+
+The default of 2 makes the labeler inert on a study with
+`num_annotators_per_item: 1`: no item can ever have two annotators, so no item
+can ever become an example, and the worker runs forever reporting
+`Refreshed high-confidence examples: 0 examples across 0 schemas`. Set it to 1
+for a single-annotator study, or raise `num_annotators_per_item`. When the pool
+comes back empty the log now names the gate that emptied it.
+
+All four of these live under `example_selection:`. The block is nested three
+deep, and a flat spelling — `min_confidence`, `num_examples`, `schema_names`
+directly under `icl_labeling:` — is now reported as an unrecognized key rather
+than accepted and ignored.
 
 #### LLM Labeling
 
@@ -337,27 +357,20 @@ The weight interpolates linearly as annotations accumulate, providing a smooth t
 
 ## Annotation Routing
 
-Noise-aware routing between LLM auto-labeling and human annotation (based on Yuan et al., 2024):
+`active_learning.annotation_routing`, `routing_thresholds` and
+`verification_sample_rate` are accepted in a config but nothing reads them, so
+they do not route anything; Potato names them at boot. Two things do what they
+describe:
 
-```yaml
-active_learning:
-  annotation_routing: true
-  routing_thresholds:
-    auto_label_min_confidence: 0.9
-    show_suggestion_below: 0.5
-  verification_sample_rate: 0.2
-```
-
-- **High LLM confidence (>0.9):** Auto-label with periodic spot-checking
-- **Medium confidence (0.5-0.9):** Route to human annotator (most informative)
-- **Low confidence (<0.5):** Route to human with LLM suggestion displayed
-
-The `verification_sample_rate` controls how often auto-labeled instances are spot-checked by humans.
+- The share of ICL labels sent back to annotators for blind checking is
+  `icl_labeling.verification.sample_rate` (see [Configuration
+  Options](#configuration-options)).
+- Accepting machine labels above a confidence, with a stated error bound, is a
+  [labeling engine contract](../labeling-engine/contracts.md).
 
 ## References
 
 - Mavromatis et al. (2024) "CoverICL: Selective Annotation for In-Context Learning via Active Graph Coverage." *EMNLP 2024*.
-- Yuan et al. (2024) "Hide and Seek in Noise Labels: Noise-Robust Collaborative Active Learning." *ACL 2024*.
 - Xiao et al. (2023) "FreeAL: Towards Human-Free Active Learning in the Era of Large Language Models." *EMNLP 2023*.
 
 ## Related Documentation

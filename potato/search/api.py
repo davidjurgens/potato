@@ -30,8 +30,12 @@ def _annotator_claim_enabled() -> bool:
 
 
 def _serialize(hits) -> list:
+    # `id` is an alias for `instance_id`. Every other Potato endpoint that
+    # returns items calls it `id`, so a caller reading `id` off a search hit
+    # got nothing back and had a count with anonymous rows under it.
     return [
-        {"instance_id": h.instance_id, "snippet": h.snippet, "score": h.score}
+        {"instance_id": h.instance_id, "id": h.instance_id,
+         "snippet": h.snippet, "score": h.score}
         for h in hits
     ]
 
@@ -149,7 +153,23 @@ def annotator_claim():
         if item is None:
             return jsonify({"error": f"Unknown instance {instance_id}"}), 404
         user_state = get_user_state_manager().get_user_state(username)
-        already = instance_id in user_state.get_assigned_instance_ids()
+        # Ids are strings in the queue; a JSON number for one the user holds
+        # was taken for a new claim and refused at the cap.
+        already = str(instance_id) in {str(i) for i in user_state.get_assigned_instance_ids()}
+        if not already:
+            # max_annotations_per_user caps the queue, claimed items included.
+            # Counted the way assignment top-up counts, so an injected check
+            # does not use up a claim. -1 is unlimited.
+            cap = user_state.get_max_assignments()
+            if cap is not None and cap >= 0 and \
+                    ism._dataset_assignment_count(user_state) >= cap:
+                return jsonify({
+                    "error": f"Your queue already holds {cap} item(s), the "
+                             f"most this project assigns to one annotator "
+                             f"(max_annotations_per_user), so {instance_id} "
+                             f"cannot be claimed.",
+                    "max_assignments": cap,
+                }), 409
         user_state.assign_instance(item)
     except Exception as e:
         logger.error(f"Claim failed for {instance_id}: {e}")

@@ -53,7 +53,7 @@ Each test inherits from `BaseSeleniumTest` which automatically:
 1. **Creates a unique test user** for each test run
 2. **Registers the user** via the web interface
 3. **Logs in the user** and verifies authentication
-4. **Provides a fresh WebDriver** instance for each test
+4. **Creates a fresh WebDriver** instance for each test
 5. **Cleans up** after each test
 
 ### 2. Test Isolation
@@ -521,6 +521,25 @@ class TestAnnotationPersistence(BaseSeleniumTest):
         selected_elements = self.driver.find_elements(By.CSS_SELECTOR, "input[name='likert_rating']:checked")
         assert len(selected_elements) == 0
 ```
+
+## Loading every example (opt-in)
+
+`test_example_pages_load.py` boots each project under `examples/` in debug
+mode, opens its annotation page in headless Chrome, and fails if the loading
+state never clears or the console shows an uncaught `SyntaxError` or
+`ReferenceError`. It skips examples that cannot boot without an outside
+service, such as the live coding agent, which needs a container sandbox.
+
+It takes about two minutes with six workers and is skipped unless asked for:
+
+```bash
+POTATO_EXAMPLE_SWEEP=1 pytest tests/selenium/test_example_pages_load.py -n 6
+```
+
+Run it after changing anything every page loads: `base_template_v2.html`,
+shared JavaScript, the frontend asset markers in `flask_server.py`, or a
+request hook. It found `visual_ai_assistant.js` failing to parse on every
+image or video project with AI support.
 
 ## Future Enhancements
 

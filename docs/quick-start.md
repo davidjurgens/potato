@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-This guide will help you get started with Potato annotation tasks using YAML configuration files.
+A Potato task is a YAML config file, a data file, and a directory to write annotations into. This page builds one from scratch.
 
 ## Installation
 
@@ -18,11 +18,25 @@ cd potato
 pip install -r requirements.txt
 ```
 
+To run Potato in Docker instead, or to put a task online, see
+[Installing and running Potato](deployment/installation.md).
+
+### Checking the install
+
+```bash
+potato --version
+```
+
+It prints the version, and the commit as well when Potato is running out of a
+git checkout. That is the line to quote in a bug report. See
+[Debugging](tools/debugging_guide.md#checking-what-you-installed) for what it
+says when two installs are visible at once.
+
 ## Creating Your First Annotation Task
 
 ### 1. Create a Task Directory
 
-Start by creating a directory for your annotation task:
+Create a directory for your annotation task:
 
 ```bash
 mkdir my_annotation_task
@@ -55,7 +69,6 @@ Create a YAML configuration file `config.yaml` in your task directory:
 ```yaml
 # Basic Configuration
 port: 8000
-server_name: My First Annotation Task
 annotation_task_name: Sentiment Analysis
 task_dir: .  # Resolves to the directory containing this config file
 
@@ -116,13 +129,17 @@ alert_time_each_instance: 10000000
 
 ### 4. Start the Server
 
-Start the annotation server with your configuration:
+Step 1 left you inside `my_annotation_task/`. Go back to the directory that
+contains it and start the server:
 
 ```bash
+cd ..
+
 # If you installed from PyPI (Option 1):
 potato start my_annotation_task/config.yaml -p 8000
 
-# If you cloned the repo (Option 2), run from the repo root:
+# If you cloned the repo (Option 2), run from the repo root
+# (with my_annotation_task/ created there):
 python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 ```
 
@@ -132,11 +149,11 @@ python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 
 ## Project Structure
 
-Your final project structure should look like this:
+The finished project looks like this:
 
 ```
 my_annotation_task/
-├── config.yaml              # ✅ Config file in task_dir
+├── config.yaml              # the config file, inside task_dir
 ├── data/
 │   └── my_data.json         # Your annotation data
 ├── annotation_output/       # Created automatically (per output_annotation_dir)
@@ -148,12 +165,12 @@ my_annotation_task/
 
 ## Alternative: Multiple Config Files
 
-If you want to have multiple configuration files for different experiments, you can use a `configs/` subdirectory:
+For several configuration files across different experiments, put them in a `configs/` subdirectory:
 
 ```
 my_annotation_task/
 ├── configs/
-│   ├── experiment1.yaml     # ✅ Config files in configs/
+│   ├── experiment1.yaml     # config files, inside configs/
 │   └── experiment2.yaml
 ├── data/
 │   └── my_data.json

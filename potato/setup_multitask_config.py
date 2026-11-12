@@ -1,9 +1,8 @@
 """
 Multitask Configuration Setup Module
 
-This module provides functionality for setting up multitask annotation projects.
-It processes a base configuration and creates task-specific configurations
-for each supported task, including:
+Sets up multitask annotation projects: reads a base configuration and writes one
+task-specific configuration per supported task, including:
 
 - Task-specific survey flow files
 - Specialized configuration files

@@ -168,8 +168,12 @@ class TestPasswordResetAPI:
         # Should show generic success, not an error
         assert "error" not in resp.text.lower() or "exists" not in resp.text.lower()
 
-    def test_forgot_password_known_user_shows_link(self):
-        """POST /forgot-password with known user shows reset link."""
+    def test_forgot_password_known_user_does_not_show_link(self):
+        """POST /forgot-password never hands a reset link to the requester.
+
+        Anyone can submit this form, so returning a link would let them reset
+        any account. Links are issued only by an admin.
+        """
         session = requests.Session()
         self._register_user(session, "forgot_user", "mypass")
 
@@ -178,4 +182,20 @@ class TestPasswordResetAPI:
             data={"username": "forgot_user"},
         )
         assert resp.status_code == 200
-        assert "/reset/" in resp.text
+        assert "/reset/" not in resp.text
+        assert "administrator" in resp.text.lower()
+
+    def test_forgot_password_same_response_for_unknown_user(self):
+        """Known and unknown usernames get the same page (no enumeration)."""
+        session = requests.Session()
+        self._register_user(session, "forgot_user2", "mypass")
+
+        known = session.post(
+            f"{self.server.base_url}/forgot-password",
+            data={"username": "forgot_user2"},
+        )
+        unknown = session.post(
+            f"{self.server.base_url}/forgot-password",
+            data={"username": "no_such_user_abc"},
+        )
+        assert known.text == unknown.text

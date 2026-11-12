@@ -1,7 +1,7 @@
 """
 Data Source Manager
 
-This module provides the central manager for all data sources, implementing
+The central manager for all data sources, implementing
 the singleton pattern for thread-safe access across the application.
 """
 
@@ -13,6 +13,7 @@ from potato.data_sources.base import DataSource, SourceConfig, SourceType
 from potato.data_sources.credentials import CredentialManager
 from potato.data_sources.cache_manager import CacheManager
 from potato.data_sources.partial_reader import PartialReader, PartialLoadingConfig
+from potato.data_sources.parsing import SourceDataError
 
 if TYPE_CHECKING:
     from potato.item_state_management import ItemStateManager
@@ -130,10 +131,43 @@ class DataSourceManager:
         self._id_key = item_props.get("id_key", "id")
         self._text_key = item_props.get("text_key", "text")
 
+        # Live ingestion. The coordinator is an attribute rather than its own
+        # module singleton, so the existing clear_data_source_manager() ->
+        # close() teardown already stops every poll thread.
+        from potato.data_sources.live_ingestion import (
+            LiveCursorStore,
+            LiveIngestionCoordinator,
+        )
+        self._live_ingestion = LiveIngestionCoordinator(
+            LiveCursorStore(config.get("output_annotation_dir", "."))
+        )
+
         # Initialize sources from configuration
         self._init_sources()
+        self._init_live_workers()
 
         logger.info(f"DataSourceManager initialized with {len(self._sources)} sources")
+
+    def _init_live_workers(self) -> None:
+        """Register a poll worker for every source that opted into live mode."""
+        for source_id, source in self._sources.items():
+            if not source.supports_live_ingestion():
+                continue
+
+            live_config = getattr(source, "live_config", None)
+            if live_config is None:
+                continue
+
+            self._live_ingestion.register(
+                source,
+                live_config,
+                lambda item, sid=source_id: self.ingest_item(item, sid),
+            )
+            logger.info(
+                "Live ingestion registered for %s (poll interval: %.1fs, cursor: %s)",
+                source_id, live_config.poll_interval_seconds,
+                live_config.cursor_column or "<query-supplied>",
+            )
 
     def _init_sources(self) -> None:
         """Initialize data sources from configuration."""
@@ -233,6 +267,12 @@ class DataSourceManager:
                         status["is_complete"] = state.is_complete
                         status["last_loaded_at"] = state.last_loaded_at
 
+                # Live state rides along on the existing payload, so the admin
+                # dashboard shows it without any client change.
+                worker = self._live_ingestion.get_worker(source.source_id)
+                if worker is not None:
+                    status["live_ingestion"] = worker.get_status()
+
                 statuses.append(status)
 
             return statuses
@@ -255,6 +295,11 @@ class DataSourceManager:
                     count = self._load_from_source(source, is_initial=True)
                     total_loaded += count
                     logger.info(f"Loaded {count} items from {source_id}")
+                except SourceDataError:
+                    # Malformed rows and duplicate ids stop the boot, as they
+                    # do for data_files: a study that silently loads short is
+                    # worse than one that refuses to start.
+                    raise
                 except Exception as e:
                     logger.error(f"Failed to load from {source_id}: {e}")
 
@@ -304,21 +349,44 @@ class DataSourceManager:
         """
         source_id = source.source_id
 
-        # Check if source is complete
-        if self.partial_reader:
-            state = self.partial_reader.get_state(source_id)
-            if state and state.is_complete:
+        # A live source does its startup read through the cursor path, so the
+        # cursor is seeded and persisted by the same code that will maintain
+        # it. On a restart this reads only what arrived while the server was
+        # down, instead of re-reading the whole table.
+        if source.supports_live_ingestion():
+            worker = self._live_ingestion.get_worker(source_id)
+            if worker is not None:
+                loaded = worker.prime()
+                logger.info(
+                    f"Live source {source_id}: {loaded} items loaded in the "
+                    f"initial catch-up read"
+                )
+                return loaded
+
+        partial = self.partial_reader is not None and self.partial_reader.config.enabled
+        state = self.partial_reader.get_state(source_id) if partial else None
+
+        if not partial:
+            start, count = 0, None  # Load all
+        elif is_initial:
+            # The item pool is empty at boot, so the first read starts from
+            # the top and re-reads everything an earlier run had loaded.
+            # Resuming at the saved position dropped those rows from the pool
+            # on every restart, annotated or not.
+            start = 0
+            if count is None:
+                if state is not None and state.is_complete:
+                    count = None
+                else:
+                    already = self.partial_reader.get_start_position(source_id)
+                    count = max(self.partial_reader.get_load_count(source_id, True), already)
+        else:
+            if state is not None and state.is_complete:
                 logger.debug(f"Source {source_id} is already complete")
                 return 0
-
-        # Determine how many items to load and from what position
-        if self.partial_reader and self.partial_reader.config.enabled:
             start = self.partial_reader.get_start_position(source_id)
             if count is None:
-                count = self.partial_reader.get_load_count(source_id, is_initial)
-        else:
-            start = 0
-            count = None  # Load all
+                count = self.partial_reader.get_load_count(source_id, False)
 
         # Check if source supports partial reading
         if start > 0 and not source.supports_partial_reading():
@@ -328,51 +396,117 @@ class DataSourceManager:
             )
             return 0
 
-        # Load items
+        # Load items. The position advances by records READ, not items added:
+        # a row with no id or a duplicate is still a row, and counting only
+        # the added ones re-read rows and marked a source complete early.
         items_loaded = 0
-        is_complete = False
+        records_read = 0
+        for item in source.read_items(start=start, count=count):
+            records_read += 1
+            outcome = self.ingest_item(item, source_id)
+            if outcome == "added":
+                items_loaded += 1
+            elif outcome == "duplicate":
+                message = (f"Duplicate instance ID '{item.get(self._id_key)}' in "
+                           f"source {source_id}")
+                if is_initial:
+                    raise SourceDataError(message)
+                logger.error(message + "; keeping the first")
+            elif is_initial:
+                raise SourceDataError(
+                    f"Item {start + records_read} in source {source_id} has no "
+                    f"'{self._id_key}'")
 
-        try:
-            for item in source.read_items(start=start, count=count):
-                # Validate ID key exists
-                if self._id_key not in item:
-                    logger.warning(
-                        f"Missing id_key '{self._id_key}' in item from {source_id}"
-                    )
-                    continue
+        is_complete = count is None or records_read < count
 
-                instance_id = str(item[self._id_key])
-
-                # Check for duplicates
-                if self._item_state_manager.has_item(instance_id):
-                    logger.debug(f"Skipping duplicate ID: {instance_id}")
-                    continue
-
-                # Add item to state manager
-                try:
-                    self._item_state_manager.add_item(instance_id, item)
-                    items_loaded += 1
-                except ValueError as e:
-                    logger.warning(f"Failed to add item {instance_id}: {e}")
-
-            # Check if we loaded fewer items than requested (source exhausted)
-            if count is not None and items_loaded < count:
-                is_complete = True
-
-        except StopIteration:
-            is_complete = True
-
-        # Update partial reader state
-        if self.partial_reader:
-            total_estimate = source.get_total_count()
+        if partial:
             self.partial_reader.update_state(
                 source_id=source_id,
                 items_added=items_loaded,
+                line_number=start + records_read,
                 is_complete=is_complete,
-                total_estimate=total_estimate
+                total_estimate=source.get_total_count(),
+                replace=is_initial,
             )
 
         return items_loaded
+
+    def ingest_item(self, item: Dict[str, Any], source_id: str = "") -> str:
+        """
+        Add a single item to the ItemStateManager.
+
+        This is the one insertion path for every source, static or live. That
+        matters for more than tidiness: the id is stringified here, and a
+        second path that skipped the ``str()`` would dedupe integer ``1``
+        against string ``"1"`` incorrectly and admit the same row twice.
+
+        Note this method does NOT take ``self._lock``. It is called from the
+        live poll thread, and ``DataSourceManager._lock`` is held by
+        ``list_sources()`` on the admin request path and by
+        ``check_auto_load()`` on the annotation path -- taking it here would
+        let a slow database stall annotation requests.
+
+        Args:
+            item: The raw item dictionary
+            source_id: Source identifier, for log messages only
+
+        Returns:
+            ``"added"``, ``"duplicate"`` or ``"invalid"``
+        """
+        if self._id_key not in item:
+            logger.warning(
+                f"Missing id_key '{self._id_key}' in item from {source_id or 'source'}"
+            )
+            return "invalid"
+
+        instance_id = str(item[self._id_key])
+
+        # Cheap unlocked pre-filter; add_item re-checks under its own lock.
+        if self._item_state_manager.has_item(instance_id):
+            # A live source re-reads its overlap window on purpose, so the
+            # same row arriving twice is routine. A different row under an
+            # id already in the pool is not: keep the first and say so.
+            existing = self._item_state_manager.get_item(instance_id)
+            old = dict(existing.get_data()) if existing is not None else {}
+            old.pop("displayed_text", None)
+            new = {k: v for k, v in item.items() if k != "displayed_text"}
+            if old and old != new:
+                logger.error(
+                    f"Instance ID '{instance_id}' from {source_id or 'a source'} is already "
+                    f"in the pool with different content; keeping the first")
+            else:
+                logger.debug(f"Skipping duplicate ID: {instance_id}")
+            return "duplicate"
+
+        self._prepare_displayed_text(item)
+
+        try:
+            self._item_state_manager.add_item(instance_id, item)
+            return "added"
+        except ValueError:
+            # Lost a race with another ingest path. That is a duplicate, not
+            # a failure -- it must never be counted against a poll.
+            logger.debug(f"Concurrent duplicate ID: {instance_id}")
+            return "duplicate"
+
+    def _prepare_displayed_text(self, item: Dict[str, Any]) -> None:
+        """
+        Precompute ``displayed_text`` before the item enters the pool.
+
+        ``_render_displayed_text()`` only ever runs at startup, over the items
+        loaded by then. There is a lazy fallback when rendering an instance,
+        but it does not cover exports, search indexing or the quality-control
+        injection path, so runtime-added items need this up front.
+        """
+        if "displayed_text" in item:
+            return
+        try:
+            from potato.flask_server import get_displayed_text
+            raw_text = item.get(self._text_key, item.get("text", ""))
+            item["displayed_text"] = get_displayed_text(raw_text) if raw_text is not None else ""
+        except Exception as e:
+            # Never let display rendering block ingestion.
+            logger.debug(f"Could not precompute displayed_text: {e}")
 
     def refresh_source(self, source_id: str) -> bool:
         """
@@ -439,6 +573,62 @@ class DataSourceManager:
 
         return results
 
+    # =========================================================================
+    # Live ingestion
+    # =========================================================================
+
+    def has_live_sources(self) -> bool:
+        """True when at least one source is configured for live polling."""
+        return self._live_ingestion.has_workers()
+
+    def start_live_ingestion(self) -> int:
+        """
+        Start every live poll worker.
+
+        Must be called after the initial load and after user state has been
+        loaded -- see the call site in ``flask_server.configure_app()``.
+
+        Returns:
+            Number of workers started
+        """
+        return self._live_ingestion.start_all()
+
+    def stop_live_ingestion(self) -> None:
+        """Stop every live poll worker and wait briefly for them to exit."""
+        self._live_ingestion.stop_all()
+
+    def poll_source_now(self, source_id: str) -> Dict[str, int]:
+        """
+        Run one poll immediately, outside the normal interval.
+
+        Args:
+            source_id: The source to poll
+
+        Returns:
+            Counts for this poll: rows_fetched, items_added, duplicates_skipped
+
+        Raises:
+            ValueError: If the source is unknown or has no live worker
+        """
+        worker = self._live_ingestion.get_worker(source_id)
+        if worker is None:
+            raise ValueError(f"Source '{source_id}' has no live ingestion worker")
+        return worker.poll_once()
+
+    def get_live_ingestion_status(self, source_id: Optional[str] = None):
+        """
+        Status for one live worker, or all of them.
+
+        Returns:
+            A single status dict, None if that source has no worker, or a list
+            of dicts when ``source_id`` is omitted
+        """
+        if source_id is None:
+            return self._live_ingestion.get_status()
+
+        worker = self._live_ingestion.get_worker(source_id)
+        return worker.get_status() if worker else None
+
     def clear_cache(self) -> int:
         """
         Clear the download cache for all sources.
@@ -468,10 +658,19 @@ class DataSourceManager:
         if self.partial_reader:
             stats["partial_loading"] = self.partial_reader.get_stats()
 
+        if self._live_ingestion.has_workers():
+            stats["live_ingestion"] = self._live_ingestion.get_status()
+
         return stats
 
     def close(self) -> None:
         """Close all sources and release resources."""
+        # Stop the poll threads BEFORE taking the lock. stop_all() joins
+        # threads that may currently be inside ingest_item(); joining while
+        # holding a lock they could want is a deadlock. Stopping first also
+        # means no worker is mid-query when its engine is disposed below.
+        self._live_ingestion.stop_all()
+
         with self._lock:
             for source in self._sources.values():
                 try:

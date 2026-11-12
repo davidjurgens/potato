@@ -50,6 +50,9 @@ ALLOWED_ELEMENTS: Set[str] = {
     'a',
     # Media and figures for instructional/survey content (Issue #129)
     'img', 'figure', 'figcaption',
+    # Audio/video media — src checked against dangerous patterns; only safe
+    # attributes allowed (no event handlers). Potato is a multimedia tool.
+    'video', 'audio', 'source', 'track',
     # Ruby annotations for CJK text
     'ruby', 'rt', 'rp',
 }
@@ -100,6 +103,13 @@ ALLOWED_ATTRIBUTES: Dict[str, Set[str]] = {
     'caption': {'class', 'style'},
     # Images — src checked against dangerous patterns like href
     'img': {'src', 'alt', 'title', 'style', 'width', 'height'},
+    # Audio/video media — src checked against dangerous patterns; boolean
+    # attributes (controls/autoplay/loop/muted) carry no script risk.
+    'video': {'src', 'controls', 'width', 'height', 'style', 'poster',
+              'preload', 'autoplay', 'loop', 'muted', 'playsinline'},
+    'audio': {'src', 'controls', 'preload', 'autoplay', 'loop', 'muted'},
+    'source': {'src', 'type', 'srcset', 'media'},
+    'track': {'src', 'kind', 'srclang', 'label', 'default'},
     # Figures and captions for instructional content
     'figure': {'class', 'style'},
     'figcaption': {'class', 'style'},
@@ -137,6 +147,13 @@ ALLOWED_CSS_PROPERTIES: Set[str] = {
     'border-collapse',
 }
 
+# Valueless boolean attributes — emitted as a bare name when present without a
+# value (e.g. <video controls autoplay loop muted>). Only those also present in
+# a tag's ALLOWED_ATTRIBUTES are kept.
+BOOLEAN_ATTRIBUTES: Set[str] = {
+    'controls', 'autoplay', 'loop', 'muted', 'playsinline', 'default',
+}
+
 # Dangerous patterns to block
 DANGEROUS_PATTERNS = [
     re.compile(r'javascript:', re.IGNORECASE),
@@ -144,6 +161,47 @@ DANGEROUS_PATTERNS = [
     re.compile(r'data:', re.IGNORECASE),
     re.compile(r'expression\s*\(', re.IGNORECASE),
 ]
+
+
+# A well-formed HTML character reference: &name; &#1234; &#x1F60A;
+# Used to keep `html.escape` from turning an author's `&mdash;` into
+# `&amp;mdash;`, which renders on screen as the literal text "&mdash;".
+_CHAR_REF = re.compile(
+    r'&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});')
+
+
+def _escape_text(text: str, quote: bool = False) -> str:
+    """``html.escape`` for a text node, preserving character references.
+
+    ``html.escape`` rewrites every ``&``, so ``a &mdash; b`` came back as
+    ``a &amp;mdash; b`` and the annotator read a literal ``&mdash;``. It also
+    made the sanitizer non-idempotent: each pass added another ``amp;``, so
+    text that was sanitized on the way in and again on the way out decayed.
+
+    Only *text nodes* get this treatment. Character references in text can
+    never introduce markup — the browser resolves them to characters in an
+    already-parsed text node — so ``&lt;script&gt;`` still renders as the four
+    visible characters ``<scr`` … and not as an element.
+
+    ``href``, ``src`` and ``style`` values deliberately keep the blunt
+    ``html.escape`` (see ``_UNESCAPED_ATTRS``): an href of
+    ``java&Tab;script:alert(1)`` is inert once the ``&`` is escaped, and is a
+    live XSS vector if the reference survives.
+    """
+    out = []
+    pos = 0
+    for m in _CHAR_REF.finditer(text):
+        out.append(html.escape(text[pos:m.start()], quote=quote))
+        out.append(m.group(0))
+        pos = m.end()
+    out.append(html.escape(text[pos:], quote=quote))
+    return ''.join(out)
+
+
+# Attributes whose values must NOT keep character references: a reference can
+# reconstitute a URL scheme (``java&Tab;script:``) or a CSS function that the
+# raw-text DANGEROUS_PATTERNS scan cannot see.
+_UNESCAPED_ATTRS: Set[str] = {'href', 'src', 'srcset', 'poster', 'style'}
 
 
 def sanitize_html(text: str) -> Markup:
@@ -191,7 +249,7 @@ def sanitize_html(text: str) -> Markup:
     for match in tag_pattern.finditer(text):
         # Add escaped text before this tag
         if match.start() > pos:
-            result.append(html.escape(text[pos:match.start()]))
+            result.append(_escape_text(text[pos:match.start()]))
 
         is_close = match.group(1) == '/'
         tag_name = match.group(2).lower()
@@ -216,7 +274,7 @@ def sanitize_html(text: str) -> Markup:
 
     # Add remaining text (escaped)
     if pos < len(text):
-        result.append(html.escape(text[pos:]))
+        result.append(_escape_text(text[pos:]))
 
     # Return as Markup to prevent Jinja2's auto-escape from escaping again
     return Markup(''.join(result))
@@ -239,24 +297,37 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
     # Get allowed attributes for this tag
     allowed = ALLOWED_ATTRIBUTES.get(tag_name, ALLOWED_ATTRIBUTES.get('*', set()))
 
-    # Parse attributes
+    # Parse attributes. The value (= "..."/'...'/bare) is OPTIONAL so that
+    # valueless boolean attributes (controls, autoplay, loop, muted, ...) are
+    # captured rather than silently dropped.
     attr_pattern = re.compile(
-        r'''(\w+(?:-\w+)*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))''',
+        r'''(\w+(?:-\w+)*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+)))?''',
         re.IGNORECASE
     )
 
     sanitized = []
     for match in attr_pattern.finditer(attrs_str):
         attr_name = match.group(1).lower()
+        has_value = any(match.group(g) is not None for g in (2, 3, 4))
         # Get value from whichever group matched
         attr_value = match.group(2) or match.group(3) or match.group(4) or ""
 
         if attr_name not in allowed:
             continue
 
+        # Valueless boolean attribute (e.g. <video controls autoplay>) — emit bare.
+        if not has_value:
+            if attr_name in BOOLEAN_ATTRIBUTES:
+                sanitized.append(attr_name)
+            continue
+
         # Special handling for href/src attributes — block dangerous URLs
-        if attr_name in ('href', 'src'):
-            if any(p.search(attr_value) for p in DANGEROUS_PATTERNS):
+        if attr_name in ('href', 'src', 'srcset', 'poster'):
+            # Browsers drop ASCII tab/CR/LF anywhere in a URL and leading
+            # control characters and spaces, so `java<TAB>script:` is still a
+            # javascript: URL. Match against the URL as the browser reads it.
+            url_as_parsed = re.sub(r'[\x00-\x20\x7f]', '', attr_value)
+            if any(p.search(url_as_parsed) for p in DANGEROUS_PATTERNS):
                 logger.warning(f"Blocked dangerous pattern in {attr_name} attribute")
                 continue
 
@@ -270,8 +341,13 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
         if attr_name == 'class':
             attr_value = _sanitize_class(attr_value)
 
-        # Escape the value
-        escaped_value = html.escape(attr_value, quote=True)
+        # Escape the value. Everything except the URL/CSS attributes keeps its
+        # character references, so a data-label or title of "A&amp;B" survives a
+        # round trip instead of decaying into "A&amp;amp;B".
+        if attr_name in _UNESCAPED_ATTRS:
+            escaped_value = html.escape(attr_value, quote=True)
+        else:
+            escaped_value = _escape_text(attr_value, quote=True)
         sanitized.append(f'{attr_name}="{escaped_value}"')
 
     # Security: auto-add rel="noopener noreferrer" for links with target="_blank"
@@ -377,6 +453,58 @@ def escape_for_attribute(text: str) -> str:
         .replace('`', '&#96;')
         .replace('$', '&#36;')
     )
+
+
+#: Tags whose content is itself code or a nested document: dropped whole.
+_ACTIVE_TAGS = {
+    'script', 'style', 'iframe', 'frame', 'frameset', 'object', 'embed',
+    'applet', 'svg', 'math', 'template', 'noscript', 'link', 'meta', 'base',
+    'form', 'input', 'button', 'textarea', 'select', 'option', 'xmp',
+    'noembed', 'noframes', 'plaintext', 'portal',
+}
+_URL_ATTRS = {'href', 'src', 'srcset', 'poster', 'action', 'formaction',
+              'xlink:href', 'background', 'cite', 'data', 'ping'}
+
+
+def strip_active_content(markup: str) -> str:
+    """Pre-rendered display HTML with everything executable removed.
+
+    For the ``rendered_html`` that the code, PDF and spreadsheet displays
+    accept from an item. That markup is normally produced by Potato's format
+    handlers, but an item can supply the dict itself, so it is not trusted.
+    ``sanitize_html`` would also strip the ``data-*`` attributes those
+    displays position by, so this keeps structure and attributes and removes
+    only what can run: script-bearing elements, ``on*`` handlers, ``srcdoc``,
+    and URLs with a javascript:/vbscript:/data: scheme.
+    """
+    if not markup:
+        return ""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(str(markup), "html.parser")
+    for tag in soup.find_all(True):
+        if tag.decomposed:
+            continue
+        if tag.name.lower() in _ACTIVE_TAGS:
+            tag.decompose()
+            continue
+        for attr in list(tag.attrs):
+            name = attr.lower()
+            value = tag.attrs[attr]
+            if isinstance(value, list):
+                value = " ".join(value)
+            if name.startswith('on') or name in ('srcdoc', 'formaction'):
+                del tag.attrs[attr]
+            elif name in _URL_ATTRS:
+                url_as_parsed = re.sub(r'[\x00-\x20\x7f]', '', str(value))
+                if any(p.search(url_as_parsed) for p in DANGEROUS_PATTERNS):
+                    del tag.attrs[attr]
+            elif name == 'style':
+                cleaned = _sanitize_style(str(value))
+                if cleaned:
+                    tag.attrs[attr] = cleaned
+                else:
+                    del tag.attrs[attr]
+    return str(soup)
 
 
 # Register as Jinja2 filter

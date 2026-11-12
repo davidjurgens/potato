@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# A jsPsych Stroop task inside a Potato study.
+#
+#   screener   -> age and colour vision; colour-vision difficulty ends the study (exit_when)
+#   stroop     -> the jsPsych timeline in tasks/stroop.js (type: jspsych)
+#   annotation -> rate the emotional valence of six words
+#   debrief    -> a short survey, questions in a per-participant order
+#
+# Participants are assigned to one of two conditions (feedback: none or
+# immediate). The timeline reads it from potato.conditions.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/jspsych-stroop/config.yaml -p 8000
+
+annotation_task_name: jsPsych Stroop with word ratings
+task_dir: .
+output_annotation_dir: annotation_output/jspsych-stroop/
+data_files:
+  - data/jspsych-stroop.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+
+conditions:
+  factors:
+    feedback: [none, immediate]
+  assignment: balanced
+
+phases:
+  order: [screener, stroop, annotation, debrief]
+  screener:
+    type: prestudy
+    file: surveys/screener.json
+    exit_when:
+      show_when:
+        - {schema: colour_vision, operator: equals, value: "Yes"}
+      message: >-
+        This study needs you to tell red, green and blue apart quickly, so we
+        cannot include you. Thank you for your time.
+  stroop:
+    type: jspsych
+    timeline: tasks/stroop.js
+    plugins: [instructions, html-keyboard-response]
+  debrief:
+    type: poststudy
+    file: surveys/debrief.json
+    randomize_questions:
+      pin_last: [comments]
+
+annotation_schemes:
+  - annotation_type: radio
+    name: valence
+    description: How pleasant or unpleasant is this word?
+    labels: [Unpleasant, Neutral, Pleasant]
+    sequential_key_binding: true
+    label_requirement:
+      required: true

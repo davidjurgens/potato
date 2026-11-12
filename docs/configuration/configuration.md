@@ -1,6 +1,6 @@
 # Configuration Guide
 
-This document provides a comprehensive guide to configuring Potato annotation tasks using YAML configuration files. Potato uses YAML files to define all aspects of an annotation task, from server settings to annotation schemes and user management.
+Every part of a Potato task lives in one YAML file: server settings, data paths, annotation schemes, users, assignment, and the optional features. This page walks through each section.
 
 > **Looking for a quick lookup?** See the [Configuration Reference](config_reference.md) for a complete table of all config keys, annotation types, and their required fields.
 
@@ -29,7 +29,7 @@ This document provides a comprehensive guide to configuring Potato annotation ta
 
 ```
 my_annotation_project/
-├── config.yaml                    # ✅ Config file in task_dir
+├── config.yaml                    # the config file, inside task_dir
 ├── data/
 │   └── my_data.json
 ├── output/
@@ -53,7 +53,7 @@ Using `task_dir: .` makes your configuration portable because paths are resolved
 
 ```
 my_annotation_project/
-├── config.yaml                    # ✅ Config file with task_dir: .
+├── config.yaml                    # the config file, with task_dir: .
 ├── data/
 │   └── my_data.json
 └── output/
@@ -73,7 +73,7 @@ output_annotation_dir: output/annotations/
 ```
 my_annotation_project/
 ├── configs/
-│   ├── config1.yaml              # ✅ Config files in configs/ subdirectory
+│   ├── config1.yaml              # config files, in a configs/ subdirectory
 │   └── config2.yaml
 ├── data/
 │   └── my_data.json
@@ -140,7 +140,6 @@ Example:
 ```yaml
 site_dir: default          # Use default templates
 customjs: null            # No custom JavaScript
-custom_ds: "default"      # Use default dataset handling
 ```
 
 ### Validation Requirements
@@ -165,8 +164,7 @@ Potato validates your configuration to ensure:
 ### Core Settings
 
 ```yaml
-# Server identification
-server_name: My Annotation Task
+# Task name, shown to annotators and in the browser title
 annotation_task_name: Sentiment Analysis Task
 
 # Root directory for your task's design and output
@@ -177,8 +175,7 @@ port: 8000
 ```
 
 **Key Options:**
-- **`server_name`**: Display name for the server (shown in browser title)
-- **`annotation_task_name`**: Name of the annotation task (shown to annotators)
+- **`annotation_task_name`**: Name of the annotation task, shown in the page header and the browser title
 - **`port`**: Port number for the server (default: 8000)
 - **`task_dir`**: The root directory for the task. All custom layout, data, and annotations will be placed in this directory. When set to `.` or a relative path, it is resolved relative to the config file's directory (not the current working directory). Using `task_dir: .` is recommended for portable configurations.
 
@@ -190,9 +187,15 @@ port: 8000
 server:
   port: 8000
   host: "0.0.0.0"  # Listen on all interfaces
-  require_password: true
-  persist_sessions: false
+
+# Top-level keys, not part of the server block
+require_password: true
+persist_sessions: false
 ```
+
+The `server` block takes only `port`, `host` and `debug`. `require_password`
+and `persist_sessions` are top-level keys; nested under `server` they are
+ignored.
 
 ### Advanced Server Settings
 
@@ -201,8 +204,23 @@ customjs: null  # Path to custom JavaScript file
 customjs_hostname: null  # Hostname for custom JS
 site_dir: default  # or path to custom template directory
 alert_time_each_instance: 10  # Seconds before alert (very high = disabled)
-debug: false  # Enable debug mode (bypasses admin authentication)
+debug: false  # Debug mode. Requests from this machine also skip admin authentication
 ```
+
+### Session cookie
+
+```yaml
+session_cookie_samesite: Lax   # Lax, Strict or None
+session_cookie_secure: false   # true once the server is reached over HTTPS
+```
+
+The session cookie is `SameSite=Lax` by default, so the browser does not send
+it with a form posted from another site. Crowd deployments (`crowdsourcing.provider`
+or `login.type: url_direct`/`prolific`) keep the browser's default instead,
+because the platform shows the task inside its own page and a Lax cookie is not
+sent from inside another site's frame. If the task runs in a frame and sessions
+are lost, set `session_cookie_samesite: None` with `session_cookie_secure: true`
+and serve over HTTPS.
 
 ### Admin Dashboard Authentication
 
@@ -239,11 +257,19 @@ data_files:
 item_properties:
   id_key: id           # Field name for item ID
   text_key: text       # Field name for item text
-  context_key: context # Optional: field name for context
   kwargs:              # Optional: additional fields to pass to templates
     - metadata
     - source
+  private_keys:        # Optional: fields the annotator's browser never receives
+    - model_a
+    - model_b
 ```
+
+`private_keys` lists item fields to leave out of everything sent to the
+annotator's browser: the page's item data, `/api/instance_data` and
+`/api/current_instance`. They stay in the data file and in exports. Use it to
+keep a comparison blind, for example the model behind each response in a
+`pairwise` task. The `id_key` and `text_key` fields cannot be private.
 
 The `encoding` field (optional, default `utf-8`) can be set per-file using the dict form. Any [Python-recognized encoding](https://docs.python.org/3/library/codecs.html#standard-encodings) is accepted.
 
@@ -270,7 +296,7 @@ auto_export_interval: 60                     # seconds between exports (default:
 
 Annotations are always saved as per-user `user_state.json` files in `output_annotation_dir`. The `export_annotation_format` setting additionally auto-exports to the specified format(s) into an `exports/` subdirectory. You can also export manually at any time using the export CLI — see [Export Formats](../data-export/export_formats.md).
 
-> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` instead.
+> **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Instance Display
 
@@ -307,10 +333,10 @@ instance_display:
 
 ### Example: Image Classification
 
-Previously, to show an image with radio buttons, you had to use a workaround with `image_annotation` schema. Now you can use `instance_display`:
+To show an image and collect a radio answer about it, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on the image, not for displaying it.
 
 ```yaml
-# Clean approach with instance_display
+# Display the image; collect the label separately
 instance_display:
   fields:
     - key: image_url
@@ -322,7 +348,7 @@ annotation_schemes:
     labels: [A, B, C]
 ```
 
-For comprehensive documentation including all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
+For all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
 
 ## Annotation Schemes
 
@@ -395,11 +421,10 @@ annotation_schemes:
   - annotation_type: slider
     name: confidence
     description: How confident are you in your assessment?
-    min: 0
-    max: 10
+    min_value: 0
+    max_value: 10
+    starting_value: 5
     step: 1
-    min_label: Not Confident
-    max_label: Very Confident
 ```
 
 ### Number Input
@@ -436,14 +461,13 @@ annotation_schemes:
   - annotation_type: span
     name: sentiment_spans
     description: Highlight text spans with different sentiments
-    labels:
-      - positive
-      - negative
-      - neutral
-    colors:  # Optional: custom colors for each label
-      positive: "#4CAF50"
-      negative: "#f44336"
-      neutral: "#9E9E9E"
+    labels:  # color is optional on each label
+      - name: positive
+        color: "#4CAF50"
+      - name: negative
+        color: "#f44336"
+      - name: neutral
+        color: "#9E9E9E"
     bad_text_label:  # Optional: checkbox for invalid text
       label_content: No answer
 ```
@@ -543,13 +567,22 @@ hide_navbar: true              # Hide navigation bar
 allow_phase_back_navigation: true  # Allow backward navigation across phases (default: false)
 ```
 
-When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown, allowing users to return to previous phases.
+When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown and users can return to previous phases.
 
 ## Database Configuration
 
 ### MySQL Database Setup
 
-Potato supports MySQL database backend for improved performance and scalability. To use MySQL:
+Potato can store annotations in MySQL instead of files. It needs the MySQL
+driver, which is not installed by default:
+
+```bash
+pip install 'potato-annotation[mysql]'
+```
+
+If the driver is missing or the database cannot be reached, `potato start`
+stops with an error. It does not fall back to files, so annotations never end up
+somewhere other than the database you configured. To use it:
 
 ```yaml
 database:
@@ -561,14 +594,11 @@ database:
   password: ${POTATO_DB_PASSWORD}  # Use environment variable for security
   charset: utf8mb4
   pool_size: 10
-  max_overflow: 20
-  pool_timeout: 30
-  pool_recycle: 3600
 ```
 
 ### Database Configuration Options
 
-- **`type`**: Database type (`mysql` or `file` for file-based storage)
+- **`type`**: `mysql`. Leave the block out to store state in files.
 - **`host`**: Database server hostname
 - **`port`**: Database server port (default: 3306)
 - **`database`**: Database name
@@ -576,9 +606,53 @@ database:
 - **`password`**: Database password (use environment variables for security)
 - **`charset`**: Character encoding (default: utf8mb4)
 - **`pool_size`**: Connection pool size (default: 10)
-- **`max_overflow`**: Maximum overflow connections (default: 20)
-- **`pool_timeout`**: Connection timeout in seconds (default: 30)
-- **`pool_recycle`**: Connection recycle time in seconds (default: 3600)
+
+### Where annotator state goes
+
+Each annotator's state is stored as one JSON document in the
+`user_state_documents` table. It is the same document the file backend writes
+to `annotation_output/<user>/user_state.json`, so every kind of answer is kept,
+including spans, links, events, training progress and survey answers. The
+annotation history goes in `annotation_history_log`, one row per action. Potato
+creates both tables on first start and loads every stored annotator at boot.
+
+The data items themselves, exports and the rest of the output directory are
+still files. Only annotator state moves to the database.
+
+The admin and MCP exports, the export CLI (`python -m potato.export`), paper mode, auto-export
+(`export_annotation_format`) and model training read annotator state from the
+database. When the export CLI runs on another machine, it connects with the
+config's `database` block, so that machine needs the driver and network access
+to the database. `${VAR}` references in `password` are expanded as they are at
+startup.
+
+The other tools that handle saved state work with the database too:
+
+- `potato repair-annotations` reads each state from the database and writes
+  the repair back. With a backup, the old document goes to
+  `annotation_output/<user>/user_state.json.bak`.
+- The admin data archive, and so `potato deploy pull`, writes each annotator
+  out of the database as `annotation_output/<user>/user_state.json` and
+  `annotation_history.jsonl`, the layout the file backend uses. A pull from a
+  VM or a local container goes through that archive rather than SSH or
+  `docker cp`, so it needs the deployment's URL and admin key.
+- The `backup` and `huggingface_backup` mirrors write the same files under
+  `_databases/mysql/` on each cycle. Restore on boot runs only when the
+  database is empty, and the restored annotators are imported into it.
+- `filter_by_prior_annotation` reads an earlier task in MySQL when the filter
+  carries that task's `database` block.
+
+At startup Potato imports every `annotation_output/<user>/user_state.json`
+whose user is not in the database yet, with its history. That covers a file
+study switched to MySQL and a project made by `potato import --seed-user`. When
+both exist, the database copy wins, and the files are left where they are.
+
+The backup mirrors are not a substitute for backing up the database itself
+with your usual MySQL tooling, such as `mysqldump`.
+
+Older releases defined tables named `user_states`, `label_annotations` and so
+on. They could not be created on MySQL 8 with utf8mb4, so no database holds data
+in them and there is nothing to migrate. Potato no longer creates them.
 
 ### Environment Variables
 
@@ -634,34 +708,36 @@ Potato supports multiple strategies for assigning items to annotators.
 
 ```yaml
 assignment_strategy: random  # Options: random, fixed_order, least_annotated, max_diversity
-
-# Alternative: nested configuration
-assignment:
-  strategy: random
-  max_annotations_per_item: 3
-  random_seed: 1234
+max_annotations_per_item: 3  # -1 for unlimited
+random_seed: 1234            # seed for random assignment (default 1234)
 ```
+
+These are top-level keys. Potato does not read a nested `assignment:` block.
 
 ### Available Strategies
 
-- `random`: Assigns items randomly to annotators
-- `fixed_order`: Assigns items in the order they appear in the dataset
-- `least_annotated`: Prioritizes items with the fewest annotations
-- `max_diversity`: Prioritizes items with highest disagreement in existing annotations
-- `active_learning`: Uses ML to prioritize uncertain items (placeholder)
-- `llm_confidence`: Uses LLM confidence scores (placeholder)
+All thirteen values of `assignment_strategy`, as defined by `AssignmentStrategy`
+in `potato/item_state_management.py`:
 
-### Legacy Assignment Configuration
+| Strategy | What it does |
+|----------|--------------|
+| `random` | Assigns items randomly to annotators |
+| `fixed_order` | Assigns items in the order they appear in the dataset |
+| `least_annotated` | Prioritizes items with the fewest annotations |
+| `max_diversity` | Prioritizes items with the highest disagreement in existing annotations |
+| `active_learning` | Serves the item pool in its current order. With [`active_learning.enabled`](../ai-intelligence/active_learning_guide.md) set, the manager reorders that pool by query strategy after each retrain, so the most informative unlabeled items come first. Without it, the order is whatever you configured |
+| `category_based` | Assigns items matching the annotator's qualified [categories](../advanced/category_assignment.md) |
+| `diversity_clustering` | Samples items round-robin from embedding clusters ([diversity ordering](../workflow/diversity_ordering.md)) |
+| `batch` | Restricts assignment to configured annotator/item cohorts ([batch assignment](../advanced/task_assignment.md)) |
+| `priority` | Serves items by a triage signal, errors and low scores first ([triage queue](../agent-evaluation/triage_queue.md)) |
+| `psychometric` | Routes items by expected information gain under a live IRT model, so confident items stop consuming annotation budget ([psychometrics](../advanced/psychometrics.md)) |
+| `llm_confidence` | Least-confident prelabel first, then prelabels with no confidence, then items with no prelabel in configured order |
+| `model_review` | Serves prelabelled items least-confident first, for review of model output ([model review](../ai-intelligence/model_review.md)) |
+| `engine` | Serves the labeling engine's requests (calibration, verification, audit, adjudication) in its priority order ([labeling engine](../labeling-engine/overview.md)) |
 
-```yaml
-automatic_assignment:
-  on: true
-  output_filename: task_assignment.json
-  sampling_strategy: random  # random or ordered
-  labels_per_instance: 3
-  instance_per_annotator: 5
-  test_question_per_annotator: 0
-```
+The 1.x `automatic_assignment` block is not read; [Task
+Assignment](../advanced/task_assignment.md#moving-from-automatic_assignment)
+maps its keys onto these.
 
 ## UI and Layout Configuration
 
@@ -685,22 +761,47 @@ phases:
 
 ```yaml
 ui:
-  show_progress: true
-  show_instructions: true
-  allow_navigation: true
-  allow_editing: true
+  theme: auto                 # auto, light or dark
+  max_instance_height: 400    # cap the instance text height, in pixels
 ```
 
 ### Keyboard Shortcuts
 
 ```yaml
 horizontal_key_bindings: true
-sequential_key_binding: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    labels: [positive, negative, neutral]
+    sequential_key_binding: true   # per scheme: keys 1, 2, 3
 ```
+
+`sequential_key_binding` belongs on an annotation scheme, not at the top level.
+
+When several schemes on a page use `sequential_key_binding`, each gets its own
+keys: the first takes the number row, the next the row below it, and so on.
+Keys that another scheme already binds are skipped. Those include any label's
+`key_value` and the fixed keys of pairwise (`1`, `2`, and `0` for a tie), BWS
+(the number row for best, `q w e r …` for worst) and triage (`1`, `2`, `3`, or
+its `accept_key`, `reject_key` and `skip_key`). When two schemes fix the same
+key, as two binary pairwise schemes do, neither can be moved, so Potato logs a
+warning naming both. A press of that key reaches only one of them, or all of
+them at once.
+
+Viewer keys are skipped too. Image, video, audio, point-cloud, rollout and
+interval annotation listen for their own keys across the whole page, so a
+label shortcut on one of those keys either does nothing or fires along with the
+viewer's action. In image annotation, for example, `r` picks the bounding-box
+tool and `0` fits the image. Audio also uses `1`–`9` to pick its first nine
+labels, and interval annotation uses the keys it fills in for its labels. A label
+whose `key_value` is a viewer key gets the same warning. Spectrogram, volume
+and microscopy annotation and the listening and triad tests are not affected:
+they take keys only while focus is inside them.
 
 ## AI Support
 
-Potato provides integrated AI support to enhance annotation workflows with intelligent hints and keyword highlighting. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators.
+With `ai_support` on, an LLM suggests labels and highlights keywords in the text while the annotator works. The annotator still makes the call.
 
 ### Basic AI Configuration
 
@@ -724,44 +825,34 @@ For detailed setup instructions and configuration options, see [AI Support Docum
 
 ## Advanced Features
 
-### SurveyFlow Configuration
+### Survey Pages and Screening
+
+Consent, screening and post-study survey pages are phases:
 
 ```yaml
-surveyflow:
-  on: true
-  order:
-    - pre_annotation
-    - post_annotation
-  pre_annotation:
-    - surveyflow/intro.jsonl
-    - surveyflow/instruction.jsonl
-    - surveyflow/consent.jsonl
-  post_annotation:
-    - surveyflow/experience.jsonl
-    - surveyflow/demographic_questions.jsonl
-    - surveyflow/end.jsonl
-  testing:
-    - surveyflow/testing.jsonl
+phases:
+  order: [consent, prestudy, annotation, poststudy]
+  consent:
+    type: consent
+    file: surveys/consent.json
+  prestudy:
+    type: prestudy
+    file: surveys/screener.json
+  poststudy:
+    type: poststudy
+    file: surveys/demographics.json
 ```
 
-### Prestudy Configuration
-
-```yaml
-prestudy:
-  on: true
-  minimum_score: 0.8
-  groundtruth_key: whether_match
-  question_key: Whether the presented sentences are discussing the same scientific finding
-  answer_mapping:
-    Yes: true
-    No: false
-  pass_page: surveyflow/prestudy_pass.jsonl
-  fail_page: surveyflow/prestudy_fail.jsonl
-```
+[Survey Flow](../workflow/surveyflow.md) covers the question files, and
+[Experiment Flow](../workflow/experiment_flow.md) covers `exit_when` for
+screening people out. The 1.x `surveyflow` and top-level `prestudy` blocks are
+not read, and Potato names them at boot if a config still sets them. To grade
+a qualification against known answers, use the
+[training phase](../workflow/training_phase.md).
 
 ### Active Learning
 
-Active learning uses machine learning to intelligently prioritize annotation tasks. For comprehensive configuration options, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+Active learning reorders the queue so the instances a model is least sure about come first. The [Active Learning Guide](../ai-intelligence/active_learning_guide.md) covers every option.
 
 ```yaml
 active_learning:
@@ -984,7 +1075,6 @@ Here's a complete configuration file that demonstrates most features:
 ```yaml
 # Basic Configuration
 port: 8000
-server_name: Comprehensive Annotation Task
 annotation_task_name: Multi-Modal Text Analysis
 
 data_files:
@@ -995,7 +1085,7 @@ item_properties:
   context_key: context
 
 task_dir: output/comprehensive_task/
-output_annotation_format: json
+export_annotation_format: json
 annotation_codebook_url: https://docs.google.com/document/d/...
 
 user_config:
@@ -1047,11 +1137,10 @@ annotation_schemes:
   - annotation_type: slider
     name: confidence
     description: How confident are you in your assessment?
-    min: 0
-    max: 10
+    min_value: 0
+    max_value: 10
+    starting_value: 5
     step: 1
-    min_label: Not Confident
-    max_label: Very Confident
 
   - annotation_type: select
     name: category
@@ -1071,21 +1160,16 @@ annotation_schemes:
     step: 1
 
 ui:
-  show_progress: true
-  show_instructions: true
-  allow_navigation: true
-  allow_editing: true
+  theme: auto
 
 server:
   port: 8000
   host: 0.0.0.0
-  require_password: true
-  persist_sessions: false
 
-assignment:
-  strategy: least_annotated
-  max_annotations_per_item: 3
-  random_seed: 1234
+require_password: true
+persist_sessions: false
+
+random_seed: 1234
 
 site_dir: default
 customjs: null
@@ -1100,18 +1184,23 @@ When you start Potato with a configuration file, it will validate the configurat
 
 - Missing required fields
 - Invalid annotation types
-- File paths that dont exist
+- File paths that do not exist
 - Invalid assignment strategies
 - Malformed YAML syntax
 
-## Best Practices
-1. **Start Simple**: Begin with basic configuration and add complexity gradually
-2. **Test Thoroughly**: Always test your configuration with a small dataset first
-3. **Use Descriptive Names**: Choose clear, descriptive names for annotation schemes
-4. **Document Your Choices**: Add comments to explain non-obvious configuration choices
-5. **Version Control**: Keep your configuration files in version control
-6. **Environment Variables**: Use environment variables for sensitive information
-7. **Backup Data**: Always backup your data and configuration before making changes
+## Practical advice
+
+Get a minimal config running against a handful of items before adding schemes,
+because a validation error in a 200-line file is much harder to place than one
+in a 20-line file. Scheme names end up in your exported column headers and in
+every agreement report, so pick names you will still understand in six months,
+and comment anything a reader would otherwise have to reverse-engineer.
+
+Keep configs in version control: they are the record of what annotators
+actually saw, and reviewers will ask. Put API keys and database passwords in
+environment variables and reference them, so the config stays committable. Back
+up the output directory before changing `task_dir`, `output_annotation_dir`, or
+any assignment setting mid-study.
 
 ## Troubleshooting
 

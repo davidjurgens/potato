@@ -12,10 +12,10 @@
     "method": "subscales",
     "subscales": {
       "extraversion": {"items": [1, 6, 11, 16], "reverse": [6, 16]},
-      "agreeableness": {"items": [2, 7, 12, 17], "reverse": [2, 12]},
+      "agreeableness": {"items": [2, 7, 12, 17], "reverse": [7, 17]},
       "conscientiousness": {"items": [3, 8, 13, 18], "reverse": [8, 18]},
       "neuroticism": {"items": [4, 9, 14, 19], "reverse": [9, 19]},
-      "openness": {"items": [5, 10, 15, 20], "reverse": [15, 20]}
+      "openness": {"items": [5, 10, 15, 20], "reverse": [10, 15, 20]}
     }
   },
   "instructions": "Describe yourself as you generally are now, not as you wish to be in the future. Describe yourself as you honestly see yourself, in relation to other people you know of the same sex as you are, and roughly your same age.",

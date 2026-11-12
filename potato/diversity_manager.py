@@ -114,6 +114,9 @@ class DiversityManager:
         self.cluster_members: Dict[int, List[str]] = {}  # cluster_id -> [instance_ids]
         self.user_cluster_states: Dict[str, ClusterState] = {}  # user_id -> state
         self.num_clusters: int = config.num_clusters
+        #: Set by use_embedder(); reported by the corpus map so the admin can
+        #: see what produced the points rather than assuming it was text.
+        self.embedder_spec = None
 
         # Threading for async operations
         self._embedding_executor = ThreadPoolExecutor(max_workers=4)
@@ -138,9 +141,9 @@ class DiversityManager:
                 self.logger.info("Using custom embedding function")
                 self._embed_function = config.custom_embedding_function
             else:
-                self.logger.info(f"Loading sentence-transformer model: {config.model_name}")
-                from sentence_transformers import SentenceTransformer  # lazy: heavy import
-                self.model = SentenceTransformer(config.model_name)
+                # Loaded on first use, not here: a project whose embedder turns
+                # out to be CLIP (or a lab's own encoder) would otherwise pay
+                # for a sentence-transformer it never calls, at boot.
                 self._embed_function = self._embed_with_model
 
             self.enabled = True
@@ -154,8 +157,37 @@ class DiversityManager:
             self.enabled = False
 
     def _embed_with_model(self, texts: List[str]) -> Any:
-        """Embed texts using the loaded sentence-transformer model."""
+        """Embed texts using the sentence-transformer model, loading it once."""
+        if self.model is None:
+            self.logger.info(
+                "Loading sentence-transformer model: %s", self.config.model_name)
+            from sentence_transformers import SentenceTransformer  # lazy: heavy
+            self.model = SentenceTransformer(self.config.model_name)
         return self.model.encode(texts, show_progress_bar=False)
+
+    def use_embedder(self, embedder) -> bool:
+        """Embed through a resolved project embedder instead of plain text.
+
+        Everything downstream — batching, the disk cache, clustering, diverse
+        ordering — works on opaque references, so pointing this at an image or
+        audio backend makes the whole diversity path modality-agnostic without
+        touching any of it.
+
+        Args:
+            embedder: a ``potato.embedders.ResolvedEmbedder``
+
+        Returns:
+            True when the embedder was adopted.
+        """
+        if embedder is None or not embedder.available:
+            return False
+        self._embed_function = embedder.backend.embed
+        self.embedder_spec = embedder.spec
+        self.logger.info(
+            "Diversity/corpus embeddings: %s backend, model %s, field '%s' (%s)",
+            embedder.spec.backend, embedder.spec.model,
+            embedder.spec.source_field, embedder.spec.chosen_because)
+        return True
 
     def _get_cache_dir(self) -> str:
         """Get the cache directory path."""
@@ -472,6 +504,54 @@ class DiversityManager:
 
         return None
 
+    def _cluster_order(self) -> List[int]:
+        if self.cluster_members:
+            return sorted(self.cluster_members)
+        return sorted(set(self.cluster_labels.values()))
+
+    def _round_robin(self, ordered_ids: List[str], start: int) -> List[str]:
+        """``ordered_ids`` interleaved one per cluster, from cluster ``start``.
+
+        Unclustered items follow, in their original order.
+        """
+        clusters = self._cluster_order()
+        queues: Dict[int, List[str]] = {}
+        unclustered = []
+        for iid in ordered_ids:
+            cid = self.cluster_labels.get(iid)
+            if cid is None:
+                unclustered.append(iid)
+            else:
+                queues.setdefault(cid, []).append(iid)
+        for cid in queues:
+            if cid not in clusters:
+                clusters.append(cid)
+        order: List[str] = []
+        cursor = start % len(clusters) if clusters else 0
+        while any(queues.values()):
+            for step in range(len(clusters)):
+                cid = clusters[(cursor + step) % len(clusters)]
+                if queues.get(cid):
+                    order.append(queues[cid].pop(0))
+                    cursor = (cursor + step + 1) % len(clusters)
+                    break
+        return order + unclustered
+
+    def note_assigned(self, user_id: str, instance_ids: List[str]) -> None:
+        """Advance the user's round robin past the clusters just served."""
+        if not self.enabled or not self.cluster_labels:
+            return
+        with self._lock:
+            state = self.get_user_cluster_state(user_id)
+            clusters = self._cluster_order()
+            for iid in instance_ids:
+                cid = self.cluster_labels.get(iid)
+                if cid is None or cid not in clusters:
+                    continue
+                state.current_cluster_index = (clusters.index(cid) + 1) % len(clusters)
+                state.sampled_clusters.add(cid)
+                state.cluster_sample_counts[cid] = state.cluster_sample_counts.get(cid, 0) + 1
+
     def get_next_diverse_item(
         self,
         user_id: str,
@@ -493,7 +573,8 @@ class DiversityManager:
         with self._lock:
             # Find clusters with available items
             available_by_cluster: Dict[int, List[str]] = {}
-            for iid in available_ids:
+            # Sorted: iterating the set made the pick depend on PYTHONHASHSEED.
+            for iid in sorted(available_ids):
                 if iid in self.cluster_labels:
                     cluster_id = self.cluster_labels[iid]
                     if cluster_id not in available_by_cluster:
@@ -502,7 +583,7 @@ class DiversityManager:
 
             if not available_by_cluster:
                 # No clustered items available
-                return list(available_ids)[0] if available_ids else None
+                return sorted(available_ids)[0] if available_ids else None
 
             # Get next cluster using round-robin
             next_cluster = self._get_next_cluster(user_id, set(available_by_cluster.keys()))
@@ -555,19 +636,17 @@ class DiversityManager:
                 else:
                     reorderable.add(iid)
 
-            # Generate diverse order for reorderable items
-            diverse_order: List[str] = []
-            remaining = reorderable.copy()
-
-            while remaining:
-                next_item = self.get_next_diverse_item(user_id, remaining)
-                if next_item:
-                    diverse_order.append(next_item)
-                    remaining.discard(next_item)
-                else:
-                    # Fallback: append remaining items
-                    diverse_order.extend(sorted(remaining))
-                    break
+            # Round robin over clusters from the user's current position,
+            # taking each cluster's items in queue order. Built with a local
+            # cursor: this ordering is regenerated on every assignment call,
+            # and advancing the user's own cursor for every simulated pick
+            # moved it by a whole ordering each time, so the items actually
+            # served came out in blocks of one cluster. Iterating a set also
+            # made the pick within a cluster depend on PYTHONHASHSEED.
+            # note_assigned() advances the cursor for what is really served.
+            diverse_order = self._round_robin(
+                [iid for iid in available_ids if iid in reorderable],
+                state.current_cluster_index)
 
             # Merge preserved items back at their original positions using
             # a slot-based approach. Pre-allocate slots for preserved items,

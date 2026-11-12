@@ -27,6 +27,9 @@ from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
 
 
+SOLO_ADMIN_KEY = "solo-integration-test-admin-key"
+
+
 def _create_integration_test_config(test_dir):
     """Create Solo Mode config with 20 instances, low thresholds, all features."""
     data_dir = os.path.join(test_dir, "data")
@@ -113,6 +116,7 @@ def _create_integration_test_config(test_dir):
             ],
         }],
         'user_config': {'allow_no_password': True},
+        'admin_api_key': SOLO_ADMIN_KEY,
         'output': {
             'annotation_output_format': 'json',
             'annotation_output_dir': 'annotations',
@@ -210,7 +214,7 @@ class TestEndToEndWorkflow:
         )
         assert resp.status_code == 200  # redirects (followed) or 200
 
-        prompts = requests.get(
+        prompts = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/prompts"
         ).json()
         assert prompts['current_version'] >= 1
@@ -220,7 +224,7 @@ class TestEndToEndWorkflow:
         self, solo_integration_server, authed_session
     ):
         """Updating prompt increments the version."""
-        before = requests.get(
+        before = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/prompts"
         ).json()
 
@@ -229,13 +233,13 @@ class TestEndToEndWorkflow:
             data={'action': 'update', 'prompt': 'Updated prompt text v2'},
         )
 
-        after = requests.get(
+        after = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/prompts"
         ).json()
         assert after['current_version'] > before['current_version']
 
     def test_advance_to_parallel_annotation(
-        self, solo_integration_server, manager
+        self, solo_integration_server, manager, authed_session
     ):
         """Phase can be advanced to PARALLEL_ANNOTATION."""
         from potato.solo_mode.phase_controller import SoloPhase
@@ -243,7 +247,7 @@ class TestEndToEndWorkflow:
         manager.advance_to_phase(SoloPhase.PROMPT_REVIEW, force=True)
         manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION, force=True)
 
-        status = requests.get(
+        status = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/status"
         ).json()
         assert 'PARALLEL_ANNOTATION' in status['phase_name']
@@ -269,7 +273,7 @@ class TestEndToEndWorkflow:
                 data={'instance_id': iid, 'annotation': 'positive'},
             )
 
-        stats = requests.get(
+        stats = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/status"
         ).json()
         assert stats['annotation_stats']['human_labeled'] >= 5
@@ -298,11 +302,11 @@ class TestEndToEndWorkflow:
         metrics = manager.get_agreement_metrics()
         assert metrics.disagreements > 0
 
-    def test_export_contains_all_sections(self, solo_integration_server):
+    def test_export_contains_all_sections(self, authed_session, solo_integration_server):
         """Export endpoint returns annotations, predictions, prompt_history."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/export"
-        ).json()
+        , headers={"X-API-Key": SOLO_ADMIN_KEY}).json()
 
         assert 'phase' in data
         assert 'annotations' in data
@@ -310,11 +314,11 @@ class TestEndToEndWorkflow:
         assert 'prompt_history' in data
         assert 'agreement_metrics' in data
 
-    def test_export_has_predictions(self, solo_integration_server):
+    def test_export_has_predictions(self, authed_session, solo_integration_server):
         """Export contains injected LLM predictions."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/export"
-        ).json()
+        , headers={"X-API-Key": SOLO_ADMIN_KEY}).json()
         assert len(data['llm_predictions']) > 0
 
 
@@ -392,17 +396,17 @@ class TestAnalysisFeatureIntegration:
     """Test confusion analysis and disagreement explorer via API."""
 
     def test_confusion_analysis_returns_structure(
-        self, solo_integration_server, manager
+        self, solo_integration_server, manager, authed_session
     ):
         """Confusion analysis returns expected fields."""
         # Ensure there are some comparisons
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/confusion-analysis"
         ).json()
         assert 'enabled' in data or 'patterns' in data
 
     def test_confusion_analysis_with_disagreements(
-        self, solo_integration_server, manager
+        self, solo_integration_server, manager, authed_session
     ):
         """Create disagreements and verify patterns are generated."""
         from potato.solo_mode.phase_controller import SoloPhase
@@ -416,37 +420,37 @@ class TestAnalysisFeatureIntegration:
             # Record human label that disagrees
             manager.record_human_label(iid, 'sentiment', 'negative', 'test_user')
 
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/confusion-analysis"
         ).json()
         if data.get('enabled'):
             assert 'patterns' in data
 
     def test_disagreement_explorer_returns_structure(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Disagreement explorer returns scatter data."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/disagreement-explorer"
         ).json()
         # Should have scatter_points or error
         assert isinstance(data, dict)
 
     def test_disagreement_explorer_with_label_filter(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Disagreement explorer accepts label filter."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/disagreement-explorer",
             params={'label': 'positive'},
         ).json()
         assert isinstance(data, dict)
 
     def test_disagreement_timeline_returns_buckets(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Timeline endpoint returns bucketed data."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/disagreement-timeline",
             params={'bucket_size': 5},
         ).json()
@@ -456,9 +460,9 @@ class TestAnalysisFeatureIntegration:
 class TestLabelingFunctionIntegration:
     """Test labeling function endpoints via API."""
 
-    def test_labeling_functions_status(self, solo_integration_server):
+    def test_labeling_functions_status(self, authed_session, solo_integration_server):
         """Labeling function stats endpoint returns expected structure."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/labeling-functions/stats"
         ).json()
         assert 'enabled' in data
@@ -483,9 +487,9 @@ class TestLabelingFunctionIntegration:
         data = resp.json()
         assert 'success' in data
 
-    def test_list_labeling_functions(self, solo_integration_server):
+    def test_list_labeling_functions(self, authed_session, solo_integration_server):
         """List labeling functions endpoint."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/labeling-functions"
         ).json()
         assert 'enabled' in data
@@ -495,10 +499,10 @@ class TestRefinementLoopIntegration:
     """Test refinement loop endpoints."""
 
     def test_refinement_status_returns_structure(
-        self, solo_integration_server
+        self, solo_integration_server, authed_session
     ):
         """Refinement status returns enabled flag and cycle info."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/refinement-status"
         ).json()
         assert 'enabled' in data
@@ -532,25 +536,25 @@ class TestRefinementLoopIntegration:
 class TestEdgeCaseRuleIntegration:
     """Test edge case rule endpoints."""
 
-    def test_rules_endpoint_returns_structure(self, solo_integration_server):
+    def test_rules_endpoint_returns_structure(self, authed_session, solo_integration_server):
         """Rules endpoint returns rules and stats."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/rules"
         ).json()
         assert 'rules' in data
         assert 'stats' in data
 
-    def test_rules_categories_endpoint(self, solo_integration_server):
+    def test_rules_categories_endpoint(self, authed_session, solo_integration_server):
         """Categories endpoint returns list."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/rules/categories"
         ).json()
         assert 'categories' in data
         assert isinstance(data['categories'], list)
 
-    def test_rules_viz_data_returns_arrays(self, solo_integration_server):
+    def test_rules_viz_data_returns_arrays(self, authed_session, solo_integration_server):
         """Viz data endpoint returns points and clusters arrays."""
-        data = requests.get(
+        data = authed_session.get(
             f"{solo_integration_server.base_url}/solo/api/rules/viz-data"
         ).json()
         assert 'points' in data
@@ -570,6 +574,92 @@ class TestEdgeCaseRuleIntegration:
         assert resp.status_code in (200, 400, 403)
         data = resp.json()
         assert 'success' in data or 'error' in data
+
+
+class TestReviewPhaseWiring:
+    """End-to-end wiring of the PERIODIC_REVIEW and RULE_REVIEW phases through
+    the real HTTP routes (these phases were previously unreachable)."""
+
+    def _reset_to_parallel(self, manager):
+        from potato.solo_mode.phase_controller import SoloPhase
+        # The manager singleton is shared across the module's tests; clear the
+        # review-relevant state so each case starts from a known baseline
+        # (prior tests populate human_labeled_ids, which would otherwise exclude
+        # our injected instances from the review pool).
+        manager.predictions.clear()
+        manager.human_labeled_ids.clear()
+        manager.disagreement_ids.clear()
+        manager.validation_tracker.reset_periodic_review_counter()
+        manager.advance_to_phase(SoloPhase.PROMPT_REVIEW, force=True)
+        manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION, force=True)
+
+    def test_annotate_post_enters_periodic_review(
+        self, solo_integration_server, manager, authed_session
+    ):
+        from potato.solo_mode.phase_controller import SoloPhase
+
+        self._reset_to_parallel(manager)
+        # Low-confidence, un-human-labeled predictions => review-eligible items.
+        for i in range(5):
+            iid = f"int_{i:03d}"
+            manager.set_llm_prediction(iid, 'sentiment',
+                                       _make_prediction(iid, 'positive', confidence=0.2))
+        # Make a review due.
+        manager.validation_tracker.periodic_review_interval = 3
+        for i in range(3):
+            manager.validation_tracker.record_llm_label(f"int_{i:03d}")
+
+        # Annotate a different instance; the POST should divert to review.
+        resp = authed_session.post(
+            f"{solo_integration_server.base_url}/solo/annotate",
+            data={"instance_id": "int_010", "annotation": "positive"},
+            allow_redirects=False,
+        )
+        assert resp.status_code in (301, 302)
+        assert "/solo/review" in resp.headers.get("Location", "")
+        assert manager.get_current_phase() == SoloPhase.PERIODIC_REVIEW
+
+    def test_review_completion_returns_to_active_annotation(
+        self, solo_integration_server, manager, authed_session
+    ):
+        from potato.solo_mode.phase_controller import SoloPhase
+
+        # Enter periodic review with one review item, then consume it.
+        self._reset_to_parallel(manager)
+        manager.set_llm_prediction("int_007", 'sentiment',
+                                   _make_prediction("int_007", 'positive', confidence=0.2))
+        manager.validation_tracker.periodic_review_interval = 1
+        manager.validation_tracker.record_llm_label("int_007")
+        assert manager.check_and_enter_periodic_review() is True
+        assert manager.get_current_phase() == SoloPhase.PERIODIC_REVIEW
+
+        # Mark the review item as handled so no items remain, then load review.
+        manager.human_labeled_ids.add("int_007")
+        resp = authed_session.get(
+            f"{solo_integration_server.base_url}/solo/review",
+            allow_redirects=False,
+        )
+        assert resp.status_code in (301, 302)
+        assert "/solo/annotate" in resp.headers.get("Location", "")
+        assert manager.get_current_phase() == SoloPhase.ACTIVE_ANNOTATION
+
+    def test_annotate_post_enters_rule_review_when_categories_pending(
+        self, solo_integration_server, manager, authed_session
+    ):
+        from unittest.mock import MagicMock, patch
+        from potato.solo_mode.phase_controller import SoloPhase
+
+        self._reset_to_parallel(manager)
+        with patch.object(manager.edge_case_rule_manager,
+                          'get_pending_categories', return_value=[MagicMock()]):
+            resp = authed_session.post(
+                f"{solo_integration_server.base_url}/solo/annotate",
+                data={"instance_id": "int_012", "annotation": "positive"},
+                allow_redirects=False,
+            )
+            assert resp.status_code in (301, 302)
+            assert "/solo/rule" in resp.headers.get("Location", "")
+            assert manager.get_current_phase() == SoloPhase.RULE_REVIEW
 
 
 if __name__ == "__main__":

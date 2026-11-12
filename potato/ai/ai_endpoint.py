@@ -2,17 +2,20 @@
 """
 Unified AI endpoint interface for various LLM providers.
 
-This module provides a common interface for interacting with different LLM providers
+A common interface for interacting with different LLM providers
 including OpenAI, Anthropic, Hugging Face, Ollama, and VLLM endpoints.
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
+import importlib
 import logging
 from abc import ABC, abstractmethod
 import os
+import re
 from typing import Dict, Any, Optional, List, Type, Union
 import json
+import threading
 from string import Template
 
 from pydantic import BaseModel
@@ -91,6 +94,9 @@ class ModelCapabilities:
         image_classification: Can classify images into categories
         rationale_generation: Can generate explanations/rationales for labels
         keyword_extraction: Can extract keywords from text (not applicable to images)
+        mask_output: Can output pixel-level segmentation masks (RLE), not just boxes
+        text_prompt_segmentation: Can segment from a text prompt ("the red car")
+        interactive_segmentation: Can refine a mask from click/box prompts (SAM-class)
     """
     text_generation: bool = False
     vision_input: bool = False
@@ -99,6 +105,12 @@ class ModelCapabilities:
     image_classification: bool = False
     rationale_generation: bool = False
     keyword_extraction: bool = False
+    # Segmentation is a genuinely different output shape from detection: a
+    # detector that returns boxes cannot be asked for pixels, so the assistant
+    # for it has to be gated separately or the button appears and then fails.
+    mask_output: bool = False
+    text_prompt_segmentation: bool = False
+    interactive_segmentation: bool = False
 
     def supports_assistant(self, assistant_type: str, has_image_input: bool = False) -> bool:
         """
@@ -133,6 +145,19 @@ class ModelCapabilities:
             # Detection requires vision and bounding box output
             return self.bounding_box_output and self.vision_input
 
+        elif assistant_type == "critique":
+            # Critique reads an annotated crop and must say WHY it disagrees,
+            # so it needs vision plus the ability to justify -- a detector that
+            # only emits boxes has nothing to contribute. Deliberately not
+            # gated on bounding_box_output: the model judges geometry it is
+            # shown, it never has to produce any.
+            return self.vision_input and self.rationale_generation
+
+        elif assistant_type in ("segment", "segmentation"):
+            # Segmentation needs pixel output, which detection capability does
+            # NOT imply -- a box model asked for a mask returns nothing usable.
+            return self.mask_output and self.vision_input
+
         elif assistant_type == "classification":
             # Classification depends on input type
             if has_image_input:
@@ -152,7 +177,8 @@ class ModelCapabilities:
         Returns:
             List of supported assistant type names
         """
-        all_types = ["hint", "keyword", "rationale", "detection", "pre_annotate", "classification"]
+        all_types = ["hint", "keyword", "rationale", "detection", "pre_annotate",
+                     "classification", "segment", "critique"]
         return [t for t in all_types if self.supports_assistant(t, has_image_input)]
 
 
@@ -171,6 +197,36 @@ class AIEndpointRequestError(AIEndpointError):
     pass
 
 
+#: Token usage reported by the most recent call made on this thread. Calls are
+#: synchronous, so the call that just returned on a thread is the one that set
+#: it, whichever endpoint instance made it.
+_LAST_USAGE = threading.local()
+
+
+_UNRESOLVED_ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def without_unresolved_api_key(ai_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop an ``api_key`` that is still a ``${VAR}`` reference.
+
+    Config loading leaves ``${VAR}`` as written when VAR is not set. The
+    endpoints then read that text as a key (it is non-empty, so it also beat
+    the provider's own environment fallback) and sent it with every request:
+    no error at startup, and a 401 per AI call. Without it, each endpoint
+    falls back to its environment variable or refuses to start with "API key
+    is required", the same as a config that set no key. The agent runner and
+    the coding-agent backends read ``api_key`` the same way and use this too.
+    """
+    key = ai_config.get("api_key") if isinstance(ai_config, dict) else None
+    match = _UNRESOLVED_ENV_REFERENCE.search(key) if isinstance(key, str) else None
+    if not match:
+        return ai_config
+    logger.error(
+        f"ai_config.api_key refers to ${{{match.group(1)}}}, which is not set; "
+        f"treating the key as missing. Set {match.group(1)} or remove api_key.")
+    return {k: v for k, v in ai_config.items() if k != "api_key"}
+
+
 class BaseAIEndpoint(ABC):
     """
     Abstract base class for AI endpoints.
@@ -178,6 +234,34 @@ class BaseAIEndpoint(ABC):
     All AI endpoint implementations should inherit from this class
     and implement the required methods.
     """
+
+    def _note_usage(self, input_tokens, output_tokens) -> None:
+        """Record the token counts the provider reported for this call.
+
+        Never raises: usage is bookkeeping, and a provider that changes its
+        response shape must not turn a good answer into a failed call.
+        """
+        try:
+            _LAST_USAGE.value = {
+                "input_tokens": int(input_tokens) if input_tokens is not None else None,
+                "output_tokens": int(output_tokens) if output_tokens is not None else None,
+            }
+        except (TypeError, ValueError):
+            _LAST_USAGE.value = None
+
+    def query_with_usage(self, prompt: str, output_format: Optional[Type[BaseModel]] = None):
+        """``query()``, plus the provider's token counts when it reported them.
+
+        Returns ``(reply, usage)``, where ``usage`` is ``{"input_tokens",
+        "output_tokens"}`` or None for a provider that reports nothing. The
+        labeling engine's call log records measured usage when there is some
+        and marks the row estimated otherwise.
+        """
+        _LAST_USAGE.value = None
+        reply = self.query(prompt, output_format)
+        usage = getattr(_LAST_USAGE, "value", None)
+        _LAST_USAGE.value = None
+        return reply, usage
 
     def __init__(self, config: Dict[str, Any]):
         """
@@ -190,10 +274,23 @@ class BaseAIEndpoint(ABC):
         self.description = config.get("description", "")
         self.annotation_type = config.get("annotation_type", "")
         self.ai_config = config.get("ai_config", {})
+        self.ai_config = without_unresolved_api_key(self.ai_config)
 
         # Model configuration
         self.model = self.ai_config.get("model", self._get_default_model())
-        self.max_tokens = self.ai_config.get("max_tokens", 100)
+        # 800, not 100. 100 cannot complete any of the multi-label formats
+        # this package ships: GeneralRationaleFormat over a three-label scheme
+        # runs 300-500 tokens and GeneralKeywordFormat is similar, so the
+        # generation was cut mid-object and parseStringToJson's salvage
+        # ("extract complete key-value pairs") returned the inner fragment --
+        # a plausible-looking dict of the wrong type. The tooltip read "No
+        # rationales available" and nothing anywhere said the reply had been
+        # truncated. Every bundled example that uses this sets max_tokens;
+        # nothing warned the author who did not.
+        #
+        # A cap costs nothing unless the model reaches it, so raising it does
+        # not make short answers longer.
+        self.max_tokens = self.ai_config.get("max_tokens", 800)
         self.temperature = self.ai_config.get("temperature", 0.1)
 
         # prompt
@@ -213,12 +310,20 @@ class BaseAIEndpoint(ABC):
         pass
 
     @abstractmethod
-    def query(self, prompt: str, output_format: Type[BaseModel]):
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None):
         """
         Send a query to the AI model and return the response.
 
+        Every endpoint takes the same two arguments. Callers pass a pydantic
+        model when they want JSON back and omit it (or pass None) for free
+        text, and the same call has to work whichever provider is configured.
+        Endpoints used to disagree: Anthropic's took only the prompt and the
+        others required the schema, so each provider broke a different set of
+        features with a TypeError that callers caught and logged.
+
         Args:
             prompt: The prompt to send to the model
+            output_format: Pydantic model the reply should match, or None
 
         Returns:
             The model's response as a string
@@ -295,7 +400,84 @@ class BaseAIEndpoint(ABC):
         except Exception as e:
             raise AIEndpointRequestError(f"Chat query failed: {e}")
 
-    def parseStringToJson(self, response_content: str) -> str:
+    #: Every spelling a provider uses for "I stopped because I ran out of
+    #: budget". Compared case-insensitively against the last dotted segment, so
+    #: a Gemini `FinishReason.MAX_TOKENS` enum matches as readily as OpenAI's
+    #: bare `"length"`. Checking only `"length"` meant Anthropic, Gemini and
+    #: Ollama could truncate a reply in total silence.
+    TRUNCATION_REASONS = frozenset({
+        "length",            # openai, vllm, openrouter, huggingface, ollama
+        "max_tokens",        # anthropic
+        "maxtokens",         # anthropic, defensive
+        "max_output_tokens",  # gemini, older SDKs
+        "model_length",      # vllm, when the context rather than max_tokens ran out
+    })
+
+    @classmethod
+    def _is_truncation_reason(cls, finish_reason) -> bool:
+        """Whether a provider's stop reason means "ran out of budget".
+
+        Accepts a string, an enum, or None. Enums are compared by their last
+        dotted segment because `str(FinishReason.MAX_TOKENS)` renders as
+        `"FinishReason.MAX_TOKENS"` on some SDK versions and `"MAX_TOKENS"` on
+        others, and the caller should not have to know which.
+        """
+        if finish_reason is None:
+            return False
+        token = getattr(finish_reason, "name", None) or str(finish_reason)
+        return token.rsplit(".", 1)[-1].strip().lower() in cls.TRUNCATION_REASONS
+
+    @staticmethod
+    def _stop_reason(response, *names):
+        """Read the first of ``names`` off a response that may be dict or object.
+
+        The Ollama client returns something that answers to both, and Gemini
+        buries its reason one level down on ``candidates[0]``. Callers should
+        not have to branch on that to ask a yes/no question.
+        """
+        for name in names:
+            if hasattr(response, "get"):
+                try:
+                    value = response.get(name)
+                except Exception:  # pragma: no cover - exotic mapping
+                    value = None
+            else:
+                value = None
+            if value is None:
+                value = getattr(response, name, None)
+            if value is not None:
+                return value
+        return None
+
+    def _warn_if_truncated(self, finish_reason, where="response"):
+        """
+        Say so when the model ran out of budget mid-answer.
+
+        Truncation and unconstrained output produce the same symptom -- a dict
+        the renderer cannot read and a tooltip saying the assistant has nothing
+        -- because `parseStringToJson`'s salvage step happily returns the
+        complete key-value pairs it found inside a cut-off object. Separating
+        the two took a live server and a run at each max_tokens value; the
+        finish reason was in the response all along.
+
+        Args:
+            finish_reason: The API's stop/finish reason for the choice. May be a
+                string, an enum, or None; `None` is treated as "not truncated",
+                since a provider that reports nothing is not evidence either way.
+            where: What was being generated, for the message
+        """
+        # Kept for callers that must not use a cut-off reply at all (a Solo
+        # prompt draft): the salvage step turns one into a plausible dict.
+        self.last_truncated = self._is_truncation_reason(finish_reason)
+        if not self.last_truncated:
+            return
+        logger.warning(
+            "The model hit max_tokens (%s) before finishing this %s, so the "
+            "reply is cut off and may parse into the wrong shape. Raise "
+            "ai_config.max_tokens.", self.max_tokens, where)
+
+    @staticmethod
+    def parseStringToJson(response_content: str) -> str:
         """
         Parse structured output from any LLM response, with robust fallbacks.
 
@@ -391,7 +573,7 @@ class BaseAIEndpoint(ABC):
 
         # Strategy 4: Salvage truncated JSON
         # Extract complete "key": "value" and "key": number pairs
-        salvaged = self._salvage_key_value_pairs(content_str)
+        salvaged = BaseAIEndpoint._salvage_key_value_pairs(content_str)
         if salvaged:
             logger.warning(
                 f"Salvaged {len(salvaged)} fields from truncated/malformed response"
@@ -402,7 +584,7 @@ class BaseAIEndpoint(ABC):
         # Some models (especially larger ones) produce XML like:
         # <label>joy</label><confidence>90</confidence>
         # or <response><label>joy</label></response>
-        xml_result = self._parse_xml_to_dict(content_str)
+        xml_result = BaseAIEndpoint._parse_xml_to_dict(content_str)
         if xml_result:
             logger.info(
                 f"Parsed {len(xml_result)} fields from XML-style response"
@@ -497,6 +679,53 @@ class BaseAIEndpoint(ABC):
 
         return result if result else None
 
+    def _as_structured(self, result, output_format):
+        """
+        One return type for the AI-help path, whatever the endpoint returned.
+
+        `query()` is not consistent across endpoints and never has been: ollama,
+        vllm and openrouter return `parseStringToJson(...)` -- a dict -- while
+        openai, huggingface, anthropic and gemini return
+        `response.choices[0].message.content`, a string. `/get_ai_suggestion`
+        reads that difference as success versus failure:
+
+            if isinstance(res, dict):  return jsonify(res)
+            elif isinstance(res, str): return jsonify({"error": res})
+
+        So the endpoint that gets structured output *right* -- openai sends
+        `response_format: json_schema`, which local vLLM servers honour -- had
+        its correct answer delivered to the browser labelled as an error, and
+        the annotator read "No hint available" over a complete hint.
+
+        Only converted when a schema was actually requested. Without one the
+        caller asked for free text (the model arena, chat) and a string is the
+        answer. A string that will not parse is left alone: `get_ai` also
+        returns "Unable to generate suggestion - ..." messages, and those really
+        are errors.
+        """
+        if not isinstance(result, str):
+            return result
+        if output_format is None or not hasattr(output_format, "model_json_schema"):
+            return result
+        try:
+            parsed = self.parseStringToJson(result)
+        except Exception:
+            return result
+        if not isinstance(parsed, dict):
+            return result
+        # `parseStringToJson` never fails: text it cannot read comes back as
+        # {"response": "<the text>"}. Accept the parse only when it produced at
+        # least one key the schema asked for, so an error message -- "Unable to
+        # generate suggestion - prompt not configured" -- stays a string the
+        # route can report instead of being handed to the tooltip as data.
+        try:
+            wanted = set(output_format.model_json_schema().get("properties", {}))
+        except Exception:
+            wanted = set()
+        if wanted and not (wanted & set(parsed)):
+            return result
+        return parsed
+
     def get_ai(self, data: AnnotationInput, output_format) -> str:
         """
         Get a hint for annotating the given text.
@@ -534,7 +763,8 @@ class BaseAIEndpoint(ABC):
                 max_value=data.max_value,  
                 step=data.step             
             )
-            return self.query(prompt, output_format)
+            result = self.query(prompt, output_format)
+            return self._as_structured(result, output_format)
         except Exception as e:
             logger.error(f"[get_ai] AnnotationInput: {data}")
             logger.error(f"[get_ai] Error for {data.annotation_type}/{data.ai_assistant}: {type(e).__name__}: {e}")
@@ -561,14 +791,60 @@ class BaseAIEndpoint(ABC):
 class AIEndpointFactory:
     """
     Factory class for creating AI endpoint instances.
+
+    Endpoint classes whose modules pull in optional SDKs (ollama, openai,
+    anthropic, google-genai, huggingface_hub, ...) are registered lazily as
+    (module, class name) specs and only imported when a config actually
+    selects that endpoint_type. A core install must be able to import this
+    module — and boot the server — without any of those SDKs present.
     """
 
     _endpoints = { }
+    # endpoint_type -> (relative module name, class name), resolved on demand
+    _lazy_endpoints = { }
+    # endpoint_type -> pip requirement to suggest when the import fails
+    _install_hints = { }
 
     @classmethod
     def register_endpoint(cls, endpoint_type: str, endpoint_class: type):
         """Register a new endpoint type."""
         cls._endpoints[endpoint_type] = endpoint_class
+
+    @classmethod
+    def register_lazy_endpoint(cls, endpoint_type: str, module_name: str,
+                               class_name: str, install_hint: str = None):
+        """Register an endpoint type without importing its module yet."""
+        cls._lazy_endpoints[endpoint_type] = (module_name, class_name)
+        if install_hint:
+            cls._install_hints[endpoint_type] = install_hint
+
+    @classmethod
+    def has_endpoint(cls, endpoint_type: str) -> bool:
+        """Whether an endpoint type is registered (its SDK may still be missing)."""
+        return endpoint_type in cls._endpoints or endpoint_type in cls._lazy_endpoints
+
+    @classmethod
+    def _resolve_endpoint_class(cls, endpoint_type: str) -> type:
+        """Return the class for an endpoint type, importing its module on first use.
+
+        Raises AIEndpointConfigError if the endpoint's optional dependency is
+        not installed.
+        """
+        if endpoint_type in cls._endpoints:
+            return cls._endpoints[endpoint_type]
+        module_name, class_name = cls._lazy_endpoints[endpoint_type]
+        try:
+            module = importlib.import_module(module_name, package=__package__)
+        except ImportError as e:
+            hint = cls._install_hints.get(endpoint_type)
+            hint_msg = f" Install it with: pip install {hint}" if hint else ""
+            raise AIEndpointConfigError(
+                f"The '{endpoint_type}' endpoint requires an optional dependency "
+                f"that is not installed ({e}).{hint_msg}"
+            )
+        endpoint_class = getattr(module, class_name)
+        cls._endpoints[endpoint_type] = endpoint_class
+        return endpoint_class
 
     @classmethod
     def create_endpoint(cls, config: Dict[str, Any]) -> Optional[BaseAIEndpoint]:
@@ -593,8 +869,12 @@ class AIEndpointFactory:
         if not endpoint_type:
             raise AIEndpointConfigError("endpoint_type is required when ai_support is enabled")
 
-        if endpoint_type not in cls._endpoints:
+        if not cls.has_endpoint(endpoint_type):
             raise AIEndpointConfigError(f"Unknown endpoint type: {endpoint_type}")
+
+        # May raise AIEndpointConfigError with an install hint if the
+        # endpoint's optional SDK is not installed.
+        endpoint_class = cls._resolve_endpoint_class(endpoint_type)
 
         # Prepare endpoint configuration
         endpoint_config = {
@@ -602,7 +882,6 @@ class AIEndpointFactory:
         }
 
         try:
-            endpoint_class = cls._endpoints[endpoint_type]
             return endpoint_class(endpoint_config)
         except Exception as e:
             raise AIEndpointConfigError(f"Failed to create {endpoint_type} endpoint: {e}")
@@ -619,70 +898,84 @@ def get_ai_endpoint(config: dict):
     return AIEndpointFactory.create_endpoint(config)
 
 
-# Register built-in endpoints
-try:
-    from .ollama_endpoint import OllamaEndpoint
-    AIEndpointFactory.register_endpoint("ollama", OllamaEndpoint)
-except ImportError:
-    logger.debug("Ollama endpoint not available")
+# Register built-in endpoints lazily: nothing here imports an SDK. The
+# endpoint module (and the optional package it wraps) is imported the first
+# time a config selects that endpoint_type. A hint names the extra where one
+# exists, so pip applies the version floors setup.py declares; it is printed
+# after "pip install " as is, so an extra carries its own shell quotes.
+for _type, _module, _class, _hint in [
+    ("ollama", ".ollama_endpoint", "OllamaEndpoint", "'potato-annotation[ai]'"),
+    ("openai", ".openai_endpoint", "OpenAIEndpoint", "'potato-annotation[ai]'"),
+    ("huggingface", ".huggingface_endpoint", "HuggingfaceEndpoint",
+     "'potato-annotation[huggingface]'"),
+    ("gemini", ".gemini_endpoint", "GeminiEndpoint", "'potato-annotation[ai]'"),
+    ("anthropic", ".anthropic_endpoint", "AnthropicEndpoint", "'potato-annotation[ai]'"),
+    ("vllm", ".vllm_endpoint", "VLLMEndpoint", None),
+    ("yolo", ".yolo_endpoint", "YOLOEndpoint", "ultralytics"),
+    ("ollama_vision", ".ollama_vision_endpoint", "OllamaVisionEndpoint", "'potato-annotation[ai]'"),
+    ("openai_vision", ".openai_vision_endpoint", "OpenAIVisionEndpoint", "'potato-annotation[ai]'"),
+    ("anthropic_vision", ".anthropic_vision_endpoint", "AnthropicVisionEndpoint",
+     "'potato-annotation[ai]'"),
+    ("openrouter", ".openrouter_endpoint", "OpenRouterEndpoint", None),
+    # Optional GPU segmentation. Lazy on purpose: a module-level torch
+    # import loads the whole ML stack at boot for every user who happens
+    # to have torch installed, whether or not they use segmentation.
+    ("sam", ".sam_endpoint", "SAMEndpoint", "'potato-annotation[vision]'"),
+    # Text-prompt segmentation, server-side. Weights are user-supplied and
+    # licence-gated; nothing is bundled or downloaded. See sam3_endpoint.py.
+    ("sam3", ".sam3_endpoint", "SAM3Endpoint", "onnxruntime"),
+    # Alias kept for configs written against the old AICacheManager name.
+    ("open_router", ".openrouter_endpoint", "OpenRouterEndpoint", None),
+    # Decision ("System One") models: probabilities over options, no text.
+    # systemone is plain HTTP (Jev, OpenJev, laya-serve); laya runs in
+    # process and imports torch only when a model is first loaded.
+    ("systemone", ".systemone_endpoint", "SystemOneEndpoint", None),
+    ("laya", ".laya_endpoint", "LayaEndpoint", "'potato-annotation[decision]'"),
+]:
+    AIEndpointFactory.register_lazy_endpoint(_type, _module, _class, _hint)
+del _type, _module, _class, _hint
 
-try:
-    from .openai_endpoint import OpenAIEndpoint
-    AIEndpointFactory.register_endpoint("openai", OpenAIEndpoint)
-except ImportError:
-    logger.debug("OpenAI endpoint not available")
 
-try:
-    from .huggingface_endpoint import HuggingfaceEndpoint
-    AIEndpointFactory.register_endpoint("huggingface", HuggingfaceEndpoint)
-except ImportError:
-    logger.debug("Hugging Face endpoint not available")
+def parse_llm_json(response_content):
+    """Parse a model reply into a dict: fences, prose, <think> blocks, XML."""
+    return BaseAIEndpoint.parseStringToJson(response_content)
 
-try:
-    from .gemini_endpoint import GeminiEndpoint
-    AIEndpointFactory.register_endpoint("gemini", GeminiEndpoint)
-except ImportError:
-    logger.debug("Gemini endpoint not available")
 
-try:
-    from .anthropic_endpoint import AnthropicEndpoint
-    AIEndpointFactory.register_endpoint("anthropic", AnthropicEndpoint)
-except ImportError:
-    logger.debug("Anthropic endpoint not available")
+def json_schema_instruction(output_format) -> str:
+    """Prompt suffix asking for JSON that matches ``output_format``.
 
-try:
-    from .vllm_endpoint import VLLMEndpoint
-    AIEndpointFactory.register_endpoint("vllm", VLLMEndpoint)
-except ImportError:
-    logger.debug("VLLM endpoint not available")
+    For providers without a constrained-decoding parameter. Empty when there
+    is no schema, so free-text calls are left as they are.
+    """
+    if output_format is None or not hasattr(output_format, "model_json_schema"):
+        return ""
+    try:
+        schema = json.dumps(output_format.model_json_schema())
+    except Exception:  # noqa: BLE001
+        return ""
+    return ("\n\nRespond with only a JSON object matching this JSON schema, "
+            "with no other text:\n" + schema)
 
-# Register visual AI endpoints
-try:
-    from .yolo_endpoint import YOLOEndpoint
-    AIEndpointFactory.register_endpoint("yolo", YOLOEndpoint)
-except ImportError:
-    logger.debug("YOLO endpoint not available (ultralytics not installed)")
 
-try:
-    from .ollama_vision_endpoint import OllamaVisionEndpoint
-    AIEndpointFactory.register_endpoint("ollama_vision", OllamaVisionEndpoint)
-except ImportError:
-    logger.debug("Ollama Vision endpoint not available")
+def normalize_confidence(raw, default: float = 0.5) -> float:
+    """A model's confidence as a probability in [0, 1].
 
-try:
-    from .openai_vision_endpoint import OpenAIVisionEndpoint
-    AIEndpointFactory.register_endpoint("openai_vision", OpenAIVisionEndpoint)
-except ImportError:
-    logger.debug("OpenAI Vision endpoint not available")
-
-try:
-    from .anthropic_vision_endpoint import AnthropicVisionEndpoint
-    AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
-except ImportError:
-    logger.debug("Anthropic Vision endpoint not available")
-
-try:
-    from .openrouter_endpoint import OpenRouterEndpoint
-    AIEndpointFactory.register_endpoint("openrouter", OpenRouterEndpoint)
-except ImportError:
-    logger.debug("OpenRouter endpoint not available")
+    The prompt asks for 0-100, but models also answer on the 0-1 scale.
+    Dividing every reply by 100 read ``0.92`` as 0.0092, so every such item
+    looked like the least certain one in the pool. A value in [0, 1] is taken
+    as a probability, one in (1, 100] as a percentage, and anything else is
+    clamped.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if value != value:  # NaN
+        return default
+    if value <= 0:
+        return 0.0
+    if value <= 1:
+        return value
+    if value <= 100:
+        return value / 100.0
+    return 1.0

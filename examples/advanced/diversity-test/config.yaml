@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Diversity Ordering Manual Test
 #
 # This example has 100 items across 5 themes (Sports, Technology, Food, Travel, Health)

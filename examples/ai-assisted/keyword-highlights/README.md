@@ -1,17 +1,19 @@
 # Keyword Highlights Example
 
-This example demonstrates how to use **admin-defined keyword highlights** to help annotators identify relevant words and phrases in the text.
+**Admin-defined keyword highlights**: words and phrases the task owner marks in advance, boxed in the text when an annotator opens an instance.
 
 ## What are Keyword Highlights?
 
-Keyword highlights are pre-defined words or phrases that are automatically highlighted in the text when an annotator views an instance. This feature helps:
+Keyword highlights are words and phrases you define in advance; Potato boxes
+them in the text when an annotator opens an instance. They point annotators at
+the terms the task turns on, and they cut the number of items where somebody
+misses the one word that decided the label.
 
-- Draw attention to important keywords relevant to the annotation task
-- Reduce cognitive load by pre-identifying relevant terms
-- Ensure annotators don't miss key terms
-- Speed up annotation by providing visual cues
+They also bias the annotator toward the terms you chose, which is why the
+randomization settings exist: see the distractor and partial-hint options
+below.
 
-## How It Works
+## From TSV to highlighted text
 
 1. **Keywords are defined in a TSV file** (`sentiment_keywords.tsv`) with three columns:
    - `Word`: The keyword or phrase (supports wildcards like `excel*`)

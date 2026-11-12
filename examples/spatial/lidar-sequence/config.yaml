@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# 3D boxes tracked through a lidar sequence.
+#
+# The item's `point_cloud` field lists one cloud per frame, so the viewer shows
+# a frame bar under the cloud. Draw a box on the first frame where an object
+# appears, press `f` (Copy to next frame) to carry it forward, and move it to
+# where the object is now. Frames between two keyframes show the box
+# interpolated, drawn dashed; moving it there makes another keyframe. `[` and
+# `]` step through the frames.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/spatial/lidar-sequence/config.yaml -p 8000
+#
+# Export KITTI tracking labels (label_02/drive_0001.txt). The calibration file
+# does not record the camera image's size, so give it for the 2D box columns:
+#   python -m potato.export --config examples/spatial/lidar-sequence/config.yaml \
+#       --format kitti_3d --output ./kitti --option image_width=1242 --option image_height=375
+#
+# Regenerate the frames with:
+#   python examples/spatial/lidar-sequence/generate_sequence.py
+
+port: 8000
+annotation_task_name: "Lidar sequence tracking"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/sequences.jsonl
+
+item_properties:
+  id_key: id
+  text_key: notes
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: objects
+    description: "Track every vehicle and pedestrian through the sequence."
+    source_field: point_cloud
+    tools:
+      - cuboid_3d
+    labels:
+      - name: car
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: truck
+        color: "#4ECDC4"
+        key_value: "2"
+      - name: pedestrian
+        color: "#FFD93D"
+        key_value: "3"
+    # One value per track, the same on every frame.
+    attributes:
+      - name: occluded
+        type: select
+        options: [none, partly, largely]
+        default: none
+      - name: parked
+        type: bool
+        labels: [car, truck]
+    color_mode: height
+    point_size: 2.0
+    # The calibration gives `kitti_3d` exports their camera frame. These
+    # frames have no camera images, so the camera panel shows the projection
+    # only.
+    calibration_field: calibration
+    default_box_height: 1.7
+    fit_box_height: true

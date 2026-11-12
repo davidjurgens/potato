@@ -157,7 +157,7 @@ class TestB1PhaseProgressBar:
         r = authed.get(f"{solo_server.base_url}/solo/setup")
         assert r.status_code == 200
         steps = self._phase_steps(r.text)
-        assert len(steps) == 7, f"expected 7 visible phase steps, got {steps}"
+        assert len(steps) == 9, f"expected 9 visible phase steps, got {steps}"
 
         classes = [c for c, _ in steps]
         labels = [l for _, l in steps]

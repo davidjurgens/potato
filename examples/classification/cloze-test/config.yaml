@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# A cloze (fill-in-the-blank) test. Each item has its own passage, with the
+# blanks written as [[]], and its own answer key in a separate field. The key
+# never reaches the browser; the CSV export scores each blank and adds a total.
+#
+# For one fixed passage, put it in the scheme instead:
+#   text: "The [[cat|kitten]] sat on the [[mat]]."
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/classification/cloze-test/config.yaml -p 8000
+
+annotation_task_name: Cloze test
+task_dir: .
+output_annotation_dir: annotation_output/cloze-test/
+export_annotation_format: csv
+data_files:
+  - data/cloze-test.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: cloze
+    name: completion
+    description: Fill in each blank with one word.
+    source_field: passage
+    answer_field: answers
+    scoring: case_insensitive
+    input_width: 10
+    label_requirement:
+      required: true

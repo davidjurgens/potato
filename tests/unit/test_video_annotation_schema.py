@@ -386,8 +386,12 @@ class TestSchemaRegistry:
         assert schema_def.name == "video_annotation"
         assert schema_def.supports_keybindings is True
         assert "mode" in schema_def.optional_fields
-        assert "labels" in schema_def.optional_fields
         assert "timeline_height" in schema_def.optional_fields
+        # `labels` is required, not optional: the generator raises without it in
+        # every one of the five modes, so declaring it optional let
+        # `validate --strict` pass a config that could not render.
+        assert "labels" in schema_def.required_fields
+        assert "labels" not in schema_def.optional_fields
 
     def test_generate_via_registry(self):
         """Test generating layout via registry."""
@@ -509,3 +513,38 @@ class TestHtmlEscaping:
             # Button should not contain unescaped <script> tag as HTML
             # (it may contain it in data attributes as attribute-escaped text)
             assert '<script>alert' not in button.split('>')[-2]  # Check button text content
+
+
+class TestTrackingOptions:
+    """tracking_options reaches the page; it used to be read by nothing."""
+
+    def _scheme(self, **options):
+        return {"name": "trk", "description": "Track", "annotation_type": "video_annotation",
+                "mode": "tracking", "labels": ["car"], "tracking_options": options}
+
+    def test_options_reach_the_page_config(self):
+        html, _ = generate_video_annotation_layout(
+            self._scheme(interpolation="cubic", auto_advance_frames=3))
+        assert '"interpolation": "cubic"' in html
+        assert '"autoAdvanceFrames": 3' in html
+        assert '<option value="cubic" selected>' in html
+        assert '<option value="linear">' in html
+
+    def test_defaults_are_linear_and_no_advance(self):
+        html, _ = generate_video_annotation_layout(
+            {k: v for k, v in self._scheme().items() if k != "tracking_options"})
+        assert '"interpolation": "linear"' in html
+        assert '"autoAdvanceFrames": 0' in html
+        assert '<option value="linear" selected>' in html
+        assert "__SEL_" not in html
+
+    @pytest.mark.parametrize("options, needle", [
+        ({"interpolation": "spline"}, "interpolation must be one of"),
+        ({"auto_advance_frames": -1}, "auto_advance_frames"),
+        ({"auto_advance_frames": True}, "auto_advance_frames"),
+        ({"auto_advance": 5}, "unknown key"),
+    ])
+    def test_bad_options_are_refused(self, options, needle):
+        html, _ = generate_video_annotation_layout(self._scheme(**options))
+        assert "annotation-error" in html
+        assert needle in html

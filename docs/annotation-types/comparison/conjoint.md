@@ -40,6 +40,47 @@ annotation_schemes:
 
 *Either `attributes` or `profiles_field` is required.
 
+### Where the profiles come from
+
+With `attributes`, Potato builds the profiles by combining the levels you
+declare, which is the classic design: the levels are the experimental
+conditions. Each profile takes one level of every attribute at random. The
+draw is seeded by annotator, item and scheme, so different annotators see
+different designs and a reload shows the same cards. Profiles in one set are
+distinct while the attributes allow enough combinations.
+
+With `profiles_field`, each item carries its own profiles and Potato shows them
+as they are. The rows are built from the keys the profiles use, so no
+`attributes` block is needed. Every card gets a row for every key seen anywhere
+in the set, which keeps the cards aligned when one profile omits a key: a
+missing value shows as an em dash in the right row rather than shifting the rows
+below it up.
+
+Declaring `attributes` alongside `profiles_field` narrows the display to the
+attributes you named, in the order you named them.
+
+`profiles_per_set` is fixed for the scheme, but with `profiles_field` the data
+decides how many profiles each item has. An item with fewer shows only the cards
+it has, instead of padding the set with an empty option an annotator can select.
+An item with more shows the first `profiles_per_set` of them and says on the page
+how many it is showing. Set `profiles_per_set` to the largest set in your data.
+
+```yaml
+- annotation_type: conjoint
+  name: platform
+  description: "Which platform would you rather use?"
+  profiles_field: profiles     # each item supplies its own
+  profiles_per_set: 3
+```
+
+```json
+{"id": "1", "profiles": [
+  {"Hosting": "Self-hosted", "Cost": "Free"},
+  {"Hosting": "Cloud", "Cost": "$20/mo"},
+  {"Hosting": "Hybrid", "Cost": "$8/mo"}
+]}
+```
+
 ### Attributes Format
 
 ```yaml
@@ -50,23 +91,30 @@ attributes:
 
 ## Data Format
 
+The stored answer is the number of the chosen card, or `none`:
+
 ```json
-{
-  "model_preference": {
-    "chosen_profile": 2,
-    "profiles": [
-      {"Response Length": "Brief", "Tone": "Formal", "Includes Examples": "No"},
-      {"Response Length": "Detailed", "Tone": "Conversational", "Includes Examples": "Yes"},
-      {"Response Length": "Medium", "Tone": "Technical", "Includes Examples": "Yes"}
+{"model_preference": "2"}
+```
+
+For a scheme built from `attributes`, the profiles that annotator saw are
+recorded with the item's [presentation order](../../advanced/presentation_order.md),
+under the scheme name, in card order:
+
+```json
+"instance_id_to_presentation_order": {
+  "item_1": {
+    "model_preference": [
+      {"Response Length": "Brief (1-2 sentences)", "Tone": "Formal", "Includes Examples": "No", "Cites Sources": "Yes"},
+      {"Response Length": "Detailed (multiple paragraphs)", "Tone": "Conversational", "Includes Examples": "Yes", "Cites Sources": "No"},
+      {"Response Length": "Medium (1 paragraph)", "Tone": "Technical", "Includes Examples": "Yes", "Cites Sources": "Yes"}
     ]
   }
 }
 ```
 
-If "None of these" is selected:
-```json
-{"model_preference": {"chosen_profile": "none"}}
-```
+Card `"2"` is the second profile in that list. With `profiles_field`, the
+profiles are the item's own data.
 
 ## UI Description
 

@@ -66,8 +66,9 @@ class TestPascalVOCExporter:
             assert len(objects) == 1
             assert objects[0].find("name").text == "cat"
             bndbox = objects[0].find("bndbox")
-            assert bndbox.find("xmin").text == "10"
-            assert bndbox.find("ymin").text == "20"
+            # VOC is 1-based and inclusive: pixels 10..109 are xmin=11, xmax=110.
+            assert bndbox.find("xmin").text == "11"
+            assert bndbox.find("ymin").text == "21"
             assert bndbox.find("xmax").text == "110"
             assert bndbox.find("ymax").text == "70"
 
@@ -91,8 +92,8 @@ class TestPascalVOCExporter:
 
             tree = ET.parse(os.path.join(tmpdir, "dog.xml"))
             bndbox = tree.find(".//bndbox")
-            assert bndbox.find("xmin").text == "10"
-            assert bndbox.find("ymin").text == "10"
+            assert bndbox.find("xmin").text == "11"
+            assert bndbox.find("ymin").text == "11"
             assert bndbox.find("xmax").text == "110"
             assert bndbox.find("ymax").text == "60"
 

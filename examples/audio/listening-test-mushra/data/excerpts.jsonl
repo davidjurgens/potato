@@ -1,0 +1,3 @@
+{"id": "excerpt_1", "text": "Excerpt 1: chord", "reference": "/media/chord_ref.wav", "stimuli": {"lowrate": "/media/chord_lowrate.wav", "coarse": "/media/chord_coarse.wav"}}
+{"id": "excerpt_2", "text": "Excerpt 2: arpeggio", "reference": "/media/arpeggio_ref.wav", "stimuli": {"lowrate": "/media/arpeggio_lowrate.wav", "coarse": "/media/arpeggio_coarse.wav"}}
+{"id": "excerpt_3", "text": "Excerpt 3: drone", "reference": "/media/drone_ref.wav", "stimuli": {"lowrate": "/media/drone_lowrate.wav", "coarse": "/media/drone_coarse.wav"}}

@@ -4,7 +4,7 @@ The confidence annotation schema pairs any primary annotation with an explicit c
 
 ## Overview
 
-Annotator confidence is systematically underused in NLP datasets. Recording it explicitly allows researchers to:
+Annotator confidence is systematically underused in NLP datasets. Recording it explicitly lets researchers:
 
 - Filter low-confidence annotations before model training
 - Weight annotations by confidence during aggregation
@@ -71,8 +71,8 @@ annotation_schemes:
     description: "Rate your confidence (0 = completely uncertain, 100 = fully certain)."
     target_schema: toxicity
     scale_type: slider
-    slider_min: 0
-    slider_max: 100
+    min_value: 0
+    max_value: 100
     label_requirement:
       required: true
 ```
@@ -118,7 +118,7 @@ The selected Likert point is stored as its 1-based position string:
 
 ## Related Documentation
 
-- [Likert Scale](../schemas_and_templates.md#likert) — standalone Likert rating schema
-- [Slider](../schemas_and_templates.md#slider) — continuous numeric slider schema
+- [Likert Scale](../schemas_and_templates.md#2-likert-scale-likert) — standalone Likert rating schema
+- [Slider](../schemas_and_templates.md#5-slider-slider) — continuous numeric slider schema
 - [Quality Control](../../workflow/quality_control.md) — attention checks and gold standards
 - [Active Learning](../../ai-intelligence/active_learning_guide.md) — ML-based item prioritization

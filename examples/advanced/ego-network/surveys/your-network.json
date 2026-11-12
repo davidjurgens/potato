@@ -1,0 +1,63 @@
+[
+  {
+    "name": "network_intro",
+    "annotation_type": "pure_display",
+    "description": "Your personal network",
+    "labels": ["The next questions are about the people you talk to. Use first names or nicknames only. The study keeps the names you type out of the network export unless the researcher turns them on."]
+  },
+  {
+    "name": "personal_network",
+    "annotation_type": "ego_network",
+    "description": "People you talk to",
+    "label_requirement": {"required": true},
+    "stages": [
+      {
+        "type": "name_generator",
+        "id": "discuss",
+        "title": "Important matters",
+        "prompt": "Looking back over the last six months, who are the people you talked to about matters that are important to you?",
+        "min_alters": 1,
+        "max_alters": 8,
+        "sets": {"discuss": true}
+      },
+      {
+        "type": "name_generator",
+        "id": "help",
+        "title": "Practical help",
+        "prompt": "Who would you ask for help if you were ill for a couple of weeks? You can add people you already named.",
+        "max_alters": 8,
+        "sets": {"help": true}
+      },
+      {
+        "type": "name_interpreter",
+        "id": "about",
+        "title": "About each person",
+        "prompt": "Answer these questions about each person you named.",
+        "required": true,
+        "questions": [
+          {"name": "relationship", "type": "radio", "description": "How do you know {name}?",
+           "labels": [{"name": "family", "text": "Family"}, {"name": "friend", "text": "Friend"},
+                      {"name": "coworker", "text": "Co-worker"}, {"name": "other", "text": "Other"}]},
+          {"name": "closeness", "type": "radio", "description": "How close do you feel to {name}?",
+           "labels": [{"name": "very", "text": "Very close"}, {"name": "somewhat", "text": "Somewhat close"},
+                      {"name": "not", "text": "Not close"}]},
+          {"name": "years_known", "type": "number", "description": "About how many years have you known {name}?",
+           "min": 0, "max": 100, "required": false}
+        ]
+      },
+      {
+        "type": "dyad_census",
+        "id": "know",
+        "title": "Who knows whom",
+        "prompt": "Do {a} and {b} know each other?"
+      },
+      {
+        "type": "sociogram",
+        "id": "map",
+        "title": "Your network map",
+        "prompt": "Drag people so those you feel closest to are nearer the centre. Lines show who knows whom; click two people to add or remove a line.",
+        "rings": 3
+      }
+    ]
+  }
+]

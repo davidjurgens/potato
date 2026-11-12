@@ -1,0 +1,14 @@
+{#- Header for the admin pages the dashboard links to (IAA, integrity, triage,
+    judge alignment, review board). Each had its own header or none at all,
+    and four of the five had no way back to the dashboard. Same purple bar as
+    admin.html, the annotation page and the adjudication page. -#}
+<nav class="potato-navbar admin-navbar" aria-label="Admin">
+  <div class="navbar-inner">
+    <div class="navbar-brand">
+      <span class="task-name" title="{{ annotation_task_name }} — {{ ui_lang.admin_page_title|default('Admin Dashboard') }}">{{ annotation_task_name }} — {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</span>
+    </div>
+    <div class="navbar-end" style="margin-left: auto;">
+      <a href="{{ url_prefix|default('') }}/admin" class="admin-back-link">&larr; {{ ui_lang.iaa_admin_dashboard|default('Admin Dashboard') }}</a>
+    </div>
+  </div>
+</nav>

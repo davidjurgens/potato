@@ -10,9 +10,15 @@ Output columns:
     annotation_type  schema type (radio, multiselect, span, hierarchical_multiselect)
     code             label name
     parent           parent code (for hierarchical schemas)
-    description      description / tooltip from the schema config
+    description      the code's definition. From the project codebook's
+                     "Short definition" / "Definition" block when the code has
+                     one, otherwise the description / tooltip in the config.
     color            color hex if defined
     n_uses           number of times this code was applied across all annotators
+
+Codes a coder added at /codebook during the study are included, with their
+definitions -- the codebook, not the YAML, is the source of truth for a scheme
+that declares ``codebook: true``.
 """
 
 import csv
@@ -53,6 +59,7 @@ class CodebookExporter(BaseExporter):
         out_file = os.path.join(output_path, "codebook.csv")
 
         use_counts = self._count_label_uses(context)
+        definitions = self._codebook_definitions(context)
 
         rows = []
         for scheme in context.schemas:
@@ -60,12 +67,14 @@ class CodebookExporter(BaseExporter):
             if atype not in CODEBOOK_SCHEMA_TYPES:
                 continue
             schema_name = scheme.get("name", "")
-            for code_row in self._iter_codes(scheme):
+            for code_row in self._codebook_rows(context, scheme):
                 code_row["schema"] = schema_name
                 code_row["annotation_type"] = atype
                 code_row["n_uses"] = use_counts.get(
                     (schema_name, code_row["code"]), 0
                 )
+                if not code_row.get("description"):
+                    code_row["description"] = definitions.get(code_row["code"], "")
                 rows.append(code_row)
 
         fieldnames = [
@@ -87,12 +96,107 @@ class CodebookExporter(BaseExporter):
         )
 
     @staticmethod
+    def _codebook_definitions(context):
+        """``{code name: definition}`` from the project codebook, if there is one.
+
+        The definition a coder writes at /codebook lives in a `code_block`
+        row, not in the config, so `description` was empty for every code even
+        when every code had been defined -- on an export whose whole purpose is
+        to hand someone the codebook. Prefers the short definition, falls back
+        to the full one.
+
+        Returns {} when the project has no codebook database, which is every
+        non-QDA project.
+        """
+        task_dir = context.config.get("task_dir", ".")
+        if not os.path.exists(os.path.join(task_dir, "project.sqlite")):
+            return {}
+        project = context.config.get("annotation_task_name") or "default"
+        try:
+            from potato.codebook import blocks
+            from potato.codebook.codebook import Codebook
+        except Exception:
+            return {}
+
+        out = {}
+        try:
+            for code in Codebook.load(task_dir, project)._codes:
+                bodies = {}
+                for block in blocks.list_blocks(task_dir, project,
+                                                code_id=code["id"]):
+                    body = (block.get("body_md") or "").strip()
+                    if body:
+                        bodies.setdefault(block.get("block_type"), body)
+                definition = bodies.get("short_def") or bodies.get("definition")
+                if definition:
+                    out[code["name"]] = definition
+        except Exception as e:
+            logger.warning(f"Could not read codebook definitions: {e}")
+        return out
+
+    @staticmethod
+    def _codebook_rows(context, scheme):
+        """Yield {code, parent, description, color} for a scheme, read from
+        the project codebook when the scheme is ``codebook: true``.
+
+        The server (and the export CLI) replace such a scheme's labels with
+        the codebook's bare names, so `_iter_codes` saw a flat list with no
+        parent and no colour: codebook.csv lost the tree and every colour,
+        and the .qdpx handed to NVivo or ATLAS.ti was flat. The codebook
+        itself has both. Falls back to `_iter_codes` when the scheme is not
+        codebook-backed or the project has no codebook database.
+        """
+        task_dir = context.config.get("task_dir", ".")
+        if (not scheme.get("codebook")
+                or not os.path.exists(os.path.join(task_dir, "project.sqlite"))):
+            yield from CodebookExporter._iter_codes(scheme)
+            return
+        project = context.config.get("annotation_task_name") or "default"
+        try:
+            from potato.codebook.codebook import Codebook
+            cb = Codebook.load(task_dir, project)
+        except Exception as e:
+            logger.warning(f"Could not read the project codebook: {e}")
+            cb = None
+        if cb is None or cb.is_empty():
+            yield from CodebookExporter._iter_codes(scheme)
+            return
+
+        definitions = CodebookExporter._codebook_definitions(context)
+
+        def walk(parent_id, parent_name):
+            for code in cb.children(parent_id):
+                yield {
+                    "code": code["name"],
+                    "parent": parent_name,
+                    "description": definitions.get(code["name"], ""),
+                    "color": code.get("color") or "",
+                }
+                yield from walk(code["id"], code["name"])
+
+        yield from walk("", "")
+
+    @staticmethod
     def _iter_codes(scheme):
         """Yield {code, parent, description, color} dicts for a schema."""
         atype = scheme.get("annotation_type")
 
         if atype == "hierarchical_multiselect":
-            yield from CodebookExporter._iter_hierarchical(scheme.get("labels", []), parent="")
+            # The codes are the taxonomy (inline, from taxonomy_file, or a
+            # preset); a scheme built that way has no `labels`, and reading
+            # them gave a codebook with no codes.
+            taxonomy = scheme.get("taxonomy")
+            if not taxonomy and scheme.get("taxonomy_preset"):
+                try:
+                    from potato.server_utils.failure_taxonomy import to_hierarchical
+                    taxonomy = to_hierarchical(scheme["taxonomy_preset"])
+                except Exception:
+                    taxonomy = None
+            if taxonomy:
+                yield from CodebookExporter._iter_taxonomy(
+                    taxonomy, "", scheme.get("tooltips") or {})
+            else:
+                yield from CodebookExporter._iter_hierarchical(scheme.get("labels", []), parent="")
             return
         if atype == "tree_annotation":
             yield from CodebookExporter._iter_hierarchical(scheme.get("labels", []), parent="")
@@ -104,12 +208,33 @@ class CodebookExporter(BaseExporter):
                 name = label.get("name", "")
                 yield {
                     "code": name,
-                    "parent": "",
+                    # A flat label can still name its parent: a QDPX import
+                    # carries the source's code tree this way.
+                    "parent": str(label.get("parent") or ""),
                     "description": label.get("description") or label.get("tooltip", ""),
                     "color": label.get("color", ""),
                 }
             else:
                 yield {"code": str(label), "parent": "", "description": "", "color": ""}
+
+    @staticmethod
+    def _iter_taxonomy(taxonomy, parent, tooltips):
+        """A hierarchical_multiselect taxonomy (nested dict or list) as codes."""
+        if isinstance(taxonomy, dict):
+            for key, children in taxonomy.items():
+                name = str(key)
+                yield {"code": name, "parent": parent,
+                       "description": str(tooltips.get(name) or ""), "color": ""}
+                if children:
+                    yield from CodebookExporter._iter_taxonomy(children, name, tooltips)
+        elif isinstance(taxonomy, list):
+            for item in taxonomy:
+                if isinstance(item, (dict, list)):
+                    yield from CodebookExporter._iter_taxonomy(item, parent, tooltips)
+                else:
+                    name = str(item)
+                    yield {"code": name, "parent": parent,
+                           "description": str(tooltips.get(name) or ""), "color": ""}
 
     @staticmethod
     def _iter_hierarchical(nodes, parent):
@@ -131,12 +256,21 @@ class CodebookExporter(BaseExporter):
 
     @staticmethod
     def _count_label_uses(context):
+        from potato.server_utils.iaa.dispatcher import packed_answer
+        schemes = {s.get("name"): s for s in context.schemas}
         counts = {}
         for ann in context.annotations:
             labels = ann.get("labels", {}) or {}
             for schema_name, schema_payload in labels.items():
                 names = []
-                if isinstance(schema_payload, dict):
+                # A packed type keeps its codes in the value
+                # ({"selected_labels": "City,Person"}); read by name it counted
+                # a code called selected_labels and every real code got 0.
+                packed = (packed_answer(schemes[schema_name], schema_payload)
+                          if schema_name in schemes else None)
+                if packed is not None:
+                    names = packed
+                elif isinstance(schema_payload, dict):
                     names = [k for k, v in schema_payload.items() if v]
                 elif isinstance(schema_payload, list):
                     names = [str(x) for x in schema_payload]
@@ -149,7 +283,12 @@ class CodebookExporter(BaseExporter):
             spans = ann.get("spans", {}) or {}
             for schema_name, span_list in spans.items():
                 for span in span_list or []:
-                    label = span.get("label") or span.get("annotation")
+                    # `name` is where a stored span keeps its code. Without it
+                    # every span code exported n_uses 0 -- the one column a
+                    # qualitative researcher sorts by, zero for the scheme the
+                    # codebook belongs to.
+                    label = (span.get("name") or span.get("label")
+                             or span.get("annotation"))
                     if label:
                         key = (schema_name, label)
                         counts[key] = counts.get(key, 0) + 1

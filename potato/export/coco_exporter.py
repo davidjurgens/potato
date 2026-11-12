@@ -8,21 +8,23 @@ and categories[] arrays. Supports bbox, polygon/freeform segmentation.
 import json
 import os
 import logging
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
-    build_category_mapping,
-    polygon_to_bbox,
-    polygon_area,
+    build_coco_category_map,
+    carry_provenance,
+    coco_rle_to_rle,
+    decode_rle,
     flatten_polygon,
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
+    has_image_annotation_record,
     get_image_filename,
-    decode_rle,
+    normalize_annotation_object,
+    polygons_to_rle,
     rle_to_coco_rle,
-    rle_bbox,
-    rle_area,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,24 +50,42 @@ class COCOExporter(BaseExporter):
         warnings = []
         annotation_id_counter = 1
 
-        category_map = build_category_mapping(context.annotations, context.schemas)
-        # COCO uses 1-indexed category IDs
-        coco_categories = [
-            {"id": idx + 1, "name": name, "supercategory": ""}
-            for name, idx in sorted(category_map.items(), key=lambda kv: kv[1])
-        ]
+        # Category IDs come from the label config's `label_id` when present, so
+        # a file imported from COCO exports with its original (often sparse)
+        # IDs intact rather than being densely renumbered.
+        category_map, coco_categories = build_coco_category_map(
+            context.schemas, context.annotations
+        )
 
         coco_images = []
         coco_annotations = []
         image_id_map = {}  # instance_id -> image_id
         image_id_counter = 1
+        polyline_count = 0
+        ellipse_count = 0
 
         for ann in context.annotations:
             instance_id = ann.get("instance_id", "")
             item = context.items.get(instance_id, {})
             img_anns = extract_image_annotations(ann)
-            if not img_anns:
+            # An annotator who opened the image and drew nothing produces
+            # `image_annotations: {schema: []}`, which `extract_image_annotations`
+            # filters out. Skipping the record here minted no image entry, so a
+            # confirmed negative came out identical to an image nobody opened --
+            # and in COCO an image with no annotations is a negative example and
+            # therefore training data. The entry is still minted; there are just
+            # no objects to attach to it.
+            reviewed = has_image_annotation_record(ann)
+            if not img_anns and not reviewed:
                 continue
+
+            # Dimensions are read per annotation record, NOT only when a new
+            # image id is minted. Two annotators on the same image produce two
+            # records with the same instance_id, and the second one used to
+            # fall through with `width`/`height` still holding the PREVIOUS
+            # image's values -- silently rescaling that annotator's geometry.
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
 
             # Assign image ID (deduplicate by instance_id)
             if instance_id not in image_id_map:
@@ -73,15 +93,39 @@ class COCOExporter(BaseExporter):
                 image_id_counter += 1
                 image_id_map[instance_id] = image_id
 
-                width, height = get_image_dimensions(item)
-                file_name = get_image_filename(item) or instance_id
+                file_name = get_image_filename(item, context.config) or instance_id
 
-                coco_images.append({
+                # A zero here is not a missing field, it is a broken export:
+                # the client stores normalized coordinates, so every object on
+                # this image comes out as [0, 0, 0, 0]. It used to be written
+                # with an empty `warnings` list, which reads as a clean run.
+                if width <= 0 or height <= 0:
+                    warnings.append(
+                        f"Could not determine the pixel size of {file_name} "
+                        f"({instance_id}); its annotations are written against "
+                        f"a 0x0 frame and every coordinate is 0. Add "
+                        f"`image_width` and `image_height` to the item, or "
+                        f"make the file readable from the media directory.")
+
+                image_entry = {
                     "id": image_id,
                     "file_name": file_name,
                     "width": width,
                     "height": height,
-                })
+                }
+                # Video sequences (MOT, DAVIS, extracted frames) carry which
+                # clip and which frame each item came from. COCO's own video
+                # derivatives use exactly these keys, and dropping them turns
+                # an ordered sequence into an unordered pile of stills that
+                # cannot be reassembled.
+                if item.get("sequence") is not None:
+                    image_entry["sequence"] = item["sequence"]
+                if item.get("frame") is not None:
+                    try:
+                        image_entry["frame_id"] = int(item["frame"])
+                    except (TypeError, ValueError):
+                        pass
+                coco_images.append(image_entry)
             else:
                 image_id = image_id_map[instance_id]
 
@@ -96,61 +140,127 @@ class COCOExporter(BaseExporter):
                         )
                         continue
 
-                    cat_id = category_map[label] + 1  # 1-indexed for COCO
-
-                    coco_ann = {
-                        "id": annotation_id_counter,
-                        "image_id": image_id,
-                        "category_id": cat_id,
-                        "iscrowd": 0,
-                    }
-                    annotation_id_counter += 1
-
-                    if obj_type == "bbox":
-                        x = obj.get("x", 0)
-                        y = obj.get("y", 0)
-                        w = obj.get("width", 0)
-                        h = obj.get("height", 0)
-                        coco_ann["bbox"] = [x, y, w, h]
-                        coco_ann["area"] = w * h
-                        coco_ann["segmentation"] = []
-
-                    elif obj_type in ("polygon", "freeform"):
-                        points = obj.get("points", [])
-                        if not points:
-                            warnings.append(
-                                f"Empty points for {obj_type} in {instance_id}"
-                            )
-                            continue
-                        flat = flatten_polygon(points)
-                        coco_ann["segmentation"] = [flat]
-                        bx, by, bw, bh = polygon_to_bbox(points)
-                        coco_ann["bbox"] = [bx, by, bw, bh]
-                        coco_ann["area"] = polygon_area(points)
-
-                    elif obj_type == "mask":
-                        rle = obj.get("rle", {})
-                        if not rle.get("counts"):
-                            warnings.append(
-                                f"Empty RLE mask in {instance_id}"
-                            )
-                            continue
-                        size = rle.get("size", [])
-                        mask_h = size[0] if len(size) >= 2 else height
-                        mask_w = size[1] if len(size) >= 2 else width
-                        coco_rle = rle_to_coco_rle(rle, mask_w, mask_h)
-                        decoded = decode_rle(rle, mask_w, mask_h)
-                        coco_ann["segmentation"] = coco_rle
-                        coco_ann["bbox"] = rle_bbox(decoded, mask_w, mask_h)
-                        coco_ann["area"] = rle_area(decoded)
-                        coco_ann["iscrowd"] = 1
-
-                    elif obj_type == "landmark":
+                    if obj_type == "landmark":
                         warnings.append(
                             f"Landmark annotation in {instance_id} skipped "
                             f"(not standard in COCO detection format)"
                         )
                         continue
+
+                    if obj_type == "keypoint_set":
+                        # The other half of the round trip the importer opens.
+                        # COCO wants a flat [x, y, v, ...] triplet stream plus
+                        # num_keypoints (visible/occluded only, NOT unlabelled).
+                        canon = normalize_annotation_object(obj, width, height)
+                        if canon is None or not canon.get("points"):
+                            warnings.append(
+                                f"Unusable keypoint_set in {instance_id}")
+                            continue
+                        vis = canon.get("visibility") or []
+                        flat: List[float] = []
+                        for idx, (px, py) in enumerate(canon["points"]):
+                            v = int(vis[idx]) if idx < len(vis) else 2
+                            # An unlabelled point is (0, 0, 0) by convention,
+                            # not its stored position.
+                            flat.extend([0.0, 0.0, 0] if v == 0
+                                        else [round(px, 2), round(py, 2), v])
+                        bx, by, bw, bh = canon["bbox"]
+                        coco_annotations.append({
+                            "id": annotation_id_counter,
+                            "image_id": image_id,
+                            "category_id": category_map[label],
+                            "bbox": [round(bx, 2), round(by, 2),
+                                     round(bw, 2), round(bh, 2)],
+                            "area": round(bw * bh, 2),
+                            "iscrowd": 0,
+                            "keypoints": flat,
+                            "num_keypoints": sum(1 for v in vis if v > 0),
+                            "segmentation": [],
+                            **({"attributes": dict(obj["attributes"])}
+                               if isinstance(obj.get("attributes"), dict) and obj["attributes"]
+                               else {}),
+                        })
+                        annotation_id_counter += 1
+                        continue
+
+                    # Reads the shape the browser actually writes (normalized,
+                    # nested under `coordinates`) and returns absolute pixels.
+                    canon = normalize_annotation_object(obj, width, height)
+                    if canon is None:
+                        if obj_type == "mask":
+                            warnings.append(f"Empty RLE mask in {instance_id}")
+                        else:
+                            warnings.append(
+                                f"Unusable {obj_type or 'annotation'} in "
+                                f"{instance_id}, skipping"
+                            )
+                        continue
+                    warnings.extend(
+                        f"{w} ({instance_id})" for w in canon["warnings"]
+                    )
+
+                    coco_ann = {
+                        "id": annotation_id_counter,
+                        "image_id": image_id,
+                        "category_id": category_map[label],
+                        "iscrowd": canon["iscrowd"],
+                        "bbox": canon["bbox"],
+                        "area": canon["area"],
+                    }
+                    # Where the shape came from -- a person, a model, an
+                    # imported file. COCO has no field for it, and an extra key
+                    # on an annotation is what every other tool does with the
+                    # same problem (CVAT calls it `attributes`), so the
+                    # alternative is not "cleaner COCO" but "the fact is gone".
+                    # Only written when it is known: a file where every
+                    # annotation says `source` and one where none does are both
+                    # honest, and a default would make the second look like the
+                    # first.
+                    carry_provenance(coco_ann, canon)
+                    # Per-object attributes (occlusion, truncation, ...), under
+                    # the key CVAT and the COCO-attributes extensions use.
+                    if isinstance(obj.get("attributes"), dict) and obj["attributes"]:
+                        coco_ann["attributes"] = dict(obj["attributes"])
+                    annotation_id_counter += 1
+
+                    if obj_type == "bbox":
+                        coco_ann["segmentation"] = []
+
+                    elif obj_type in ("polygon", "freeform"):
+                        coco_ann["segmentation"] = [
+                            flatten_polygon(canon["points"])
+                        ]
+
+                    elif obj_type == "ellipse":
+                        # COCO has no ellipse. The 36-gon approximation is
+                        # visually identical and is a real polygon, so it is
+                        # written as one; the parametric form is kept in an
+                        # extension key so a Potato-to-Potato trip is exact.
+                        coco_ann["segmentation"] = [
+                            flatten_polygon(canon["points"])
+                        ]
+                        coco_ann["ellipse"] = canon["ellipse"]
+                        ellipse_count += 1
+
+                    elif obj_type == "polyline":
+                        # An open path has no interior, so `segmentation` stays
+                        # empty and `area` is 0 rather than the area of the
+                        # closed shape -- writing the closed polygon would turn
+                        # every lane marking into a filled region, which reads
+                        # as a real segmentation mask downstream.
+                        coco_ann["segmentation"] = []
+                        coco_ann["area"] = 0
+                        coco_ann["polyline"] = flatten_polygon(canon["points"])
+                        polyline_count += 1
+
+                    elif obj_type == "mask":
+                        rle = canon["rle"]
+                        size = rle.get("size", [])
+                        mask_h = size[0] if len(size) >= 2 else height
+                        mask_w = size[1] if len(size) >= 2 else width
+                        coco_ann["segmentation"] = rle_to_coco_rle(
+                            rle, mask_w, mask_h
+                        )
 
                     else:
                         warnings.append(
@@ -166,15 +276,45 @@ class COCOExporter(BaseExporter):
             "categories": coco_categories,
         }
 
+        if polyline_count:
+            warnings.append(
+                f"{polyline_count} polyline(s) were written with an empty "
+                f"`segmentation`, `area: 0`, and their points under a "
+                f"non-standard `polyline` key. COCO has no open-path type; "
+                f"closing them into polygons would turn each one into a filled "
+                f"region that reads downstream as a real segmentation mask.")
+        if ellipse_count:
+            warnings.append(
+                f"{ellipse_count} ellipse(s) were written as their 36-vertex "
+                f"polygon approximation, with the exact parametric form kept "
+                f"under a non-standard `ellipse` key.")
+
         os.makedirs(output_path, exist_ok=True)
         out_file = os.path.join(output_path, "annotations.json")
         with open(out_file, "w") as f:
             json.dump(coco_output, f, indent=2)
 
+        files_written = [out_file]
+        if options.get("panoptic"):
+            panoptic_files, panoptic_warnings = self._write_panoptic(
+                context, coco_images, coco_annotations, coco_categories,
+                output_path)
+            files_written.extend(panoptic_files)
+            warnings.extend(panoptic_warnings)
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        # COCO writes the confirmed negative, so only items nobody
+        # opened are genuinely absent.
+        _blank = blank_item_warning(context, 'the COCO file',
+                                    reviewed_counts_as_present=True)
+        if _blank:
+            warnings.append(_blank)
+
         return ExportResult(
             success=True,
             format_name=self.format_name,
-            files_written=[out_file],
+            files_written=files_written,
             warnings=warnings,
             stats={
                 "num_images": len(coco_images),
@@ -182,3 +322,130 @@ class COCOExporter(BaseExporter):
                 "num_categories": len(coco_categories),
             },
         )
+
+    # ------------------------------------------------------------------
+    # Panoptic
+    # ------------------------------------------------------------------
+
+    def _write_panoptic(self, context, coco_images, coco_annotations,
+                        coco_categories, output_path):
+        """
+        Write COCO panoptic output: one PNG per image plus a segments JSON.
+
+        The panoptic format encodes each segment's id in the PIXEL COLOUR as
+        ``id = R + G*256 + B*256^2``. That is not a palette and not a class
+        map — two segments of the same class have different ids, which is the
+        whole point — so the PNG must be written as RGB with those exact
+        channel values. Saving an indexed image instead (as the DAVIS exporter
+        correctly does for *its* format) would cap the ids at 255 and silently
+        merge segments in any image with more than a handful.
+
+        Panoptic segmentation also requires that every pixel belong to at most
+        one segment. Potato's annotations may overlap, so later segments
+        overwrite earlier ones and the overlap is reported rather than left to
+        produce a silently inconsistent ground truth.
+        """
+        warnings = []
+        try:
+            from PIL import Image
+        except ImportError:
+            return [], ["Panoptic export needs Pillow; install it with "
+                        "`pip install Pillow`. The detection JSON was still "
+                        "written."]
+
+        by_image = {}
+        for ann in coco_annotations:
+            by_image.setdefault(ann["image_id"], []).append(ann)
+
+        panoptic_dir = os.path.join(output_path, "panoptic")
+        os.makedirs(panoptic_dir, exist_ok=True)
+
+        files_written = []
+        panoptic_annotations = []
+        overlapping = 0
+
+        for image in coco_images:
+            width, height = image["width"], image["height"]
+            # Segment id 0 is reserved for unlabelled pixels.
+            id_canvas = [0] * (width * height)
+            segments_info = []
+
+            for ann in by_image.get(image["id"], []):
+                bitmap = self._panoptic_bitmap(ann, width, height)
+                if bitmap is None:
+                    continue
+                segment_id = ann["id"]
+                claimed = 0
+                for i, on in enumerate(bitmap):
+                    if not on:
+                        continue
+                    if id_canvas[i]:
+                        claimed += 1
+                    id_canvas[i] = segment_id
+                if claimed:
+                    overlapping += 1
+                segments_info.append({
+                    "id": segment_id,
+                    "category_id": ann["category_id"],
+                    "area": int(sum(bitmap)),
+                    "bbox": ann["bbox"],
+                    "iscrowd": ann.get("iscrowd", 0),
+                })
+
+            # id = R + G*256 + B*256^2, written as real RGB channels.
+            pixels = [(sid % 256, (sid // 256) % 256, (sid // 65536) % 256)
+                      for sid in id_canvas]
+            png = Image.new("RGB", (width, height))
+            png.putdata(pixels)
+
+            stem = os.path.splitext(os.path.basename(image["file_name"]))[0]
+            png_name = f"{stem}.png"
+            png_path = os.path.join(panoptic_dir, png_name)
+            png.save(png_path)
+            files_written.append(png_path)
+
+            panoptic_annotations.append({
+                "image_id": image["id"],
+                "file_name": png_name,
+                "segments_info": segments_info,
+            })
+
+        json_path = os.path.join(output_path, "panoptic.json")
+        with open(json_path, "w") as f:
+            json.dump({
+                "images": coco_images,
+                "annotations": panoptic_annotations,
+                "categories": coco_categories,
+            }, f, indent=2)
+        files_written.append(json_path)
+
+        if overlapping:
+            warnings.append(
+                f"{overlapping} segment(s) overlapped another and the later "
+                f"one won. Panoptic segmentation requires each pixel to belong "
+                f"to at most one segment, so overlapping annotations cannot be "
+                f"represented; the detection JSON keeps them intact.")
+        return files_written, warnings
+
+    @staticmethod
+    def _panoptic_bitmap(ann, width, height):
+        """A flat 0/1 bitmap for one COCO annotation."""
+        segmentation = ann.get("segmentation")
+        if isinstance(segmentation, dict) and segmentation.get("counts"):
+            rle = coco_rle_to_rle(segmentation)
+            return decode_rle(rle, width, height)
+        if isinstance(segmentation, list) and segmentation:
+            rle = polygons_to_rle(segmentation, height, width)
+            return decode_rle(rle, width, height)
+        # A box-only annotation fills its box; a polyline has no interior.
+        if ann.get("polyline"):
+            return None
+        x, y, w, h = ann.get("bbox") or [0, 0, 0, 0]
+        if w <= 0 or h <= 0:
+            return None
+        bitmap = [0] * (width * height)
+        for row in range(max(0, int(y)), min(height, int(y + h))):
+            base = row * width
+            for col in range(max(0, int(x)), min(width, int(x + w))):
+                bitmap[base + col] = 1
+        return bitmap

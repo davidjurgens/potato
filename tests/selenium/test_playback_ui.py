@@ -172,7 +172,6 @@ def create_playback_config():
         "item_properties": {"id_key": "id", "text_key": "task_description"},
         "task_dir": test_output_dir,
         "output_annotation_dir": os.path.join(test_output_dir, "annotation_output"),
-        "output_annotation_format": "json",
         "instance_display": {
             "layout": {"direction": "vertical", "gap": "16px"},
             "fields": [

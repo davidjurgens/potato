@@ -487,3 +487,301 @@ class TestParquetExporterPyarrowMissing:
             result = exporter.export(context, "/tmp/test_out")
             assert result.success is False
             assert len(result.errors) > 0
+
+
+# ---------------------------------------------------------------------------
+# Audit 9: two ways parquet silently dropped data that csv and jsonl kept.
+# ---------------------------------------------------------------------------
+
+import pytest
+
+from potato.export.base import ExportContext
+from potato.export.parquet_exporter import ParquetExporter
+
+
+def _exporter():
+    return ParquetExporter.__new__(ParquetExporter)
+
+
+class TestALabelledScaleIsNotNull:
+    """A `likert` with an explicit `labels:` list stores a label, not a number.
+
+    The generator renders it as a radio group and says so at boot ("Complex
+    labels detected ... using radio layout"), so the stored value is
+    `{"Moderate": "Moderate"}`. Routing on the declared type alone sent that to
+    `_flatten_numeric`, which returned None for every row -- so the column was
+    present and entirely null, indistinguishable from a scheme nobody answered.
+    csv kept it, /admin/iaa scored it as ordinal, and the shape is the one the
+    bundled full-study skeleton recommends.
+    """
+
+    @pytest.mark.parametrize("value,expected", [
+        ({"Moderate": "Moderate"}, "Moderate"),
+        ({"Severe": "Severe"}, "Severe"),
+    ])
+    def test_a_labelled_point_survives(self, value, expected):
+        assert _exporter()._flatten_value(value, "likert") == expected
+
+    @pytest.mark.parametrize("schema_type", ["likert", "slider", "number"])
+    def test_a_numeric_answer_is_still_a_number(self, schema_type):
+        assert _exporter()._flatten_value({"scale_3": "3"}, schema_type) == 3.0
+        assert _exporter()._flatten_value("0.7", schema_type) == 0.7
+
+    def test_no_answer_is_still_null(self):
+        assert _exporter()._flatten_value(None, "likert") is None
+        assert _exporter()._flatten_value({}, "likert") is None
+
+
+class TestFreeTextIsTheTextNotTheContainer:
+    """`str()` on a textbox's dict gave `{'text_box': 'alice r06'}` in the file."""
+
+    def test_a_textbox_exports_what_was_typed(self):
+        assert _exporter()._flatten_value(
+            {"text_box": "alice r06"}, "text") == "alice r06"
+
+    def test_a_plain_string_is_unchanged(self):
+        assert _exporter()._flatten_value("already text", "text") == "already text"
+
+    def test_an_empty_answer_is_null_not_an_empty_dict_repr(self):
+        assert _exporter()._flatten_value({"text_box": ""}, "text") is None
+        assert _exporter()._flatten_value(None, "text") is None
+
+
+class TestAColumnKeepsOneType:
+    """Parquet columns are typed, and `from_pylist` aborts the WHOLE export.
+
+    A labelled scale can genuinely mix: `labels: [1, 2, 3, "Not applicable"]`
+    flattens to three floats and a string. Deciding the shape per column rather
+    than per value keeps the file writable and every answer in it.
+    """
+
+    def test_a_mixed_scale_becomes_text_rather_than_failing(self):
+        rows = _exporter()._build_annotation_rows(
+            [
+                {"instance_id": "i1", "user_id": "a",
+                 "labels": {"severity": {"3": "3"}}},
+                {"instance_id": "i2", "user_id": "b",
+                 "labels": {"severity": {"Not applicable": "Not applicable"}}},
+            ],
+            {"severity": {"annotation_type": "likert"}},
+        )
+        assert [r["severity"] for r in rows] == ["3", "Not applicable"]
+
+        pa = pytest.importorskip("pyarrow")
+        table = pa.Table.from_pylist(rows)
+        assert table.num_rows == 2
+
+    def test_a_scale_point_reads_as_written(self):
+        """`3`, not `3.0` -- it came from a label, not a measurement."""
+        rows = _exporter()._build_annotation_rows(
+            [
+                {"instance_id": "i1", "user_id": "a",
+                 "labels": {"s": {"2.5": "2.5"}}},
+                {"instance_id": "i2", "user_id": "b",
+                 "labels": {"s": {"Skip": "Skip"}}},
+            ],
+            {"s": {"annotation_type": "likert"}},
+        )
+        assert [r["s"] for r in rows] == ["2.5", "Skip"]
+
+    def test_a_uniform_numeric_column_stays_numeric(self):
+        rows = _exporter()._build_annotation_rows(
+            [
+                {"instance_id": "i1", "user_id": "a", "labels": {"s": {"3": "3"}}},
+                {"instance_id": "i2", "user_id": "b", "labels": {"s": {"4": "4"}}},
+            ],
+            {"s": {"annotation_type": "likert"}},
+        )
+        assert [r["s"] for r in rows] == [3.0, 4.0]
+
+
+class TestPhaseResponsesReachTheFile:
+    """`export_include_phase_data` was read by csv and jsonl and ignored here.
+
+    parquet wrote annotations, items and spans and no phase file at all, and
+    its stats did not mention phase responses either way -- so unlike csv there
+    was not even a count to notice. A study collecting consent and a post-study
+    survey handed over neither, and the key read as honoured.
+    """
+
+    PHASE_ROWS = [
+        {"user_id": "alice", "phase": "consent", "page": "consent",
+         "sequence": 0, "schema": "consent_agree", "label_name": "I agree",
+         "value": "I agree"},
+        {"user_id": "alice", "phase": "poststudy", "page": "poststudy",
+         "sequence": 1, "schema": "comments", "label_name": "text_box",
+         "value": "alice poststudy comment"},
+    ]
+
+    def _context(self, include: bool):
+        return ExportContext(
+            config={"export_include_phase_data": include,
+                    "item_properties": {"text_key": "text"}},
+            annotations=[{"instance_id": "i1", "user_id": "alice",
+                          "labels": {"s": {"Yes": "Yes"}}, "spans": {}}],
+            items={"i1": {"text": "hello"}},
+            schemas=[{"annotation_type": "radio", "name": "s",
+                      "description": "d", "labels": ["Yes", "No"]}],
+            phase_responses=list(self.PHASE_ROWS),
+            output_dir="",
+        )
+
+    def test_the_file_is_written_when_the_key_is_on(self, tmp_path):
+        pytest.importorskip("pyarrow")
+        result = ParquetExporter().export(self._context(True), str(tmp_path))
+
+        assert result.success, result.errors
+        written = {os.path.basename(f) for f in result.files_written}
+        assert "phase_responses.parquet" in written
+        assert result.stats["phase_response_rows"] == 2
+
+    def test_the_rows_match_what_csv_writes(self, tmp_path):
+        pq = pytest.importorskip("pyarrow.parquet")
+        ParquetExporter().export(self._context(True), str(tmp_path))
+
+        table = pq.read_table(str(tmp_path / "phase_responses.parquet"))
+        rows = table.to_pylist()
+        assert [r["value"] for r in rows] == [
+            "I agree", "alice poststudy comment"]
+        assert [r["schema"] for r in rows] == ["consent_agree", "comments"]
+        for column in ("user_id", "phase", "page", "sequence", "label_name"):
+            assert column in table.column_names
+
+    def test_the_key_being_off_warns_rather_than_going_quiet(self, tmp_path):
+        pytest.importorskip("pyarrow")
+        result = ParquetExporter().export(self._context(False), str(tmp_path))
+
+        written = {os.path.basename(f) for f in result.files_written}
+        assert "phase_responses.parquet" not in written
+        assert result.stats["phase_responses_excluded"] == 2
+        assert any("export_include_phase_data" in w for w in result.warnings), (
+            "silently dropping them is the bug; the count and the warning are "
+            "what make it visible"
+        )
+
+
+class TestCompositeAnswersSurvive:
+    """A dict whose keys are not its values is not a categorical answer.
+
+    ``_flatten_categorical`` reads a stored dict as "the chosen label is one of
+    the keys" and returns one. That holds for a radio and for a labelled scale,
+    where the key *is* the answer, and it is false for every scheme storing
+    several sub-answers keyed by row, option or step -- so a three-row multirate
+    exported as the string "Reproducibility" (the first row's *name*) and an
+    image annotation as "_data". Fifty-four of the sixty-one registered types
+    took that branch. csv had all of it right in the same export.
+    """
+
+    SCHEMAS = [
+        {"name": "handling", "annotation_type": "multirate"},
+        {"name": "uibox", "annotation_type": "image_annotation"},
+        {"name": "severity", "annotation_type": "likert"},
+        {"name": "confidence", "annotation_type": "confidence"},
+    ]
+
+    ANNOTATIONS = [
+        {"instance_id": "i1", "user_id": "alice", "labels": {
+            "handling": {"Reproducibility": "Medium", "Customer tone": "High",
+                         "Urgency": "Low"},
+            "uibox": {"_data": "[]"},
+            "severity": {"Serious": "Serious"},
+            "confidence": {"5": "5"}}},
+        {"instance_id": "i1", "user_id": "bob", "labels": {
+            "handling": {"Reproducibility": "Low", "Customer tone": "Low",
+                         "Urgency": "High"},
+            "uibox": {"_data": '[{"x": 1}]'},
+            "severity": {"Minor": "Minor"},
+            "confidence": {"3": "3"}}},
+    ]
+
+    def _rows(self, tmp_path, annotations=None, schemas=None, items=None):
+        context = ExportContext(
+            config={}, annotations=annotations or self.ANNOTATIONS,
+            items=items if items is not None else {},
+            schemas=schemas or self.SCHEMAS, output_dir=str(tmp_path))
+        result = ParquetExporter().export(context, str(tmp_path))
+        assert result.success, result.errors
+        return pq.read_table(str(tmp_path / "annotations.parquet")).to_pylist()
+
+    def test_multirate_keeps_every_row(self, tmp_path):
+        rows = self._rows(tmp_path)
+        assert rows[0]["handling.Reproducibility"] == "Medium"
+        assert rows[0]["handling.Customer tone"] == "High"
+        assert rows[0]["handling.Urgency"] == "Low"
+        assert rows[1]["handling.Urgency"] == "High"
+        # Not the row name, which is what the column used to hold.
+        assert "handling" not in rows[0]
+
+    def test_geometry_keeps_its_blob(self, tmp_path):
+        rows = self._rows(tmp_path)
+        assert rows[0]["uibox._data"] == "[]"
+        assert json.loads(rows[1]["uibox._data"]) == [{"x": 1}]
+
+    def test_composite_columns_match_what_csv_writes(self, tmp_path):
+        """The two formats must agree about the answers csv already got right.
+
+        Only for the composite schemas. The formats differ on purpose for a
+        single-select: csv writes one column per label (`severity.Serious`),
+        parquet one typed column per schema (`severity` = "Serious"), which is
+        the shape that is usable in a dataframe.
+        """
+        from potato.export.tabular_exporter import _flatten_annotation
+
+        parquet_row = self._rows(tmp_path)[0]
+        csv_row = _flatten_annotation(self.ANNOTATIONS[0])
+        composite = {c: v for c, v in csv_row.items()
+                     if c.startswith(("handling.", "uibox."))}
+        assert composite, "the fixture must exercise composite answers"
+        for column, value in composite.items():
+            assert column in parquet_row, f"{column} missing from parquet"
+            assert str(parquet_row[column]) == str(value)
+
+    def test_a_genuine_categorical_is_left_alone(self, tmp_path):
+        """`{"5": "5"}` and a labelled scale keep their single column."""
+        rows = self._rows(tmp_path)
+        assert rows[0]["confidence"] == "5"
+        assert rows[0]["severity"] == "Serious"
+
+
+class TestNoColumnIsDroppedByRowOne:
+    """`pa.Table.from_pylist` infers the schema from the first row alone.
+
+    Any key that row lacks was absent from the whole file -- not null, gone --
+    however many later rows carried it. An optional textbox, a scheme behind
+    `display_logic`, or an item field only some items have all hit it.
+    """
+
+    def test_a_schema_only_a_later_row_answered_survives(self, tmp_path):
+        annotations = [
+            {"instance_id": "i1", "user_id": "alice",
+             "labels": {"category": {"Bug": "Bug"}}},
+            {"instance_id": "i2", "user_id": "bob",
+             "labels": {"category": {"Bug": "Bug"},
+                        "notes": {"text_box": "only bob wrote this"}}},
+        ]
+        schemas = [{"name": "category", "annotation_type": "radio"},
+                   {"name": "notes", "annotation_type": "text"}]
+        context = ExportContext(config={}, annotations=annotations, items={},
+                                schemas=schemas, output_dir=str(tmp_path))
+        assert ParquetExporter().export(context, str(tmp_path)).success
+
+        table = pq.read_table(str(tmp_path / "annotations.parquet"))
+        assert "notes" in table.column_names
+        rows = table.to_pylist()
+        assert rows[0]["notes"] is None
+        assert rows[1]["notes"] == "only bob wrote this"
+
+    def test_an_item_field_only_some_items_carry_survives(self, tmp_path):
+        annotations = [{"instance_id": "i1", "user_id": "alice",
+                        "labels": {"category": {"Bug": "Bug"}}}]
+        items = {"i1": {"text": "a"},
+                 "i2": {"text": "b", "screenshot": "http://host/s.png"}}
+        context = ExportContext(
+            config={}, annotations=annotations, items=items,
+            schemas=[{"name": "category", "annotation_type": "radio"}],
+            output_dir=str(tmp_path))
+        assert ParquetExporter().export(context, str(tmp_path)).success
+
+        rows = pq.read_table(str(tmp_path / "items.parquet")).to_pylist()
+        assert rows[0]["screenshot"] is None
+        assert rows[1]["screenshot"] == "http://host/s.png"

@@ -1,0 +1,10 @@
+[
+  {"id": "desk_scene",
+   "image": "/media/desk_scene.png"},
+
+  {"id": "street_scene",
+   "image": "/media/street_scene.png"},
+
+  {"id": "shelf_scene",
+   "image": "/media/shelf_scene.png"}
+]

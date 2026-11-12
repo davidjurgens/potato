@@ -32,8 +32,64 @@
             this.initCollapsibleSections();
             this.initSpanTargets();
             this.initPerTurnRatings();
+            this.initResizableExpand();
+            this.initMediaFailures();
 
             console.log('[InstanceDisplay] Initialized with', Object.keys(this.displayFields).length, 'fields');
+        }
+
+        /**
+         * Say so when a video display cannot load its file.
+         *
+         * A missing or unplayable file left an empty black player with no
+         * message (the video example's clip answered 404 and the item read
+         * as blank). The failure is reported on the <source>, which does not
+         * bubble, and can happen before this runs, so check the state too.
+         */
+        initMediaFailures() {
+            this.displayContainer.querySelectorAll('video.display-video').forEach(video => {
+                const report = () => this.reportMediaFailure(video);
+                const sources = video.querySelectorAll('source');
+                if (sources.length) {
+                    sources[sources.length - 1].addEventListener('error', report);
+                }
+                video.addEventListener('error', report);
+                if (video.error || video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+                    report();
+                }
+            });
+        }
+
+        async reportMediaFailure(video) {
+            if (video.dataset.loadFailed) return;
+            video.dataset.loadFailed = 'true';
+            const url = video.getAttribute('data-source-url') || '';
+            let outcome = 'unknown';
+            if (url && typeof fetch === 'function') {
+                try {
+                    const response = await fetch(url, {headers: {Range: 'bytes=0-0'}});
+                    outcome = response.ok
+                        ? 'ok'
+                        : `HTTP ${response.status}${response.statusText ? ' ' + response.statusText : ''}`;
+                    try { if (response.body) response.body.cancel(); } catch (e) { /* ignore */ }
+                } catch (e) {
+                    outcome = 'unreachable';
+                }
+            }
+            let message = 'The video file could not be loaded.';
+            if (outcome.startsWith('HTTP')) {
+                message = `The video file could not be loaded: the server answered ${outcome}.`;
+            } else if (outcome === 'ok') {
+                message = 'The video file was downloaded, but this browser cannot play its format.';
+            } else if (outcome === 'unreachable') {
+                message = 'The video file could not be reached from this browser.';
+            }
+            const note = document.createElement('div');
+            note.className = 'video-error';
+            note.setAttribute('role', 'alert');
+            note.textContent = message;
+            video.hidden = true;
+            video.insertAdjacentElement('afterend', note);
         }
 
         /**
@@ -184,6 +240,56 @@
         }
 
         /**
+         * Give each height-capped display field a "Show all" control.
+         *
+         * A field wrapper (.display-field-resizable) is capped at 80vh, or at
+         * the config's max_height, and scrolls inside that. A long agent trace
+         * then reads as cut off, and resize: vertical cannot drag past the cap.
+         * The control appears only while the content actually overflows, and
+         * lifts the cap until it is pressed again.
+         */
+        initResizableExpand() {
+            const wrappers = this.displayContainer.querySelectorAll('.display-field-resizable');
+            wrappers.forEach((wrapper, i) => {
+                if (!wrapper.id) wrapper.id = `display-field-resizable-${i}`;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'display-field-expand';
+                button.setAttribute('aria-controls', wrapper.id);
+                button.setAttribute('aria-expanded', 'false');
+                button.textContent = 'Show all';
+                button.hidden = true;
+                wrapper.insertAdjacentElement('afterend', button);
+
+                const update = () => {
+                    const expanded = wrapper.classList.contains('is-expanded');
+                    const overflowing = wrapper.scrollHeight > wrapper.clientHeight + 4;
+                    button.hidden = !expanded && !overflowing;
+                };
+
+                button.addEventListener('click', () => {
+                    const expanded = wrapper.classList.toggle('is-expanded');
+                    if (expanded) {
+                        // A height dragged with the resize handle would
+                        // otherwise keep the pane short.
+                        wrapper.style.height = '';
+                    }
+                    button.setAttribute('aria-expanded', String(expanded));
+                    button.textContent = expanded ? 'Show less' : 'Show all';
+                    update();
+                });
+
+                update();
+                if (typeof ResizeObserver === 'function') {
+                    const observer = new ResizeObserver(update);
+                    observer.observe(wrapper);
+                    if (wrapper.firstElementChild) observer.observe(wrapper.firstElementChild);
+                }
+                window.addEventListener('load', update, { once: true });
+            });
+        }
+
+        /**
          * Initialize per-turn rating widgets in dialogue displays.
          * Supports both single-schema and multi-schema (multi-dimension) per-turn ratings.
          * Each schema stores its values in its own hidden input.
@@ -208,49 +314,146 @@
                 // Rating values keyed by schema: {schemaName: {turnIndex: value}}
                 const ratingValuesBySchema = {};
 
-                // Handle click on rating values
+                // Seed from server-restored hidden values BEFORE wiring events
+                // (persistence contract: the server sets value + data-server-set
+                // via BeautifulSoup; without this seed, navigate-away-and-back
+                // loses the visual selection state).
+                const seedFromInput = (schemaName, input) => {
+                    if (!input || input.getAttribute('data-server-set') !== 'true') return;
+                    const raw = input.getAttribute('value') || input.value;
+                    if (!raw) return;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object') {
+                            ratingValuesBySchema[schemaName] = parsed;
+                        }
+                    } catch (e) {
+                        console.warn('[InstanceDisplay] Could not parse per-turn ratings for', schemaName, e);
+                    }
+                };
+                Object.entries(hiddenInputs).forEach(([schemaName, input]) => seedFromInput(schemaName, input));
+                if (singleHiddenInput) seedFromInput('', singleHiddenInput);
+
+                // Paint one turn + schema: fill up to the chosen value, mark
+                // the chosen value as the checked radio, and keep exactly one
+                // value in the tab order (the checked one, else the first) so
+                // Tab enters each rating once and arrows move within it.
+                const paintTurn = (schema, turn) => {
+                    const chosen = (ratingValuesBySchema[schema] || {})[turn];
+                    const selector = `.ptr-value[data-turn="${turn}"][data-schema="${schema}"]`;
+                    const values = [...container.querySelectorAll(selector)];
+                    values.forEach((v, i) => {
+                        const vVal = parseInt(v.dataset.value, 10);
+                        v.classList.toggle('ptr-selected', !!chosen && vVal <= chosen);
+                        v.setAttribute('aria-checked', String(!!chosen && vVal === chosen));
+                        const tabStop = chosen ? vVal === chosen : i === 0;
+                        v.setAttribute('tabindex', tabStop ? '0' : '-1');
+                    });
+                };
+
+                // Paint restored visual state
+                Object.entries(ratingValuesBySchema).forEach(([schema, schemaValues]) => {
+                    Object.keys(schemaValues).forEach((turn) => paintTurn(schema, turn));
+                });
+
+                // Choose a value. `toggle` is the mouse/Space behaviour --
+                // choosing the current value again clears it; arrow keys always
+                // set, as radio groups do.
+                const choose = (el, toggle) => {
+                    const turn = el.dataset.turn;
+                    const value = parseInt(el.dataset.value, 10);
+                    const schema = el.dataset.schema || '';
+
+                    if (!ratingValuesBySchema[schema]) {
+                        ratingValuesBySchema[schema] = {};
+                    }
+                    const schemaValues = ratingValuesBySchema[schema];
+
+                    if (toggle && schemaValues[turn] === value) {
+                        delete schemaValues[turn];
+                    } else {
+                        schemaValues[turn] = value;
+                    }
+
+                    paintTurn(schema, turn);
+
+                    // Update the corresponding hidden input
+                    if (schema && hiddenInputs[schema]) {
+                        hiddenInputs[schema].value = JSON.stringify(schemaValues);
+                    } else if (singleHiddenInput) {
+                        singleHiddenInput.value = JSON.stringify(schemaValues);
+                    }
+                };
+
                 container.querySelectorAll('.ptr-value').forEach(el => {
                     el.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const turn = el.dataset.turn;
-                        const value = parseInt(el.dataset.value, 10);
-                        const schema = el.dataset.schema || '';
-
-                        // Initialize schema bucket
-                        if (!ratingValuesBySchema[schema]) {
-                            ratingValuesBySchema[schema] = {};
-                        }
-                        const schemaValues = ratingValuesBySchema[schema];
-
-                        // Toggle: clicking same value deselects
-                        if (schemaValues[turn] === value) {
-                            delete schemaValues[turn];
-                        } else {
-                            schemaValues[turn] = value;
-                        }
-
-                        // Update visual state for this turn + schema combination
-                        const selector = `.ptr-value[data-turn="${turn}"][data-schema="${schema}"]`;
-                        container.querySelectorAll(selector).forEach(v => {
-                            const vVal = parseInt(v.dataset.value, 10);
-                            if (schemaValues[turn] && vVal <= schemaValues[turn]) {
-                                v.classList.add('ptr-selected');
-                            } else {
-                                v.classList.remove('ptr-selected');
-                            }
-                        });
-
-                        // Update the corresponding hidden input
-                        if (schema && hiddenInputs[schema]) {
-                            hiddenInputs[schema].value = JSON.stringify(schemaValues);
-                        } else if (singleHiddenInput) {
-                            singleHiddenInput.value = JSON.stringify(schemaValues);
-                        }
-
-                        console.log('[InstanceDisplay] Per-turn rating:', fieldKey,
-                            schema ? `schema=${schema}` : '', 'turn', turn, '=',
-                            schemaValues[turn] || 'cleared');
+                        choose(el, true);
                     });
+
+                    el.addEventListener('keydown', (e) => {
+                        const group = [...el.parentElement.querySelectorAll('.ptr-value')];
+                        const i = group.indexOf(el);
+                        let target = null;
+                        if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                            target = group[(i + 1) % group.length];
+                        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                            target = group[(i - 1 + group.length) % group.length];
+                        } else if (e.key === 'Home') {
+                            target = group[0];
+                        } else if (e.key === 'End') {
+                            target = group[group.length - 1];
+                        } else if (e.key === ' ' || e.key === 'Enter') {
+                            // Stop the page-level hotkeys (Enter = Next) from
+                            // also acting on this key.
+                            e.preventDefault();
+                            e.stopPropagation();
+                            choose(el, true);
+                            return;
+                        } else {
+                            return;
+                        }
+                        e.preventDefault();
+                        e.stopPropagation();
+                        choose(target, false);
+                        target.focus();
+                    });
+                });
+
+                // Live collaborative sessions. A per-turn rating scheme has no
+                // form of its own (no data-annotation-type), so collab.js can
+                // reach it only through the per-schema hook, which it calls
+                // after writing the teammate's JSON into this hidden input.
+                // The answer replaces this schema's ratings and every turn is
+                // repainted; nothing is written back or saved.
+                const applyLive = (schema, value) => {
+                    let parsed = {};
+                    if (value) {
+                        try { parsed = JSON.parse(value); } catch (e) { return false; }
+                        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+                    }
+                    ratingValuesBySchema[schema] = parsed;
+                    const own = hiddenInputs[schema];
+                    if (own && own.value !== (value || '')) own.value = value || '';
+                    const turns = new Set();
+                    container.querySelectorAll('.ptr-value').forEach(v => {
+                        if ((v.dataset.schema || '') === schema) turns.add(v.dataset.turn);
+                    });
+                    turns.forEach(turn => paintTurn(schema, turn));
+                    return true;
+                };
+                window.potatoCollabAppliers = window.potatoCollabAppliers || {};
+                Object.keys(hiddenInputs).forEach((schemaName) => {
+                    const previous = window.potatoCollabAppliers[schemaName];
+                    // One schema can be rated in two dialogue fields; each
+                    // container repaints its own turns.
+                    const appliers = (previous && previous._ptrAppliers) || [];
+                    appliers.push(applyLive);
+                    const hook = (schema, value) => appliers.map(fn => fn(schema, value)).every(Boolean);
+                    hook._ptrAppliers = appliers;
+                    if (!previous || previous._ptrAppliers) {
+                        window.potatoCollabAppliers[schemaName] = hook;
+                    }
                 });
             });
         }

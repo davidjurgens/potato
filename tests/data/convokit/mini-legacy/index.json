@@ -1,0 +1,11 @@
+{
+ "utterances-index": {
+  "Binary": "<class 'int'>"
+ },
+ "users-index": {},
+ "conversations-index": {
+  "page_title": "<class 'str'>"
+ },
+ "overall-index": {},
+ "version": 1
+}

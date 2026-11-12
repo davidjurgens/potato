@@ -1,0 +1,16 @@
+{
+ "alice": {
+  "meta": {
+   "editor_since": 2004
+  },
+  "vectors": []
+ },
+ "bob": {
+  "editor_since": 2011
+ },
+ "carol": {
+  "meta": {},
+  "vectors": []
+ },
+ "dave": {}
+}

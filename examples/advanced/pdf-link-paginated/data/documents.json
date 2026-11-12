@@ -1,0 +1,12 @@
+[
+  {
+    "id": "paper_001",
+    "title": "Paginated view — page browser + pin-navigate",
+    "pdf": "/media/sample-paper.pdf"
+  },
+  {
+    "id": "paper_002",
+    "title": "Paginated view — second document",
+    "pdf": "/media/sample-paper.pdf"
+  }
+]

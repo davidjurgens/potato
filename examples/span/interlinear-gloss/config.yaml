@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Interlinear glossed text (Leipzig-style morpheme glossing)
+#
+# Four short Latin sentences, glossed by the Potato authors for illustration
+# only. latin_1 is fully analysed, latin_2 is blank, latin_3 has a segmentation
+# but no glosses, and latin_4 has a deliberate error: the clitic -que is glossed
+# with "-" where the segmentation has "=", so that word shows as misaligned.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/span/interlinear-gloss/config.yaml -p 8000
+#
+# Export the glosses as FLExText, Toolbox, or aligned text plus gb4e LaTeX:
+#   python -m potato.export --config examples/span/interlinear-gloss/config.yaml --format flextext --output out/
+#   python -m potato.export --config examples/span/interlinear-gloss/config.yaml --format toolbox --output out/
+#   python -m potato.export --config examples/span/interlinear-gloss/config.yaml --format igt --output out/
+
+annotation_task_name: "Interlinear glossing (Latin, illustrative)"
+
+data_files:
+  - data/interlinear-gloss-example.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: interlinear_gloss
+    name: igt
+    description: "Segment each word into morphemes and gloss every morpheme"
+    instructions: >-
+      Put - between affixes and = before a clitic, in both lines. Write
+      grammatical categories in capitals (ACC, PL, 3SG) and join several
+      meanings of one morpheme with a dot (NOM.SG).
+    source_field: text
+    morphemes_field: morphemes
+    gloss_field: glosses
+    translation_field: translation
+    tiers: [pos, notes]
+    abbreviations: leipzig
+    language: la
+    metalanguage: en
+    label_requirement:
+      required: true

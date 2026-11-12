@@ -1,0 +1,85 @@
+{
+ "DeploymentListInput": [
+  "environmentId",
+  "includeDeleted",
+  "projectId",
+  "serviceId",
+  "status"
+ ],
+ "ProjectCreateInput": [
+  "defaultEnvironmentName",
+  "description",
+  "isMonorepo",
+  "isPublic",
+  "name",
+  "prDeploys",
+  "repo",
+  "runtime",
+  "workspaceId"
+ ],
+ "ServiceCreateInput": [
+  "branch",
+  "environmentId",
+  "icon",
+  "name",
+  "projectId",
+  "registryCredentials",
+  "source",
+  "templateId",
+  "templateServiceId",
+  "variables"
+ ],
+ "ServiceDomainCreateInput": [
+  "environmentId",
+  "serviceId",
+  "targetPort"
+ ],
+ "ServiceInstanceUpdateInput": [
+  "autoInstrumentationEnabled",
+  "buildCommand",
+  "builder",
+  "cronSchedule",
+  "dockerfilePath",
+  "drainingSeconds",
+  "healthcheckPath",
+  "healthcheckTimeout",
+  "ipv6EgressEnabled",
+  "multiRegionConfig",
+  "nixpacksPlan",
+  "numReplicas",
+  "overlapSeconds",
+  "preDeployCommand",
+  "preDeployTimeoutSeconds",
+  "railwayConfigFile",
+  "region",
+  "registryCredentials",
+  "restartPolicyMaxRetries",
+  "restartPolicyType",
+  "rootDirectory",
+  "sleepApplication",
+  "source",
+  "startCommand",
+  "tracingEnabled",
+  "watchPatterns"
+ ],
+ "ServiceSourceInput": [
+  "image",
+  "repo"
+ ],
+ "VariableCollectionUpsertInput": [
+  "environmentId",
+  "projectId",
+  "replace",
+  "serviceId",
+  "skipDeploys",
+  "variables"
+ ],
+ "VolumeCreateInput": [
+  "environmentId",
+  "mountPath",
+  "projectId",
+  "region",
+  "serviceId"
+ ],
+ "_source": "Railway GraphQL introspection, https://backboard.railway.com/graphql/v2, captured 2026-10-04"
+}

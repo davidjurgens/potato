@@ -1,7 +1,6 @@
 annotation_task_name: "Comprehensive Annotation Demo"
 task_dir: "output/comprehensive-annotation-test"
 output_annotation_dir: "output/comprehensive-annotation-test"
-output_annotation_format: "jsonl"
 max_annotations_per_user: 10
 assignment_strategy: "fixed_order"
 data_files:

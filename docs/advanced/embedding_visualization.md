@@ -1,6 +1,6 @@
 # Embedding Dashboard Visualization
 
-The Embedding Visualization feature provides an interactive 2D visualization of your annotation data in the admin dashboard. Using UMAP dimensionality reduction on text embeddings, it allows you to:
+The embedding visualization is a 2D map of your corpus in the admin dashboard. It embeds each instance, reduces the vectors with UMAP, and plots them, so you can:
 
 - **Explore data patterns**: See clustering and distribution of your instances
 - **Track annotation progress**: Visualize annotated vs. unannotated items
@@ -12,10 +12,8 @@ The Embedding Visualization feature provides an interactive 2D visualization of 
 The embedding visualization requires the following dependencies:
 
 ```bash
-# Required dependencies
-pip install umap-learn>=0.5.0
-pip install sentence-transformers  # Already required for diversity_ordering
-pip install scikit-learn  # Already required for diversity_ordering
+# UMAP, and sentence-transformers for the embeddings
+pip install 'potato-annotation[viz,embeddings]'
 ```
 
 Additionally, **diversity ordering must be enabled** in your configuration, as the visualization uses the embeddings computed by the DiversityManager.
@@ -87,7 +85,7 @@ Use the Plotly.js selection tools to select instances:
 
 ### Priority Queue
 
-The selection panel allows you to create a priority queue for annotation:
+The selection panel builds a priority queue for annotation:
 
 1. **Make a selection** using lasso or box tool
 2. **Click "Add to Queue"** to add the selection as a priority group

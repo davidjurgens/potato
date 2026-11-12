@@ -10,6 +10,7 @@ import shutil
 
 import pytest
 import requests
+import time
 import yaml
 
 from tests.helpers.flask_test_setup import FlaskTestServer
@@ -94,11 +95,21 @@ def api_server():
     shutil.rmtree(test_dir, ignore_errors=True)
 
 
+@pytest.fixture
+def authed_session(api_server):
+    """A logged-in session: the solo read APIs refuse anonymous requests."""
+    session = requests.Session()
+    session.post(f"{api_server.base_url}/auth",
+                 data={"email": f"refine_user_{time.time()}", "pass": ""})
+    yield session
+    session.close()
+
+
 class TestRefinementAPI:
     """Smoke tests for new API endpoints."""
 
-    def test_strategies_endpoint_lists_strategies(self, api_server):
-        r = requests.get(f"{api_server.base_url}/solo/api/refinement/strategies")
+    def test_strategies_endpoint_lists_strategies(self, authed_session, api_server):
+        r = authed_session.get(f"{api_server.base_url}/solo/api/refinement/strategies")
         assert r.status_code == 200
         data = r.json()
         assert 'strategies' in data
@@ -107,15 +118,15 @@ class TestRefinementAPI:
         assert 'principle_icl' in names
         assert 'hybrid_dual_track' in names
 
-    def test_log_endpoint_returns_empty_initially(self, api_server):
-        r = requests.get(f"{api_server.base_url}/solo/api/refinement/log")
+    def test_log_endpoint_returns_empty_initially(self, authed_session, api_server):
+        r = authed_session.get(f"{api_server.base_url}/solo/api/refinement/log")
         assert r.status_code == 200
         data = r.json()
         assert data['count'] == 0
         assert data['log'] == []
 
-    def test_pending_endpoint_returns_empty_initially(self, api_server):
-        r = requests.get(f"{api_server.base_url}/solo/api/refinement/pending")
+    def test_pending_endpoint_returns_empty_initially(self, authed_session, api_server):
+        r = authed_session.get(f"{api_server.base_url}/solo/api/refinement/pending")
         assert r.status_code == 200
         data = r.json()
         assert data['count'] == 0

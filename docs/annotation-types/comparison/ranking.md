@@ -32,8 +32,6 @@ Key differences from Best-Worst Scaling:
 | `description` | — | Task instruction |
 | `labels` | — | List of item names to rank (required, minimum 2) |
 | `allow_ties` | `false` | Allow annotators to place items at equal rank |
-| `items_key` | `null` | Data field containing dynamic items (overrides `labels`) |
-| `sequential_key_binding` | `false` | Enable keyboard shortcut reordering |
 | `label_requirement.required` | `false` | Require a complete ranking before proceeding |
 
 ### YAML Example — Static Item List
@@ -51,25 +49,6 @@ annotation_schemes:
       - Response D
     label_requirement:
       required: true
-```
-
-### YAML Example — Dynamic Items from Data
-
-When the items to rank come from the instance data (different items per row):
-
-```yaml
-annotation_schemes:
-  - annotation_type: ranking
-    name: translation_rank
-    description: "Rank these machine translations from most to least fluent."
-    items_key: translations
-    allow_ties: true
-```
-
-With corresponding data:
-
-```json
-{"id": "t001", "source": "The cat sat on the mat.", "translations": ["Le chat était assis sur le tapis.", "Le chat s'est assis sur le tapis.", "Chat sur tapis."]}
 ```
 
 ### Ties Configuration
@@ -122,8 +101,6 @@ This means B is ranked 1st, D and A are tied at 2nd, and C is ranked 4th.
 ## Troubleshooting
 
 **Annotators find full ranking of 6+ items tiring:** Consider switching to Best-Worst Scaling for large item pools. BWS achieves similar statistical efficiency with much lower per-item cognitive load.
-
-**Dynamic items from data have different lengths per instance:** Use `items_key` with `allow_ties: false` and ensure your data preprocessing produces consistent list lengths if downstream analysis requires it.
 
 ## Related Documentation
 

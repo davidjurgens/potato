@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }}</title>
+    {% include '_theme_head.html' %}
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="potato-page-center">
+    <main class="potato-page-card" style="text-align: center;" id="runtime-return-refused">
+        {% if unsigned %}
+        <h1 class="potato-page-title">This return could not be confirmed</h1>
+        <p class="potato-page-subtitle">The link that brought you back was not signed by the task.
+            Go back to the study and finish the task from there.</p>
+        {% else %}
+        <h1 class="potato-page-title">This link is out of date</h1>
+        <p class="potato-page-subtitle">It belongs to an earlier attempt, or to another part of the study.
+            Go back to the study to see where you are.</p>
+        {% endif %}
+        <a class="shadcn-button" href="{{ home_url }}">Back to the study</a>
+    </main>
+</body>
+</html>

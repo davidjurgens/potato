@@ -151,7 +151,7 @@ class OllamaToolUseBackend(CodingAgentBackend):
                         "input": tool_input,
                     })
 
-                    output = execute_tool(tool_name, tool_input, self._working_dir)
+                    output = execute_tool(tool_name, tool_input, self.sandbox)
                     output_type = self._classify_output_type(tool_name)
 
                     tc = {

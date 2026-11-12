@@ -1,6 +1,6 @@
 # Active Learning Query Strategies
 
-This document provides a comprehensive reference for all query strategies available in Potato's active learning system.
+Every query strategy Potato's active learning can use, with its formulation and its citation.
 
 ## Overview
 
@@ -206,7 +206,7 @@ active_learning:
     model_name: "all-MiniLM-L6-v2"  # 80MB, fast, 384-dim
 ```
 
-**Installation:** `pip install sentence-transformers`
+**Installation:** `pip install 'potato-annotation[embeddings]'`
 
 **Model options:**
 - `all-MiniLM-L6-v2` — Fast, good quality (default)
@@ -230,22 +230,12 @@ The weight interpolates linearly: early on, LLM predictions dominate (good with 
 
 This approach is inspired by FreeAL (Xiao et al., 2023) and the collaborative frameworks described in the LLM-based AL survey (Xia et al., 2025).
 
-## Advanced: Annotation Routing
+## Annotation Routing
 
-Noise-aware routing between LLM auto-labeling and human annotation, based on Yuan et al. (2024):
-
-```yaml
-active_learning:
-  annotation_routing: true
-  routing_thresholds:
-    auto_label_min_confidence: 0.9  # Auto-label above this
-    show_suggestion_below: 0.5      # Show LLM suggestion below this
-  verification_sample_rate: 0.2     # Spot-check rate for auto-labels
-```
-
-- **High LLM confidence (>0.9):** Auto-label, flag for periodic verification
-- **Medium confidence (0.5-0.9):** Route to human (most informative)
-- **Low confidence (<0.5):** Route to human with LLM suggestion shown
+`annotation_routing`, `routing_thresholds` and `verification_sample_rate` are
+accepted under `active_learning` but nothing reads them, so they route
+nothing; Potato names them at boot. To accept machine labels above a
+confidence, use a [labeling engine contract](../labeling-engine/contracts.md).
 
 ## Troubleshooting
 
@@ -264,7 +254,7 @@ active_learning:
 - Set `max_instances_to_reorder` to limit the pool size
 
 **Sentence-transformers not found:**
-- Install: `pip install sentence-transformers`
+- Install: `pip install 'potato-annotation[embeddings]'`
 - The package is only imported when configured, not at startup
 
 ## References

@@ -1,7 +1,7 @@
 """
 Adjudication Module
 
-This module provides a comprehensive adjudication system where designated users
+An adjudication system where designated users
 review items with multiple annotations, resolve disagreements, and produce
 gold-standard final decisions.
 
@@ -23,6 +23,7 @@ The workflow:
 5. Final dataset CLI merges unanimous + adjudicated decisions
 """
 
+import hashlib
 import json
 import logging
 import math
@@ -32,6 +33,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
+
+from potato.server_utils import annotation_values
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +75,17 @@ class AdjudicationConfig:
     similarity_top_k: int = 5
     similarity_precompute: bool = True
 
+    # Machine raters. Off by default, so an existing study's queue is unchanged.
+    # On, declared tools and models enter the queue as participants and a human
+    # adjudicator resolves what they disagreed about -- which is the whole shape
+    # of the problem when N annotation pipelines disagree and no gold standard
+    # exists. See potato/annotator_origin.py.
+    include_machine_annotators: bool = False
+    # Floor on how many *people* an item needs before it can be adjudicated.
+    # Zero is meaningful and deliberate: four tools and no humans is a valid
+    # queue, because the adjudicator is the human in that design.
+    min_human_annotations: int = 0
+
     # Output
     output_subdir: str = "adjudication"
 
@@ -84,11 +98,15 @@ class AdjudicationItem:
     span_annotations: Dict[str, List[Dict]]  # user_id -> [span_dict, ...]
     behavioral_data: Dict[str, Dict]  # user_id -> {total_time_ms, ...}
     agreement_scores: Dict[str, float]  # schema_name -> agreement score
-    overall_agreement: float
+    overall_agreement: Optional[float]  # None: no schema could be scored
     num_annotators: int
     status: str = "pending"  # pending, in_progress, completed, skipped
     assigned_adjudicator: Optional[str] = None
     mace_predictions: Dict[str, Any] = field(default_factory=dict)  # schema -> predicted label
+    # user_id -> short origin label, for participants that are not people. An
+    # adjudicator choosing between two answers needs to know that one of them
+    # came from a tool, and which version of it.
+    annotator_origins: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -105,6 +123,8 @@ class AdjudicationItem:
         }
         if self.mace_predictions:
             result["mace_predictions"] = self.mace_predictions
+        if self.annotator_origins:
+            result["annotator_origins"] = self.annotator_origins
         return result
 
 
@@ -123,6 +143,10 @@ class AdjudicationDecision:
     guideline_update_flag: bool = False
     guideline_update_notes: str = ""
     time_spent_ms: int = 0
+    # What each adopted answer's author was, captured when the decision was
+    # made. Stored rather than derived, because a later config edit could
+    # otherwise change what a past decision appears to have meant.
+    source_origins: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -139,6 +163,7 @@ class AdjudicationDecision:
             "guideline_update_flag": self.guideline_update_flag,
             "guideline_update_notes": self.guideline_update_notes,
             "time_spent_ms": self.time_spent_ms,
+            "source_origins": self.source_origins,
         }
 
     @classmethod
@@ -151,12 +176,15 @@ class AdjudicationDecision:
             label_decisions=d.get("label_decisions", {}),
             span_decisions=d.get("span_decisions", []),
             source=d.get("source", {}),
-            confidence=d.get("confidence", "medium"),
+            # Absent stays absent: a record saved without a confidence must
+            # not reload as "medium", a value nobody chose.
+            confidence=d.get("confidence") or "",
             notes=d.get("notes", ""),
             error_taxonomy=d.get("error_taxonomy", []),
             guideline_update_flag=d.get("guideline_update_flag", False),
             guideline_update_notes=d.get("guideline_update_notes", ""),
             time_spent_ms=d.get("time_spent_ms", 0),
+            source_origins=d.get("source_origins", {}) or {},
         )
 
 
@@ -236,6 +264,11 @@ class AdjudicationManager:
             adj.similarity_top_k = sim_config.get("top_k", 5)
             adj.similarity_precompute = sim_config.get("precompute_on_start", True)
 
+        adj.include_machine_annotators = bool(
+            adj_config.get("include_machine_annotators", False))
+        adj.min_human_annotations = int(
+            adj_config.get("min_human_annotations", 0))
+
         adj.output_subdir = adj_config.get("output_subdir", "adjudication")
 
         return adj
@@ -268,7 +301,7 @@ class AdjudicationManager:
             scheme_names = [s.get("name", "") for s in annotation_schemes]
 
             # Iterate over all items
-            for instance_id, item in ism.instance_id_to_instance.items():
+            for instance_id, item in ism.iter_items():
                 instance_id_str = str(instance_id)
 
                 # Skip if already decided
@@ -287,7 +320,32 @@ class AdjudicationManager:
                     if u not in self.adj_config.adjudicator_users
                 }
 
+                # Declared machine raters. Excluding adjudicators is the
+                # existing precedent for dropping a class of participant, and
+                # this extends it: a tool is kept out of the queue unless the
+                # study says otherwise, so no existing queue changes shape.
+                from potato.annotator_origin import describe, is_machine
+
+                item_origins = {}
+                humans = set()
+                for u in sorted(annotators):
+                    ustate = usm.get_user_state(u)
+                    if ustate is not None and is_machine(ustate):
+                        item_origins[u] = describe(ustate)
+                    else:
+                        humans.add(u)
+
+                if not self.adj_config.include_machine_annotators:
+                    annotators = humans
+                    item_origins = {}
+
                 if len(annotators) < self.adj_config.min_annotations:
+                    continue
+
+                # A floor on people, separate from the floor on participants.
+                # Default 0: four tools and no humans is a valid queue, because
+                # the adjudicator is the human in that design.
+                if len(humans) < self.adj_config.min_human_annotations:
                     continue
 
                 # Check if we require fully annotated items
@@ -311,7 +369,8 @@ class AdjudicationManager:
                         instance_id_str, {}
                     )
                     if label_annots:
-                        item_annotations[user_id] = self._serialize_labels(label_annots)
+                        item_annotations[user_id] = self._serialize_labels(
+                            label_annots, user_state, instance_id_str)
 
                     # Get span annotations
                     span_annots = user_state.instance_id_to_span_to_value.get(
@@ -336,9 +395,11 @@ class AdjudicationManager:
                 )
                 overall = self._compute_overall_agreement(agreement_scores)
 
-                # Filter by agreement threshold
+                # Filter by agreement threshold. An item with no score is
+                # queued: nothing shows its annotators agreed.
                 if not self.adj_config.show_all_items:
-                    if overall >= self.adj_config.agreement_threshold:
+                    if (overall is not None
+                            and overall >= self.adj_config.agreement_threshold):
                         continue
 
                 # Preserve existing status if already in queue
@@ -370,6 +431,7 @@ class AdjudicationManager:
                     status=status,
                     assigned_adjudicator=assigned,
                     mace_predictions=mace_preds,
+                    annotator_origins=item_origins,
                 )
 
             self._queue_built = True
@@ -399,7 +461,7 @@ class AdjudicationManager:
             instance_id_str = str(instance_id)
             if instance_id_str in self.decisions:
                 return False
-            item = ism.instance_id_to_instance.get(instance_id)
+            item = ism.find_item(instance_id)
             if item is None:
                 return False
 
@@ -407,7 +469,25 @@ class AdjudicationManager:
                 u for u in ism.instance_annotators.get(instance_id, set())
                 if u not in self.adj_config.adjudicator_users
             }
+            # The same participant filters build_queue applies. This path used
+            # to skip them, so a declared tool's labels reached the queue on
+            # auto-route that a rebuild would have kept out, and an item with
+            # too few people was queued anyway.
+            from potato.annotator_origin import describe, is_machine
+            item_origins = {}
+            humans = set()
+            for u in sorted(annotators):
+                ustate = usm.get_user_state(u)
+                if ustate is not None and is_machine(ustate):
+                    item_origins[u] = describe(ustate)
+                else:
+                    humans.add(u)
+            if not self.adj_config.include_machine_annotators:
+                annotators = humans
+                item_origins = {}
             if len(annotators) < self.adj_config.min_annotations:
+                return False
+            if len(humans) < self.adj_config.min_human_annotations:
                 return False
 
             scheme_names = [s.get("name", "") for s in self.config.get("annotation_schemes", [])]
@@ -420,7 +500,8 @@ class AdjudicationManager:
                     continue
                 la = ustate.instance_id_to_label_to_value.get(instance_id_str, {})
                 if la:
-                    item_annotations[user_id] = self._serialize_labels(la)
+                    item_annotations[user_id] = self._serialize_labels(
+                        la, ustate, instance_id_str)
                 sa = ustate.instance_id_to_span_to_value.get(instance_id_str, {})
                 if sa:
                     item_spans[user_id] = self._serialize_spans(sa)
@@ -434,7 +515,8 @@ class AdjudicationManager:
             agreement_scores = self._compute_agreement(item_annotations, scheme_names)
             overall = self._compute_overall_agreement(agreement_scores)
             if not self.adj_config.show_all_items:
-                if overall >= self.adj_config.agreement_threshold:
+                if (overall is not None
+                        and overall >= self.adj_config.agreement_threshold):
                     return False
 
             existing = self.queue.get(instance_id_str)
@@ -448,30 +530,41 @@ class AdjudicationManager:
                 num_annotators=len(annotators),
                 status=existing.status if existing else "pending",
                 assigned_adjudicator=existing.assigned_adjudicator if existing else None,
+                annotator_origins=item_origins,
             )
+            # %s, not %.3f: overall is None when no scheme had a comparable
+            # value, and a format error inside logging is swallowed (or, under
+            # pytest's handler, raised and then hidden by the caller).
             self.logger.info(
-                "Auto-routed item %s into adjudication queue (overall agreement=%.3f, "
-                "threshold=%.3f, annotators=%d)",
-                instance_id_str, overall, self.adj_config.agreement_threshold, len(annotators),
+                "Auto-routed item %s into adjudication queue (overall agreement=%s, "
+                "threshold=%s, annotators=%d)",
+                instance_id_str,
+                "n/a" if overall is None else f"{overall:.3f}",
+                self.adj_config.agreement_threshold, len(annotators),
             )
             return True
 
-    def _serialize_labels(self, label_data: Dict) -> Dict[str, Any]:
-        """Convert label annotation data to serializable dict."""
-        result = {}
-        for key, value in label_data.items():
-            # Key might be a Label object or a string
-            if hasattr(key, 'get_schema'):
-                schema = key.get_schema()
-                name = key.get_name()
-                if schema not in result:
-                    result[schema] = {}
-                result[schema][name] = value
-            elif isinstance(key, str):
-                result[key] = value
-            else:
-                result[str(key)] = value
-        return result
+    def _serialize_labels(self, label_data: Dict, user_state=None,
+                          instance_id: Optional[str] = None) -> Dict[str, Any]:
+        """Convert label annotation data to serializable dict.
+
+        Delegates to :func:`annotation_values.group_by_schema` so adjudication
+        and the IAA dispatcher share one definition of how the flat
+        ``{Label: value}`` container regroups by schema. With the annotator's
+        state, a pairwise answer is put in data order, as the IAA report reads
+        it: under ``randomize_order`` the stored letter is the screen position.
+        """
+        grouped = annotation_values.group_by_schema(label_data)
+        getter = getattr(user_state, "get_presentation_order", None)
+        if not callable(getter) or instance_id is None:
+            return grouped
+        from potato.server_utils.presentation_order import source_oriented
+        try:
+            orders = getter(instance_id)
+        except Exception:
+            return grouped
+        return source_oriented(self.config.get("annotation_schemes") or [],
+                               grouped, orders)
 
     def _serialize_spans(self, span_data: Dict) -> List[Dict]:
         """Convert span annotation data to serializable list."""
@@ -513,28 +606,45 @@ class AdjudicationManager:
             Dict mapping schema_name to agreement score (0.0 - 1.0)
         """
         agreement_scores = {}
+        # Defensive: this is reachable from code paths (and tests) that build a
+        # manager without a full config. An unknown schema falls through to the
+        # categorical path below, which is the pre-existing behaviour.
+        own_config = getattr(self, "config", None) or {}
+        scheme_by_name = {s.get("name"): s
+                          for s in (own_config.get("annotation_schemes") or [])
+                          if isinstance(s, dict)}
 
         for schema in scheme_names:
+            scheme_def = scheme_by_name.get(schema)
+
+            # Schemas with no defined notion of agreement are OMITTED, not
+            # scored. Image annotation used to fall through to the branch below
+            # and collapse to frozenset({"_data"}) for every annotator, so two
+            # people who agreed on nothing scored 1.0 and no image item could
+            # ever be routed for review.
+            if scheme_def is not None and not annotation_values.is_comparable(scheme_def):
+                continue
+
+            if scheme_def is not None and annotation_values.supports_geometry(scheme_def):
+                score = self._geometry_agreement(item_annotations, schema, scheme_def)
+                if score is not None:
+                    agreement_scores[schema] = score
+                continue
+
+            # One reader for "what did this annotator answer", shared with the
+            # exporter and /admin/iaa. Adjudication used to collapse any dict
+            # to its key set, which is the answer only for the
+            # {label: label} types: a constant_sum's keys are its options,
+            # identical for every annotator, so three different distributions
+            # scored 1.0 and the item was never routed.
             values = []
             for user_id, user_annots in item_annotations.items():
                 if schema in user_annots:
-                    val = user_annots[schema]
-                    # Normalize to comparable form
-                    if isinstance(val, dict):
-                        # Radio stores {label: label} (value is the label string)
-                        # and multiselect stores {label: value/true}. A label is
-                        # "selected" when its value is present/truthy. The old
-                        # filter (v is True / == "true" / == 1) dropped radio's
-                        # string value, collapsing every annotator to an empty
-                        # frozenset -> a spurious 1.0 agreement even on total
-                        # disagreement.
-                        falsey = (False, None, "", "false", "False", 0, "0")
-                        selected = frozenset(
-                            k for k, v in val.items() if v not in falsey
-                        )
-                        values.append(selected)
-                    else:
-                        values.append(val)
+                    values.append(
+                        annotation_values.comparable_value(
+                            scheme_def if scheme_def is not None
+                            else {"name": schema},
+                            user_annots[schema]))
 
             if len(values) < 2:
                 continue
@@ -554,10 +664,46 @@ class AdjudicationManager:
 
         return agreement_scores
 
-    def _compute_overall_agreement(self, agreement_scores: Dict[str, float]) -> float:
-        """Compute overall agreement as the mean of per-schema scores."""
+    def _geometry_agreement(self, item_annotations: Dict[str, Dict],
+                            schema: str, scheme_def: dict) -> Optional[float]:
+        """
+        Mean pairwise geometry agreement for one image schema on one item.
+
+        Compares actual shapes: 1 - distance, where distance accounts for both
+        boundary overlap and unmatched instances, so an annotator who misses
+        half the objects scores low even if their boxes are pixel-perfect.
+        """
+        values = [
+            annotation_values.comparable_value(scheme_def, annots[schema])
+            for annots in item_annotations.values()
+            if schema in annots
+        ]
+        if len(values) < 2:
+            return None
+
+        scores = []
+        for i in range(len(values)):
+            for j in range(i + 1, len(values)):
+                d = annotation_values.distance(scheme_def, values[i], values[j])
+                if d is not None:
+                    scores.append(1.0 - d)
+
+        return sum(scores) / len(scores) if scores else None
+
+    def _compute_overall_agreement(self, agreement_scores: Dict[str, float]
+                                   ) -> Optional[float]:
+        """
+        Overall agreement as the mean of the schemas that HAVE a score, or
+        None when none does.
+
+        Schemas omitted by ``_compute_agreement`` (no defined notion of
+        agreement) are absent from this dict and so are excluded here rather
+        than silently counted as perfect. An item with no scored schema at all
+        (span-only, or every schema answered once) used to score 1.0, which
+        passed the threshold, so it never reached the queue.
+        """
         if not agreement_scores:
-            return 1.0
+            return None
         return sum(agreement_scores.values()) / len(agreement_scores)
 
     def get_queue(
@@ -584,10 +730,11 @@ class AdjudicationManager:
             if filter_status:
                 items = [i for i in items if i.status == filter_status]
 
-            # Sort: pending first, then by agreement (lowest first)
+            # Sort: pending first, then by agreement (lowest first), with
+            # unscored items ahead of every scored one
             items.sort(key=lambda x: (
                 0 if x.status == "pending" else 1 if x.status == "in_progress" else 2,
-                x.overall_agreement,
+                -1.0 if x.overall_agreement is None else x.overall_agreement,
             ))
 
             return items
@@ -612,7 +759,7 @@ class AdjudicationManager:
         from potato.item_state_management import get_item_state_manager
 
         ism = get_item_state_manager()
-        item = ism.instance_id_to_instance.get(instance_id)
+        item = ism.find_item(instance_id)
         if item:
             # Use text_key from config if available
             text_key = self.config.get("item_properties", {}).get("text_key", "text")
@@ -627,7 +774,7 @@ class AdjudicationManager:
         from potato.item_state_management import get_item_state_manager
 
         ism = get_item_state_manager()
-        item = ism.instance_id_to_instance.get(instance_id)
+        item = ism.find_item(instance_id)
         if item:
             data = item.get_data()
             if isinstance(data, dict):
@@ -663,6 +810,11 @@ class AdjudicationManager:
         """
         with self._lock:
             instance_id = str(decision.instance_id)
+            # Only in a study with machine raters. Elsewhere every entry would
+            # read "human", and recording it would add a column to every
+            # all-human study's adjudication export for no information.
+            if not decision.source_origins and self._has_machine_raters(instance_id):
+                decision.source_origins = self._source_origins(instance_id, decision)
             self.decisions[instance_id] = decision
 
             # Update queue status
@@ -677,7 +829,86 @@ class AdjudicationManager:
                 f"Adjudication decision saved for {instance_id} "
                 f"by {decision.adjudicator_id}"
             )
-            return True
+        # Outside the lock: the engine may read the queue back.
+        from potato.labeling_engine.integration.hooks import on_adjudication
+        on_adjudication(decision)
+        from potato.trace_ingestion.writeback import on_adjudication as writeback_on_adjudication
+        writeback_on_adjudication(decision, self.config)
+        return True
+
+    def _has_machine_raters(self, instance_id: str) -> bool:
+        """True when the study declares machine raters or this item has one."""
+        from potato.annotator_origin import parse_machine_annotators
+        queued = self.queue.get(instance_id)
+        return bool(parse_machine_annotators(self.config)
+                    or (queued and queued.annotator_origins))
+
+    def _source_origins(self, instance_id: str,
+                        decision: AdjudicationDecision) -> Dict[str, str]:
+        """What produced each schema's final answer, per schema.
+
+        Two cases. When ``decision.source`` names an annotator -- the
+        adjudicator adopted that person's or tool's answer -- the entry is
+        ``describe()`` of that annotator: "human", or e.g. "pipeline_a 2.1.0 db
+        refdb-2024-03 (tool)". When the adjudicator chose the value
+        themselves, which is what the radio form always records, the entry
+        lists every annotator who had given that same value, joined with
+        "; ". A final label that only two tools sharing a database ever gave
+        is a different finding from one three curators gave, and ``source``
+        alone ("adjudicator") says neither. A value nobody gave, or a merged
+        answer, gets no entry.
+
+        Recorded now, while the declarations that produced it are current.
+        Caller holds the lock.
+        """
+        from potato.annotator_origin import describe
+
+        queued = self.queue.get(instance_id)
+        known = dict(queued.annotator_origins) if queued else {}
+        answers = dict(queued.annotations) if queued else {}
+        usm_box: List[Any] = []
+
+        def origin(author: str) -> Optional[str]:
+            if author in known:
+                return known[author]
+            # Leave it out rather than guess "human" when the author's state
+            # cannot be read (offline tooling, a deleted user):
+            # describe(None) would say human.
+            try:
+                if not usm_box:
+                    from potato.user_state_management import get_user_state_manager
+                    usm_box.append(get_user_state_manager())
+                state = usm_box[0].get_user_state(author)
+            except Exception:
+                return None
+            if state is None:
+                return None
+            known[author] = describe(state)
+            return known[author]
+
+        sources = decision.source if isinstance(decision.source, dict) else {}
+        out: Dict[str, str] = {}
+        for schema, value in (decision.label_decisions or {}).items():
+            author = sources.get(schema)
+            if isinstance(author, str) and author and author not in (
+                    "adjudicator", "merged"):
+                described = origin(author)
+                if described:
+                    out[schema] = described
+                continue
+            if author == "merged":
+                continue
+            chosen = _answer_set(value)
+            if not chosen:
+                continue
+            agreeing = sorted({
+                d for user, ans in answers.items()
+                if isinstance(ans, dict) and _answer_set(ans.get(schema)) == chosen
+                for d in [origin(user)] if d
+            })
+            if agreeing:
+                out[schema] = "; ".join(agreeing)
+        return out
 
     def get_stats(self) -> Dict[str, Any]:
         """Get adjudication progress statistics."""
@@ -699,11 +930,9 @@ class AdjudicationManager:
                 1 for i in self.queue.values() if i.status == "in_progress"
             )
 
-            avg_agreement = 0.0
-            if self.queue:
-                avg_agreement = sum(
-                    i.overall_agreement for i in self.queue.values()
-                ) / len(self.queue)
+            scored = [i.overall_agreement for i in self.queue.values()
+                      if i.overall_agreement is not None]
+            avg_agreement = sum(scored) / len(scored) if scored else None
 
             # Per-adjudicator stats
             adjudicator_stats = defaultdict(lambda: {"completed": 0, "total_time_ms": 0})
@@ -741,7 +970,7 @@ class AdjudicationManager:
         try:
             ism = get_item_state_manager()
             item_texts = {}
-            for instance_id, item in ism.instance_id_to_instance.items():
+            for instance_id, item in ism.iter_items():
                 text = self.get_item_text(str(instance_id))
                 if text:
                     item_texts[str(instance_id)] = text
@@ -806,42 +1035,51 @@ class AdjudicationManager:
 
         return results
 
-    def _get_consensus_label(self, item: AdjudicationItem) -> Optional[str]:
+    @staticmethod
+    def _label_string(val: Any) -> str:
+        """One comparable string for a stored answer."""
+        if isinstance(val, dict):
+            # Multiselect: the selected options, sorted
+            selected = sorted(
+                k for k, v in val.items()
+                if v is True or v == "true" or v == 1
+            )
+            return ", ".join(selected) if selected else str(val)
+        return str(val)
+
+    def _consensus_schema(self, item: AdjudicationItem) -> Optional[str]:
+        """The schema consensus is taken on: the first, in sorted order, that
+        anyone answered. Sorted, so every annotator is compared on the same
+        schema whatever order their answers were stored in."""
+        names = {name for ua in item.annotations.values()
+                 for name, val in ua.items() if val is not None}
+        return min(names) if names else None
+
+    def _get_consensus_label(self, item: AdjudicationItem,
+                             schema_name: Optional[str] = None) -> Optional[str]:
         """
-        Get the majority/consensus label for an item across the first schema.
+        The strict majority label on one schema, or None when there is none.
 
-        Args:
-            item: The AdjudicationItem
-
-        Returns:
-            The most common label value as a string, or None
+        A tied vote has no consensus. ``Counter.most_common`` used to break
+        the tie by insertion order, which follows set iteration, so with two
+        disagreeing annotators -- the usual queue item -- the "consensus" was
+        whoever iterated first, and flipped with the hash seed.
         """
         if not item.annotations:
             return None
-
-        # Use the first schema that has values
-        for user_annots in item.annotations.values():
-            for schema_name in user_annots:
-                # Collect all values for this schema
-                values = []
-                for ua in item.annotations.values():
-                    val = ua.get(schema_name)
-                    if val is not None:
-                        if isinstance(val, dict):
-                            # Multiselect: use frozenset representation
-                            selected = sorted(
-                                k for k, v in val.items()
-                                if v is True or v == "true" or v == 1
-                            )
-                            values.append(", ".join(selected) if selected else str(val))
-                        else:
-                            values.append(str(val))
-
-                if values:
-                    counter = Counter(values)
-                    return counter.most_common(1)[0][0]
-
-        return None
+        if schema_name is None:
+            schema_name = self._consensus_schema(item)
+        if schema_name is None:
+            return None
+        values = [self._label_string(ua[schema_name])
+                  for ua in item.annotations.values()
+                  if ua.get(schema_name) is not None]
+        if not values:
+            return None
+        ranked = Counter(values).most_common(2)
+        if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+            return None
+        return ranked[0][0]
 
     # ------------------------------------------------------------------
     # Phase 3: Behavioral signal analysis
@@ -967,26 +1205,16 @@ class AdjudicationManager:
             if user_id not in item.annotations:
                 continue
 
-            consensus = self._get_consensus_label(item)
+            schema_name = self._consensus_schema(item)
+            consensus = self._get_consensus_label(item, schema_name)
             if consensus is None:
                 continue
-
-            user_annots = item.annotations[user_id]
-            # Check the first schema
-            for schema_name, val in user_annots.items():
-                if isinstance(val, dict):
-                    selected = sorted(
-                        k for k, v in val.items()
-                        if v is True or v == "true" or v == 1
-                    )
-                    user_label = ", ".join(selected) if selected else str(val)
-                else:
-                    user_label = str(val)
-
-                if user_label == consensus:
-                    agree_count += 1
-                total_count += 1
-                break  # Only check first schema
+            val = item.annotations[user_id].get(schema_name)
+            if val is None:
+                continue
+            if self._label_string(val) == consensus:
+                agree_count += 1
+            total_count += 1
 
         if total_count < 3:
             return None
@@ -1126,7 +1354,7 @@ class AdjudicationManager:
         scheme_names = [s.get("name", "") for s in annotation_schemes]
         results = []
 
-        for instance_id, item in ism.instance_id_to_instance.items():
+        for instance_id, item in ism.iter_items():
             instance_id_str = str(instance_id)
             result = {
                 "instance_id": instance_id_str,
@@ -1142,6 +1370,8 @@ class AdjudicationManager:
                 result["adjudicator"] = decision.adjudicator_id
                 result["confidence"] = decision.confidence
                 result["provenance"] = decision.source
+                if decision.source_origins:
+                    result["source_origins"] = decision.source_origins
                 results.append(result)
                 continue
 
@@ -1165,7 +1395,8 @@ class AdjudicationManager:
                     instance_id_str, {}
                 )
                 if labels:
-                    annotations[user_id] = self._serialize_labels(labels)
+                    annotations[user_id] = self._serialize_labels(
+                        labels, user_state, instance_id_str)
 
             if not annotations:
                 continue
@@ -1189,7 +1420,24 @@ class AdjudicationManager:
 
             if is_unanimous and unanimous_labels:
                 result["labels"] = unanimous_labels
-                result["source"] = "unanimous"
+                # Four tools agreeing is not unanimity in the human sense.
+                # Pipelines that share a reference database make the same
+                # mistake together, so their agreement is evidence about their
+                # inputs rather than about the answer. A study with no declared
+                # machine rater keeps the value it has always written, because
+                # renaming it for everyone would break the export contract for
+                # projects this feature does not concern.
+                from potato.annotator_origin import is_machine
+                kinds = {
+                    "machine" if is_machine(usm.get_user_state(u)) else "human"
+                    for u in annotations
+                }
+                if kinds == {"human"}:
+                    result["source"] = "unanimous"
+                elif kinds == {"machine"}:
+                    result["source"] = "unanimous_machine"
+                else:
+                    result["source"] = "unanimous_mixed"
                 result["num_annotators"] = len(annotators)
                 results.append(result)
             else:
@@ -1222,3 +1470,100 @@ def clear_adjudication_manager():
     global _ADJUDICATION_MANAGER
     with _ADJUDICATION_LOCK:
         _ADJUDICATION_MANAGER = None
+
+
+# ---------------------------------------------------------------------------
+# Blind adjudication
+# ---------------------------------------------------------------------------
+
+#: Keys in an AdjudicationItem payload that are keyed by annotator id.
+# ``annotator_origins`` is keyed by user id like the rest. Left out of this
+# list, it sent the blinded adjudicator the real id of every declared machine.
+_ANNOTATOR_KEYED = ("annotations", "span_annotations", "behavioral_data",
+                    "annotator_origins")
+
+
+def _answer_set(value: Any) -> frozenset:
+    """A label answer as the set of labels it selects, for comparison.
+
+    Annotators' answers arrive as ``{label: True}``; a decision holds a bare
+    label, a list of labels, or the same dict. Anything else (a number, free
+    text) compares as its string.
+    """
+    if value is None or value == "" or value == [] or value == {}:
+        return frozenset()
+    if isinstance(value, dict):
+        return frozenset(str(k) for k, v in value.items() if v not in (False, None, "", 0))
+    if isinstance(value, (list, tuple, set)):
+        return frozenset(str(v) for v in value)
+    return frozenset([str(value)])
+
+
+def annotator_aliases(instance_id: str, user_ids) -> Dict[str, str]:
+    """Map each annotator to a display alias for one item.
+
+    ``show_annotator_names: false`` exists so the adjudicator's judgment is not
+    coloured by who produced which answer. It was applied only in the browser
+    (``config.show_annotator_names ? userId : 'Annotator'``) while both API
+    endpoints shipped the addresses, so the blind came off in the network tab
+    -- and the adjudicator is simultaneously the party being blinded and the
+    party holding the session.
+
+    The alias is stable for the item, because the panes group answers by
+    annotator and a decision may be submitted, reloaded and revised. It is
+    ordered by a hash of ``(instance_id, user_id)`` rather than by sorting,
+    because sorted addresses put the same person first on every item and leak
+    the alphabet.
+    """
+    ordered = sorted(
+        (str(u) for u in user_ids),
+        key=lambda u: hashlib.sha256(
+            f"{instance_id}\x00{u}".encode("utf-8")).hexdigest())
+    return {user_id: f"Annotator {n}"
+            for n, user_id in enumerate(ordered, start=1)}
+
+
+def blind_item_dict(item_dict: Dict[str, Any],
+                    aliases: Dict[str, str]) -> Dict[str, Any]:
+    """Re-key an item payload onto aliases, dropping any real id."""
+    result = dict(item_dict)
+    for key in _ANNOTATOR_KEYED:
+        section = result.get(key)
+        if isinstance(section, dict):
+            result[key] = {aliases.get(user_id, "Annotator"): value
+                           for user_id, value in section.items()}
+    return result
+
+
+def blind_annotator_signals(signals: Dict[str, Any],
+                            aliases: Dict[str, str]) -> Dict[str, Any]:
+    """Re-key annotator signals, including the ``user_id`` inside each value.
+
+    The address was stated twice -- as the key and again in the body -- so
+    re-keying alone would have left it on the wire.
+    """
+    blinded = {}
+    for user_id, signal in signals.items():
+        alias = aliases.get(user_id, "Annotator")
+        if isinstance(signal, dict):
+            signal = dict(signal)
+            if "user_id" in signal:
+                signal["user_id"] = alias
+        blinded[alias] = signal
+    return blinded
+
+
+def unblind_user_id(value: Any, aliases: Dict[str, str]) -> Any:
+    """Turn an alias back into the real annotator id.
+
+    The adjudication UI records geometry decisions as ``{annotator, idx}``
+    references, so whatever the API called an annotator comes back on submit.
+    Without this the picks resolve against nothing and the adjudicator's chosen
+    boxes are silently dropped from the stored decision.
+    """
+    if not isinstance(value, str):
+        return value
+    for real_id, alias in aliases.items():
+        if alias == value:
+            return real_id
+    return value

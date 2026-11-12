@@ -21,7 +21,11 @@ class PairwiseDisplay(BaseDisplay):
     name = "pairwise"
     required_fields = ["key"]
     optional_fields = {
-        "cell_width": "50%",
+        # "auto" divides the row evenly among however many items there are.
+        # A hardcoded 50% was the old default and it was only ever right for
+        # two items -- three or more overflowed, and even two wrapped, because
+        # 50% + 50% plus the flex gap is wider than the row.
+        "cell_width": "auto",
         "show_labels": True,
         "labels": None,  # Custom labels like ["Option A", "Option B"]
         "vertical_on_mobile": True,
@@ -47,7 +51,7 @@ class PairwiseDisplay(BaseDisplay):
 
         # Get display options
         options = self.get_display_options(field_config)
-        cell_width = options.get("cell_width", "50%")
+        cell_width = options.get("cell_width", "auto")
         show_labels = options.get("show_labels", True)
         custom_labels = options.get("labels")
         vertical_on_mobile = options.get("vertical_on_mobile", True)
@@ -65,7 +69,19 @@ class PairwiseDisplay(BaseDisplay):
 
         # Calculate cell width based on number of items
         if cell_width == "auto":
-            cell_width = f"{100 / len(items)}%"
+            cell_width = f"{100 / len(items):.6g}%"
+
+        # The cells sit in a flex row with a gap between them, so N cells at
+        # 100/N% each are collectively wider than the row and the last one wraps
+        # to its own line -- which is how a side-by-side display ended up
+        # stacked at every viewport width. Each cell gives back its share of the
+        # gutter. Only percentages are adjusted: an absolute width is what the
+        # author asked for, verbatim.
+        gap_share = (len(items) - 1) / len(items)
+        if cell_width.endswith("%") and gap_share:
+            cell_width = (
+                f"calc({cell_width} - var(--pairwise-gap, 16px) * {gap_share:.6g})"
+            )
 
         # Build HTML for each cell
         cell_html_list = []
@@ -140,11 +156,26 @@ class PairwiseDisplay(BaseDisplay):
         if custom_labels and len(custom_labels) >= len(items):
             return custom_labels[:len(items)]
 
+        # A label carried in the DATA. `{"left": {"label": "Model A", "text":
+        # ...}}` is the natural way to write a comparison whose sides differ
+        # per item, and it was ignored: labels came only from
+        # display_options.labels, which is one fixed pair for the whole study,
+        # so every cell read "A" and "B" whatever the data said.
+        from_data = [
+            (item.get("label") or item.get("name") or item.get("title") or "")
+            if isinstance(item, dict) else ""
+            for item in items
+        ]
+        if all(from_data):
+            return [str(label) for label in from_data]
+
         # Default labels
         if len(items) == 2:
-            return ["A", "B"]
+            defaults = ["A", "B"]
         else:
-            return [f"Option {i + 1}" for i in range(len(items))]
+            defaults = [f"Option {i + 1}" for i in range(len(items))]
+        # Partial: keep each item's own label where it has one.
+        return [str(from_data[i]) or defaults[i] for i in range(len(items))]
 
     def _render_item(self, item: Any) -> str:
         """
@@ -165,7 +196,8 @@ class PairwiseDisplay(BaseDisplay):
             return escaped.replace('\n', '<br>')
 
         if isinstance(item, dict):
-            # Check for common patterns
+            # Check for common patterns. `label`/`name`/`title` are consumed by
+            # _get_labels, so they must not also be printed into the cell body.
             if "text" in item:
                 text = str(item["text"])
                 escaped = html.escape(text)

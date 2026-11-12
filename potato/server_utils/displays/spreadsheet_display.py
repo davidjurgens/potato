@@ -18,9 +18,38 @@ from typing import Dict, Any, List, Optional
 import html
 import logging
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length, display_text
+from potato.server_utils.html_sanitizer import strip_active_content
 
 logger = logging.getLogger(__name__)
+
+
+def _column_union(rows) -> list:
+    """Every column any row has, in the order it first appears.
+
+    Columns used to come from row 0 alone, and every row was then projected
+    onto them: `[row.get(h, "") for h in headers]`. A key that first appeared
+    later was dropped, values and all, with no warning and no log line.
+
+    The shape this hits is a JSON-lines export that omits a field when it is
+    empty, which is what most APIs and `to_json(orient="records")` produce.
+    Measured on a three-row table whose second row carried a RETRACTION_NOTE
+    the first did not: the rendered table read country/year/cases over all
+    three rows, well-formed, and the cell saying the figures were withdrawn was
+    not in the `<table>` at all.
+
+    Three rows is the worst case for noticing -- with row 0 sparse you lose a
+    column from every later row and the table still looks complete.
+    """
+    headers, seen = [], set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                headers.append(key)
+    return headers
 
 
 class SpreadsheetDisplay(BaseDisplay):
@@ -36,13 +65,23 @@ class SpreadsheetDisplay(BaseDisplay):
     optional_fields = {
         "annotation_mode": "row",    # "row", "cell", or "range"
         "show_headers": True,        # Show column headers
+        # A list-of-lists carries its header the way a CSV does: as the first
+        # row. There was no way to say so, so `show_headers: true` had nothing
+        # to act on and the header line was rendered as data row 1. Opt-in
+        # rather than inferred, because a wrong guess here silently promotes a
+        # real row out of the data.
+        "header_row": False,         # First row of a list-of-lists is the header
         "max_height": 400,           # Max container height
         "max_width": None,           # Max container width
         "striped": True,             # Alternating row colors
         "hoverable": True,           # Highlight row on hover
         "sortable": False,           # Enable column sorting
         "filterable": False,         # Enable column filtering
-        "selectable": True,          # Enable row/cell selection
+        # Off by default. The selection is only emitted as a DOM event that
+        # nothing stores, so on by default it put row checkboxes on every
+        # read-only table (an agent trace's "Trace Info" metadata, say) that
+        # an annotator could tick and then lose on the next item.
+        "selectable": False,         # Show row/cell selection controls
         "compact": False,            # Compact table styling
         # New styling options
         "border_style": "default",   # "default", "bordered", "minimal", "rounded", "none"
@@ -65,7 +104,9 @@ class SpreadsheetDisplay(BaseDisplay):
             List of validation error messages (empty if valid)
         """
         errors = super().validate_config(field_config)
-        options = field_config.get("display_options", {})
+        # Through the resolver, so an option written flat on the field is
+        # validated too rather than silently skipping these checks.
+        options = self.get_display_options(field_config)
 
         # Validate border_style
         border_style = options.get("border_style", "default")
@@ -113,20 +154,37 @@ class SpreadsheetDisplay(BaseDisplay):
         if isinstance(data, dict):
             # Pre-extracted FormatOutput data
             if "rendered_html" in data:
-                return self._wrap_content(data["rendered_html"], options, field_key)
+                return self._wrap_content(strip_active_content(data["rendered_html"]), options, field_key)
 
-            # Extract from metadata
+            # Extract from metadata. `columns` is accepted alongside
+            # `headers`: {columns, rows} is the obvious spelling and the one a
+            # data file tends to use, and it used to render the rows with no
+            # header row at all -- with `show_headers: true` set and nothing
+            # for it to act on.
             rows = data.get("rows", [])
-            headers = data.get("headers", data.get("metadata", {}).get("headers", []))
+            headers = (data.get("headers")
+                       or data.get("columns")
+                       or data.get("metadata", {}).get("headers")
+                       or data.get("metadata", {}).get("columns")
+                       or [])
+            # {columns, rows: [{col: value}]} -- rows keyed by column name
+            # rather than positional.
+            if rows and isinstance(rows[0], dict):
+                if not headers:
+                    headers = _column_union(rows)
+                rows = [[row.get(h, "") for h in headers] for row in rows]
         elif isinstance(data, list):
             if data and isinstance(data[0], dict):
                 # List of dictionaries
-                headers = list(data[0].keys()) if data else []
+                headers = _column_union(data)
                 rows = [[row.get(h, "") for h in headers] for row in data]
             else:
                 # List of lists
                 rows = data
                 headers = []
+                if data and options.get("header_row"):
+                    headers = [str(c) for c in data[0]]
+                    rows = data[1:]
         else:
             return f'<div class="spreadsheet-error">Unsupported data format</div>'
 
@@ -148,10 +206,10 @@ class SpreadsheetDisplay(BaseDisplay):
         max_width = options.get("max_width")
 
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {css_length(max_height)}")
             styles.append("overflow-y: auto")
         if max_width:
-            styles.append(f"max-width: {max_width}px")
+            styles.append(f"max-width: {css_length(max_width)}")
             styles.append("overflow-x: auto")
 
         style_str = "; ".join(styles) if styles else ""
@@ -261,7 +319,8 @@ class SpreadsheetDisplay(BaseDisplay):
                 )
 
             for col_idx, cell in enumerate(row):
-                cell_value = str(cell) if cell is not None else ""
+                # A nested object in a cell rendered as `{'k': 'v'}`.
+                cell_value = display_text(cell)
                 cell_classes = ["spreadsheet-cell"]
                 if mode == "cell":
                     cell_classes.append("selectable-cell")
@@ -327,7 +386,7 @@ class SpreadsheetDisplay(BaseDisplay):
         options = self.get_display_options(field_config)
 
         attrs["annotation-mode"] = options.get("annotation_mode", "row")
-        attrs["selectable"] = str(options.get("selectable", True)).lower()
+        attrs["selectable"] = str(options.get("selectable", False)).lower()
 
         return attrs
 

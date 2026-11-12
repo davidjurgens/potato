@@ -16,7 +16,7 @@
 .spreadsheet-display {
     position: relative;
     border-radius: var(--radius, 0.5rem);
-    background-color: var(--card, #ffffff);
+    background-color: var(--card, light-dark(#ffffff, #1a1a1a));
     overflow: auto;
     resize: vertical;
 }
@@ -30,7 +30,7 @@
     border-collapse: collapse;
     font-size: 0.875rem;
     line-height: 1.5;
-    background-color: var(--card, #ffffff);
+    background-color: var(--card, light-dark(#ffffff, #1a1a1a));
 }
 
 .spreadsheet-table th,
@@ -42,15 +42,15 @@
 
 /* Default border style */
 .spreadsheet-table {
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-table th {
-    border-bottom: 2px solid var(--border, #e4e4e7);
+    border-bottom: 2px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-table td {
-    border-bottom: 1px solid var(--border, #e4e4e7);
+    border-bottom: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 /* ==========================================================================
@@ -59,12 +59,12 @@
 
 /* Bordered - all cells have visible borders */
 .spreadsheet-table.border-bordered {
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-table.border-bordered th,
 .spreadsheet-table.border-bordered td {
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 /* Minimal - only horizontal lines */
@@ -74,12 +74,12 @@
 
 .spreadsheet-table.border-minimal th {
     border: none;
-    border-bottom: 2px solid var(--border, #e4e4e7);
+    border-bottom: 2px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-table.border-minimal td {
     border: none;
-    border-bottom: 1px solid var(--border, #e4e4e7);
+    border-bottom: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-table.border-minimal tbody tr:last-child td {
@@ -88,7 +88,7 @@
 
 /* Rounded - rounded corners with border */
 .spreadsheet-display.border-rounded {
-    border: 1px solid var(--border, #e4e4e7);
+    border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
     border-radius: var(--radius, 0.5rem);
     overflow: hidden;
 }
@@ -100,7 +100,7 @@
 
 .spreadsheet-table.border-rounded th,
 .spreadsheet-table.border-rounded td {
-    border-bottom: 1px solid var(--border, #e4e4e7);
+    border-bottom: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-table.border-rounded tbody tr:last-child td {
@@ -115,7 +115,7 @@
 }
 
 .spreadsheet-table.border-none th {
-    border-bottom: 1px solid var(--border, #e4e4e7);
+    border-bottom: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 /* ==========================================================================
@@ -125,8 +125,8 @@
 /* Default header style */
 .spreadsheet-table thead th {
     font-weight: 600;
-    color: var(--foreground, #09090b);
-    background-color: var(--muted, #f4f4f5);
+    color: var(--foreground, light-dark(#09090b, #dfdfe4));
+    background-color: var(--muted, light-dark(#f4f4f5, #1f1f21));
     text-transform: none;
     letter-spacing: normal;
 }
@@ -154,8 +154,8 @@
 
 /* Light header */
 .spreadsheet-table.header-light thead th {
-    background-color: var(--light-bg, #f5f7fb);
-    color: var(--foreground, #09090b);
+    background-color: var(--light-bg, light-dark(#f5f7fb, #171b25));
+    color: var(--foreground, light-dark(#09090b, #dfdfe4));
 }
 
 /* Transparent header */
@@ -165,7 +165,7 @@
     text-transform: uppercase;
     font-size: 0.75rem;
     letter-spacing: 0.05em;
-    color: var(--muted-foreground, #71717a);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
 }
 
 /* ==========================================================================
@@ -173,12 +173,12 @@
    ========================================================================== */
 
 .spreadsheet-table.table-striped tbody tr:nth-child(even) {
-    background-color: var(--muted, #f4f4f5);
+    background-color: var(--muted, light-dark(#f4f4f5, #1f1f21));
 }
 
 /* Alternate striping pattern */
 .spreadsheet-table.table-striped-odd tbody tr:nth-child(odd) {
-    background-color: var(--muted, #f4f4f5);
+    background-color: var(--muted, light-dark(#f4f4f5, #1f1f21));
 }
 
 /* ==========================================================================
@@ -186,7 +186,7 @@
    ========================================================================== */
 
 .spreadsheet-table.table-hoverable tbody tr:hover {
-    background-color: var(--accent, #f4f4f5);
+    background-color: var(--accent, light-dark(#f4f4f5, #1f1f21));
     cursor: default;
 }
 
@@ -251,14 +251,14 @@
 .spreadsheet-selection-summary {
     padding: 0.5rem 1rem;
     font-size: 0.8125rem;
-    color: var(--muted-foreground, #71717a);
-    background-color: var(--muted, #f4f4f5);
-    border-top: 1px solid var(--border, #e4e4e7);
+    color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
+    background-color: var(--muted, light-dark(#f4f4f5, #1f1f21));
+    border-top: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
 }
 
 .spreadsheet-selection-summary .selected-count {
     font-weight: 600;
-    color: var(--primary, #6e56cf);
+    color: var(--primary, light-dark(#6e56cf, #b2a8db));
 }
 
 /* ==========================================================================
@@ -273,7 +273,7 @@
 }
 
 .spreadsheet-table th[data-sortable="true"]:hover {
-    background-color: color-mix(in srgb, var(--primary, #6e56cf) 10%, var(--muted, #f4f4f5));
+    background-color: color-mix(in srgb, var(--primary, #6e56cf) 10%, var(--muted, light-dark(#f4f4f5, #1f1f21)));
 }
 
 .spreadsheet-table th[data-sortable="true"]::after {

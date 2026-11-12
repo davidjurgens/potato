@@ -1,0 +1,142 @@
+{
+  "user_id": "alice",
+  "instance_id_ordering": [
+    "r1",
+    "r2",
+    "r3",
+    "r4",
+    "r5",
+    "r6"
+  ],
+  "current_instance_index": 0,
+  "current_phase_and_page": [
+    "annotation",
+    "annotation"
+  ],
+  "completed_phase_and_pages": [],
+  "max_assignments": 6,
+  "instance_id_to_behavioral_data": {},
+  "instance_id_to_label_to_value": {
+    "r1": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "positive"
+        },
+        "true"
+      ],
+      [
+        {
+          "schema": "aspects",
+          "name": "acting"
+        },
+        "true"
+      ],
+      [
+        {
+          "schema": "aspects",
+          "name": "plot"
+        },
+        "true"
+      ]
+    ],
+    "r2": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "true"
+      ],
+      [
+        {
+          "schema": "aspects",
+          "name": "plot"
+        },
+        "true"
+      ]
+    ],
+    "r3": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "neutral"
+        },
+        "true"
+      ],
+      [
+        {
+          "schema": "aspects",
+          "name": "visuals"
+        },
+        "true"
+      ],
+      [
+        {
+          "schema": "aspects",
+          "name": "music"
+        },
+        "true"
+      ]
+    ],
+    "r4": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "positive"
+        },
+        "true"
+      ]
+    ],
+    "r5": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "true"
+      ]
+    ],
+    "r6": [
+      [
+        {
+          "schema": "sentiment",
+          "name": "negative"
+        },
+        "true"
+      ],
+      [
+        {
+          "schema": "aspects",
+          "name": "acting"
+        },
+        "true"
+      ]
+    ]
+  },
+  "instance_id_to_span_to_value": {},
+  "phase_to_page_to_label_to_value": {},
+  "phase_to_page_to_span_to_value": {},
+  "training_state": {
+    "completed_questions": {},
+    "total_correct": 0,
+    "total_attempts": 0,
+    "total_mistakes": 0,
+    "passed": false,
+    "failed": false,
+    "current_question_index": 0,
+    "training_instances": [],
+    "show_feedback": false,
+    "feedback_message": "",
+    "allow_retry": false,
+    "max_mistakes": -1,
+    "max_mistakes_per_question": -1,
+    "category_scores": {}
+  },
+  "qualified_categories": [],
+  "category_qualification_scores": {},
+  "instance_id_to_keyword_highlight_state": {},
+  "instance_id_to_link_to_value": {},
+  "instance_id_to_event_to_value": {},
+  "crowd_metadata": {}
+}

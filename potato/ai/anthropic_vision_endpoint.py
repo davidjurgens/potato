@@ -1,13 +1,13 @@
 """
 Anthropic Vision AI Endpoint
 
-This module provides integration with Anthropic's Claude models for visual
+Integration with Anthropic's Claude models for visual
 analysis using the image content block format.
 """
 
 import base64
 import logging
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -36,7 +36,7 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
     Configuration options:
     - model: Model to use (default: claude-sonnet-4-20250514)
     - api_key: Anthropic API key (can also use ANTHROPIC_API_KEY env var)
-    - max_tokens: Maximum response tokens (default: 1024)
+    - max_tokens: Maximum response tokens (default: 800)
     - temperature: Sampling temperature (default: 0.1)
     """
 
@@ -49,7 +49,15 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
         text_classification=True,
         image_classification=True,
         rationale_generation=True,
-        keyword_extraction=False,  # Keywords don't apply to images
+        # True, and gated per item rather than per endpoint. These are
+        # language models; they extract keywords from text as well as their
+        # text-only siblings do. `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`, so declaring False here
+        # said "no keywords, ever" -- and the capability filter runs per item,
+        # so on a text-only task through a vision endpoint the Keyword button
+        # was simply absent and only two of the three assistants were
+        # reachable.
+        keyword_extraction=True,
     )
 
     def _initialize_client(self) -> None:
@@ -58,7 +66,7 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
             import anthropic
         except ImportError:
             raise AIEndpointRequestError(
-                "anthropic package is required. Install it with: pip install anthropic"
+                "anthropic package is required. Install it with: pip install 'potato-annotation[ai]'"
             )
 
         import os
@@ -78,7 +86,7 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
         """Get the default Anthropic model."""
         return DEFAULT_MODEL
 
-    def query(self, prompt: str, output_format: Type[BaseModel]) -> Any:
+    def query(self, prompt: str, output_format: Optional[Type[BaseModel]] = None) -> Any:
         """
         Standard text query without images.
 
@@ -91,6 +99,15 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
         """
         try:
             # Add JSON instruction to prompt
+            if output_format is None or not hasattr(output_format, "model_json_schema"):
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                self._warn_if_truncated(response.stop_reason)
+                return response.content[0].text
+
             json_prompt = f"""{prompt}
 
 Please respond with valid JSON matching this schema:
@@ -102,11 +119,43 @@ Please respond with valid JSON matching this schema:
                 messages=[{"role": "user", "content": json_prompt}],
             )
 
+            self._warn_if_truncated(response.stop_reason)
             content = response.content[0].text
             return self.parseStringToJson(content)
 
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic query failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn text chat, with the system prompt passed natively.
+
+        The base class's fallback called query(prompt) without an
+        output_format and failed on every message.
+        """
+        try:
+            system_parts = []
+            api_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_parts.append(msg["content"])
+                else:
+                    api_messages.append({"role": msg["role"],
+                                         "content": msg["content"]})
+
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": api_messages,
+            }
+            if system_parts:
+                kwargs["system"] = "\n\n".join(system_parts)
+
+            response = self.client.messages.create(**kwargs)
+            self._warn_if_truncated(response.stop_reason, where="chat reply")
+            return response.content[0].text
+        except Exception as e:
+            raise AIEndpointRequestError(f"Anthropic vision chat request failed: {e}")
 
     def query_with_image(
         self,
@@ -156,6 +205,7 @@ Only return the JSON object, no other text."""
                 messages=[{"role": "user", "content": content}],
             )
 
+            self._warn_if_truncated(response.stop_reason, where="image response")
             response_content = response.content[0].text
             logger.debug(f"Anthropic vision response: {response_content[:500] if response_content else 'empty'}")
 
@@ -210,6 +260,7 @@ Only return the JSON object, no other text."""
                 kwargs["system"] = system
 
             response = self.client.messages.create(**kwargs)
+            self._warn_if_truncated(response.stop_reason, where="chat reply")
             return response.content[0].text
 
         except Exception as e:

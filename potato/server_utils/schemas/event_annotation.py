@@ -11,7 +11,8 @@ from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
     escape_html_content,
-    generate_tooltip_html
+    generate_tooltip_html,
+    generate_layout_attributes,
 )
 from .span import get_span_color, SPAN_COLOR_PALETTE
 
@@ -54,6 +55,9 @@ def _generate_event_annotation_layout_internal(annotation_scheme, horizontal=Fal
     Returns:
         tuple: (HTML string, key bindings list)
     """
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     scheme_name = annotation_scheme["name"]
     description = annotation_scheme.get("description", "Annotate events with triggers and arguments")
     span_schema = annotation_scheme.get("span_schema", "")
@@ -128,7 +132,7 @@ def _generate_event_annotation_layout_internal(annotation_scheme, horizontal=Fal
     show_labels = visual_display.get("show_labels", True)
 
     schematic = f"""
-    <div id="{escape_html_content(scheme_name)}" class="event-annotation-container annotation-form"
+    <div id="{escape_html_content(scheme_name)}" class="event-annotation-container annotation-form" data-annotation-type="event_annotation" data-schema-name="{escape_html_content(scheme_name)}" {layout_attrs}
          data-annotation-type="event_annotation"
          data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
          data-span-schema="{escape_html_content(span_schema)}"

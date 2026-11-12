@@ -1,6 +1,6 @@
 # Annotation Navigation & Status Indicators
 
-Potato provides navigation tools to help annotators efficiently move through their assigned items, including visual status indicators and skip-to-unannotated navigation buttons.
+Annotators move through their assigned items with previous/next buttons, a status indicator showing whether the current item is labeled, and buttons that skip straight to the next unannotated item.
 
 ## Overview
 
@@ -93,10 +93,11 @@ hide_navbar: true  # Hides the entire navbar including navigation
 
 ### Custom Navigation Layout
 
-For custom navigation layouts, modify the HTML template:
+For a custom layout of the annotation form, point `task_layout` at your own
+HTML file ([Layout Customization](../configuration/layout_customization.md)):
 
 ```yaml
-html_layout: "path/to/custom_layout.html"
+task_layout: "templates/custom_layout.html"
 ```
 
 ## How Status is Determined

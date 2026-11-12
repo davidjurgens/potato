@@ -263,7 +263,15 @@ class TestSaveUserConfig:
         assert data["username"] == "alice"
         assert _is_salted_hash(data["password"])
 
-    def test_skips_when_default_path_in_memory(self, tmp_path):
+    def test_writes_at_the_default_path_too(self, tmp_path):
+        """An account created at the default path must also survive a restart.
+
+        This used to be skipped: `in_memory` with no explicit
+        `authentication.user_config_path` -- the default, and what every
+        example ships -- wrote nothing, so a self-registered annotator did not
+        exist after a bounce, and the sign-up form then accepted their username
+        with any password and handed over their annotation directory.
+        """
         user_file = tmp_path / "user_config.json"
         user_file.write_text("")
         authenticator = UserAuthenticator(str(user_file), auth_method="in_memory")
@@ -271,8 +279,9 @@ class TestSaveUserConfig:
         authenticator.add_user("alice", "password123")
         authenticator.save_user_config()
 
-        # File should remain empty
-        assert user_file.read_text().strip() == ""
+        data = json.loads(user_file.read_text().strip())
+        assert data["username"] == "alice"
+        assert _is_salted_hash(data["password"])
 
     def test_skips_for_database_method(self, tmp_path):
         """Database backend handles its own persistence."""

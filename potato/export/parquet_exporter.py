@@ -10,13 +10,20 @@ Output files:
     items.parquet       - One row per item with original data fields
 """
 
+import json
 import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
+from .origin_columns import (ORIGIN_COLUMN, engine_fields, engine_in_use, origin_fields,
+                             origin_in_use)
 
 logger = logging.getLogger(__name__)
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _check_pyarrow():
@@ -94,7 +101,8 @@ class ParquetExporter(BaseExporter):
 
             # 2. Write spans.parquet
             if include_spans:
-                span_rows = self._build_span_rows(context.annotations)
+                span_rows = self._build_span_rows(
+                    context.annotations, context, warnings)
                 if span_rows:
                     span_path = os.path.join(output_path, "spans.parquet")
                     span_table = pa.Table.from_pylist(span_rows)
@@ -110,6 +118,32 @@ class ParquetExporter(BaseExporter):
                     pq.write_table(items_table, items_path, compression=compression)
                     files_written.append(items_path)
 
+            # 4. Write phase_responses.parquet
+            #
+            # csv and jsonl have written this since F-047; parquet did not, and
+            # said nothing either way, so a study that collected consent and a
+            # post-study survey handed over neither and the key that was meant
+            # to control it read as honoured. Same predicate and same warning as
+            # the delimited exporters, so the three cannot drift apart again.
+            from potato.export.tabular_exporter import (
+                _phase_exclusion_warning, _should_include_phase_data,
+            )
+
+            phase_rows = []
+            if _should_include_phase_data(context):
+                phase_rows = self._build_phase_rows(context.phase_responses)
+                if phase_rows:
+                    phase_path = os.path.join(output_path,
+                                              "phase_responses.parquet")
+                    phase_table = pa.Table.from_pylist(phase_rows)
+                    pq.write_table(phase_table, phase_path,
+                                   compression=compression)
+                    files_written.append(phase_path)
+            else:
+                excluded = _phase_exclusion_warning(context)
+                if excluded:
+                    warnings.append(excluded)
+
             return ExportResult(
                 success=True,
                 format_name=self.format_name,
@@ -119,6 +153,9 @@ class ParquetExporter(BaseExporter):
                     "annotation_rows": len(ann_rows),
                     "span_rows": len(span_rows) if include_spans else 0,
                     "item_rows": len(item_rows) if include_items and context.items else 0,
+                    "phase_response_rows": len(phase_rows),
+                    "phase_responses_excluded": (
+                        0 if phase_rows else len(context.phase_responses or [])),
                     "compression": compression,
                 },
             )
@@ -136,38 +173,199 @@ class ParquetExporter(BaseExporter):
                                 schema_map: Dict[str, dict]) -> List[dict]:
         """Build flat row dicts for the annotations table."""
         rows = []
+        with_origin = origin_in_use(annotations)
+        with_engine = engine_in_use(annotations)
         for ann in annotations:
             row = {
                 "instance_id": ann.get("instance_id", ""),
                 "user_id": ann.get("user_id", ""),
             }
+            if with_origin:
+                row.update(origin_fields(ann))
+            if with_engine:
+                row.update(engine_fields(ann))
 
             labels = ann.get("labels", {})
             for schema_name, value in labels.items():
                 schema_config = schema_map.get(schema_name, {})
                 schema_type = schema_config.get("annotation_type", "")
-                row[schema_name] = self._flatten_value(value, schema_type)
+                composite = self._composite_columns(value, schema_type)
+                if composite is None:
+                    row[schema_name] = self._flatten_value(value, schema_type)
+                else:
+                    for sub_name, sub_value in composite.items():
+                        column = (f"{schema_name}.{sub_name}" if sub_name
+                                  else schema_name)
+                        row[column] = sub_value
 
             rows.append(row)
+
+        self._unify_mixed_columns(rows)
+        self._align_columns(rows)
         return rows
 
+    @staticmethod
+    def _align_columns(rows: List[dict]) -> None:
+        """Give every row every column, in first-appearance order.
+
+        ``pa.Table.from_pylist`` infers the schema from the **first row alone**
+        and silently drops any key that row does not have. So a schema nobody
+        answered on the first (instance, user) pair was missing from the entire
+        file -- not null, absent -- however many later rows held it. An
+        optional textbox, a conditional scheme behind ``display_logic``, or an
+        item field only some items carry all hit it.
+
+        Filling the union with None also makes the per-row sub-columns that
+        ``_flatten_composite`` emits safe: a multirate row a given annotator
+        skipped is a null in its column rather than a missing column.
+        """
+        columns: List[str] = []
+        seen = set()
+        for row in rows:
+            for key in row:
+                if key not in seen:
+                    seen.add(key)
+                    columns.append(key)
+        for row in rows:
+            for key in columns:
+                row.setdefault(key, None)
+
+    @staticmethod
+    def _unify_mixed_columns(rows: List[dict]) -> None:
+        """Force any column holding both numbers and strings to strings.
+
+        Parquet columns are typed, and `pa.Table.from_pylist` raises on the
+        first value that does not fit the type it inferred -- which aborts the
+        whole export, not just that column. A labelled scale can genuinely mix:
+        `labels: [1, 2, 3, "Not applicable"]` flattens to three floats and a
+        string. Choosing the shape per column rather than per value keeps the
+        file writable and keeps every answer in it.
+        """
+        column_types: Dict[str, set] = {}
+        for row in rows:
+            for key, value in row.items():
+                if value is None:
+                    continue
+                kind = ("number" if isinstance(value, (int, float))
+                        and not isinstance(value, bool) else
+                        "string" if isinstance(value, str) else None)
+                if kind:
+                    column_types.setdefault(key, set()).add(kind)
+
+        mixed = {k for k, kinds in column_types.items() if len(kinds) > 1}
+        if not mixed:
+            return
+        for row in rows:
+            for key in mixed:
+                value = row.get(key)
+                if value is None:
+                    continue
+                # `3` came from a scale point, not a measurement: render it "3",
+                # not "3.0", so the column reads the way the labels do.
+                if isinstance(value, float) and value.is_integer():
+                    row[key] = str(int(value))
+                else:
+                    row[key] = str(value)
+
     def _flatten_value(self, value: Any, schema_type: str) -> Any:
-        """Flatten an annotation value to a Parquet-compatible type."""
+        """Flatten an annotation value to a Parquet-compatible type.
+
+        Routing on the declared type alone is not enough, because one declared
+        type has two stored shapes. A `likert` with an explicit `labels:` list
+        renders as a radio group -- the generator says so at boot -- and stores
+        its answer categorically, `{"Moderate": "Moderate"}`. Sent to
+        `_flatten_numeric` that yields None on every row, and the column is
+        present and entirely null, which reads as "nobody answered this" rather
+        than "the exporter could not represent it". The shape the bundled
+        full-study skeleton recommends is exactly this one.
+        """
         if schema_type in ("radio", "select"):
             return self._flatten_categorical(value)
         elif schema_type in ("likert", "slider", "number"):
-            return self._flatten_numeric(value)
+            numeric = self._flatten_numeric(value)
+            if numeric is not None:
+                return numeric
+            # A labelled scale is stored as a label. Better the label than a
+            # null; the CSV exporter and /admin/iaa both keep it.
+            return self._flatten_categorical(value)
         elif schema_type == "multiselect":
             return self._flatten_multiselect(value)
         elif schema_type == "text":
-            if isinstance(value, str):
-                return value
-            return str(value) if value is not None else None
+            return self._flatten_text(value)
         else:
             # Generic fallback
             if isinstance(value, dict):
                 return self._flatten_categorical(value)
             return value
+
+    # The types whose stored shape this exporter knows how to reduce to one
+    # scalar. Everything else reaches `_composite_columns` first.
+    _SCALAR_TYPES = frozenset({
+        "radio", "select", "likert", "slider", "number", "multiselect", "text",
+    })
+
+    @classmethod
+    def _composite_columns(cls, value: Any,
+                           schema_type: str) -> Optional[Dict[str, Any]]:
+        """Sub-columns for an answer that is several answers, or None.
+
+        `_flatten_categorical` reads a stored dict as "the selected label is
+        one of the keys" and returns one of them. That is true for a radio
+        (`{"positive": True}`) and for a labelled scale (`{"5": "5"}`), where
+        the key *is* the answer. It is false for every scheme that stores
+        several sub-answers keyed by row, option or step -- multirate keys by
+        row name, constant_sum and soft_label by option, image_annotation by
+        the `_data` blob, and the agent-trace schemes by step index. For those,
+        the value carries the answer and the key merely names the question, so
+        returning a key returned the *question* and dropped every answer:
+        a three-row multirate exported as the string "Reproducibility".
+
+        Fifty-four of the sixty-one registered types take that branch, and the
+        ones that survived it did so by coincidence -- `confidence` stores
+        `{"5": "5"}`, so the key happens to be the value.
+
+        The test is therefore "do the keys carry the answer": a single key that
+        equals its own value, or that holds a selection flag, is categorical.
+        Anything else is expanded to `schema.key` columns, which is the shape
+        the csv and jsonl exporters have always written for the same data.
+        """
+        if schema_type in cls._SCALAR_TYPES:
+            return None
+        if not isinstance(value, dict) or not value:
+            return None
+        if len(value) == 1:
+            (key, only), = value.items()
+            if isinstance(only, bool) or only is None:
+                return None
+            if isinstance(only, str):
+                if only == str(key) or only.strip().lower() in (
+                        "", "true", "false", "on", "off"):
+                    return None
+            elif str(only) == str(key):
+                return None
+        return {str(k): (v if not isinstance(v, (dict, list))
+                         else _json_dumps(v))
+                for k, v in value.items()}
+
+    def _flatten_text(self, value: Any) -> Optional[str]:
+        """The typed text, not the container it arrived in.
+
+        A textbox stores `{"text_box": "what they wrote"}`; `str()` on that
+        gives the repr of a dict, so every free-text column came out as
+        `{'text_box': 'alice r06'}`.
+        """
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            parts = [str(v) for v in value.values()
+                     if v is not None and str(v) != ""]
+            return "\n".join(parts) if parts else None
+        if isinstance(value, (list, tuple)):
+            parts = [str(v) for v in value if v is not None and str(v) != ""]
+            return "\n".join(parts) if parts else None
+        return str(value)
 
     def _flatten_categorical(self, value: Any) -> Optional[str]:
         """Extract the selected label from a categorical annotation."""
@@ -211,13 +409,104 @@ class ParquetExporter(BaseExporter):
             return [str(v) for v in value]
         return None
 
-    def _build_span_rows(self, annotations: List[dict]) -> List[dict]:
-        """Build flat row dicts for the spans table."""
+    def _build_phase_rows(self, phase_responses: List[dict]) -> List[dict]:
+        """Phase/survey rows, columns matching the csv and jsonl files.
+
+        Every row carries every column so the parquet schema is stable even
+        when only some rows have `hidden` or `superseded`.
+        """
+        columns = ["user_id", "phase", "page", "sequence", "schema",
+                   "label_name", "value"]
+        for optional in ("hidden", "superseded"):
+            if any(optional in row for row in phase_responses or []):
+                columns.append(optional)
+
         rows = []
+        for response in phase_responses or []:
+            row = {}
+            for column in columns:
+                value = response.get(column)
+                # `value` and `sequence` are the only ones that vary in type;
+                # a typed column cannot hold both, so store them as text.
+                row[column] = None if value is None else (
+                    value if isinstance(value, (bool, int)) and column != "value"
+                    else str(value))
+            rows.append(row)
+        return rows
+
+    #: Stored span key -> the column it is written to, where the two differ.
+    #: Renames and aliases both, because to the completeness check they are the
+    #: same thing: the key reaches the file under another name.
+    #:
+    #: `id` becomes `span_id` so it does not read as a generic row id beside
+    #: `instance_id` and `user_id`. `name`/`label`/`title` are the three
+    #: spellings the label has been written under and all feed the `label`
+    #: column; `value`/`text` likewise feed `text`.
+    #:
+    #: `label` and `value` are read by `_build_span_rows` as fallbacks but are
+    #: NOT produced by `SpanAnnotation.to_dict()` today. They were in the drop
+    #: list, which was wrong twice over: they are not dropped, and an entry in
+    #: a drop list with no subject is a standing exemption that activates on
+    #: the day something starts writing that key. Declared here instead, and
+    #: `test_parquet_span_columns.py` drives each one to prove the fallback is
+    #: real rather than remembered.
+    SPAN_KEY_COLUMNS = {
+        "id": "span_id",
+        "name": "label",
+        "label": "label",
+        "title": "title",
+        "value": "text",
+        "text": "text",
+    }
+
+    #: The only key a stored span carries that deliberately gets no column:
+    #: `schema` is the dict key the span is filed under, so it is already the
+    #: `schema_name` column on every row.
+    SPAN_KEYS_NOT_COLUMNS = frozenset({"schema"})
+
+    @classmethod
+    def _span_key_is_placed(cls, key: str, row: dict) -> bool:
+        """Whether a stored span key reaches the exported row."""
+        if key in cls.SPAN_KEYS_NOT_COLUMNS:
+            return True
+        return cls.SPAN_KEY_COLUMNS.get(key, key) in row
+
+    def _build_span_rows(self, annotations: List[dict],
+                         context: Optional["ExportContext"] = None,
+                         warnings: Optional[List[str]] = None) -> List[dict]:
+        """Build flat row dicts for the spans table.
+
+        Both content columns were empty on every row: `label` read a `label`
+        key the stored span does not have -- it is `name` -- and `text` read a
+        key nothing ever writes. So a reader could not even tell which label
+        had been applied without going back to the csv.
+
+        The row used to be seven fixed keys, and everything else a stored span
+        carries was dropped without a word. `target_field` is the one that
+        breaks the file: it says which display field the drag was in, it varies
+        WITHIN a scheme (a scheme records in every span-target field on the
+        page), and nothing else recovers it -- the span id is
+        schema+label+offsets, so two spans over the same words in two fields
+        produce byte-identical rows. A multi-field span study handed over as
+        parquet had silently lost which field every span was drawn in.
+
+        `additional_parts` and `format_coords` are the same failure with more
+        of the annotation missing: a discontinuous span exported as its first
+        range alone, and a PDF span lost its page and box.
+
+        An empty column looks like a bug and an absent column looks like a
+        decision, which is why this went unnoticed through a previous pass over
+        this same builder. `tests/unit/test_parquet_span_columns.py` now fails
+        when the stored shape grows a key this does not place.
+        """
+        rows = []
+        unplaced = set()
+        with_origin = origin_in_use(annotations)
         for ann in annotations:
             instance_id = ann.get("instance_id", "")
             user_id = ann.get("user_id", "")
             spans = ann.get("spans", {})
+            origin_kind = origin_fields(ann)[ORIGIN_COLUMN]
 
             for schema_name, span_list in spans.items():
                 if not isinstance(span_list, list):
@@ -225,15 +514,50 @@ class ParquetExporter(BaseExporter):
                 for span in span_list:
                     if not isinstance(span, dict):
                         continue
-                    rows.append({
+                    text = span.get("text") or span.get("value")
+                    if not isinstance(text, str) and context is not None:
+                        text = context.covered_text(instance_id, span)
+                    row = {
                         "instance_id": instance_id,
                         "user_id": user_id,
                         "schema_name": schema_name,
                         "start": span.get("start"),
                         "end": span.get("end"),
-                        "label": span.get("label", ""),
-                        "text": span.get("text", ""),
-                    })
+                        # The stored span calls it `name`; `label` was always "".
+                        "label": (span.get("name")
+                                  or span.get("label")
+                                  or span.get("title") or ""),
+                        "text": text if isinstance(text, str) else "",
+                        # Which display field the drag was in. Varies within a
+                        # scheme, and unrecoverable from anything else in the file.
+                        "target_field": span.get("target_field") or "",
+                        "title": span.get("title") or "",
+                        "span_id": span.get("id") or "",
+                    }
+                    # Structured extras as JSON, so the column is readable
+                    # without inventing a nested parquet schema per format.
+                    for key in ("format_coords", "additional_parts"):
+                        value = span.get(key)
+                        row[key] = _json_dumps(value) if value else ""
+                    for key in ("kb_id", "kb_source", "kb_label"):
+                        row[key] = span.get(key) or ""
+                    if with_origin:
+                        row[ORIGIN_COLUMN] = origin_kind
+
+                    unplaced.update(
+                        key for key in span
+                        if not self._span_key_is_placed(key, row))
+                    rows.append(row)
+
+        # Said out loud rather than dropped. The whole defect above was a row
+        # builder quietly narrower than the thing it was building rows from.
+        if unplaced and warnings is not None:
+            warnings.append(
+                f"spans.parquet has no column for {sorted(unplaced)}; those "
+                f"keys are on the stored spans and are not in the exported "
+                f"file. Read the csv or jsonl export for them.")
+
+        self._align_columns(rows)
         return rows
 
     def _build_item_rows(self, items: Dict[str, dict]) -> List[dict]:
@@ -245,9 +569,12 @@ class ParquetExporter(BaseExporter):
                 for key, val in item_data.items():
                     # Convert non-primitive types to strings for Parquet compatibility
                     if isinstance(val, (dict, list)):
-                        import json
-                        row[key] = json.dumps(val, ensure_ascii=False)
+                        row[key] = _json_dumps(val)
                     else:
                         row[key] = val
             rows.append(row)
+        # Items are not required to carry identical fields, and the first one
+        # decided the whole schema. See `_align_columns`.
+        self._unify_mixed_columns(rows)
+        self._align_columns(rows)
         return rows

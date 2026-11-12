@@ -39,9 +39,11 @@ class TestHuggingFaceOAuthProvider:
         scopes = hf["client_kwargs"]["scope"]
         assert "openid" in scopes
 
-    def test_scopes_include_email(self):
-        """Email scope needed for user identity."""
+    def test_email_is_not_requested_by_default(self):
+        """A Space grants only the scopes its README lists, and `email` is not
+        among the defaults, so asking for it would fail the sign-in. Identity
+        falls back to the Hugging Face username instead (see
+        tests/unit/test_hf_spaces_signin.py)."""
         from potato.auth_backends.oauth_backend import PROVIDER_CONFIGS
         hf = PROVIDER_CONFIGS["huggingface"]
-        scopes = hf["client_kwargs"]["scope"]
-        assert "email" in scopes
+        assert hf["client_kwargs"]["scope"].split() == ["openid", "profile"]

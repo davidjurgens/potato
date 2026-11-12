@@ -1,15 +1,16 @@
 # Task Assignment
 
-Potato provides flexible task assignment strategies to control how annotation instances are distributed to annotators. This guide covers all available strategies and configuration options.
+Assignment strategies decide which instances each annotator sees and in what order. This page covers every strategy and its configuration.
 
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [Assignment Strategies](#assignment-strategies)
 3. [Configuration](#configuration)
-4. [Legacy Configuration](#legacy-configuration)
-5. [Test Questions](#test-questions)
-6. [Examples](#examples)
+4. [Moving from `automatic_assignment`](#moving-from-automatic_assignment)
+5. [Examples](#examples)
+6. [Surplus annotators](#surplus-annotators)
+7. [Admin Dashboard Integration](#admin-dashboard-integration)
 
 ---
 
@@ -25,9 +26,10 @@ Task assignment controls:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `assignment_strategy` | Strategy for assigning items | `random` |
+| `assignment_strategy` | Strategy for assigning items | `fixed_order` (`priority` when a `triage` block is enabled and no strategy is set) |
 | `max_annotations_per_user` | Maximum items per annotator | unlimited |
-| `max_annotations_per_item` | Target annotations per item | 3 |
+| `num_annotators_per_item` | Cap on how many annotators one item gets. `0` also means unlimited; a negative number is refused | unset (unlimited) |
+| `max_annotations_per_item` | Deprecated spelling of `num_annotators_per_item`, read only when that key gives no number. `-1` means unlimited. Setting both to different numbers is refused | `-1` (unlimited) |
 
 ---
 
@@ -81,6 +83,12 @@ max_annotations_per_item: 4
 
 **How it works**: Calculates a disagreement score based on the ratio of unique annotations to total annotations. Higher disagreement items are assigned first.
 
+The score compares the labels each annotator chose for a schema, and takes the
+highest ratio across schemas. An item needs two annotators before it can score
+above zero, so early in a study every item scores 0.0 and the order is
+arbitrary. Set `max_annotations_per_item` to at least 2, otherwise the strategy
+has nothing to compare.
+
 **Best for**: Quality control and resolving ambiguous items.
 
 #### 5. Diversity Clustering Assignment (`diversity_clustering`)
@@ -101,7 +109,7 @@ diversity_ordering:
 **How it works**:
 1. Items are embedded using a sentence-transformer model
 2. K-means clustering groups similar items together
-3. Items are sampled round-robin from different clusters
+3. Items are sampled round-robin from different clusters, one cluster per item served, taking each cluster's items in data order
 4. When all clusters are sampled, reclustering occurs
 
 **Best for**: Tasks where annotator fatigue from similar content is a concern, or when early coverage of the full topic space is important.
@@ -125,20 +133,79 @@ batch_assignment:
       instances: ["r2_item_001", "r2_item_002"]
 ```
 
-For long batches, move the instance list into a separate data file. The file can
-use the same local formats supported by `data_files` (`json`, `jsonl`, `csv`,
-`tsv`, or `parquet`) and IDs are read using `item_properties.id_key`:
+`assignment_strategy: batch` is not optional here. A group's `schemes`
+binding is honoured under any strategy, but its `instances` list is read
+only by the batch strategy, and the default is `fixed_order`. Omit the
+strategy line and each cohort visibly gets its own questions — which
+reads as proof the config took effect — while every annotator is served
+every item, and nothing in the collected data shows the split did not
+happen. The server warns at load when groups list instances under
+another strategy.
+
+An annotator in no group is served nothing under this strategy, and gets
+a page saying so. Adding data or raising `num_annotators_per_item` will
+not give them work; only adding them to a group's `annotators` list will.
+
+For long batches, move the instance list into a separate data file. If the
+batch file is already a full Potato input data file, use `data_file`: Potato
+will load the items and use the same file to define the group order. This lets
+one config point each annotator cohort at a specific input file:
 
 ```yaml
 assignment_strategy: batch
 num_annotators_per_item: 4
+data_files: []
 
 batch_assignment:
   groups:
     - name: round1_batch_a
       annotators: ["u1", "u2", "u3", "u4"]
-      instances_file: batches/round1_batch_a.csv
+      data_file: batches/round1_batch_a.csv
+    - name: round1_batch_b
+      annotators: ["u5", "u6", "u7", "u8"]
+      data_file: batches/round1_batch_b.csv
 ```
+
+If the file contains only IDs and the items are loaded through top-level
+`data_files`, use `instances_file` instead. `data_file` and `instances_file`
+support the same local formats as `data_files` (`json`, `jsonl`, `csv`, `tsv`,
+or `parquet`) and IDs are read using `item_properties.id_key`.
+
+When annotator IDs are not known ahead of time, such as a fresh Prolific launch,
+enable automatic cohort assignment. Potato assigns each first-arriving user to
+the least-filled batch group and keeps that user in the same group for the rest
+of the study. Group size defaults to
+`num_annotators_per_item`/`max_annotations_per_item`, or you can set
+`max_annotators` per group:
+
+```yaml
+assignment_strategy: batch
+num_annotators_per_item: 4
+data_files: []
+
+batch_assignment:
+  auto_assign_annotators: true
+  groups:
+    - name: batch_a
+      data_file: batches/batch_a.csv
+    - name: batch_b
+      data_file: batches/batch_b.csv
+    - name: batch_c
+      data_file: batches/batch_c.csv
+      max_annotators: 6
+```
+
+Cohort assignments **persist across server restarts**. The user→group mapping is
+reconstructed on startup from each user's saved assignments, so restarting the
+server (deploy, crash, reboot) keeps returning users in their original group and
+lets new users keep balancing against accurate per-group counts. No extra state
+file is written — the mapping is derived from the annotations already on disk.
+
+For this to work, each auto-assigned group's items must be **disjoint** (an item
+should belong to only one batch). If an item appears in more than one group, or a
+user's saved items span multiple groups, Potato logs a warning and attributes the
+user to the group holding the majority of their items (ties break toward the
+first-listed group).
 
 Items can also define their allowed annotators directly. This is useful when
 round-2 data is generated from round-1 annotations:
@@ -181,11 +248,27 @@ See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for ful
 
 #### 8. LLM Confidence Assignment (`llm_confidence`)
 
-Uses LLM confidence scores to prioritize items. Currently falls back to random assignment.
+Serves items in order of the model's confidence in its prelabel, lowest
+first. The confidences come from the prelabels in item data: the ones
+[model training](../ai-intelligence/model_training.md) write-back publishes,
+or a `pre_annotation` field supplied with the data. An item's confidence is
+the lowest over its schemes.
 
 ```yaml
 assignment_strategy: llm_confidence
 ```
+
+Every item is still served, in three groups:
+
+1. Items with a prelabel that has a confidence, lowest first.
+2. Items with a prelabel that has no confidence.
+3. Items with no prelabel, in their configured order.
+
+`model_review` differs in leaving out the third group, which suits a review
+pass over model output. `llm_confidence` is for a study where every item needs
+a label and the model's doubtful items should be labelled first. The order is
+read each time items are assigned, so a training run that writes new
+prelabels reorders the rest of the queue.
 
 ---
 
@@ -201,21 +284,20 @@ assignment_strategy: random
 max_annotations_per_user: 10    # -1 for unlimited
 max_annotations_per_item: 3     # -1 for unlimited
 
-# Optional: nested configuration
-assignment:
-  strategy: random
-  max_annotations_per_item: 3
-  random_seed: 1234
+# Seed for random assignment (default 1234)
+random_seed: 1234
 ```
+
+All three are top-level keys. Potato does not read a nested `assignment:` block.
 
 ### Configuration Options Reference
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `diversity_clustering`, `batch`, `active_learning`, `llm_confidence` |
+| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `active_learning`, `category_based`, `diversity_clustering`, `batch`, `priority`, `psychometric`, `model_review`, `engine`, `llm_confidence` |
 | `max_annotations_per_user` | integer | Maximum annotations per user (-1 = unlimited) |
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
-| `assignment.random_seed` | integer | Seed for reproducible random assignment |
+| `random_seed` | integer | Seed for reproducible random assignment (default 1234) |
 
 ### Reclaiming Abandoned Assignments
 
@@ -268,74 +350,19 @@ response that triggers a block is never kept.
 
 ---
 
-## Legacy Configuration
+## Moving from `automatic_assignment`
 
-The older `automatic_assignment` configuration is still supported for backwards compatibility:
+Potato 1.x configured assignment in an `automatic_assignment` block. Potato
+2.x does not read it, and names it at boot if a config still sets it. The
+keys map like this:
 
-```yaml
-automatic_assignment:
-  on: true
-  output_filename: task_assignment.json
-  sampling_strategy: random    # 'random' or 'ordered'
-  labels_per_instance: 3       # Number of labels per instance
-  instance_per_annotator: 5    # Instances per annotator
-  test_question_per_annotator: 0  # Test questions per annotator
-```
-
-### Legacy Options
-
-| Field | Description | Default |
-|-------|-------------|---------|
-| `on` | Enable automatic assignment | `false` |
-| `output_filename` | Output file for assignments | `task_assignment.json` |
-| `sampling_strategy` | `random` or `ordered` | `random` |
-| `labels_per_instance` | Target annotations per item | 3 |
-| `instance_per_annotator` | Items per annotator | 5 |
-| `test_question_per_annotator` | Test questions to insert | 0 |
-
-**Note**: If `on` is `false`, all instances will be displayed to each participant.
-
----
-
-## Test Questions
-
-You can insert test questions (attention checks) into the annotation queue. These are typically easy instances with known correct answers.
-
-### Defining Test Questions
-
-Add `_testing` to the instance ID in your data file:
-
-```csv
-text,id
-"This is test question 1",0_testing
-"This is test question 2",1_testing
-"This is test question 3",2_testing
-"Hello world",dkjfd
-"Hello tomorrow",998ds
-```
-
-Or in JSON format:
-
-```json
-[
-  {"id": "0_testing", "text": "This is a test question with an obvious answer"},
-  {"id": "1_testing", "text": "Another test question"},
-  {"id": "regular_item_1", "text": "Normal annotation item"}
-]
-```
-
-### Configuration
-
-```yaml
-automatic_assignment:
-  on: true
-  test_question_per_annotator: 2  # Insert 2 test questions per annotator
-```
-
-Potato will:
-1. Identify instances with `_testing` in their ID
-2. Randomly sample N test questions for each annotator
-3. Insert them into the annotation queue
+| `automatic_assignment` (1.x) | 2.x |
+|--------|--------|
+| `on: true`, `sampling_strategy` | `assignment_strategy` |
+| `labels_per_instance` | `num_annotators_per_item` |
+| `instance_per_annotator` | `max_annotations_per_user` |
+| `test_question_per_annotator`, `_testing` ids | `attention_checks` (see [Quality Control](../workflow/quality_control.md#attention-checks)) |
+| `output_filename` | none; assignments are part of each annotator's saved state |
 
 ---
 
@@ -401,6 +428,61 @@ See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for com
 
 ---
 
+## Surplus annotators
+
+Every item is capped at `num_annotators_per_item`. The cap counts an
+outstanding assignment as well as a submitted annotation, which is what spreads
+annotators across the dataset: the default strategy walks the item list from the
+top, so before this counted holds, five annotators arriving at a three-item
+study were all handed item_0 while item_1 and item_2 sat untouched.
+
+A hold is not a submission, though, and `instance_reclaim` is off by default, so
+an annotator who takes an item and closes the tab would otherwise remove it from
+the study for good. The cap is therefore relaxed for a second pass when
+enforcing it would have sent somebody away with nothing: a held item can be
+handed to a second annotator rather than stranded. Turn on
+[`instance_reclaim`](#reclaiming-abandoned-assignments) to have stale holds returned properly
+instead.
+
+Once every item has its full complement of **annotations**, a user who arrives
+after that gets nothing. This is easy to reach on a pilot: three items at one
+annotator each, and the fourth person to open the link is one too many.
+
+They land on a page that says so:
+
+> **There is no work left for you.** Every item in this study already has as
+> many annotators as it needs, so nothing could be assigned to you. You have
+> not annotated anything, and nothing has been recorded against your account.
+
+The server logs a warning naming the cap. The user stays in the annotation
+phase, so if you add data or raise `num_annotators_per_item`, a reload gives
+them work.
+
+Watch for this if you are paying per completion. Nobody in this state has done
+any work, and until this page existed they were shown the completion screen
+("Thank You! You have completed the annotation task and your responses are
+saved"), which reads as a finished assignment on both sides.
+
+A full study is one of several reasons assignment can come back empty. The
+page names the reason. The more specific causes are checked first, so
+`saturated` is reported only when none of the others applies. Outside the
+labeling engine, the server also logs a warning with the reason and advice for
+the admin:
+
+| Reason | Page headline | What it means for you |
+|--------|---------------|-----------------------|
+| `engine_waiting` | Nothing to label right now | `assignment_strategy: engine`, and the labeling engine has no open request this annotator can take. `potato label status` shows what the contracts are waiting for. When nothing more will come for the annotator, the engine ends their annotation phase instead of showing this page. |
+| `no_data` | This study has no items yet | No data is loaded. Check `data_files`, or the watched directory if the study ingests data live. |
+| `zero_quota` | Your account is set to zero items | This annotator's quota resolves to 0. Check `per_annotator_quota` (`by_user`, `by_user_role`, `default`) and `max_annotations_per_user`. |
+| `no_batch_group` | You are not in an annotator group for this study | Under `assignment_strategy: batch`, the annotator is in no `batch_assignment` group. Add them to a group's `annotators` list; adding data or raising `num_annotators_per_item` will not help. |
+| `no_qualified_category` | You are not qualified for any category yet | Under `category_based` assignment without dynamic expertise, the annotator has qualified for no category. Static qualification comes only from passing a training phase on categorized questions, so add training or set `category_assignment.dynamic.enabled: true`. |
+| `saturated` | There is no work left for you | Every item is at `num_annotators_per_item`. Raise the cap or add data. |
+
+An adjudicator who gets no annotation items is sent to `/adjudicate` instead of
+this page.
+
+---
+
 ## Admin Dashboard Integration
 
 You can monitor and adjust assignment settings through the Admin Dashboard:
@@ -420,6 +502,9 @@ See [Admin Dashboard](../administration/admin_dashboard.md) for more details.
 
 ## Related Documentation
 
+- [Per-Cohort Schemas](per_cohort_schemas.md) - Bind different annotation schemes to the cohorts defined here
+- [Roles & Permissions (RBAC)](../auth-users/roles_and_permissions.md) - Control who can annotate, adjudicate, export, and administer
+- [Scaling & Large Datasets](../deployment/scaling.md) - Shard large datasets across cohorts; indexing and memory notes
 - [Diversity Ordering](../workflow/diversity_ordering.md) - Embedding-based diverse item presentation
 - [Active Learning Guide](../ai-intelligence/active_learning_guide.md) - ML-based assignment prioritization
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards

@@ -679,5 +679,102 @@ class TestFormatCoordsStorage(TestFormatSpanAnnotationBase):
         assert len(span_dict["format_coords"]["bbox"]) == 4
 
 
+class TestPDFAnchorLinkPersistence(TestFormatSpanAnnotationBase):
+    """End-to-end persistence for multi-page PDF anchors + cross-page links.
+
+    Guards the ingestion fix in routes.update_instance: previously the
+    SpanAnnotation was rebuilt WITHOUT format_coords, so PDF page/bbox geometry
+    (and thus the ability to re-render anchors on reload) was silently dropped.
+    Region anchors are zero-length spans, so anchor_kind/page must also feed the
+    deterministic id to avoid colliding with a text span at the same offsets.
+    """
+
+    def _config(self):
+        instance_display = {
+            "fields": [
+                {"key": "document", "type": "text", "label": "Doc", "span_target": True}
+            ]
+        }
+        annotation_schemes = [
+            {
+                "name": "pdf_anchors",
+                "description": "PDF anchors",
+                "annotation_type": "span",
+                "labels": [
+                    {"name": "claim", "color": "#FF6B6B"},
+                    {"name": "figure", "color": "#4ECDC4"},
+                ],
+            }
+        ]
+        data_items = [
+            {"id": "pdfdoc-1", "text": "The results confirm the hypothesis stated earlier."}
+        ]
+        return self._create_test_config(instance_display, data_items, annotation_schemes)
+
+    def test_anchor_geometry_and_link_persist_through_updateinstance(self):
+        server = self._start_server(self._config())
+        session = self._create_session(server)
+
+        assert session.get(
+            f"{server.base_url}/annotate?instance_id=pdfdoc-1"
+        ).status_code == 200
+
+        payload = {
+            "instance_id": "pdfdoc-1",
+            "span_annotations": [
+                {
+                    "schema": "pdf_anchors", "name": "claim", "label": "claim",
+                    "start": 4, "end": 11, "value": "claim",
+                    "id": "anchor_text_1", "target_field": "document",
+                    "format_coords": {
+                        "format": "pdf", "anchor_kind": "text", "page": 1,
+                        "start": 4, "end": 11, "bbox": [0.10, 0.22, 0.55, 0.06],
+                    },
+                },
+                {
+                    "schema": "pdf_anchors", "name": "figure", "label": "figure",
+                    "start": 0, "end": 0, "value": "figure",
+                    "id": "anchor_region_1", "target_field": "document",
+                    "format_coords": {
+                        "format": "pdf", "anchor_kind": "region", "page": 3,
+                        "bbox": [0.12, 0.30, 0.40, 0.22],
+                    },
+                },
+            ],
+            "link_annotations": [
+                {
+                    "schema": "pdf_links", "link_type": "refers_to",
+                    "span_ids": ["anchor_text_1", "anchor_region_1"],
+                    "direction": "directed", "id": "link_pdf_1",
+                    "properties": {
+                        "anchor_pages": [1, 3], "anchor_kinds": ["text", "region"],
+                    },
+                }
+            ],
+        }
+        assert session.post(
+            f"{server.base_url}/updateinstance", json=payload
+        ).status_code == 200
+
+        # Anchors: format_coords (page/bbox/anchor_kind) must survive ingestion.
+        spans_resp = session.get(f"{server.base_url}/api/spans/pdfdoc-1")
+        assert spans_resp.status_code == 200
+        spans = {s["id"]: s for s in spans_resp.json().get("spans", [])}
+        assert "anchor_text_1" in spans and "anchor_region_1" in spans
+        text_fc = spans["anchor_text_1"]["format_coords"]
+        assert text_fc["anchor_kind"] == "text" and text_fc["page"] == 1
+        region_fc = spans["anchor_region_1"]["format_coords"]
+        assert region_fc["anchor_kind"] == "region" and region_fc["page"] == 3
+        assert region_fc["bbox"] == [0.12, 0.30, 0.40, 0.22]
+
+        # Cross-anchor link must persist and reference both anchor ids.
+        links_resp = session.get(f"{server.base_url}/api/links/pdfdoc-1")
+        assert links_resp.status_code == 200
+        links = links_resp.json().get("links", [])
+        link = next(l for l in links if l["id"] == "link_pdf_1")
+        assert link["span_ids"] == ["anchor_text_1", "anchor_region_1"]
+        assert link["properties"]["anchor_pages"] == [1, 3]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

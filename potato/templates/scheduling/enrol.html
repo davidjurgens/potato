@@ -1,0 +1,57 @@
+{% extends "scheduling/base.html" %}
+{% block main_id %}schedule-enrol{% endblock %}
+{% block content %}
+<h1 class="potato-page-title">Your schedule</h1>
+<p class="potato-page-subtitle">This study continues after today. Here is what comes next:</p>
+<ul class="sched-plan" id="schedule-plan">
+    {% for line in plan %}<li>{{ line }}</li>{% endfor %}
+</ul>
+
+<form method="post" action="{{ url_for('schedule_enrol') }}" id="schedule-enrol-form" novalidate>
+    <input type="hidden" name="timezone_detected" id="timezone-detected" value="">
+    <div class="potato-form-group">
+        <label class="potato-form-label" for="timezone">Your time zone</label>
+        <select class="potato-form-input sched-select" id="timezone" name="timezone"
+                data-default="{{ values.timezone or default_tz }}"
+                {% if errors.timezone %}aria-invalid="true" aria-describedby="timezone-error"{% endif %}>
+            {% for name in timezones %}
+            <option value="{{ name }}" {% if name == (values.timezone or default_tz) %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+        </select>
+        <p class="sched-hint" id="timezone-hint">Session times are shown in this zone. We filled in the one your browser reports.</p>
+        {% if errors.timezone %}<p class="sched-error" id="timezone-error">{{ errors.timezone }}</p>{% endif %}
+    </div>
+
+    {% if consent and (wants_email or wants_phone) %}
+    <fieldset class="sched-contact" id="schedule-contact">
+        <legend class="potato-form-label">Reminders</legend>
+        <p class="sched-hint">You agreed to be contacted. Give an address for reminders, or leave these empty to get none. Your address is stored apart from your answers, never exported, and deleted when the study ends or when you ask.</p>
+        {% if wants_email %}
+        <div class="potato-form-group">
+            <label class="potato-form-label" for="email">Email address</label>
+            <input class="potato-form-input" type="email" id="email" name="email" autocomplete="email"
+                   value="{{ values.email or '' }}" {% if errors.email %}aria-invalid="true" aria-describedby="email-error"{% endif %}>
+            {% if errors.email %}<p class="sched-error" id="email-error">{{ errors.email }}</p>{% endif %}
+        </div>
+        {% endif %}
+        {% if wants_phone %}
+        <div class="potato-form-group">
+            <label class="potato-form-label" for="phone">Mobile number for text messages</label>
+            <input class="potato-form-input" type="tel" id="phone" name="phone" autocomplete="tel"
+                   placeholder="+44 7700 900123" value="{{ values.phone or '' }}"
+                   {% if errors.phone %}aria-invalid="true" aria-describedby="phone-error"{% endif %}>
+            {% if errors.phone %}<p class="sched-error" id="phone-error">{{ errors.phone }}</p>{% endif %}
+        </div>
+        {% endif %}
+    </fieldset>
+    {% elif consent and prolific %}
+    <p class="sched-hint" id="schedule-prolific-note">Reminders will come to your Prolific inbox.</p>
+    {% elif consent and has_channels %}
+    <p class="sched-hint" id="schedule-consent-note">You agreed to be contacted about the next sessions.</p>
+    {% elif has_channels %}
+    <p class="sched-hint" id="schedule-no-consent">You chose not to be contacted, so you will get no reminders. Come back with your study link at the times shown on the next page.</p>
+    {% endif %}
+
+    <button type="submit" class="shadcn-button sched-primary" id="schedule-enrol-submit">Confirm my schedule</button>
+</form>
+{% endblock %}

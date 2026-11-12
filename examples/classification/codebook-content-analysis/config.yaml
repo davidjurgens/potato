@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Content analysis with a codebook from a file
+#
+# codebooks/topics.csv lists the codes (code, label, parent, description);
+# taxonomy_file turns it into a hierarchy to pick from. Use the same format
+# for a codebook you are licensed to use, such as the Comparative Agendas
+# Project topics or the Manifesto Project categories (Potato ships neither).
+#
+# Two coders per headline, then the reliability table:
+#   python potato/flask_server.py start examples/classification/codebook-content-analysis/config.yaml -p 8000
+#   python -m potato.export --config examples/classification/codebook-content-analysis/config.yaml --format reliability --output out/
+
+annotation_task_name: "Headline topics"
+
+data_files:
+  - data/headlines.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+max_annotations_per_item: 2
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: hierarchical_multiselect
+    name: topic
+    description: "Which topics does the headline cover?"
+    taxonomy_file: codebooks/topics.csv
+    show_codes: true
+    show_search: true
+  - annotation_type: radio
+    name: tone
+    description: "Is the headline's tone positive, negative or neutral?"
+    labels: ["Positive", "Neutral", "Negative"]

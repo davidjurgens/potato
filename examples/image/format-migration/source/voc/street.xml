@@ -1,0 +1,10 @@
+<annotation>
+  <filename>street.jpg</filename>
+  <size><width>640</width><height>480</height><depth>3</depth></size>
+  <object><name>car</name><difficult>0</difficult>
+    <bndbox><xmin>60</xmin><ymin>120</ymin><xmax>200</xmax><ymax>310</ymax></bndbox>
+  </object>
+  <object><name>person</name><difficult>0</difficult>
+    <bndbox><xmin>300</xmin><ymin>200</ymin><xmax>380</xmax><ymax>340</ymax></bndbox>
+  </object>
+</annotation>

@@ -1,0 +1,35 @@
+{
+  "name": "potato-annotation",
+  "version": "1.0.0",
+  "description": "Potato Annotation Platform",
+  "main": "index.js",
+  "scripts": {
+    "test": "python -m pytest tests/",
+    "test:jest": "jest",
+    "test:jest:watch": "jest --watch",
+    "test:jest:coverage": "jest --coverage",
+    "test:selenium": "python -m pytest tests/selenium/",
+    "test:all": "npm run test:jest && python -m pytest tests/"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/tests/jest/setup.js"],
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/potato/static/$1"
+    },
+    "collectCoverageFrom": [
+      "potato/static/**/*.js",
+      "!potato/static/**/*.min.js"
+    ],
+    "testMatch": [
+      "**/tests/jest/**/*.test.js"
+    ]
+  },
+  "keywords": ["annotation", "machine-learning", "data-labeling"],
+  "author": "Potato Team",
+  "license": "MIT"
+}

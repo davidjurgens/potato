@@ -397,19 +397,40 @@ class TestInstanceDisplayRenderer:
         assert "doc" in renderer.span_targets
 
     def test_renderer_missing_field_raises(self):
-        """Test renderer raises for missing field."""
+        """Test renderer raises for a missing field.
+
+        The raise applies when only SOME field is missing. An item matching no
+        configured field at all renders a placeholder instead: the exception is
+        swallowed upstream, so it produced a blank item with the annotation
+        form still under it.
+        """
         config = {
             "instance_display": {
                 "fields": [
-                    {"key": "missing_field", "type": "code"}
+                    {"key": "present_field", "type": "text"},
+                    {"key": "missing_field", "type": "code"},
                 ]
             }
         }
         renderer = InstanceDisplayRenderer(config)
-        instance_data = {"other_key": "value"}
+        instance_data = {"present_field": "here", "other_key": "value"}
 
         with pytest.raises(InstanceDisplayError, match="missing_field"):
             renderer.render(instance_data)
+
+    def test_renderer_with_no_matching_field_renders_a_placeholder(self):
+        """An item carrying none of the configured keys says so on the page."""
+        config = {
+            "instance_display": {
+                "fields": [{"key": "missing_field", "type": "code"}]
+            }
+        }
+        renderer = InstanceDisplayRenderer(config)
+
+        html = renderer.render({"other_key": "value"})
+
+        assert "instance-display-empty" in html
+        assert "nothing to show" in html
 
 
 class TestFormatHandlingConfig:

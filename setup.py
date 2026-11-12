@@ -13,34 +13,34 @@ def read_readme():
 _CORE_DEPS = [
     "beautifulsoup4>=4.10.0",
     "click>=8.0.3",
+    # Entity-expansion refusals for untrusted XML (FLExText, PAGE, TEI,
+    # LimeSurvey imports). Pure Python; imported only by those importers.
+    "defusedxml>=0.7.1",
     "Flask>=3.0.0",
     "itsdangerous>=2.1.0",
     "Jinja2>=3.1.6",
-    "joblib>=1.2.0",
     "MarkupSafe>=2.1.0",
     "numpy>=1.21.0",
     "pandas>=1.3.5",
     "pydantic>=2.11.9",
-    "python-dateutil>=2.8.2",
-    "pytz>=2021.3",
     "PyYAML>=6.0.1",
     "requests>=2.31.0",
     "scikit-learn>=1.0.2",
     "scipy>=1.7.3",
     "simpledorff>=0.0.2",
-    "six>=1.16.0",
-    "soupsieve>=2.3.1",
-    "threadpoolctl>=3.0.0",
     "tqdm>=4.62.3",
-    "ujson>=5.4.0",
     "Werkzeug>=3.0.6",
 ]
 
 # Optional dependency groups for specific features.
 # Install with: pip install potato-annotation[ai,formats]
+# All AI SDKs are imported lazily (see potato/ai/ai_endpoint.py's lazy
+# endpoint registry), so none of these are needed for basic server startup.
 _AI_DEPS = [
     "ollama>=0.6.0",
     "openai>=1.0.0",
+    "anthropic>=0.30.0",
+    "google-genai>=1.0.0",
 ]
 _FORMAT_DEPS = [
     "pdfplumber>=0.10.0",
@@ -49,6 +49,17 @@ _FORMAT_DEPS = [
     "mistune>=3.0.0",
     "pygments>=2.17.0",
     "openpyxl>=3.1.0",
+]
+# Headless-browser rendering for `potato preview --screenshot`, which boots a
+# task and reports what the browser did with it. Optional: without it preview
+# still validates and still returns the server-rendered HTML.
+# Model Context Protocol server, so coding agents can discover annotation types,
+# validate configs and render tasks. Imported lazily by `potato mcp`.
+_MCP_DEPS = [
+    "mcp>=1.2.0",
+]
+_PREVIEW_DEPS = [
+    "playwright>=1.40.0",
 ]
 _VIZ_DEPS = [
     "umap-learn>=0.5.0",
@@ -66,57 +77,256 @@ _AUTH_DEPS = [
 _LANGCHAIN_DEPS = [
     "langchain-core>=0.1.0",
 ]
+# Cloud storage data sources (data_sources: type s3 / gcs / azure_blob).
+_S3_DEPS = ["boto3>=1.26.0"]
+_GCS_DEPS = ["google-cloud-storage>=2.10"]
+_AZURE_DEPS = ["azure-storage-blob>=12.19"]
+# Whole-slide images (SVS, NDPI, MRXS, pyramidal TIFF) for deep zoom, read
+# through openslide (potato/media/slides.py). openslide-bin ships the C library
+# as a wheel, so no system package is needed. tifffile builds the example slide.
+_WSI_DEPS = ["openslide-python>=1.4", "openslide-bin>=4.0", "tifffile>=2023.1"]
+# SAML sign-in. python3-saml builds the `xmlsec` binding against the system's
+# libxmlsec1 (brew install libxmlsec1 / apt-get install libxmlsec1-dev), so it
+# stays out of `all`.
+_SAML_DEPS = ["python3-saml>=1.16"]
+# DICOM series and NIfTI volumes (volume_annotation): reading, NIfTI label
+# export, and DICOM SEG export.
+_VOLUME_DEPS = ["pydicom>=2.4", "nibabel>=5.0", "highdicom>=0.22"]
+# Chemistry: RDKit (BSD-3-Clause) grades chemical_structure answer keys,
+# fills InChI/InChIKey into the export, and featurizes molecules for the
+# rdkit-property trainer. The browser side needs none of it.
+_CHEMISTRY_DEPS = ["rdkit>=2024.3"]
+# FITS images for the fits_cutout display (astronomy): astropy, BSD-3-Clause.
+_ASTRO_DEPS = ["astropy>=5.3"]
+# Multichannel microscopy (the `microscopy` schema): OME-Zarr through
+# zarr-python (MIT; v3 needs Python 3.11, and reads OME-Zarr 0.5), OME-TIFF
+# through tifffile (BSD-3-Clause).
+_MICROSCOPY_DEPS = ["zarr>=3.0; python_version>='3.11'",
+                    "zarr>=2.16,<3; python_version<'3.11'",
+                    "tifffile>=2023.1", "numpy>=1.21"]
+# text_as_image draws the item text with Pillow. 10.1 is the first release
+# whose load_default() takes a size, which the ASCII-only fallback needs.
+_TEXT_IMAGE_DEPS = ["pillow>=10.1.0"]
+# The FiftyOne annotation backend (potato.integrations.fiftyone_backend). Not
+# in "all": FiftyOne brings its own MongoDB and a large dependency tree.
+_FIFTYONE_DEPS = [
+    "fiftyone>=1.0",
+]
+# Optional server-side vision stack. Browser segmentation needs none of this:
+# ONNX Runtime Web is vendored under potato/static/ and runs the default models
+# with no Python dependency at all. These cover the server endpoints
+# (`ai_type: sam`, `sam3`, SAM 2 video propagation) and decoding the image
+# formats browsers cannot display.
+#
+# segment-anything is deliberately absent. Meta publishes it from GitHub, not
+# PyPI, and the `segment-anything` name on PyPI is an anonymous upload with no
+# homepage -- not something to pull into every `potato[vision]` install. The
+# endpoint's error message names the official source instead.
+_VISION_DEPS = [
+    "onnxruntime>=1.17.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "pillow-heif>=0.15.0",
+    "rawpy>=0.19.0",
+    "imageio>=2.31.0",
+]
+# SQL data sources, including live cursor-based ingestion. The driver is
+# separate and backend-specific: psycopg2-binary for PostgreSQL, pymysql for
+# MySQL. SQLite needs nothing beyond the standard library.
+_DB_DEPS = [
+    "sqlalchemy>=2.0",
+]
+# The MySQL user-state backend (`database: {type: mysql}`, potato/database/).
+# It uses mysql-connector-python directly, not the SQLAlchemy + pymysql stack
+# the data sources above use, and no extra declared it before 2.10.2.
+_MYSQL_DEPS = [
+    "mysql-connector-python>=8.0",
+]
+# In-tool model training (potato/training). sklearn-text needs none of
+# these. Each trainer names its extra in its install hint; all stay out of
+# `all` because torch is a multi-gigabyte install. ultralytics-detect is
+# AGPL-3.0 and in no extra: installing it is the user's own decision.
+_EMBEDDING_DEPS = [
+    "sentence-transformers>=3.0.0",
+]
+_TRAIN_TEXT_DEPS = [
+    "torch>=2.1.0",
+    "transformers>=4.46.0",
+    "peft>=0.13.0",
+]
+_TRAIN_VISION_DEPS = _TRAIN_TEXT_DEPS + [
+    "pillow>=10.0.0",
+    "torchvision>=0.16.0",
+]
+_TRAIN_AUDIO_DEPS = _TRAIN_TEXT_DEPS + [
+    "soundfile>=0.12.0",
+]
+_TRAIN_LLM_DEPS = list(_TRAIN_TEXT_DEPS)
+# Local speech-to-text and speaker diarization. faster-whisper is Whisper
+# compiled through CTranslate2: no cloud API, no per-minute charge, and it runs
+# on CPU. Used by `potato transcripts --transcribe` and by Think-Aloud Mode's
+# live captioning.
+#
+# sherpa-onnx supplies the diarization Whisper has no model for. It is a ~9 MB
+# wheel running ONNX Runtime, deliberately chosen over pyannote.audio, which
+# would pull PyTorch and Lightning and require a Hugging Face token for gated
+# weights.
+#
+# Both download their model weights on first use, so an air-gapped machine
+# needs them staged once from a networked machine (POTATO_MODEL_CACHE for
+# diarization, a local CTranslate2 model directory for Whisper).
+_TRANSCRIBE_DEPS = [
+    "faster-whisper>=1.0.0",
+    "sherpa-onnx>=1.10.0",
+]
+# In-process Laya decision model (endpoint_type: laya). Pulls torch and
+# transformers, so like `vision` it stays out of `all`. The systemone HTTP
+# endpoint needs only `requests`.
+_DECISION_DEPS = [
+    "laya>=0.4.7",
+]
+# `potato deploy` to a VM provider. Only the SSH transport is extra: the API
+# clients use `requests` and the templates use Jinja2, both core dependencies.
+# paramiko 3.0+ is required for Ed25519Key.generate.
+_DEPLOY_DEPS = [
+    "paramiko>=3.0.0",
+]
+# mzML mass spectra for the spectrum display (potato/science/converters/mzml.py).
+# pyteomics (Apache-2.0) reads mzML; from 5.0 it needs psims (Apache-2.0) for
+# PSI formats. JCAMP-DX and CSV spectra need neither.
+_SPECTRA_DEPS = ["pyteomics>=4.7", "psims>=1.3", "lxml>=4.9"]
+# time_series display: WFDB records (wfdb, MIT) and Parquet sensor tables (pyarrow, Apache-2.0).
+_SIGNAL_DEPS = ["wfdb>=4.1", "pyarrow>=12.0.0"]
+
+# What a hosted server needs to back its data up off the host and restore it
+# (potato/server_utils/backup), plus Authlib for SSO logins. Installed into the
+# published image by default: on an ephemeral host a backup that cannot import
+# its client is no backup, and a deploy cannot install an extra into the image
+# it pulls, so an OAuth study deployed on the core image exited at boot.
+_HOSTING_DEPS = [
+    "huggingface_hub>=0.20.0",
+    "boto3>=1.26.0",
+] + _AUTH_DEPS
 
 setup(
     name="potato-annotation",
-    version='2.5.0',
+    version='2.14.0',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/davidjurgens/potato",
-    packages=find_packages(),
+    project_urls={
+        "Documentation": "https://www.potatoannotator.com/docs",
+        "Technical Reference": "https://potatoannotator.readthedocs.io/",
+        "Source": "https://github.com/davidjurgens/potato",
+        "Website": "https://www.potatoannotator.com",
+    },
+    license="GPL-3.0-or-later",
+    # The repo's own tests/ is a package too; without the exclude it installs
+    # into site-packages as a top-level `tests` (1,020 files in 2.10.1).
+    packages=find_packages(exclude=["tests", "tests.*"]),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: Other/Proprietary License",
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Text Processing :: Linguistic",
     ],
-    python_requires=">=3.7",
+    # pydantic>=2.11 (a core dependency) requires 3.9, so 3.7 and 3.8 could
+    # never install; saying so here gives pip a clear error instead.
+    python_requires=">=3.9",
     install_requires=_CORE_DEPS,
     extras_require={
         "ai": _AI_DEPS,
         "formats": _FORMAT_DEPS,
         "viz": _VIZ_DEPS,
+        "preview": _PREVIEW_DEPS,
+        "mcp": _MCP_DEPS,
+        # Everything a coding agent needs: the MCP server plus browser rendering.
+        "agent": _MCP_DEPS + _PREVIEW_DEPS,
         "export": _EXPORT_DEPS,
         "huggingface": _HF_DEPS,
+        # Dataset publishing: HuggingFace push + parquet output. Zenodo and the
+        # local archive need only `requests` (a core dependency), so no extra
+        # deps beyond these.
+        "publish": _HF_DEPS + _EXPORT_DEPS,
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS,
+        "fiftyone": _FIFTYONE_DEPS,
+        "s3": _S3_DEPS,
+        "gcs": _GCS_DEPS,
+        "azure": _AZURE_DEPS,
+        "wsi": _WSI_DEPS,
+        "saml": _SAML_DEPS,
+        "volumes": _VOLUME_DEPS,
+        "chemistry": _CHEMISTRY_DEPS,
+        "astro": _ASTRO_DEPS,
+        "microscopy": _MICROSCOPY_DEPS,
+        "db": _DB_DEPS,
+        "mysql": _MYSQL_DEPS,
+        "deploy": _DEPLOY_DEPS,
+        "hosting": _HOSTING_DEPS,
+        # boto3 for the AWS targets (Lightsail, EC2, ECS) and the S3 bundle
+        # store; paramiko because the VM targets are reached over SSH.
+        "deploy-aws": _DEPLOY_DEPS + ["boto3>=1.26.0"],
+        # OpenStack clouds: Jetstream2, campus clouds, EGI.
+        "deploy-openstack": _DEPLOY_DEPS + ["openstacksdk>=3.0.0"],
+        "vision": _VISION_DEPS,
+        "text-image": _TEXT_IMAGE_DEPS,
+        # Training extras. `embeddings` is also what the sentence-transformers
+        # and CLIP vectorizers need, which users were told to install by hand.
+        "embeddings": _EMBEDDING_DEPS,
+        "train-text": _TRAIN_TEXT_DEPS + _EMBEDDING_DEPS,
+        "train-vision": _TRAIN_VISION_DEPS,
+        "train-audio": _TRAIN_AUDIO_DEPS,
+        "train-llm": _TRAIN_LLM_DEPS,
+        "train": sorted(set(_TRAIN_TEXT_DEPS + _EMBEDDING_DEPS
+                            + _TRAIN_VISION_DEPS + _TRAIN_AUDIO_DEPS
+                            + _TRAIN_LLM_DEPS)),
+        "transcribe": _TRANSCRIBE_DEPS,
+        "decision": _DECISION_DEPS,
+        "signals": _SIGNAL_DEPS,
+        "spectra": _SPECTRA_DEPS,
+        # `all` deliberately excludes `vision`: torch is a multi-gigabyte
+        # install, and nothing in the default experience needs it.
+        "all": _AI_DEPS + _FORMAT_DEPS + _TEXT_IMAGE_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _MYSQL_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
     },
     include_package_data=True,
     entry_points={
         "console_scripts": [
             "potato=potato.flask_server:main",
         ],
+        # Pytest plugin for Potato evaluations (markers, the potato_eval fixture,
+        # --potato-threshold gating). Inert unless eval tests run / thresholds set.
+        "pytest11": [
+            "potato_eval=potato.testing.pytest_plugin",
+        ],
     },
     package_data={
+        # Templates and static assets are shipped recursively via MANIFEST.in
+        # together with include_package_data=True above. Do not add per-folder
+        # globs here; new nested asset directories should be included without
+        # requiring packaging changes.
         "potato": [
-            "templates/*.html",
-            "base_html/*.html",
-            "base_html/examples/*.html",
-            "static/*",
-            "static/styles/*",
-            "static/survey_assets/*",
+            "i18n/*.yaml",
+            # Generated specs: the config JSON Schema and the examples catalog.
+            # Shipped so editors, agents and the MCP server resolve them offline
+            # from an installed wheel, without reaching the docs site. The
+            # examples catalog especially -- `examples/` itself is not packaged,
+            # so this JSON is the only record of it a wheel has. Regenerate:
+            #   python scripts/generate_config_schema.py
+            #   python scripts/generate_examples_manifest.py
+            "schemas/*.json",
+            # cloud-init, Caddyfile and systemd unit templates. A provider
+            # renders these from an installed wheel, so they must ship.
+            "deploy/templates/*.j2",
         ],
     },
 )

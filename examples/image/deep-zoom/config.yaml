@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+port: 8000
+annotation_task_name: Deep-zoom survey annotation
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+  - data/scans.json
+
+item_properties:
+  id_key: id
+  text_key: image
+
+# Where the tile server reads from. Paths in the data file are relative to it.
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: structures
+    description: "Mark every structure. Zoom in — most are invisible at fit-to-screen."
+    source_field: image
+
+    # The whole point of this example. `fabric` (the default) sends the image
+    # to the browser as one file; `deepzoom` serves a tile pyramid, which is
+    # the only way a source this size is workable.
+    viewer: deepzoom
+
+    tiles:
+      # DZI's default. 254 + 1px of overlap on each side is exactly 256.
+      tile_size: 254
+      overlap: 1
+      # Refuse to build a level larger than this rather than silently serving
+      # a blurred one. 640 MP is a 32000x20000 image.
+      max_pixels: 640000000
+      navigator: true
+
+    tools: [bbox, polygon, brush, eraser]
+    labels:
+      - name: building
+        color: "#c0392b"
+      - name: vehicle
+        color: "#2980b9"
+      - name: vegetation
+        color: "#27ae60"

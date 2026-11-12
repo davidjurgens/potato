@@ -14,6 +14,7 @@ ITEM_FULLY_ANNOTATED = "item.fully_annotated"
 TASK_COMPLETED = "task.completed"
 USER_PHASE_COMPLETED = "user.phase_completed"
 QUALITY_ATTENTION_CHECK_FAILED = "quality.attention_check_failed"
+MEMO_ISSUE_ASSIGNED = "memo.issue_assigned"
 
 ALL_EVENTS = [
     ANNOTATION_CREATED,
@@ -22,6 +23,7 @@ ALL_EVENTS = [
     TASK_COMPLETED,
     USER_PHASE_COMPLETED,
     QUALITY_ATTENTION_CHECK_FAILED,
+    MEMO_ISSUE_ASSIGNED,
 ]
 
 
@@ -94,5 +96,25 @@ def build_attention_check_failed_payload(user_id, instance_id, message=None,
             "instance_id": instance_id,
             "message": message,
             "blocked": blocked,
+        },
+    }
+
+
+def build_issue_assigned_payload(memo_id, instance_id, assignee, assigned_by,
+                                 status="open"):
+    """Build payload for memo.issue_assigned.
+
+    Ids only, never the note's text: an issue can be private to its author
+    and assignee, and a webhook goes wherever the admin pointed it.
+    """
+    return {
+        "event": MEMO_ISSUE_ASSIGNED,
+        "timestamp": _now_iso(),
+        "data": {
+            "memo_id": memo_id,
+            "instance_id": instance_id,
+            "assignee": assignee,
+            "assigned_by": assigned_by,
+            "status": status,
         },
     }

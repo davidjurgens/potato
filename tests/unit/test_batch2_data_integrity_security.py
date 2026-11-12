@@ -440,35 +440,20 @@ class TestPrefetchCountValidation:
 # MySQL Schema: KB columns in span_annotations table
 # ============================================================================
 
-class TestMySQLSpanSchemaKBColumns:
-    """Tests that the MySQL schema includes KB columns."""
+class TestMySQLSpanKBFields:
+    """Entity-link fields on a span survive the MySQL backend."""
 
-    def test_span_annotations_schema_has_kb_columns(self):
-        """Test that the CREATE TABLE SQL includes kb_id, kb_source, kb_label."""
-        from potato.database.connection import DatabaseManager
-
-        import inspect
-        source = inspect.getsource(DatabaseManager.create_tables)
-        assert "kb_id" in source
-        assert "kb_source" in source
-        assert "kb_label" in source
-
-    def test_mysql_span_insert_includes_kb_fields(self):
-        """Test that the INSERT SQL includes KB fields."""
-        import inspect
+    def test_kb_fields_round_trip(self):
+        from tests.unit.test_database_user_state import _DocumentStore
         from potato.database.mysql_user_state import MysqlUserState
-
-        source = inspect.getsource(MysqlUserState.add_span_annotation)
-        assert "kb_id" in source
-        assert "kb_source" in source
-        assert "kb_label" in source
-
-    def test_mysql_span_select_includes_kb_fields(self):
-        """Test that the SELECT SQL includes KB fields."""
-        import inspect
-        from potato.database.mysql_user_state import MysqlUserState
-
-        source = inspect.getsource(MysqlUserState.get_span_annotations)
-        assert "kb_id" in source
-        assert "kb_source" in source
-        assert "kb_label" in source
+        from potato.item_state_management import SpanAnnotation
+        from potato.phase import UserPhase
+        db = _DocumentStore()
+        state = MysqlUserState("u", db_manager=db)
+        state.advance_to_phase(UserPhase.ANNOTATION, None)
+        state.add_span_annotation("i", SpanAnnotation("e", "X", "X", 0, 3, kb_id="Q42",
+                                                      kb_source="wikidata", kb_label="Adams"), True)
+        state.save()
+        span = next(iter(MysqlUserState.load_from_db("u", db).get_span_annotations("i")))
+        assert (span.get_kb_id(), span.get_kb_source(), span.get_kb_label()) == \
+            ("Q42", "wikidata", "Adams")

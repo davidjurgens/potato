@@ -1,0 +1,176 @@
+/* Truth Serum — surprisingly-popular prediction widget (light theme).
+   Bottom-LEFT; Boundary Lab owns bottom-right. */
+
+.ts-panel {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    background: #ffffff;
+    border: 1px solid #dcefe4;
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(16, 84, 56, 0.16), 0 2px 8px rgba(0, 0, 0, 0.06);
+    font-size: 0.925rem;
+    z-index: 1044;
+    animation: ts-slide-in 0.28s cubic-bezier(0.21, 1.02, 0.55, 1);
+}
+
+@keyframes ts-slide-in {
+    from { transform: translateY(14px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.ts-hidden { display: none !important; }
+
+.ts-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(120deg, #14532d, #15803d);
+    color: #ffffff;
+    border-radius: 13px 13px 0 0;
+}
+
+.ts-title {
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.ts-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.15rem;
+    line-height: 1;
+    min-width: 28px;
+    min-height: 28px;
+    cursor: pointer;
+}
+
+.ts-close:hover { color: #ffffff; background: rgba(255, 255, 255, 0.14); }
+
+.ts-body { padding: 14px 16px 8px; }
+
+.ts-question {
+    color: #1f3b2c;
+    line-height: 1.45;
+    margin-bottom: 12px;
+}
+
+.ts-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ts-slider {
+    flex: 1;
+    accent-color: #15803d;
+    cursor: pointer;
+    min-height: 28px;
+}
+
+.ts-value {
+    min-width: 48px;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #14532d;
+}
+
+.ts-actions { margin-top: 12px; }
+
+.ts-save {
+    width: 100%;
+    border: 1.5px solid #15803d;
+    border-radius: 8px;
+    background: #f0faf3;
+    color: #14532d;
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.ts-save:hover { background: #dcf5e2; }
+
+.ts-error {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: #b91c1c;
+}
+
+.ts-footer {
+    padding: 7px 16px 10px;
+    font-size: 0.74rem;
+    color: #98b3a3;
+    border-top: 1px solid #eef7f1;
+    text-align: center;
+}
+
+/* Collapsed confirmation chip */
+.ts-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    color: #1f3b2c;
+    font-size: 0.87rem;
+}
+
+.ts-chip-mark {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border-radius: 50%;
+    background: #dcf5e2;
+    color: #166534;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-align: center;
+    line-height: 22px;
+}
+
+.ts-chip-edit {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #15803d;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.ts-chip-edit:hover { background: #f0faf3; }
+
+.ts-save:focus-visible,
+.ts-close:focus-visible,
+.ts-chip-edit:focus-visible,
+.ts-slider:focus-visible {
+    outline: 2px solid #15803d;
+    outline-offset: 2px;
+}
+
+.ts-close:focus-visible { outline-color: #bbf7d0; }
+
+@media (max-width: 640px) {
+    .ts-panel {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        width: auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ts-panel { animation: none; }
+    .ts-save { transition: none; }
+}

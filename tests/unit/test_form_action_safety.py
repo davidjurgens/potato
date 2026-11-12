@@ -6,6 +6,8 @@ Issue #151: Pressing Enter in input fields would trigger form submission to
 a 404 error and loss of annotation data.
 """
 
+import re
+
 import pytest
 from potato.server_utils.schemas.registry import schema_registry
 
@@ -94,8 +96,15 @@ class TestFormActionSafety:
         except Exception:
             pytest.skip(f"Could not generate HTML for {annotation_type} with minimal config")
 
-        # If the schema generates a <form>, it should have a safe action
-        if "<form" in html.lower():
-            assert 'action="javascript:void(0)"' in html or 'action=""' in html or "action" not in html, (
-                f"Schema '{annotation_type}' has a <form> with an unsafe action attribute."
+        # Read the action off each <form> tag rather than searching the whole
+        # document for the substring "action": that matched the word inside a
+        # comment ("the first real interaction...") and failed a schema whose
+        # form has no action attribute at all.
+        for form_tag in re.findall(r"<form\b[^>]*>", html, re.I | re.S):
+            action = re.search(r'\baction\s*=\s*"([^"]*)"', form_tag, re.I)
+            if action is None:
+                continue  # No action attribute is the safest case.
+            assert action.group(1) in ("javascript:void(0)", ""), (
+                f"Schema '{annotation_type}' has a <form> with an unsafe action "
+                f"attribute: {action.group(1)!r}"
             )

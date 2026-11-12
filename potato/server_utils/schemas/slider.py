@@ -467,7 +467,8 @@ from .radio import generate_radio_layout
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
@@ -503,6 +504,9 @@ def generate_slider_layout(annotation_scheme):
     return safe_generate_layout(annotation_scheme, generate_slider_layout_internal)
 
 def generate_slider_layout_internal(annotation_scheme):
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     from .identifier_utils import escape_html_content, generate_element_identifier, generate_validation_attribute
     
     if "labels" in annotation_scheme:
@@ -522,7 +526,30 @@ def generate_slider_layout_internal(annotation_scheme):
         raise Exception(
             f'Slider scale for "{annotation_scheme["name"]}" must have minimum value < max value ({min_value} >= {max_value})'
         )
-    
+
+    # The browser clamps an out-of-range `value` on a range input, so the
+    # element ended up at the boundary while the tooltip and the JS that
+    # positions the thumb were both painted with the raw number. Declared 99 on
+    # a 0..10 slider: input value 10, tooltip "99", thumb at the right end --
+    # consistent with both readings, and the disagreement lives exactly in the
+    # state the annotator sees FIRST. Someone who agrees with the default and
+    # saves without touching the control reads 99 and stores 10.
+    #
+    # Clamped rather than refused: the widget is usable and the study runs, so
+    # this is a boot warning rather than a validation failure that would stop a
+    # task working today. `min_value >= max_value` above still raises, because
+    # that one leaves nothing to render.
+    if starting_value < min_value or starting_value > max_value:
+        clamped = min(max(starting_value, min_value), max_value)
+        logger.warning(
+            "Slider %r has starting_value %s outside its range %s..%s. Using "
+            "%s. The browser clamps the control either way; before this the "
+            "tooltip still showed %s, so the annotator was told the default "
+            "was a value the slider cannot hold.",
+            annotation_scheme["name"], starting_value, min_value, max_value,
+            clamped, starting_value)
+        starting_value = clamped
+
     show_labels = annotation_scheme.get("show_labels", True)
     min_label = str(min_value) if show_labels else ''
     max_label = str(max_value) if show_labels else ''
@@ -535,7 +562,7 @@ def generate_slider_layout_internal(annotation_scheme):
     max_tick = annotation_scheme.get("maxTick", 8)
 
     schematic = f"""
-    <form id="{identifiers['schema']}" class="annotation-form slider" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" >
+    <form id="{identifiers['schema']}" class="annotation-form slider" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="slider" data-schema-name="{identifiers['schema']}" {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{identifiers['schema']}">
             <legend class="custom-slider-title">{annotation_scheme['description']}</legend>
@@ -588,9 +615,12 @@ def generate_slider_layout_internal(annotation_scheme):
         
         function setupCustomSlider(sliderInput) {{
             const sliderId = sliderInput.id;
-            const min = parseInt(sliderInput.min);
-            const max = parseInt(sliderInput.max);
-            const step = parseInt(sliderInput.step) || 1;
+            // parseFloat, not parseInt: a 0..1 slider in steps of 0.1 snapped
+            // to whole numbers, so it could only ever store 0 or 1.
+            const min = parseFloat(sliderInput.min);
+            const max = parseFloat(sliderInput.max);
+            const step = parseFloat(sliderInput.step) || 1;
+            const stepDecimals = (String(step).split('.')[1] || '').length;
             
             // Get references to custom elements
             const container = document.getElementById('customSlider_' + sliderId);
@@ -619,8 +649,9 @@ def generate_slider_layout_internal(annotation_scheme):
                 // Calculate the new value based on the click position
                 let newValue = min + (percentClicked / 100) * (max - min);
                 
-                // Snap to the nearest step
-                newValue = Math.round(newValue / step) * step;
+                // Snap to the nearest step (rounded to the step's precision, so
+                // 0.1 * 3 stores 0.3 rather than 0.30000000000000004)
+                newValue = Number((Math.round((newValue - min) / step) * step + min).toFixed(stepDecimals));
                 
                 // Ensure the value is within bounds
                 newValue = Math.max(min, Math.min(max, newValue));
@@ -793,8 +824,8 @@ def generate_slider_layout_internal(annotation_scheme):
         
         function updateCustomSlider(sliderInput) {{
             const sliderId = sliderInput.id;
-            const min = parseInt(sliderInput.min);
-            const max = parseInt(sliderInput.max);
+            const min = parseFloat(sliderInput.min);
+            const max = parseFloat(sliderInput.max);
             
             const sliderThumb = document.getElementById('sliderThumb_' + sliderId);
             const sliderTrackActive = document.getElementById('sliderTrackActive_' + sliderId);

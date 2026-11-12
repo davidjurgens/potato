@@ -1,8 +1,7 @@
 # Potato Node
-In order to use better practices within the potato tool, we created a sub directory
+To use better practices within the potato tool, we created a sub directory
 to allow for compiled javascript modules to be used within the project. This should
-allow us to still support legacy modules while at the same time leveraging the power 
-of node and npm.
+allow us to still support legacy modules while at the same time using node and npm.
 
 
 ## Using this sub-project

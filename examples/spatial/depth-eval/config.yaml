@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Evaluating a monocular depth prediction.
+#
+# The annotator sees the RGB frame and the predicted depth over it, drags the
+# near/far window until the structure is legible, and marks the regions where
+# the prediction is wrong. The cursor reports the distance under it in METRES,
+# which is what makes a scale error findable — a depth map whose values are all
+# 30% short looks completely normal once the window rescales.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/spatial/depth-eval/config.yaml -p 8000
+#
+# Regenerate the scenes with:
+#   python examples/spatial/depth-eval/generate_depth.py
+#
+# The two scenes carry the failures a real monocular model makes: flying pixels
+# at the near box's silhouette, a hole where a dark surface returned nothing
+# (drawn in magenta, so it cannot be confused with near or far depth), and — in
+# scene 2 only — a back wall reported 30% nearer than it is.
+
+port: 8000
+annotation_task_name: "Depth prediction review"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+# Two panels: the photograph, and the depth over it. The depth display fetches
+# its own colourised render from /media/depth, so nothing here has to know that
+# the file on disk is a 16-bit PNG the browser cannot show.
+instance_display:
+  fields:
+    - key: rgb
+      type: image
+      label: "RGB frame"
+    - key: depth
+      type: depth_map
+      label: "Predicted depth"
+      display_options:
+        # Stored units per metre, inverted: this file holds millimetres. The
+        # file does not record its own unit and nothing can infer it, so
+        # getting this wrong is silent — check the readout against something
+        # you know the size of before trusting a corpus.
+        depth_scale: 0.001
+        colormap: turbo
+        # The RGB frame underneath, so the overlay slider cross-fades between
+        # them. Without it the depth is legible but unlocated.
+        rgb_field: rgb
+        overlay_opacity: 0.85
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: depth_quality
+    description: "Overall, is this depth prediction usable?"
+    labels:
+      - name: "Usable"
+        key_value: "1"
+      - name: "Usable with local errors"
+        key_value: "2"
+      - name: "Wrong scale or structure"
+        key_value: "3"
+
+  - annotation_type: multiselect
+    name: failure_modes
+    description: "Which failures are present? (select all)"
+    labels:
+      - "Flying pixels at depth edges"
+      - "Missing measurements (holes)"
+      - "Wrong absolute scale"
+      - "Flat where the scene is not"
+      - "Object merged into background"
+
+  - annotation_type: text
+    name: notes
+    description: "Where did you check the metre readout, and what did it say?"

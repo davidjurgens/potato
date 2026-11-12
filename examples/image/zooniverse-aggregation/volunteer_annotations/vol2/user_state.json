@@ -1,0 +1,58 @@
+{
+  "user_id": "vol2",
+  "max_assignments": -1,
+  "instance_id_ordering": [
+    "9001",
+    "9002"
+  ],
+  "current_instance_index": 0,
+  "current_phase_and_page": [
+    "annotation",
+    "aggregation (imported)"
+  ],
+  "completed_phase_and_pages": [],
+  "instance_id_to_label_to_value": {
+    "9001": [
+      [
+        {
+          "schema": "T0",
+          "name": "Yes"
+        },
+        "Yes"
+      ],
+      [
+        {
+          "schema": "T1",
+          "name": "Ice"
+        },
+        "Ice"
+      ],
+      [
+        {
+          "schema": "T2",
+          "name": "_data"
+        },
+        "[{\"type\": \"landmark\", \"label\": \"Adult\", \"color\": \"#00ff00\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.102, \"y\": 0.196}}, {\"type\": \"landmark\", \"label\": \"Adult\", \"color\": \"#00ff00\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.805, \"y\": 0.804}}, {\"type\": \"bbox\", \"label\": \"Nest\", \"color\": \"#ff0000\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.205, \"y\": 0.21, \"width\": 0.1, \"height\": 0.1}}]"
+      ]
+    ],
+    "9002": [
+      [
+        {
+          "schema": "T0",
+          "name": "No"
+        },
+        "No"
+      ],
+      [
+        {
+          "schema": "T1",
+          "name": "Rock"
+        },
+        "Rock"
+      ]
+    ]
+  },
+  "instance_id_to_span_to_value": {},
+  "phase_to_page_to_label_to_value": {},
+  "phase_to_page_to_span_to_value": {}
+}

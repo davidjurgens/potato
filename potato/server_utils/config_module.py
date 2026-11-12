@@ -4,6 +4,7 @@ Config module with enhanced security validation and error handling.
 
 import yaml
 import os
+import sys
 import logging
 import re
 import codecs
@@ -37,6 +38,12 @@ class ConfigSecurityError(Exception):
 
 import difflib
 
+# The localizable UI string keys (single source of truth). The ui_language
+# whitelist below is derived from these so a new string never needs a duplicate
+# whitelist edit. Safe import: i18n has no dependency back on this module.
+from potato.server_utils.i18n import UI_LANG_DEFAULTS as _UI_LANG_DEFAULTS
+_UI_LANG_KEYS = set(_UI_LANG_DEFAULTS)
+
 # ============================================================================
 # Known config key schema (hierarchical)
 # Keys map to None (leaf), set (known sub-keys), or dict (nested schema).
@@ -46,14 +53,27 @@ KNOWN_CONFIG_KEYS = {
     # === Core / required ===
     "item_properties": {
         "id_key", "text_key", "category_key", "kwargs",
+        # The image counterpart of text_key, for AI support on a multimodal
+        # item. `ai_support.image_key` overrides it.
+        "image_key",
+        # Item fields kept out of everything the annotator's browser receives.
+        "private_keys",
     },
     "data_files": None,
     "task_dir": None,
     "output_annotation_dir": None,
+    # Deprecated; folded onto export_annotation_format at load time. Kept here
+    # so an old config gets the deprecation warning rather than "unrecognized".
     "output_annotation_format": None,
     "annotation_task_name": None,
     "task_description": None,
     "annotation_task_description": None,
+
+    # === Dataset publishing (HuggingFace / Zenodo / archive) ===
+    # Descriptive metadata for the auto-generated dataset card / Zenodo deposit,
+    # and feature/runtime options. Both optional; publishing works with neither.
+    "dataset_metadata": None,
+    "publish": None,
 
     # === Data sources ===
     "data_directory": None,
@@ -67,15 +87,19 @@ KNOWN_CONFIG_KEYS = {
     # === Annotation ===
     "annotation_schemes": None,
     "phases": None,
-    "output_annotation_format": None,
 
     # === Auth / login ===
     "authentication": {
         "method", "providers", "user_identity_field", "database_url",
         "user_config_path", "auto_register", "allow_local_login",
-        "allowed_domain", "allowed_domains", "allowed_org",
+        "allowed_domain", "allowed_domains", "allowed_org", "saml",
     },
-    "login": {"type", "url_argument", "auto_redirect_delay", "auto_redirect_on_completion"},
+    "login": {"type", "url_argument"},
+    # Read at top level by routes.py and every crowd provider, never under
+    # `login` — they sat in that block for releases, so a config that put them
+    # where the allowlist implied got no warning and no redirect.
+    "auto_redirect_on_completion": None,
+    "auto_redirect_delay": None,
     "user_config": {"allow_all_users", "users"},
     "require_password": None,
     "require_no_password": None,
@@ -85,22 +109,25 @@ KNOWN_CONFIG_KEYS = {
     "server": {"port", "host", "debug"},
     "port": None,
     "host": None,
+    "session_timeout_minutes": None,
     "customjs": None,
     "customjs_hostname": None,
     "site_dir": None,
     "site_file": None,
     "persist_sessions": None,
     "session_lifetime_days": None,
+    "session_cookie_samesite": None,
+    "session_cookie_secure": None,
     "base_html_template": None,
 
     # === Quality control ===
     "attention_checks": {
         "enabled", "items_file", "frequency", "probability",
-        "min_response_time", "failure_handling",
+        "min_response_time", "failure_handling", "geometry_iou_tolerance",
     },
     "gold_standards": {
         "enabled", "items_file", "mode", "frequency",
-        "accuracy", "auto_promote",
+        "accuracy", "auto_promote", "feedback", "geometry_iou_tolerance",
     },
     "gold_standards_file": None,
     "pre_annotation": {
@@ -113,17 +140,51 @@ KNOWN_CONFIG_KEYS = {
 
     # === AI ===
     "ai_support": {
-        "enabled", "endpoint_type", "ai_config_file", "ai_config",
-        "option_highlighting", "features", "cache_config",
+        "enabled": None, "endpoint_type": None, "ai_config_file": None,
+        "option_highlighting": None, "features": None, "cache_config": None,
+        # The study's no-assistance comparison group (assist_holdout.py).
+        "holdout": {"fraction", "salt"},
+        # Which item field holds the picture. The AI path reads exactly one
+        # field -- `item_properties.text_key` -- and sniffs it to decide
+        # whether the item is an image, so a multimodal item could send its
+        # text or its photograph but never both.
+        "image_key": None,
+        # Spelled out rather than left opaque so `ai_support.ai_config.modle`
+        # is caught. The union of every key any endpoint reads: the shared
+        # ones first, then the per-endpoint ones (openai_vision's detail /
+        # json_mode / max_image_size, vllm's think, yolo and sam's detection
+        # settings). An `ai_config_file` merges its keys in here flat, so the
+        # same list covers that file's contents.
+        "ai_config": {
+            "model": None, "base_url": None, "api_base": None,
+            "api_key": None, "max_tokens": None, "temperature": None,
+            "timeout": None, "enabled": None,
+            "detail": None, "json_mode": None, "max_image_size": None,
+            "think": None,
+            "classes": None, "custom_classes": None,
+            "confidence_threshold": None, "iou_threshold": None,
+            "device": None, "max_frames": None, "default_video_fps": None,
+            # `include.all` is the switch most authors want and the one whose
+            # absence is silent, so a typo in it must not pass either.
+            "include": {"all", "special_include"},
+        },
     },
     "chat_support": {
         "enabled", "endpoint_type", "ai_config", "ui",
+        # Read at chat_manager.py:52. It was not ignored -- a template set here
+        # took effect -- but it was rejected here, so the only way to change
+        # what the chat assistant is told, including the default's instruction
+        # not to name a label, could not pass `validate --strict`.
+        "system_prompt",
     },
 
     # === Advanced features ===
     "training": {
+        # allow_retry is read at routes.py `training_config.get('allow_retry', True)`
+        # but was missing here, so every config that set it got an "unrecognized key"
+        # warning and the reader had to fall back to the default.
         "enabled", "data_file", "annotation_schemes",
-        "passing_criteria", "feedback", "failure_action",
+        "passing_criteria", "feedback", "failure_action", "allow_retry",
     },
     "active_learning": {
         "enabled", "classifier", "vectorizer",
@@ -135,12 +196,35 @@ KNOWN_CONFIG_KEYS = {
         "classifier_params", "vectorizer_params", "calibrate_probabilities",
         "bald_params", "use_icl_ensemble", "icl_ensemble_params",
         "annotation_routing", "routing_thresholds",
+        # Flat spellings of the dataclass fields. parse_active_learning_config
+        # reads any ActiveLearningConfig field and the active-learning guides
+        # use these, but they were missing here, so --strict rejected them.
+        "classifier_name", "classifier_kwargs", "vectorizer_name",
+        "vectorizer_kwargs", "cold_start_batch_size", "verification_sample_rate",
+        "model_persistence_enabled", "model_save_directory",
+        "model_retention_count", "llm_enabled", "llm_config",
     },
     "category_assignment": {
-        "enabled", "category_key", "qualification", "fallback", "dynamic",
+        "enabled": None,
+        # Accepted as the other spelling of item_properties.category_key,
+        # which is where the code used to look and only there -- so a config
+        # putting it in the block named after the feature ran with every item
+        # uncategorized and looked healthy.
+        "category_key": None,
+        "qualification": None,
+        "fallback": None,
+        "dynamic": {
+            "enabled": None,
+            "min_annotations_for_consensus": None,
+            "agreement_method": None,
+            "learning_rate": None,
+            "update_interval_seconds": None,
+            "base_probability": None,
+        },
     },
     "batch_assignment": {
-        "groups", "annotator_key",
+        "groups", "annotator_key", "auto_assign_annotators", "group_by_condition",
+        "randomize_within_list",
     },
     "diversity_ordering": {
         "enabled", "model_name", "num_clusters", "items_per_cluster",
@@ -148,11 +232,15 @@ KNOWN_CONFIG_KEYS = {
         "recluster_threshold", "preserve_visited",
         "trigger_ai_prefetch", "cache_dir",
     },
-    "diversity_config": None,
     "embedding_visualization": {
         "enabled", "sample_size", "include_all_annotated",
         "embedding_model", "image_embedding_model", "umap", "label_source",
     },
+    # The project-wide embedder (corpus map, diversity ordering, duplicate
+    # detection). Backend-specific extras (entrypoint, endpoint, headers,
+    # batch_size, modality, frames…) are passed through to the backend, so this
+    # block deliberately does not enumerate them.
+    "embeddings": None,
     "adjudication": {
         "enabled", "adjudicator_users", "min_annotations",
         "agreement_threshold", "fast_decision_warning_ms",
@@ -161,6 +249,11 @@ KNOWN_CONFIG_KEYS = {
         "show_annotator_names",
         "output_subdir", "require_confidence",
         "show_all_items", "show_timing_data",
+        "include_machine_annotators", "min_human_annotations",
+    },
+    "annotator_dashboard": {
+        "enabled", "show_project_progress", "show_personal_progress",
+        "show_active_annotators",
     },
     "database": {"type", "host", "database", "username", "password", "port",
                  "pool_size", "pool_timeout", "connection_string"},
@@ -175,32 +268,56 @@ KNOWN_CONFIG_KEYS = {
         "enabled", "min_annotations_per_item", "trigger_every_n", "num_restarts",
         "min_items", "num_iters",
     },
-    "icl_labeling": None,
-    "llm_labeling": None,
+    # Recorded three levels deep because that is where icl_labeling is
+    # actually configured. It was `None` -- sub-keys unchecked -- and its real
+    # shape is nested, so the flat block a reader would naturally write
+    # (`min_confidence`, `num_examples`, `schema_names`) validated clean,
+    # booted clean and did nothing at all.
+    "icl_labeling": {
+        "enabled": None,
+        "example_selection": {
+            "min_agreement_threshold", "min_annotators_per_instance",
+            "max_examples_per_schema", "refresh_interval_seconds",
+        },
+        "llm_labeling": {
+            "batch_size", "trigger_threshold", "confidence_threshold",
+            "batch_interval_seconds", "max_total_labels",
+            "max_unlabeled_ratio", "pause_on_low_accuracy",
+            "min_accuracy_threshold",
+        },
+        "verification": {"enabled", "sample_rate", "selection_strategy",
+                         "mix_with_regular_assignments", "assignment_mix_rate"},
+        "persistence": {"predictions_file"},
+    },
+    # `llm_labeling` is deliberately NOT here. It was a recognized top-level
+    # key that nothing read: the only reader is icl_labeler.py:188, which
+    # reads it as a sub-block of `icl_labeling`, and that is where the bundled
+    # example puts it. Recognized-but-inert is the worst of both -- a config
+    # naming a made-up model with a nonsense batch size validated clean,
+    # booted clean, logged nothing and registered no route. Unlisted, the
+    # unknown-key check points the author at `icl_labeling` instead.
 
     # === UI & layout ===
     "ui": None,
     "ui_config": None,
-    "layout": {"grid", "breakpoints", "groups", "order", "styling"},
+    # Third level recorded because it is where the form layout is actually
+    # configured, and an undeclared key is invisible to the JSON Schema, the
+    # config reference and `validate --strict` alike.
+    "layout": {
+        "grid": {"columns", "gap", "row_gap", "align_items"},
+        "breakpoints": {"mobile", "tablet"},
+        "groups": {"id", "schemas", "title", "description", "collapsible",
+                   "collapsed_default", "background_color"},
+        "order": None,
+        "styling": {"align_items", "content_align", "group_background_odd",
+                    "group_background_even", "group_padding", "form_padding"},
+    },
     "instance_display": {"fields", "layout", "resizable"},
     "format_handling": {"enabled", "default_format", "pdf", "spreadsheet"},
-    "ui_language": {
-        "html_lang", "html_dir",
-        "next_button", "previous_button", "submit_button", "go_button",
-        "retry_button", "logout",
-        "labeled_badge", "in_progress_badge", "not_labeled_badge",
-        "progress_label", "loading", "error_heading",
-        "adjudicate", "codebook", "instructions_heading",
-        "text_to_annotate", "video_to_annotate", "audio_to_annotate",
-        "login_title", "login_subtitle_password", "login_subtitle_username",
-        "sign_in_tab", "register_tab",
-        "username_label", "password_label",
-        "sign_in_button", "continue_button", "register_button",
-        "forgot_password", "username_placeholder",
-        "choose_username_placeholder", "create_password_placeholder",
-        "sign_in_with", "or_divider",
-        "powered_by", "cite_us",
-    },
+    # Derived from the shared English defaults (single source of truth) plus
+    # the "_base" control key, which selects a bundled catalog to layer inline
+    # overrides on top of. Adding a UI string in i18n.py auto-updates this.
+    "ui_language": {"_base", *_UI_LANG_KEYS},
     "base_css": None,
     "ui_debug": None,
     "hide_navbar": None,
@@ -208,6 +325,10 @@ KNOWN_CONFIG_KEYS = {
 
     # === Content ===
     "annotation_instructions": None,
+    # Read by CredentialManager.from_config(). The top-level
+    # `env_substitution` alias that used to sit here was read by nothing;
+    # the working form has always been nested under this key.
+    "credentials": {"env_substitution", "env_file"},
     "annotation_codebook_url": None,
     "custom_footer_html": None,
     "header_file": None,
@@ -219,11 +340,21 @@ KNOWN_CONFIG_KEYS = {
     "highlight_linebreaks": None,
     "list_as_text": {"text_list_prefix_type", "horizontal", "alternating_shading"},
     "jumping_to_id_disabled": None,
+    "review_mode": {"enabled", "auto_advance", "advance_on", "delay_ms"},
     "horizontal_key_bindings": None,
     "completion_code": None,
     "allow_phase_back_navigation": None,
     "require_fully_annotated": None,
     "export_include_phase_data": None,
+    # Write annotation_changes.csv — the timestamped record of every answer revision.
+    # Off by default: it is much larger than the annotations and carries fine-grained
+    # interaction detail not every study wants to distribute.
+    "export_include_annotation_changes": None,
+    # Sidecar files of per-item behavioural measurements. Off by default for
+    # the same reason as annotation changes, and because they describe
+    # identifiable annotators.
+    "export_include_typing_dynamics": None,
+    "export_include_authenticity": None,
     "export_annotation_format": None,
     "auto_export_interval": None,
 
@@ -232,20 +363,164 @@ KNOWN_CONFIG_KEYS = {
         "waveform_cache_dir", "waveform_look_ahead", "waveform_cache_max_size",
         "client_fallback_max_duration",
     },
-    "spectrogram": None,
     "media_directory": None,
-    "default_video_fps": None,
+    "serve_raw_medical_files": None,
 
     # === External integrations ===
+    # Crowd-provider selection + per-provider sub-blocks (validated by the
+    # provider registry in potato/crowdsourcing/registry.py at init time).
+    "crowdsourcing": None,
     "mturk": None,
     "prolific": {
         "config_file_path", "token", "study_id",
-        "max_concurrent_sessions", "workload_checker_period",
+        "max_concurrent_sessions", "workload_checker", "workload_checker_period",
         "completion_code", "sandbox_mode",
     },
     "webhooks": {"enabled", "endpoints"},
-    "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
+    # Model Context Protocol control surface. Absent or disabled means the
+    # blueprint is never registered, so the endpoints do not exist at all.
+    "mcp": {
+        "enabled", "tools", "destructive", "scope", "auth", "audit_log",
+        "allow_debug",
+    },
+    "trace_ingestion": {
+        "enabled": None, "sources": None, "api_key": None, "notify_annotators": None,
+        # Opt back in to an unauthenticated receiver. Without an api_key the
+        # webhook endpoints now reject every request; this re-opens them.
+        "allow_unauthenticated": None,
+        # Scores back to Langfuse / LangSmith (trace_ingestion/writeback.py).
+        "writeback": {
+            "trigger": None, "score_prefix": None, "min_annotators": None,
+            "langfuse": {"host", "public_key_env", "secret_key_env", "score_configs"},
+            "langsmith": {"api_url", "api_key_env"},
+        },
+    },
+    "cot_segmentation": {
+        "source_key", "target_key", "strategy", "min_step_chars", "max_steps",
+        "markers", "sentences_per_step", "llm_max_chars",
+    },
+    # Agreement drift tracking: agreement scored per time window, plus the
+    # re-calibration prompt that fires when the latest window falls below the
+    # project baseline. See potato/server_utils/iaa/drift.py.
+    # Cost estimate + spend cap for AI actions. See potato/ai/cost.py.
+    "ai_budget": {"cap_usd", "prices"},
+    "calibration": {"enabled", "windows", "window_by", "drop_threshold"},
+    "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Boundary Lab: counterfactual boundary probing (decision boundaries,
+    # contrast-set export, invariance-probe quality control).
+    "boundary_probing": {
+        "enabled", "schema", "probes_per_item", "include_invariance",
+        "sources", "precomputed_key", "rationale_on_flip", "debounce_ms",
+        "ai_support",
+    },
+    # Truth Serum: surprisingly-popular scoring (peer-prediction micro-question).
+    "truth_serum": {"enabled", "schema", "question", "min_annotators"},
+    # Think-Aloud: local voice rationales + rule-based spoken-label phrases.
+    "thinkaloud": {"enabled", "schema", "stt", "model", "chunk_seconds",
+                   "stems", "fillers", "require_spoken_label", "language"},
+    # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
+    "pocket": {"enabled", "batch_size", "auto_redirect"},
+    # text_as_image: the item text is rendered to a PNG server-side, so an
+    # annotator cannot copy it into a chatbot. Accepts `true` as well as this
+    # mapping. See potato/server_utils/text_to_image.py.
+    "text_as_image": {"enabled", "font_size", "max_width", "font_path"},
+    # KaTeX math rendering in item text, display fields and trace steps.
+    # Validated in detail by potato.math_rendering.validate_math_config().
+    "math": {"enabled", "delimiters", "fields", "macros"},
+    # Keystroke logging: content-blind typing dynamics on free-text fields, and
+    # the composed/transcribed/pasted detection built on them. Validated in
+    # detail by validate_keystroke_logging_config().
+    "keystroke_logging": {
+        "enabled", "fidelity", "include_schemas", "exclude_schemas",
+        "store_events", "classify_paste_source", "idle_session_ms",
+        "flush_interval_ms", "pause_thresholds_ms", "disclose_to_annotators",
+        "disclosure_text", "detection", "phases",
+    },
+    # Annotation telemetry: content-blind drawing dynamics on geometry schemas,
+    # and the rubber-stamping screening built on them. Validated in detail by
+    # validate_annotation_telemetry_config().
+    "annotation_telemetry": {
+        "enabled", "fidelity", "include_schemas", "exclude_schemas",
+        "store_events", "idle_ms", "flush_interval_ms",
+        "disclose_to_annotators", "disclosure_text", "detection", "phases",
+    },
+    # Authenticity paradata: page-level, content-blind signals of outsourced or
+    # automated work (leaving the page, copying the item, external pastes,
+    # webdriver) for every task type. Validated by validate_authenticity_config().
+    "authenticity": {
+        "enabled", "flush_interval_ms", "min_away_ms", "track_pointer",
+        "disclose_to_annotators", "disclosure_text", "detection", "phases",
+    },
+    # The always-on interaction tracker (clicks, focus, scroll, shortcut keys).
+    "interaction_tracking": {"enabled", "disclose_to_annotators", "disclosure_text",
+                             "phases"},
+    # Incentive payments for price_list / bdm / belief_elicitation answers.
+    # Validated by potato.incentives.validate_incentives_config().
+    "incentives": {"enabled", "currency", "rules", "pay", "max_bonus", "seed", "only_finished"},
+    # Scheduled sessions and their messages. Validated in full (unknown keys
+    # refused, credentials refused inline) by
+    # potato.scheduling.config.validate_schedule_config().
+    "schedule": {"timezone", "seed", "poll_seconds", "scheduler", "waves",
+                 "experience_sampling", "delphi"},
+    "notifications": {"dry_run", "base_url", "channels", "contact", "templates"},
+    # Between-subjects conditions for experiment designs. Validated by
+    # experiment_conditions.validate_conditions_config().
+    "conditions": {"factors", "assignment", "balance_on", "max_per_cell", "cells",
+                   "in_progress_minutes"},
+    # Timed trials on the annotation page. Validated by
+    # potato.trial_timing.validate_trial_timing_config().
+    "trial_timing": {"enabled", "fixation_ms", "fixation_symbol", "stimulus_duration_ms",
+                     "trial_duration_ms", "iti_ms", "response", "item_overrides",
+                     "disable_back_navigation", "show_response_options", "presentation"},
+    # Psychometrics: live IRT (labels with error bars) + adaptive routing.
+    "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
+                      "min_annotators_per_item", "confidence_threshold",
+                      "cost_per_judgment", "discrimination_flag_threshold",
+                      "include_machine_annotators"},
+    # Multiplayer Rooms: live norming sessions, adjudication huddles, shadowing.
+    "rooms": {"enabled", "who_can_create", "persist_votes", "poll_interval_ms",
+              "max_members", "schema"},
+    # Live collaborative sessions: teams annotating the same items together.
+    # Validated in depth by potato.collab.config.validate_collab_block().
+    "collab": {"enabled", "who_can_create", "max_members", "default_mode",
+               "conflict_policy", "require_signoff", "blind_first", "sync_view",
+               "exclude_members_from_solo", "transport",
+               "poll_interval_ms", "hidden_poll_interval_ms", "sse", "max_items",
+               "teams"},
+    # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
+    # Leaf sub-dicts (sampling/human/calibration/output) are validated by
+    # validate_judge_calibration_config(); kept shallow here to avoid
+    # unknown-key churn while the feature stabilizes.
+    "judge_calibration": {
+        "enabled", "prompt", "models", "k_samples", "max_items", "fraction",
+        "sampling", "human", "schemas", "calibration", "output", "state_dir",
+    },
+    # Machine annotators: raters that are tools or models rather than people.
+    # Declaring one is what separates a legitimate machine rater from the
+    # fabricated user the importers refuse to write. Leaf validation of
+    # `annotators` lives in validate_machine_annotators_config(); kept shallow
+    # here for the same reason as judge_calibration above.
+    "machine_annotators": {"enabled", "require_declaration", "annotators"},
+    "triage": {"enabled", "order", "default_priority", "show_badge",
+               "signal_field", "invert_signal", "rules"},
+    # Datasets / Experiments: versioned eval datasets + experiment runs.
+    "datasets": {"enabled", "storage"},
+    # Automation rules: filter -> sample -> actions over incoming items.
+    "automation": {"enabled", "rules"},
+    # Semantic curation: embedding index, similarity search, dynamic slices.
+    "curation": {"enabled", "model_name", "embed_on_ingest", "text_key"},
+    # Multi-model arena: fan a prompt out to N providers side by side.
+    "arena": {"enabled", "models"},
+    # Read only by `potato validate`, never by the server.
+    "validation": {"acknowledge"},
+    "grid_view": {"enabled", "scheme", "page_size"},
+    # Installed plugins to load (a list of entry-point names).
+    "plugins": None,
+    # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
+    "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
+    # Off-host backup to HuggingFace and/or S3, with restore on boot.
+    "backup": {"enabled", "sinks", "schedule_minutes", "restore_on_boot"},
 
     # === Debug / logging ===
     "debug": None,
@@ -257,7 +532,18 @@ KNOWN_CONFIG_KEYS = {
 
     # === Agent ===
     "live_agent": None,
-    "live_coding_agent": None,
+    # Live coding agent. `sandbox_*` and `container_*` govern the boundary the
+    # agent's tool calls run inside -- see potato/sandbox/__init__.py for the
+    # ladder. Declared explicitly because a typo in a sandbox key is a security
+    # setting that silently does nothing.
+    "live_coding_agent": {
+        "backend_type", "ai_config", "working_dir", "max_turns",
+        "system_prompt",
+        "sandbox_mode", "container_cli", "container_runtime", "sandbox_image",
+        "sandbox_network", "sandbox_user", "sandbox_memory", "sandbox_cpus",
+        "sandbox_pids_limit", "sandbox_root",
+        "acknowledge_untrusted_code_execution",
+    },
     "agent_proxy": None,
 
     # === Legacy / multi-task ===
@@ -280,6 +566,48 @@ KNOWN_CONFIG_KEYS = {
     # Per-annotator workload caps:
     #   { default: int, by_user: {user_id: int}, by_user_role: {role: int} }
     "per_annotator_quota": None,
+    # Role labels: { user_id: role }. Drives per_annotator_quota.by_user_role
+    # and (when the label names a permissioned RBAC role) confers permissions.
+    "user_roles": None,
+    # Role-based access control: role -> permissions, user/SSO role assignment.
+    "rbac": {
+        "enabled", "roles", "user_role_assignments", "sso_role_mapping",
+    },
+    # Named, reusable annotation-scheme sets referenced by batch_assignment
+    # groups for per-cohort schema assignment.
+    "scheme_sets": None,
+    # Multi-document corpus map: embed -> cluster -> UMAP -> KNN at ingest,
+    # exposed to annotators as a 2D navigation surface. Heavy compute is lazy
+    # (never at boot). Sub-keys clustering/umap/knn/cluster_labeling are leaf
+    # (None) — parsed by parse_corpus_map_config, not recursed here.
+    # Consensus export (format `consensus`): vote fractions, point clusters
+    # and box groups across annotators. Parsed by potato/aggregation/config.py.
+    "consensus_aggregation": {
+        "agreement_threshold": None,
+        "min_classifiers": None,
+        "schemes": None,
+        "points": {"eps", "eps_unit", "min_samples"},
+        "boxes": {"iou_threshold"},
+    },
+    "corpus_map": {
+        "enabled": None,
+        "build_on_start": None,
+        "embedding_model": None,
+        "clustering": None,
+        "umap": None,
+        "knn": None,
+        "cluster_labeling": None,
+        "sample_size": None,
+    },
+    # Cross-document event registry: admin-defined template slots that
+    # annotators fill with evidence drawn from many documents.
+    "event_template": {
+        "enabled": None,
+        "name": None,
+        "allow_annotator_create": None,
+        "seed_events": None,
+        "slots": None,
+    },
     # qda_mode sub-keys are deliberately leaf (None): validation stops at
     # memos/codebook and does NOT recurse into their sub-keys. This is
     # intentional forward-compat — parse_qda_mode_config() routes any
@@ -319,6 +647,11 @@ KNOWN_CONFIG_KEYS = {
     "codebook": {
         "enabled": None,
         "mode": None,
+        # Consumed by potato/codebook/distiller.py::DistillerConfig.from_config.
+        "distiller": {
+            "include", "include_types", "include_doc_sections",
+            "scope", "procedure", "max_chars",
+        },
     },
     # Top-level convenience scalar mirroring codebook.mode.
     "codebook_mode": None,
@@ -338,6 +671,74 @@ KNOWN_CONFIG_KEYS = {
         "auto_detect": None,
         "attributes": None,
     },
+    # Session-level scoring: group traces by session_id/thread_id and
+    # score whole sessions on /sessions (schemes opt in with
+    # `session_level: true`). `key` overrides the detected field;
+    # `attributes` lifts item fields onto the session.
+    "sessions": {
+        "enabled": None,
+        "key": None,
+        "attributes": None,
+    },
+    # Reviewer routing + kanban board (/admin/review). A parallel review-
+    # state store (pending/in_review/needs_second/adjudication/done) with
+    # first-match routing rules over the shared condition grammar.
+    "review_workflow": {
+        "enabled": None,
+        "reviewers": None,
+        "auto_enroll": None,
+        "routing": None,
+    },
+    # In-tool model training (potato/training). Read by training/manager.py
+    # and training/writeback.py.
+    "model_training": {
+        "enabled": None,
+        "retain_runs": None,
+        "grace_seconds": None,
+        "queue_max": None,
+        "split_seed": None,
+        "splits": None,
+        "aggregation": None,
+        "auto_retrain": None,
+        "max_wall_seconds": None,
+        "max_ram_mb": None,
+        "device": None,
+        "num_threads": None,
+        "writeback": {"schemas", "min_confidence", "field", "include_unlabeled"},
+        # Where runs execute (training/backends.py). Entries are validated by
+        # validate_backends_config, which knows the per-type keys.
+        "backend": None,
+        "backends": None,
+        "max_predictions_mb": None,
+        # Per-trainer parameter defaults, merged under a run's own params.
+        "trainer_params": None,
+        # Large images cut into tiles at bundle time (training/tiling.py).
+        "tiling": {"enabled", "auto_min_side", "tile_size", "overlap",
+                   "downsample", "mpp", "background", "max_predict_tiles",
+                   "min_visible", "tissue_threshold"},
+    },
+    # The labeling engine (potato/labeling_engine): machines label, humans
+    # calibrate and certify. Sources, cascade and contracts are lists of
+    # mappings validated by labeling_engine.config.parse_engine_config.
+    "labeling_engine": {
+        "enabled": None,
+        "schemas": None,
+        "sources": None,
+        "cascade": None,
+        "contracts": None,
+        "humans": {"pools", "dev_fraction", "calibration_rate",
+                   "min_calibration_per_class", "audit_rate", "overlap",
+                   "overlap_k", "verify_visibility", "distribution_k", "truth"},
+        "crowd": {"provider", "study_id", "reward_usd", "per_worker_quota"},
+        "budgets": {"model_usd", "human_usd", "human_labels"},
+        "runtime": {"batch_size", "concurrency", "cache", "retries",
+                    "planner_interval", "hold_minutes"},
+        "features": {"distill", "optimize", "drift", "crowd_recruit",
+                     "crowd_live_spend", "pii_redaction", "payload_capture"},
+        "redaction": {"categories"},
+        "distill": {"trainer", "min_labels", "every", "include_silver", "modality",
+                    "image_field"},
+    },
     "solo_mode": {
         "enabled": None,
         "labeling_models": None,
@@ -352,6 +753,10 @@ KNOWN_CONFIG_KEYS = {
         "labeling_functions": None,
         "confidence_routing": None,
         "confusion_analysis": None,
+        "suggestions": {"display", "blind_rate", "minimum_blind_sample"},
+        "cache": {"enabled"},
+        "gold": {"file", "id_key", "label_key", "text_key"},
+        "jury": {"enabled", "models", "early_stop"},
         "state_dir": None,
         "refinement_loop": {
             "enabled",
@@ -376,16 +781,384 @@ KNOWN_CONFIG_KEYS = {
     "admin_api_key": None,
     "alert_time_each_instance": None,
     "assignment_strategy": None,
-    "reclaim_stale_assignments": None,
     "instance_reclaim": None,
+    "assignment_hold_minutes": None,
+    # Where item payloads live. In-memory by default; see potato/item_store.py
+    # for the measurement that makes that the right default and the scale at
+    # which "paged" starts to pay for itself.
+    "item_store": {"backend", "path", "cache_size"},
     "max_session_seconds": None,
-    "env_substitution": None,
 
     # === Internal (set by system, not user) ===
     "config_file": None,
     "__config_file__": None,
     "_bws_pool_items": None,
 }
+
+#: Keys `attention_checks.failure_handling` actually reads. The unknown-key pass
+#: stops at the top level, so nothing else was checking inside this block.
+ATTENTION_FAILURE_HANDLING_KEYS = {
+    "warn_threshold", "warn_message", "block_threshold", "block_message",
+}
+
+
+# --- Deprecated config keys ------------------------------------------------- #
+
+# Keys the loader still accepts, with a warning, and will stop reading in a
+# later release. `output_annotation_format` was live until the v2 storage
+# rewrite (commit 5eef51d, March 2025) deleted save_all_annotations(), the only
+# code that read it. Annotations have gone to
+# `<output_annotation_dir>/<user>/user_state.json` regardless of its value ever
+# since, so a config carrying it gets a setting that does nothing. Folding it
+# onto `export_annotation_format` writes a periodic export in that format under
+# `<output_annotation_dir>/exports/<format>/`, which is close to what the name
+# suggests.
+DEPRECATED_KEY_ALIASES = {
+    "output_annotation_format": "export_annotation_format",
+}
+
+# `json` was one of four values the old key accepted, and the export registry
+# has no exporter under that name -- `jsonl` is the JSON-shaped one. Without
+# this mapping every folded config would log "not registered, skipping" on each
+# save. Deliberately a static table: importing the export registry here would
+# pull 29 exporters onto the boot path.
+DEPRECATED_KEY_VALUE_ALIASES = {
+    "output_annotation_format": {"json": "jsonl"},
+}
+
+_DEPRECATION_REMOVAL_NOTE = "It will stop being read in a later release."
+
+
+def normalize_config_before_validation(
+    config_data: Dict[str, Any], config_file_dir: str
+) -> Dict[str, Any]:
+    """Apply everything the server does to a config before validating it.
+
+    `potato validate` used to skip these steps and so reported errors a running
+    server does not have: a config whose `ai_support.endpoint_type` came from an
+    environment variable was rejected as an unknown endpoint type, because
+    nothing had expanded the `${...}` yet. One function, both callers.
+    """
+    # Merge external AI config file if specified (before validation)
+    config_data = _merge_ai_config_file(config_data, config_file_dir)
+
+    # Substitute ${ENV_VAR} references in LLM endpoint config blocks
+    # (live_agent, solo_mode, judge_calibration, agent_proxy, ...)
+    config_data = _substitute_llm_block_env_vars(config_data)
+
+    # Apply default values for common configuration options
+    if 'task_dir' not in config_data:
+        config_data['task_dir'] = '.'
+        logger.debug("task_dir not specified, defaulting to '.'")
+    if 'site_dir' not in config_data:
+        config_data['site_dir'] = 'default'
+        logger.debug("site_dir not specified, defaulting to 'default'")
+
+    # Resolve task_dir relative to config file directory if it's '.' or a relative path
+    task_dir = config_data.get('task_dir')
+    if isinstance(task_dir, str) and (task_dir == '.' or not os.path.isabs(task_dir)):
+        task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
+        config_data['task_dir'] = task_dir
+        logger.debug(f"Resolved task_dir to: {task_dir}")
+
+    _absolute_calibration_paths(config_data)
+    _absolute_text_as_image_font(config_data)
+
+    _apply_require_fully_annotated(config_data)
+    _normalize_runtime_phases(config_data)
+    from potato.server_utils.taxonomy_files import apply_taxonomy_files
+    apply_taxonomy_files(config_data, config_file_dir)
+    from potato.server_utils.select_label_files import (
+        config_schemes, resolve_select_label_files)
+    resolve_select_label_files(config_schemes(config_data),
+                               config_data['task_dir'], config_file_dir)
+
+    return config_data
+
+
+def _normalize_runtime_phases(config_data: Dict[str, Any]) -> None:
+    """Give each runtime phase (`type: jspsych`, `type: osweb`, ...) a survey
+    slot to run in.
+
+    The phase sequence has one slot per phase type, and a runtime task sits
+    either before the annotation phase (prestudy) or after it (poststudy).
+    The entry keeps `_kind: <runtime>` so the loader and renderer know what it
+    is; everything else -- ordering, `show_when`, counterbalancing,
+    `--debug-phase` -- treats it as an ordinary survey page.
+    """
+    from potato.runtimes.phase import is_runtime_type
+    from potato.server_utils.phase_flow import phases_dict
+    phases = config_data.get("phases")
+    if not phases:
+        return
+    entries = phases_dict(config_data)
+    if isinstance(phases, dict) and isinstance(phases.get("order"), list):
+        order = list(phases["order"])
+    else:
+        order = list(entries)
+
+    def _is_annotation(name):
+        if name == "annotation":
+            return True
+        entry = entries.get(name) or {}
+        return str(entry.get("type", "")).lower() == "annotation"
+
+    first_annotation = next((i for i, n in enumerate(order) if _is_annotation(n)), None)
+    for name, entry in entries.items():
+        if not is_runtime_type(entry.get("type")):
+            continue
+        kind = str(entry.get("type")).lower()
+        slot = entry.get("slot")
+        pos = order.index(name) if name in order else None
+        inferred = ("poststudy" if (first_annotation is not None and pos is not None
+                                    and pos > first_annotation) else "prestudy")
+        if slot is None:
+            slot = inferred
+        elif slot != inferred:
+            logger.warning(
+                "phases.%s: slot is '%s', but its place in phases.order is %s the "
+                "annotation phase. The page runs with the other %s pages, not where "
+                "the order lists it.", name, slot,
+                "after" if inferred == "poststudy" else "before", slot)
+        if slot not in ("prestudy", "poststudy"):
+            raise ConfigValidationError(
+                f"phases.{name}.slot must be 'prestudy' or 'poststudy', not '{slot}'")
+        entry["_kind"] = kind
+        entry["type"] = slot
+        from potato.runtimes.registry import get_adapter
+        get_adapter(kind).normalize(name, entry)
+
+
+def _scheme_is_required_for_test(scheme: Dict[str, Any]) -> bool:
+    """Mirror of `flask_server._scheme_is_required`, importable without booting.
+
+    Re-exported so the wiring test can assert the stamped key is the one the
+    gate reads, rather than asserting the stamp exists and calling it done.
+    """
+    from potato.flask_server import _scheme_is_required
+
+    return _scheme_is_required(scheme)
+
+
+def _apply_require_fully_annotated(config_data: Dict[str, Any]) -> None:
+    """Turn the top-level flag into the per-scheme key everything already reads.
+
+    `require_fully_annotated` was documented, accepted, type-validated,
+    published in the JSON schema and set to `true` in Potato's own
+    full-study-skeleton -- and read by nothing at top level. An annotator could
+    skip every question on every item while the config said they could not.
+    (The same name inside the `adjudication` block is a different, working
+    feature: "only queue items every expected annotator has finished".)
+
+    Wired here rather than at the gate so the browser gets it too. The gate
+    reads `_scheme_is_required`, but the `required` attribute on the rendered
+    input comes from `label_requirement`, so wiring only the gate would have
+    produced a server refusal on a page that never told the annotator which
+    question was missing.
+
+    Applied in `normalize_config_before_validation` so `potato validate` and
+    the running server agree about what the config means.
+
+    An explicit per-scheme `label_requirement` always wins, in both directions:
+    the flag cannot un-require a scheme, and a scheme that opts out with
+    `required: false` stays optional.
+    """
+    if config_data.get("require_fully_annotated") is not True:
+        return
+
+    stamped = 0
+    for scheme in _collect_all_annotation_schemes(config_data):
+        if not isinstance(scheme, dict):
+            continue
+        if "label_requirement" in scheme or "required" in scheme:
+            continue
+        scheme["label_requirement"] = {"required": True}
+        stamped += 1
+
+    if stamped:
+        logger.debug(
+            "require_fully_annotated: made %d scheme(s) required", stamped)
+
+
+#: Keys a config may carry that nothing reads. They stay accepted, so an old
+#: config still boots, but each one is named at boot and by `potato validate`
+#: (and fails `--strict`): a config that looks like it sets up a screener or an
+#: assignment policy and silently does neither is the failure being avoided.
+#: Dotted keys are nested; the message says what to use instead.
+UNREAD_CONFIG_KEYS = {
+    "surveyflow": (
+        "Its survey pages are not shown. Move them into `phases` "
+        "(docs/workflow/surveyflow.md, \"Moving from surveyflow\", maps the "
+        "old keys)."
+    ),
+    "prestudy": (
+        "Add a phase with `type: prestudy` under `phases`; `exit_when` on it "
+        "screens people out."
+    ),
+    "automatic_assignment": (
+        "Items are assigned by `assignment_strategy`. Use "
+        "`num_annotators_per_item` for annotators per item "
+        "(`labels_per_instance`, `annotators_per_instance`) and "
+        "`max_annotations_per_user` for items per annotator "
+        "(`instance_per_annotator`)."
+    ),
+    "active_learning.annotation_routing": (
+        "Nothing routes items past annotators on model confidence. Accepting "
+        "machine labels above a confidence is a `labeling_engine` contract "
+        "(docs/labeling-engine/contracts.md)."
+    ),
+    "active_learning.routing_thresholds": (
+        "See `active_learning.annotation_routing`."
+    ),
+    "active_learning.verification_sample_rate": (
+        "The spot-check rate for auto-labels is "
+        "`icl_labeling.verification.sample_rate`."
+    ),
+}
+
+
+def unread_key_warnings(config_data: Dict[str, Any]) -> List[str]:
+    """Describe every key in UNREAD_CONFIG_KEYS that the config sets."""
+    messages: List[str] = []
+    if not isinstance(config_data, dict):
+        return messages
+    for dotted, advice in UNREAD_CONFIG_KEYS.items():
+        node: Any = config_data
+        for part in dotted.split("."):
+            node = node.get(part, _MISSING) if isinstance(node, dict) else _MISSING
+        if node is not _MISSING:
+            messages.append(
+                f"Config key '{dotted}' is not read, so it has no effect. {advice}")
+    return messages
+
+
+_MISSING = object()
+
+
+def deprecated_key_warnings(config_data: Dict[str, Any]) -> List[str]:
+    """Describe every deprecated key present in the config.
+
+    Pure: builds the messages `apply_deprecated_key_aliases()` logs, so
+    `potato validate` can report the same thing without touching the config.
+    """
+    messages: List[str] = []
+    if not isinstance(config_data, dict):
+        return messages
+
+    for legacy, replacement in DEPRECATED_KEY_ALIASES.items():
+        if legacy not in config_data:
+            continue
+        value = config_data[legacy]
+
+        if replacement in config_data:
+            messages.append(
+                f"'{legacy}' is deprecated and is being ignored here, because "
+                f"'{replacement}' is also set. Delete '{legacy}'."
+            )
+            continue
+
+        if not value:
+            messages.append(
+                f"'{legacy}' is deprecated and empty, so it does nothing. "
+                f"Delete it, or set '{replacement}' to the format you want "
+                f"exported."
+            )
+            continue
+
+        folded = _fold_deprecated_value(legacy, value)
+        if folded != value:
+            messages.append(
+                f"'{legacy}' is deprecated and never changed where annotations "
+                f"are stored. Reading it as '{replacement}: {folded}', which "
+                f"writes a periodic export to "
+                f"'<output_annotation_dir>/exports/{folded}/'. The value "
+                f"changed because no exporter is called '{value}'. Replace it "
+                f"with '{replacement}: {folded}' (renaming the key alone leaves "
+                f"'{value}', which no exporter handles). {_DEPRECATION_REMOVAL_NOTE}"
+            )
+        else:
+            messages.append(
+                f"'{legacy}' is deprecated and never changed where annotations "
+                f"are stored. Reading it as '{replacement}: {folded}', which "
+                f"writes a periodic export to "
+                f"'<output_annotation_dir>/exports/{folded}/'. Rename the key "
+                f"to '{replacement}'. {_DEPRECATION_REMOVAL_NOTE}"
+            )
+    return messages
+
+
+def _fold_deprecated_value(legacy: str, value: Any) -> Any:
+    """Map a legacy value onto one the replacement key understands."""
+    value_map = DEPRECATED_KEY_VALUE_ALIASES.get(legacy, {})
+    if isinstance(value, str):
+        return value_map.get(value, value)
+    if isinstance(value, list):
+        return [value_map.get(v, v) if isinstance(v, str) else v for v in value]
+    return value
+
+
+def apply_deprecated_key_aliases(config_data: Dict[str, Any]) -> List[str]:
+    """Fold deprecated keys onto their replacements, warning once for each.
+
+    Mutates `config_data`: the legacy key is removed after its value moves, so
+    nothing downstream reads a key whose meaning has changed. An explicitly set
+    replacement always wins.
+    """
+    messages = deprecated_key_warnings(config_data)
+    if not isinstance(config_data, dict):
+        return messages
+
+    for legacy, replacement in DEPRECATED_KEY_ALIASES.items():
+        if legacy not in config_data:
+            continue
+        value = config_data.pop(legacy)
+        if replacement in config_data or not value:
+            continue
+        config_data[replacement] = _fold_deprecated_value(legacy, value)
+
+    for message in messages:
+        logger.warning(message)
+    return messages
+
+
+def validate_ui_language_config(config_data):
+    """Warn (never raise) about an unresolvable ``ui_language`` setting.
+
+    Accepts a bundled language-code string (``ui_language: es``), the legacy
+    inline dict, or a dict with ``_base`` naming a bundled catalog. Unknown
+    codes degrade to English at render time, so this only surfaces a warning to
+    help the author catch typos.
+    """
+    if not isinstance(config_data, dict) or "ui_language" not in config_data:
+        return
+
+    from potato.server_utils.i18n import (
+        available_language_codes,
+        resolve_language_code,
+    )
+
+    value = config_data["ui_language"]
+
+    def _warn_unknown(code):
+        available = ", ".join(sorted(available_language_codes())) or "(none)"
+        logger.warning(
+            "ui_language references unknown language code '%s'. Falling back "
+            "to English. Available bundled languages: %s", code, available,
+        )
+
+    if isinstance(value, str):
+        if resolve_language_code(value) is None:
+            _warn_unknown(value)
+    elif isinstance(value, dict):
+        base = value.get("_base")
+        if base is not None:
+            if resolve_language_code(base) is None:
+                _warn_unknown(base)
+    else:
+        logger.warning(
+            "ui_language must be a language-code string or a mapping; got %s. "
+            "It will be ignored.", type(value).__name__,
+        )
 
 
 def validate_unknown_keys(config_data, schema=None, path=""):
@@ -405,9 +1178,20 @@ def validate_unknown_keys(config_data, schema=None, path=""):
     known_keys = set(schema.keys()) if isinstance(schema, dict) else schema
     unknown_keys = set(config_data.keys()) - known_keys
 
-    for key in sorted(unknown_keys):
-        full_key = f"{path}.{key}" if path else key
-        matches = difflib.get_close_matches(key, known_keys, n=3, cutoff=0.6)
+    for key in sorted(unknown_keys, key=str):
+        full_key = f"{path}.{key}" if path else str(key)
+        if not isinstance(key, str):
+            # YAML 1.1 reads bare on/off/yes/no (and numbers) as non-strings,
+            # keys included. difflib cannot compare them, and the author wrote
+            # a word: say which one and how to keep it a word.
+            logger.warning(
+                "Config key %r at %s is not a string, which happens when YAML "
+                "reads a bare on/off/yes/no or a number as a value. Quote the "
+                "key (\"%s\":) to keep it as text.",
+                key, path or "the top level", key)
+            continue
+        matches = difflib.get_close_matches(key, [k for k in known_keys if isinstance(k, str)],
+                                            n=3, cutoff=0.6)
         if matches:
             suggestions = ", ".join(f"'{m}'" for m in matches)
             logger.warning(
@@ -500,7 +1284,8 @@ _OPTIONAL_INT_FIELDS = {
     "alert_time_each_instance": ("seconds to alert per instance", False),
     "max_annotations_per_item": ("max annotations per item", True),  # -1 = unlimited
     "max_annotations_per_user": ("max annotations per user", True),
-    "min_annotators_per_instance": ("minimum annotators per instance", False),
+    "min_annotators_per_instance": (
+        "deprecated spelling of num_annotators_per_item", False),
     "random_seed": ("random seed", True),
     "max_session_seconds": ("max session duration in seconds", False),
 }
@@ -515,12 +1300,13 @@ _OPTIONAL_BOOL_FIELDS = {
     "customjs": "whether custom JS is enabled",
     "watch_data_directory": "whether to watch data directory for changes",
     "persist_sessions": "whether to persist sessions across restarts",
+    "session_cookie_secure": "whether the session cookie is sent over HTTPS only",
 }
 
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
-    "batch",
+    "batch", "priority", "psychometric", "model_review", "engine",
 ]
 
 
@@ -692,17 +1478,103 @@ def resolve_num_annotators_per_item(config_data: Dict[str, Any]) -> int:
         1. num_annotators_per_item (int form)            → that value
         2. num_annotators_per_item.default               → that value
         3. max_annotations_per_item (legacy)             → that value
-        4. otherwise                                     → -1 (unlimited)
+        4. min_annotators_per_instance (legacy)          → that value
+        5. otherwise                                     → -1 (unlimited)
+
+    ``min_annotators_per_instance`` is a deprecated spelling of the same
+    setting, not a second one. It named a coverage floor that was parsed,
+    stored on ``ItemStateManager.min_annotations_per_item``, and read
+    nowhere: no assignment or retirement decision consulted it, so a study
+    asking for three annotators an item got as many as it got. Reading it
+    as the cap is what the author meant by writing it, and it is the only
+    number in the config with a claim on that slot.
+
+    This changes behaviour for a config that sets it alone: the cap moves
+    from unlimited to the stated number, and items now retire when they
+    reach it. Setting it alongside a canonical spelling that disagrees is
+    refused in ``validate_optional_field_types`` rather than resolved
+    here -- silently picking one of two numbers an author wrote down is
+    the failure this key already caused once.
     """
+    # 0 means unlimited, as the validation message for this key promises. The
+    # cap checks treat any cap >= 0 as a limit, so a 0 passed through retired
+    # every item before anyone saw it.
+    def cap(value: int) -> int:
+        return -1 if value == 0 else value
+
     val = config_data.get("num_annotators_per_item")
     if isinstance(val, int) and not isinstance(val, bool):
-        return val
+        return cap(val)
     if isinstance(val, dict) and val.get("default") is not None:
-        return int(val["default"])
+        return cap(int(val["default"]))
     legacy = config_data.get("max_annotations_per_item")
     if isinstance(legacy, int) and not isinstance(legacy, bool):
-        return legacy
+        return cap(legacy)
+    renamed = config_data.get("min_annotators_per_instance")
+    if isinstance(renamed, int) and not isinstance(renamed, bool):
+        return cap(renamed)
     return -1
+
+
+def validate_ai_budget_prices(config_data: Dict[str, Any]) -> None:
+    """Refuse a malformed `ai_budget.prices` rather than pricing against it.
+
+    Raised, not warned. Every other shape check in this module can afford to
+    warn because the wrong value produces a visible wrong result. This one
+    does not: a price is read by the spend cap and by nothing else, so a
+    transposed pair or a bare number becomes a cap that refuses affordable
+    runs or permits expensive ones, and the config that caused it looks fine.
+    """
+    budget = config_data.get("ai_budget")
+    if not isinstance(budget, dict) or "prices" not in budget:
+        return
+
+    prices = budget["prices"]
+    if not isinstance(prices, dict):
+        raise ConfigValidationError(
+            "ai_budget.prices must be a mapping of model name to "
+            "[input, output] USD per million tokens, got "
+            f"{type(prices).__name__}: {prices!r}"
+        )
+
+    for model, pair in prices.items():
+        where = f"ai_budget.prices[{model!r}]"
+        if not isinstance(model, str) or not model.strip():
+            raise ConfigValidationError(
+                f"{where}: model names must be non-empty strings.")
+        if isinstance(pair, (str, bytes)) or not isinstance(pair, (list, tuple)):
+            raise ConfigValidationError(
+                f"{where} must be a two-item [input, output] list of USD per "
+                f"million tokens, got {type(pair).__name__}: {pair!r}"
+            )
+        if len(pair) != 2:
+            raise ConfigValidationError(
+                f"{where} must have exactly two entries "
+                f"[input, output], got {len(pair)}: {pair!r}"
+            )
+        for value, role in zip(pair, ("input", "output")):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConfigValidationError(
+                    f"{where}: the {role} price must be a number, got "
+                    f"{type(value).__name__}: {value!r}"
+                )
+            if value < 0:
+                raise ConfigValidationError(
+                    f"{where}: the {role} price must not be negative, got "
+                    f"{value!r}. Use an ai_support endpoint_type Potato knows "
+                    "is local if the run is free."
+                )
+        if pair[1] < pair[0]:
+            # True of every published rate from all three vendors that
+            # PRICE_TABLE covers. Warned rather than raised: it is evidence of
+            # a swap, not proof of one, and refusing a real price nobody can
+            # override is worse than saying so.
+            logger.warning(
+                "%s has output (%s) cheaper than input (%s). Every published "
+                "rate Potato ships is the other way round, so check the pair "
+                "is not reversed -- the cap is the only thing that reads it.",
+                where, pair[1], pair[0],
+            )
 
 
 def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
@@ -750,6 +1622,8 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
     if 'per_annotator_quota' in config_data:
         validate_per_annotator_quota(config_data['per_annotator_quota'])
 
+    validate_ai_budget_prices(config_data)
+
     # Emit a deprecation warning if max_annotations_per_item is set alongside
     # num_annotators_per_item; reject silent inconsistencies (both set to
     # conflicting values).
@@ -771,6 +1645,54 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
             stacklevel=2,
         )
 
+    # `min_annotators_per_instance` is the same setting under an older,
+    # worse name. It was parsed and never read, so every study that set it
+    # got unlimited coverage while its config said three. Treating it as a
+    # deprecated spelling of `num_annotators_per_item` is the only reading
+    # under which the number the author wrote reaches the assigner.
+    #
+    # Refused rather than resolved when it disagrees with a canonical
+    # spelling: two different numbers for one slot is a question only the
+    # author can answer, and guessing is what produced the original defect.
+    if 'min_annotators_per_instance' in config_data:
+        renamed = config_data['min_annotators_per_instance']
+        if not isinstance(renamed, int) or isinstance(renamed, bool) or renamed < 1:
+            raise ConfigValidationError(
+                "'min_annotators_per_instance' must be a positive integer "
+                f"(annotators per item), got {renamed!r}."
+            )
+        for other_key in ('num_annotators_per_item', 'max_annotations_per_item'):
+            if other_key not in config_data:
+                continue
+            other = config_data[other_key]
+            other_int = other.get('default') if isinstance(other, dict) else other
+            if other_int is not None and other_int != renamed:
+                raise ConfigValidationError(
+                    f"'min_annotators_per_instance' and '{other_key}' are both set "
+                    f"with conflicting values ({renamed} vs {other_int}). They are "
+                    "the same setting: annotators collected per item. "
+                    "'min_annotators_per_instance' never named a separate floor -- "
+                    "it was read and never enforced. Drop it and keep "
+                    "'num_annotators_per_item', which is the canonical key."
+                )
+        import warnings as _w
+        _w.warn(
+            "'min_annotators_per_instance' is deprecated; use "
+            "'num_annotators_per_item' instead. It is now read as the "
+            "annotators-per-item count rather than being ignored, so an item "
+            f"retires at {renamed} annotators where it previously had no cap.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning(
+            "min_annotators_per_instance: %s is deprecated and has been read as "
+            "num_annotators_per_item: %s. Until now it was parsed and never "
+            "consulted, so this study collected an unlimited number of "
+            "annotators per item; it will now retire an item at %s. Rename the "
+            "key to num_annotators_per_item to silence this.",
+            renamed, renamed, renamed,
+        )
+
     # Validate assignment_strategy enum
     if 'assignment_strategy' in config_data:
         strat = config_data['assignment_strategy']
@@ -783,6 +1705,1242 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
                 f"'assignment_strategy' value '{strat_name}' is not recognized. "
                 f"Valid strategies: {', '.join(_VALID_ASSIGNMENT_STRATEGIES)}"
             )
+
+
+def validate_machine_annotators_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``machine_annotators`` block when enabled.
+
+    The failure worth catching at load is a declaration that never matches a
+    participant. The study then runs, the machine annotates, and its rows are
+    counted as a person's because the id did not line up -- which is the exact
+    contamination the block exists to prevent, arriving silently.
+
+    An unrecognized ``kind`` is not an error. It still is not human, and
+    ``annotator_origin`` treats it as a machine, which is the reading that
+    cannot corrupt a published agreement number.
+    """
+    block = config_data.get("machine_annotators")
+    if not isinstance(block, dict) or not block.get("enabled"):
+        return
+
+    errors = []
+    declared = block.get("annotators")
+
+    if declared is None:
+        errors.append(
+            "machine_annotators is enabled but declares no 'annotators', so no "
+            "participant would be recorded as a machine"
+        )
+    elif not isinstance(declared, list):
+        errors.append(
+            f"machine_annotators.annotators must be a list, got "
+            f"{type(declared).__name__}"
+        )
+    else:
+        seen = set()
+        for index, entry in enumerate(declared):
+            where = f"machine_annotators.annotators[{index}]"
+            if not isinstance(entry, dict):
+                errors.append(
+                    f"{where} must be a mapping, got {type(entry).__name__}"
+                )
+                continue
+            entry_id = entry.get("id")
+            if entry_id is None or not str(entry_id).strip():
+                errors.append(
+                    f"{where} has no 'id', so no user state can be matched to it"
+                )
+                continue
+            entry_id = str(entry_id).strip()
+            if entry_id in seen:
+                errors.append(
+                    f"{where} repeats id {entry_id!r}; one participant cannot "
+                    f"have two declarations"
+                )
+            seen.add(entry_id)
+
+    # A guard that cannot tell anyone apart is worse than no guard, because it
+    # reads as protection and provides none. `require_declaration` refuses
+    # writes from a participant who is neither a declared machine nor a listed
+    # person, so it needs a list of people to check against. Under open
+    # registration every username that registers becomes a valid account, so
+    # there would be nothing left for it to refuse -- and the study would
+    # believe it was protected.
+    if block.get("require_declaration"):
+        from potato.authentication import _parse_authorized_users
+
+        user_config = config_data.get("user_config") or {}
+        allow_all = user_config.get("allow_all_users", True)
+        listed = _parse_authorized_users(user_config)
+        # A roster can arrive either inline or as a JSONL file. The file is not
+        # read here -- a validator has no business doing I/O -- so this asks
+        # whether one is configured, not how many people it holds.
+        roster_file = (config_data.get("authentication") or {}).get(
+            "user_config_path")
+        if allow_all or not (listed or roster_file):
+            errors.append(
+                "machine_annotators.require_declaration is set, but this study "
+                "accepts any username that registers, so there is no list of "
+                "people to check a participant against and the setting would "
+                "refuse nothing. Set user_config.allow_all_users: false and "
+                "name your annotators in user_config.users or "
+                "authentication.user_config_path, or remove require_declaration"
+            )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid machine_annotators configuration:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+
+def validate_solo_mode_config(config_data: Dict[str, Any]) -> None:
+    """Refuse to start on an invalid ``solo_mode`` block.
+
+    The manager used to log these errors and leave solo mode off, so a typo
+    started a study whose solo pages said "Solo Mode is not enabled" with the
+    reason only in the server log.
+    """
+    sm = config_data.get("solo_mode")
+    if not isinstance(sm, dict) or not sm.get("enabled"):
+        return
+
+    from potato.solo_mode.config import parse_solo_mode_config
+
+    try:
+        cfg = parse_solo_mode_config(config_data)
+    except (TypeError, ValueError, AttributeError) as e:
+        raise ConfigValidationError(f"solo_mode is invalid: {e}") from e
+    errors = cfg.validate(config_data.get("annotation_schemes"))
+    if cfg.gold.file:
+        from potato.solo_mode.evaluation import resolve_gold_path
+        try:
+            gold_path = resolve_gold_path(cfg.gold.file, config_data.get("task_dir", "."))
+        except ConfigSecurityError as e:
+            errors.append(f"solo_mode.gold.file: {e}")
+        else:
+            if not os.path.isfile(gold_path):
+                errors.append(f"solo_mode.gold.file not found: {gold_path}")
+    if errors:
+        raise ConfigValidationError(
+            "Invalid solo_mode configuration:\n  - " + "\n  - ".join(errors))
+
+
+def _warn_engine_budget_too_small(engine_cfg) -> None:
+    """Warn when budgets.human_labels cannot certify a selective_risk contract
+    even if every machine answer were right: such a study can only stall.
+    The first look's test needs n held-out labels with (1 - error)^n at most
+    its level, and as many again go to dev."""
+    import math
+    cap = engine_cfg.budgets.get("human_labels")
+    if cap is None:
+        return
+    dev = float(getattr(engine_cfg.humans, "dev_fraction", 0.5) or 0.5)
+    for c in engine_cfg.contracts:
+        if c.kind != "selective_risk" or not c.error or c.error >= 1:
+            continue
+        alpha = (1.0 - float(c.confidence)) * 6 / math.pi ** 2
+        cert = math.ceil(math.log(alpha) / math.log(1.0 - float(c.error)))
+        need = math.ceil(cert / max(1e-9, 1.0 - dev))
+        if cap < need:
+            logger.warning(
+                f"budgets.human_labels {cap:g} cannot certify {c.id} (error {c.error:g}, "
+                f"confidence {c.confidence:g}) even with no machine errors: it needs at "
+                f"least {need} human labels ({cert} held out, the rest for choosing the "
+                "threshold). Raise the budget or loosen the target.")
+
+
+def _absolute_text_as_image_font(config_data: Dict[str, Any]) -> None:
+    """``text_as_image.font_path``, relative to task_dir like the data files."""
+    block = config_data.get("text_as_image")
+    task_dir = config_data.get("task_dir")
+    if not isinstance(block, dict) or not isinstance(task_dir, str):
+        return
+    path = block.get("font_path")
+    if isinstance(path, str) and path and not os.path.isabs(path):
+        block["font_path"] = os.path.normpath(os.path.join(task_dir, path))
+
+
+#: Deprecation notes already printed in this process.
+_DEPRECATION_NOTES_SHOWN = set()
+
+def _absolute_calibration_paths(config_data: Dict[str, Any]) -> None:
+    """A decision model's ``calibration`` file, relative to task_dir.
+
+    The endpoint opens the path as given, which is relative to whatever
+    directory the server was started from, not the project's.
+    """
+    task_dir = config_data.get("task_dir")
+    if not isinstance(task_dir, str):
+        return
+
+    def fix(holder: Dict[str, Any]) -> None:
+        path = holder.get("calibration")
+        if isinstance(path, str) and path and not os.path.isabs(path):
+            holder["calibration"] = os.path.normpath(os.path.join(task_dir, path))
+
+    engine = config_data.get("labeling_engine")
+    if isinstance(engine, dict):
+        for source in engine.get("sources") or []:
+            if isinstance(source, dict) and isinstance(source.get("options"), dict):
+                fix(source["options"])
+    solo = config_data.get("solo_mode")
+    if isinstance(solo, dict):
+        for model in solo.get("labeling_models") or []:
+            if isinstance(model, dict):
+                fix(model)
+
+
+def validate_training_backends_config(config_data: Dict[str, Any]) -> None:
+    """model_training: backends, trainer_params, splits, writeback,
+    auto_retrain, and decision-model calibration files (training/config_check.py).
+
+    Checked at boot because the first sign of a misspelt ``pyhton`` would
+    otherwise be a failed run, after a bundle build and an ssh connection.
+    """
+    from potato.training.config_check import training_config_problems
+    problems = training_config_problems(config_data)
+    training = config_data.get("model_training")
+    if not isinstance(training, dict):
+        if problems:
+            raise ConfigValidationError("; ".join(problems))
+        return
+    if "backends" in training or "backend" in training:
+        from potato.training.backends import (backends_config_warnings,
+                                              validate_backends_config)
+        problems.extend(validate_backends_config(config_data))
+        for warning in backends_config_warnings(config_data):
+            logger.warning(warning)
+    if "trainer_params" in training:
+        from potato.training.registry import validate_trainer_params
+        problems.extend(validate_trainer_params(training["trainer_params"]))
+    if problems:
+        raise ConfigValidationError("; ".join(problems))
+
+
+def validate_labeling_engine_config(config_data: Dict[str, Any]) -> None:
+    """Refuse to start on an invalid ``labeling_engine`` block.
+
+    Every problem is reported at once. An absent block, or one with
+    ``enabled: false``, is still parsed so a typo is caught before someone
+    turns it on.
+    """
+    block = config_data.get("labeling_engine")
+    engine_on = isinstance(block, dict) and bool(block.get("enabled", False))
+    if config_data.get("assignment_strategy") == "engine" and not engine_on:
+        # Otherwise every annotator is told the items already have enough
+        # annotators, which names the wrong cause.
+        raise ConfigValidationError(
+            "assignment_strategy: engine serves the labeling engine's requests, but "
+            + ("labeling_engine.enabled is false." if isinstance(block, dict)
+               else "there is no labeling_engine block.")
+            + " Turn the engine on, or choose another assignment_strategy.")
+    if block is None:
+        # Not a warning: `validate --strict` fails on any warning, and every
+        # config using these keys would start failing it.
+        # Printed rather than logged: this runs before logging is configured,
+        # so a logger.info here reached nobody (potato-skill O1). Once per
+        # process, since a config can be validated more than once.
+        from potato.labeling_engine.config.translate import deprecation_warnings
+        for note in deprecation_warnings(config_data):
+            if note not in _DEPRECATION_NOTES_SHOWN:
+                _DEPRECATION_NOTES_SHOWN.add(note)
+                print(f"NOTE: {note}", file=sys.stderr)
+        return
+    from potato.labeling_engine.config import EngineConfigError, parse_engine_config
+    try:
+        engine_cfg = parse_engine_config(config_data)
+    except EngineConfigError as e:
+        raise ConfigValidationError(str(e)) from e
+    if engine_cfg.enabled and not engine_cfg.contracts:
+        # Valid, and it accepts nothing: a machine label is only accepted
+        # under a contract, so with none the engine labels nothing and the
+        # config said nothing about it (potato-skill).
+        logger.warning(
+            "labeling_engine is enabled with no contracts, so it will accept no "
+            "machine label. Add a contract "
+            "(for example selective_risk or threshold_legacy) for each scheme "
+            "the engine should label, or set labeling_engine.enabled: false.")
+    if engine_cfg.enabled:
+        # A contract on a scheme type with no family (free text, pairwise)
+        # can never be scored: its calibration requests opened and never
+        # closed, and it read as an ordinary "insufficient".
+        from potato.labeling_engine.families import Unsupported, family_for
+        from potato.labeling_engine.schemes import scheme_specs
+        specs = {sp.name: sp for sp in scheme_specs(config_data)}
+        unscorable = [f"{c.id} ({c.schema}: {specs[c.schema].annotation_type})"
+                      for c in engine_cfg.contracts
+                      if c.schema in specs and isinstance(family_for(specs[c.schema]),
+                                                          Unsupported)]
+        if unscorable:
+            raise ConfigValidationError(
+                "labeling_engine: these contracts are on schemes the engine cannot "
+                "score machine answers for: " + ", ".join(unscorable) + ". Free text "
+                "and pairwise schemes have no loss: take them out of the contracts "
+                "and labeling_engine.schemas (people then answer them on the items "
+                "the engine sends them), or judge them with an LLM-judge scheme.")
+        _warn_engine_budget_too_small(engine_cfg)
+        if config_data.get("assignment_strategy") == "engine":
+            # People are served the engine's requests only, so a scheme the
+            # engine does not handle (left out of labeling_engine.schemas, or
+            # one no source can label, such as free text) is answered on
+            # those items and no others. The second case needed no
+            # `schemas` key, the commonest shape, and said nothing (A6).
+            from potato.labeling_engine.service import unsupported_schemes as _no_source
+            left_out = [s.get("name") for s in (config_data.get("annotation_schemes") or [])
+                        if isinstance(s, dict) and engine_cfg.schemas
+                        and s.get("name") not in engine_cfg.schemas]
+            left_out += [n for n in _no_source(config_data, engine_cfg, every_scheme=True)
+                         if n not in left_out]
+            if left_out:
+                logger.warning(
+                    f"assignment_strategy: engine serves only the engine's requests, and "
+                    f"the engine does not label {', '.join(map(str, left_out))}, so people "
+                    "will answer them only on the items the engine sends them for the "
+                    "other schemes, not on every item. If every item needs them, use "
+                    "another assignment_strategy.")
+        # A contract on a scheme no cascade source can label never runs, and
+        # its scheme drops out of the engine without a word.
+        from potato.labeling_engine.service import unsupported_schemes
+        bad = unsupported_schemes(config_data, engine_cfg)
+        if bad:
+            raise ConfigValidationError(
+                "labeling_engine: no cascade source can label "
+                + "; ".join(f"{name!r} ({'; '.join(why)})" for name, why in bad.items()))
+
+
+def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``judge_calibration`` block when enabled.
+
+    Delegates to the typed config's ``validate()`` (so the rules live in one
+    place) and additionally cross-checks that referenced schema names exist in
+    ``annotation_schemes``. Raises ConfigValidationError on hard errors.
+    """
+    jc = config_data.get("judge_calibration")
+    if not isinstance(jc, dict) or not jc.get("enabled"):
+        return
+
+    from potato.judge_calibration.config import parse_judge_calibration_config
+
+    cfg = parse_judge_calibration_config(config_data)
+    errors = cfg.validate()
+
+    # Cross-check schema references against declared annotation_schemes.
+    declared = {
+        s.get("name")
+        for s in (config_data.get("annotation_schemes") or [])
+        if isinstance(s, dict)
+    }
+    for name in cfg.schemas:
+        if name not in declared:
+            errors.append(
+                f"judge_calibration.schemas references unknown scheme '{name}' "
+                f"(declared: {sorted(n for n in declared if n)})"
+            )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid judge_calibration configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
+def validate_event_template_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``event_template`` block when enabled."""
+    et = config_data.get("event_template")
+    if not isinstance(et, dict) or not et.get("enabled"):
+        return
+
+    errors = []
+    slots = et.get("slots")
+    if not isinstance(slots, list) or not slots:
+        errors.append("event_template.slots must be a non-empty list")
+    else:
+        seen = set()
+        for i, s in enumerate(slots):
+            if not isinstance(s, dict) or not s.get("name"):
+                errors.append(f"event_template.slots[{i}] must be a dict with a 'name'")
+                continue
+            name = s["name"]
+            if name in seen:
+                errors.append(f"event_template.slots has duplicate slot name '{name}'")
+            seen.add(name)
+
+    seed = et.get("seed_events")
+    if seed is not None and not isinstance(seed, (str, list)):
+        errors.append("event_template.seed_events must be a file path or a list")
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid event_template configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
+def validate_cot_segmentation_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``cot_segmentation`` block when present.
+
+    Splits a long chain-of-thought string into per-step lists for the
+    ``cot_trace`` display + ``process_reward`` schema.
+    """
+    seg = config_data.get("cot_segmentation")
+    if seg is None:
+        return
+    if not isinstance(seg, dict):
+        raise ConfigValidationError("cot_segmentation must be a mapping")
+
+    valid_strategies = {"blank_line", "numbered", "markers", "sentence", "llm", "auto"}
+    errors = []
+    if not seg.get("source_key") or not isinstance(seg.get("source_key"), str):
+        errors.append("cot_segmentation.source_key is required and must be a string")
+    strategy = seg.get("strategy", "auto")
+    if strategy not in valid_strategies:
+        errors.append(
+            f"cot_segmentation.strategy must be one of: {', '.join(sorted(valid_strategies))}"
+        )
+    if "target_key" in seg and not isinstance(seg["target_key"], str):
+        errors.append("cot_segmentation.target_key must be a string")
+    for num_key in ("min_step_chars", "max_steps", "sentences_per_step", "llm_max_chars"):
+        if num_key in seg and not isinstance(seg[num_key], int):
+            errors.append(f"cot_segmentation.{num_key} must be an integer")
+    if "markers" in seg and not isinstance(seg["markers"], list):
+        errors.append("cot_segmentation.markers must be a list of strings")
+    if strategy == "llm" and not (config_data.get("ai_support") or config_data.get("judge_alignment")):
+        logger.warning(
+            "cot_segmentation.strategy is 'llm' but no ai_support/judge_alignment "
+            "endpoint is configured; segmentation will fall back to heuristics."
+        )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid cot_segmentation configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
+#: Defaults for the ``keystroke_logging`` block. Note ``enabled`` is False: this
+#: records how annotators produce free text, so it is opt-in rather than
+#: something a project acquires by upgrading Potato.
+KEYSTROKE_LOGGING_DEFAULTS: Dict[str, Any] = {
+    "enabled": False,
+    "fidelity": "events",          # off | summary | events
+    "include_schemas": [],         # empty = every free-text field
+    "exclude_schemas": [],
+    "store_events": True,
+    "classify_paste_source": True,
+    "idle_session_ms": 30000,
+    "flush_interval_ms": 5000,
+    "pause_thresholds_ms": [500, 1000, 2000, 5000, 10000],
+    "disclose_to_annotators": True,
+    "disclosure_text": None,       # None = DEFAULT_DISCLOSURE_TEXT below
+    "detection": {
+        "enabled": True,
+        "calibrate": False,
+        "on_external_insert": "flag",   # allow | warn | block | flag
+        "thresholds": {},
+    },
+}
+
+VALID_KEYSTROKE_FIDELITIES = {"off", "summary", "events"}
+VALID_EXTERNAL_INSERT_ACTIONS = {"allow", "warn", "block", "flag"}
+
+#: Shown on every page that can contain a free-text field when
+#: ``disclose_to_annotators`` is true. Deliberately states the limit of the
+#: collection as well as its existence: an annotator who is told only "your
+#: typing is recorded" will reasonably assume the keys themselves are stored.
+#: This is a persistent reminder, not a substitute for consent -- see
+#: docs/advanced/keystroke_logging_ethics.md for the consent language.
+DEFAULT_DISCLOSURE_TEXT = (
+    "This task records the timing and rhythm of your typing in text boxes "
+    "(when you pause, revise, or paste) — not the individual keys you press."
+)
+
+
+def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``text_as_image`` key when present.
+
+    Accepts ``true`` and the mapping form. Warns about the two things the
+    feature takes away, because neither failure is obvious on screen: a span
+    scheme silently loses the offsets it anchors to, and a screen reader gets
+    nothing.
+    """
+    raw = config_data.get("text_as_image")
+    if raw is None or raw is False:
+        return
+
+    from potato.server_utils import text_to_image
+
+    if not isinstance(raw, (bool, dict)):
+        raise ConfigValidationError(
+            "text_as_image must be true, false, or a mapping"
+        )
+
+    errors = []
+    if isinstance(raw, dict):
+        if "enabled" in raw and not isinstance(raw["enabled"], bool):
+            errors.append("text_as_image.enabled must be a boolean")
+        for key in ("font_size", "max_width"):
+            if key not in raw:
+                continue
+            value = raw[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                errors.append(f"text_as_image.{key} must be a positive integer")
+        font_path = raw.get("font_path")
+        if "font_path" in raw and (not isinstance(font_path, str) or not font_path):
+            errors.append("text_as_image.font_path must be a path to a .ttf or .otf file")
+        elif isinstance(font_path, str) and not os.path.isfile(font_path):
+            errors.append(
+                f"text_as_image.font_path: no file at {font_path} (a relative "
+                "path is read from task_dir)")
+    if errors:
+        raise ConfigValidationError(
+            "Invalid text_as_image configuration:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+    options = text_to_image.settings(config_data)
+    if options is None:
+        return
+
+    schemes = config_data.get("annotation_schemes") or []
+
+    # instance_display owns the page, so the picture never replaces its text
+    # fields. A text field there shows the words in the clear: the setting
+    # looks on and protects nothing. A warning and not an error, so a config
+    # that starts today keeps starting; `potato validate --strict` stops it.
+    display = config_data.get("instance_display")
+    display_fields = display.get("fields") if isinstance(display, dict) else None
+    text_fields = [
+        str(field.get("key") or "?")
+        for field in display_fields or ()
+        if isinstance(field, dict)
+        and field.get("type") not in text_to_image.NON_TEXT_DISPLAY_TYPES
+    ]
+    if text_fields:
+        logger.warning(
+            "text_as_image does not cover instance_display. It replaces only "
+            "the item_properties.text_key text box, so the text of these "
+            "instance_display fields stays on the page and can be copied: "
+            "%s. To protect the text, remove the instance_display block and "
+            "put the text in the text_key field.", ", ".join(text_fields))
+        return
+
+    # Applicability first. A media or instance_display project renders the item
+    # itself, so the feature never runs there and nothing can conflict with it.
+    # Checking conflicts before this would reject, for example, every image
+    # project: those set text_key to image_url, and their scheme reads
+    # source_field: image_url, which the check below reads as a collision.
+    if text_to_image.applies(config_data, schemes) is None:
+        # One exception to "nothing can conflict": an audio or video scheme
+        # beside a text_key that is not its media field. The page shows that
+        # text in a box next to the player, and the feature leaves it alone, so
+        # the setting would look on and hide nothing.
+        exposed = text_to_image.media_showing_text(config_data, schemes)
+        if exposed:
+            raise ConfigValidationError(
+                "text_as_image is incompatible with these annotation schemes: "
+                + ", ".join(exposed)
+                + ". An audio_annotation, video_annotation or tiered_annotation "
+                "scheme shows the item text in a box beside the player, and "
+                "text_as_image does not replace that box, so annotators could "
+                "still copy the text. Point item_properties.text_key at the "
+                "media field, or turn off text_as_image."
+            )
+        logger.warning(
+            "text_as_image is on, but this project uses instance_display or a "
+            "media annotation scheme, which render the item themselves. The "
+            "setting has no effect here."
+        )
+        return
+
+    # Pocket Mode is a second annotation surface with its own item feed:
+    # /pocket/api/batch sends the text of every item in the batch as plain
+    # JSON, and the Pocket cards show it as words. The picture never reaches
+    # that surface, so the combination would look protected and not be.
+    pocket = config_data.get("pocket") or {}
+    if isinstance(pocket, dict) and pocket.get("enabled"):
+        raise ConfigValidationError(
+            "text_as_image is incompatible with pocket.enabled. Pocket Mode "
+            "shows each item's text as words and returns it from "
+            "/pocket/api/batch, so annotators on Pocket could still copy it. "
+            "Turn off one of the two."
+        )
+
+    # Rooms is the same case: /rooms/api/disagreements and the room state
+    # endpoint return the item text, and the room page shows it as words.
+    rooms = config_data.get("rooms") or {}
+    if isinstance(rooms, dict) and rooms.get("enabled"):
+        raise ConfigValidationError(
+            "text_as_image is incompatible with rooms.enabled. Rooms show each "
+            "item's text as words and return it from /rooms/api/disagreements "
+            "and /rooms/api/<room_id>/state, so annotators in a room could "
+            "still copy it. Turn off one of the two."
+        )
+
+    # The conflicts below are errors and not warnings, for the same reason as
+    # validate_live_ingestion_assignment_compat: each one looks like it worked.
+    # The annotator sees a picture, the scheme finds nothing, and the study
+    # collects empty annotations. A log line is too easy to miss for a failure
+    # that quiet.
+    conflicting = text_to_image.span_schemes(schemes)
+    if conflicting:
+        raise ConfigValidationError(
+            "text_as_image is incompatible with these annotation schemes: "
+            + ", ".join(conflicting)
+            + ". Each one anchors its annotations to character offsets in the "
+            "instance text, and text_as_image removes that text from the page, "
+            "so an annotator would have nothing to select. Turn off "
+            "text_as_image, or use a scheme that does not select text."
+        )
+
+    text_key = (config_data.get("item_properties") or {}).get("text_key", "text")
+    reading_removed = text_to_image.schemes_reading_removed_fields(schemes, text_key)
+    if reading_removed:
+        raise ConfigValidationError(
+            "text_as_image is incompatible with these annotation schemes: "
+            + ", ".join(reading_removed)
+            + ". Each one reads a data field that text_as_image removes from "
+            "the page, so the scheme would render empty. Point the scheme at a "
+            "different field, or turn off text_as_image."
+        )
+
+    # Pillow draws the picture. It is not a core dependency, and without it
+    # every annotation page failed with HTTP 500 instead of one clear error.
+    import importlib.util
+    if importlib.util.find_spec("PIL") is None:
+        raise ConfigValidationError(
+            "text_as_image is on, which needs Pillow to draw the item text. "
+            "Install it with: pip install 'potato-annotation[text-image]'")
+    try:
+        _, font_name = text_to_image.load_font(
+            options["font_size"], options.get("font_path"))
+    except OSError as error:
+        raise ConfigValidationError(
+            f"text_as_image.font_path: {options.get('font_path')} is not a font "
+            f"Pillow can read ({error}). Use a .ttf or .otf file.") from error
+    if font_name is None:
+        logger.warning(
+            "text_as_image found none of these fonts: %s. It uses Pillow's "
+            "default font, which has ASCII letters only, so letters such as "
+            "ü, ß or é show as boxes. Set text_as_image.font_path to a .ttf "
+            "or .otf file.", ", ".join(text_to_image.FALLBACK_FONTS))
+
+    logger.warning(
+        "text_as_image is on. Annotators see a picture of each item, so a "
+        "screen reader gets nothing from it. Leave the setting off for a "
+        "study that must stay accessible."
+    )
+
+
+def validate_keystroke_logging_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``keystroke_logging`` block when present.
+
+    Records content-blind typing dynamics on free-text fields so a researcher can
+    tell composed text from transcribed or pasted text. See
+    ``docs/advanced/keystroke_logging.md``.
+    """
+    ks = config_data.get("keystroke_logging")
+    if ks is None:
+        return
+    if not isinstance(ks, dict):
+        raise ConfigValidationError("keystroke_logging must be a mapping")
+
+    errors = []
+
+    fidelity = ks.get("fidelity", "events")
+    if fidelity not in VALID_KEYSTROKE_FIDELITIES:
+        errors.append(
+            "keystroke_logging.fidelity must be one of: "
+            + ", ".join(sorted(VALID_KEYSTROKE_FIDELITIES))
+        )
+
+    for bool_key in ("enabled", "store_events", "classify_paste_source",
+                     "disclose_to_annotators"):
+        if bool_key in ks and not isinstance(ks[bool_key], bool):
+            errors.append(f"keystroke_logging.{bool_key} must be true or false")
+
+    for list_key in ("include_schemas", "exclude_schemas"):
+        if list_key in ks and not isinstance(ks[list_key], list):
+            errors.append(f"keystroke_logging.{list_key} must be a list of schema names")
+
+    text = ks.get("disclosure_text")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        errors.append(
+            "keystroke_logging.disclosure_text must be a non-empty string "
+            "(omit it to use the default notice)"
+        )
+    errors += _validate_tracker_phases("keystroke_logging", ks, config_data)
+
+    for int_key in ("idle_session_ms", "flush_interval_ms"):
+        if int_key in ks and not isinstance(ks[int_key], int):
+            errors.append(f"keystroke_logging.{int_key} must be an integer")
+
+    thresholds = ks.get("pause_thresholds_ms")
+    if thresholds is not None:
+        if not isinstance(thresholds, list) or not thresholds:
+            errors.append(
+                "keystroke_logging.pause_thresholds_ms must be a non-empty list of "
+                "millisecond integers"
+            )
+        elif not all(isinstance(t, int) and t > 0 for t in thresholds):
+            errors.append(
+                "keystroke_logging.pause_thresholds_ms entries must be positive integers"
+            )
+
+    detection = ks.get("detection")
+    if detection is not None:
+        if not isinstance(detection, dict):
+            errors.append("keystroke_logging.detection must be a mapping")
+        else:
+            for bool_key in ("enabled", "calibrate"):
+                if bool_key in detection and not isinstance(detection[bool_key], bool):
+                    errors.append(
+                        f"keystroke_logging.detection.{bool_key} must be true or false")
+            action = detection.get("on_external_insert", "flag")
+            if action not in VALID_EXTERNAL_INSERT_ACTIONS:
+                errors.append(
+                    "keystroke_logging.detection.on_external_insert must be one of: "
+                    + ", ".join(sorted(VALID_EXTERNAL_INSERT_ACTIONS))
+                )
+            th = detection.get("thresholds")
+            if th is not None and not isinstance(th, dict):
+                errors.append(
+                    "keystroke_logging.detection.thresholds must be a mapping of "
+                    "threshold name to number")
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid keystroke_logging configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+    # Warn rather than fail: the combination is legal, just self-defeating.
+    if ks.get("enabled") and fidelity == "summary" and ks.get("store_events"):
+        logger.warning(
+            "keystroke_logging.store_events is true but fidelity is 'summary'; "
+            "no raw event streams will be stored."
+        )
+    if ks.get("enabled") and not ks.get("disclose_to_annotators", True):
+        logger.warning(
+            "keystroke_logging.disclose_to_annotators is false. Typing dynamics are "
+            "behavioural data about your annotators; check that your consent "
+            "documentation and ethics approval cover collecting them silently."
+        )
+
+
+def get_keystroke_logging_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the ``keystroke_logging`` block with defaults filled in.
+
+    Always returns a dict that is safe to index. ``enabled`` is False when the
+    block is absent, so callers need no separate presence check.
+    """
+    import copy
+    merged = copy.deepcopy(KEYSTROKE_LOGGING_DEFAULTS)
+    block = (config_data or {}).get("keystroke_logging")
+    if not isinstance(block, dict):
+        return merged
+    for key, value in block.items():
+        if key == "detection" and isinstance(value, dict):
+            merged["detection"].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_keystroke_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The subset of the keystroke config the browser needs.
+
+    Detection thresholds are deliberately withheld: they are evaluated
+    server-side, and shipping them would tell an annotator exactly how slowly to
+    paste in order to stay under the flag.
+    """
+    ks = get_keystroke_logging_config(config_data)
+    return {
+        "enabled": ks["enabled"],
+        "fidelity": ks["fidelity"],
+        "include_schemas": ks["include_schemas"],
+        "exclude_schemas": ks["exclude_schemas"],
+        "classify_paste_source": ks["classify_paste_source"],
+        "idle_session_ms": ks["idle_session_ms"],
+        "flush_interval_ms": ks["flush_interval_ms"],
+        "on_external_insert": ks["detection"].get("on_external_insert", "flag"),
+        # Rendered as a page notice; also readable by the client so a custom
+        # layout can place it somewhere better than the default bar.
+        "disclose_to_annotators": ks["disclose_to_annotators"],
+        "disclosure_text": get_keystroke_disclosure_text(config_data),
+    }
+
+
+def get_keystroke_disclosure_text(config_data: Dict[str, Any]) -> str:
+    """The notice shown to annotators, or ``""`` when disclosure is off.
+
+    Returns the empty string both when the feature is disabled and when the
+    researcher has explicitly opted out of disclosure, so a caller can treat
+    "no text" as "render nothing" without re-checking the flags.
+    """
+    ks = get_keystroke_logging_config(config_data)
+    if not ks["enabled"] or ks["fidelity"] == "off":
+        return ""
+    if not ks.get("disclose_to_annotators", True):
+        return ""
+    custom = ks.get("disclosure_text")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    return DEFAULT_DISCLOSURE_TEXT
+
+
+# --------------------------------------------------------------------------
+# Annotation telemetry (the drawing-process analogue of keystroke logging)
+# --------------------------------------------------------------------------
+
+ANNOTATION_TELEMETRY_DEFAULTS: Dict[str, Any] = {
+    "enabled": False,
+    "fidelity": "events",          # off | summary | events
+    "include_schemas": [],         # empty = every geometry schema
+    "exclude_schemas": [],
+    "store_events": True,
+    # Gap above which the annotator is charged to idle rather than active time.
+    # Two minutes rather than a tighter bound because inspecting a hard image is
+    # real work that produces no events at all.
+    "idle_ms": 120000,
+    "flush_interval_ms": 10000,
+    "disclose_to_annotators": True,
+    "disclosure_text": None,       # None = DEFAULT_TELEMETRY_DISCLOSURE below
+    "detection": {
+        "enabled": True,
+        "calibrate": False,
+        "thresholds": {},
+    },
+}
+
+VALID_TELEMETRY_FIDELITIES = {"off", "summary", "events"}
+
+#: Shown on every page that can contain a drawing canvas when
+#: ``disclose_to_annotators`` is true. States the limit of the collection as
+#: well as its existence, for the same reason as the keystroke notice: an
+#: annotator told only "your annotation is recorded" will reasonably assume
+#: something more invasive than timing.
+DEFAULT_TELEMETRY_DISCLOSURE = (
+    "This task records how you work on the images — when you draw, zoom, "
+    "revise, and accept AI suggestions — not what you draw or where."
+)
+
+
+def validate_annotation_telemetry_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``annotation_telemetry`` block when present.
+
+    Records content-blind drawing dynamics on geometry schemas so a researcher
+    can tell considered annotation from rubber-stamping. See
+    ``docs/advanced/annotation_telemetry.md``.
+    """
+    at = config_data.get("annotation_telemetry")
+    if at is None:
+        return
+    if not isinstance(at, dict):
+        raise ConfigValidationError("annotation_telemetry must be a mapping")
+
+    errors = []
+
+    fidelity = at.get("fidelity", "events")
+    if fidelity not in VALID_TELEMETRY_FIDELITIES:
+        errors.append(
+            "annotation_telemetry.fidelity must be one of: "
+            + ", ".join(sorted(VALID_TELEMETRY_FIDELITIES))
+        )
+
+    for bool_key in ("enabled", "store_events", "disclose_to_annotators"):
+        if bool_key in at and not isinstance(at[bool_key], bool):
+            errors.append(f"annotation_telemetry.{bool_key} must be true or false")
+
+    for list_key in ("include_schemas", "exclude_schemas"):
+        if list_key in at and not isinstance(at[list_key], list):
+            errors.append(
+                f"annotation_telemetry.{list_key} must be a list of schema names")
+
+    for int_key in ("idle_ms", "flush_interval_ms"):
+        if int_key in at and (not isinstance(at[int_key], int)
+                              or isinstance(at[int_key], bool)
+                              or at[int_key] <= 0):
+            errors.append(
+                f"annotation_telemetry.{int_key} must be a positive integer")
+
+    text = at.get("disclosure_text")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        errors.append(
+            "annotation_telemetry.disclosure_text must be a non-empty string "
+            "(omit it to use the default notice)"
+        )
+    errors += _validate_tracker_phases("annotation_telemetry", at, config_data)
+
+    detection = at.get("detection")
+    if detection is not None:
+        if not isinstance(detection, dict):
+            errors.append("annotation_telemetry.detection must be a mapping")
+        else:
+            for bool_key in ("enabled", "calibrate"):
+                if bool_key in detection and not isinstance(detection[bool_key], bool):
+                    errors.append(
+                        f"annotation_telemetry.detection.{bool_key} "
+                        "must be true or false")
+            th = detection.get("thresholds")
+            if th is not None and not isinstance(th, dict):
+                errors.append(
+                    "annotation_telemetry.detection.thresholds must be a mapping "
+                    "of threshold name to number")
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid annotation_telemetry configuration:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+    # Warn rather than fail: both combinations are legal, just self-defeating
+    # or ethically load-bearing.
+    if at.get("enabled") and fidelity == "summary" and at.get("store_events"):
+        logger.warning(
+            "annotation_telemetry.store_events is true but fidelity is "
+            "'summary'; no raw event streams will be stored."
+        )
+    if at.get("enabled") and not at.get("disclose_to_annotators", True):
+        logger.warning(
+            "annotation_telemetry.disclose_to_annotators is false. Drawing "
+            "dynamics are behavioural data about your annotators; check that "
+            "your consent documentation and ethics approval cover collecting "
+            "them silently."
+        )
+
+
+def get_annotation_telemetry_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the ``annotation_telemetry`` block with defaults filled in.
+
+    Always returns a dict that is safe to index. ``enabled`` is False when the
+    block is absent, so callers need no separate presence check.
+    """
+    import copy
+    merged = copy.deepcopy(ANNOTATION_TELEMETRY_DEFAULTS)
+    block = (config_data or {}).get("annotation_telemetry")
+    if not isinstance(block, dict):
+        return merged
+    for key, value in block.items():
+        if key == "detection" and isinstance(value, dict):
+            merged["detection"].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_annotation_telemetry_client_config(
+    config_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """The subset of the telemetry config the browser needs.
+
+    Screening thresholds are deliberately withheld, for the same reason as the
+    keystroke ones: they are evaluated server-side, and shipping them would tell
+    an annotator exactly how long to wait before clicking accept.
+    """
+    at = get_annotation_telemetry_config(config_data)
+    return {
+        "enabled": at["enabled"],
+        "fidelity": at["fidelity"],
+        "include_schemas": at["include_schemas"],
+        "exclude_schemas": at["exclude_schemas"],
+        "flush_interval_ms": at["flush_interval_ms"],
+        "disclose_to_annotators": at["disclose_to_annotators"],
+        "disclosure_text": get_annotation_telemetry_disclosure_text(config_data),
+    }
+
+
+def get_annotation_telemetry_disclosure_text(config_data: Dict[str, Any]) -> str:
+    """The notice shown to annotators, or ``""`` when disclosure is off.
+
+    Returns the empty string both when the feature is disabled and when the
+    researcher has explicitly opted out of disclosure, so a caller can treat
+    "no text" as "render nothing" without re-checking the flags.
+    """
+    at = get_annotation_telemetry_config(config_data)
+    if not at["enabled"] or at["fidelity"] == "off":
+        return ""
+    if not at.get("disclose_to_annotators", True):
+        return ""
+    custom = at.get("disclosure_text")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    return DEFAULT_TELEMETRY_DISCLOSURE
+
+
+# --------------------------------------------------------------------------
+# Authenticity paradata (page-level; every task type)
+# --------------------------------------------------------------------------
+
+#: Defaults for the ``authenticity`` block. Opt-in, like keystroke logging: it
+#: records behaviour of identifiable annotators.
+AUTHENTICITY_DEFAULTS: Dict[str, Any] = {
+    "enabled": False,
+    "flush_interval_ms": 10000,
+    # Shorter absences are not counted: alt-tabbing past a notification is not
+    # leaving the task.
+    "min_away_ms": 1000,
+    # Pointer movement totals and the teleport-click check. Off removes the
+    # pointermove listener entirely.
+    "track_pointer": True,
+    "disclose_to_annotators": True,
+    "disclosure_text": None,       # None = DEFAULT_AUTHENTICITY_DISCLOSURE below
+    "detection": {
+        "enabled": True,
+        "thresholds": {},
+    },
+}
+
+#: States what is and is not collected, for the same reason as the keystroke
+#: notice: "your activity is recorded" invites the assumption that the copied
+#: and pasted text itself is stored.
+DEFAULT_AUTHENTICITY_DISCLOSURE = (
+    "This task records when you leave this page and whether you copy the item "
+    "or paste text from elsewhere — not what you copy or paste."
+)
+
+INTERACTION_TRACKING_DEFAULTS: Dict[str, Any] = {
+    # On by default because existing projects (and the admin Behavioral tab)
+    # depend on it; a project can now switch it off.
+    "enabled": True,
+    "disclose_to_annotators": False,
+    "disclosure_text": None,
+}
+
+DEFAULT_INTERACTION_TRACKING_DISCLOSURE = (
+    "This task records how you use the page — clicks, scrolling and time spent "
+    "on each item — not what you type."
+)
+
+
+def _validate_disclosure_block(name: str, block: Dict[str, Any],
+                               bool_keys: tuple, int_keys: tuple) -> List[str]:
+    errors = []
+    for key in bool_keys:
+        if key in block and not isinstance(block[key], bool):
+            errors.append(f"{name}.{key} must be true or false")
+    for key in int_keys:
+        v = block.get(key)
+        if key in block and (not isinstance(v, int) or isinstance(v, bool) or v <= 0):
+            errors.append(f"{name}.{key} must be a positive integer")
+    text = block.get("disclosure_text")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        errors.append(
+            f"{name}.disclosure_text must be a non-empty string "
+            "(omit it to use the default notice)")
+    return errors
+
+
+def validate_authenticity_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``authenticity`` and ``interaction_tracking`` blocks.
+
+    See ``docs/advanced/authenticity_paradata.md``.
+    """
+    errors = []
+    au = config_data.get("authenticity")
+    if au is not None:
+        if not isinstance(au, dict):
+            raise ConfigValidationError("authenticity must be a mapping")
+        errors += _validate_disclosure_block(
+            "authenticity", au,
+            ("enabled", "track_pointer", "disclose_to_annotators"),
+            ("flush_interval_ms", "min_away_ms"))
+        errors += _validate_tracker_phases("authenticity", au, config_data)
+        detection = au.get("detection")
+        if detection is not None:
+            if not isinstance(detection, dict):
+                errors.append("authenticity.detection must be a mapping")
+            else:
+                if "enabled" in detection and not isinstance(detection["enabled"], bool):
+                    errors.append("authenticity.detection.enabled must be true or false")
+                th = detection.get("thresholds")
+                if th is not None:
+                    from potato.authenticity import DEFAULT_THRESHOLDS
+                    if not isinstance(th, dict):
+                        errors.append(
+                            "authenticity.detection.thresholds must be a mapping "
+                            "of threshold name to number")
+                    else:
+                        for key, value in th.items():
+                            if key not in DEFAULT_THRESHOLDS:
+                                errors.append(
+                                    f"authenticity.detection.thresholds.{key} is not a "
+                                    "known threshold (known: "
+                                    + ", ".join(sorted(DEFAULT_THRESHOLDS)) + ")")
+                            elif (isinstance(value, bool)
+                                  or not isinstance(value, (int, float))):
+                                errors.append(
+                                    f"authenticity.detection.thresholds.{key} "
+                                    "must be a number")
+
+    it = config_data.get("interaction_tracking")
+    if it is not None:
+        if not isinstance(it, dict):
+            raise ConfigValidationError("interaction_tracking must be a mapping")
+        errors += _validate_disclosure_block(
+            "interaction_tracking", it, ("enabled", "disclose_to_annotators"), ())
+        errors += _validate_tracker_phases("interaction_tracking", it, config_data)
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid authenticity / interaction_tracking configuration:\n  - "
+            + "\n  - ".join(errors))
+
+    if isinstance(au, dict) and au.get("enabled") \
+            and not au.get("disclose_to_annotators", True):
+        logger.warning(
+            "authenticity.disclose_to_annotators is false. Page-leave, copy and "
+            "paste events are behavioural data about your annotators; check that "
+            "your consent documentation and ethics approval cover collecting "
+            "them silently.")
+
+
+def get_authenticity_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The ``authenticity`` block with defaults filled in; always safe to index."""
+    import copy
+    merged = copy.deepcopy(AUTHENTICITY_DEFAULTS)
+    block = (config_data or {}).get("authenticity")
+    if not isinstance(block, dict):
+        return merged
+    for key, value in block.items():
+        if key == "detection" and isinstance(value, dict):
+            merged["detection"].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_authenticity_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The subset the browser needs.
+
+    Thresholds are withheld, as for keystroke logging: shipping them would tell
+    an annotator exactly how long they may stay away.
+    """
+    au = get_authenticity_config(config_data)
+    return {
+        "enabled": bool(au["enabled"]),
+        "flush_interval_ms": au["flush_interval_ms"],
+        "min_away_ms": au["min_away_ms"],
+        "track_pointer": bool(au["track_pointer"]),
+        "disclosure_text": _disclosure_text(au, DEFAULT_AUTHENTICITY_DISCLOSURE),
+    }
+
+
+def get_interaction_tracking_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The ``interaction_tracking`` block with defaults filled in."""
+    merged = dict(INTERACTION_TRACKING_DEFAULTS)
+    block = (config_data or {}).get("interaction_tracking")
+    if isinstance(block, dict):
+        merged.update(block)
+    return merged
+
+
+def get_interaction_tracking_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    it = get_interaction_tracking_config(config_data)
+    return {
+        "enabled": bool(it["enabled"]),
+        "disclosure_text": _disclosure_text(
+            it, DEFAULT_INTERACTION_TRACKING_DISCLOSURE, default_disclose=False),
+    }
+
+
+def _disclosure_text(block: Dict[str, Any], default_text: str,
+                     default_disclose: bool = True) -> str:
+    """The notice to show, or ``""`` when the feature or its disclosure is off."""
+    if not block.get("enabled"):
+        return ""
+    if not block.get("disclose_to_annotators", default_disclose):
+        return ""
+    custom = block.get("disclosure_text")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    return default_text
+
+
+#: Phase types a tracker's ``phases`` list can name (the UserPhase values whose
+#: pages render through base_template_v2.html). A phase name from
+#: ``phases.order`` is accepted too, for a study with two pages of one type.
+TRACKER_PHASE_TYPES = ("consent", "prestudy", "instructions", "training",
+                       "annotation", "poststudy")
+
+
+def _validate_tracker_phases(name: str, block: Dict[str, Any],
+                             config_data: Dict[str, Any]) -> List[str]:
+    """Errors for ``<name>.phases``.
+
+    Always an error, not a ``--strict`` warning: a typo such as ``concent``
+    would otherwise switch the tracker off on every page without a word.
+    """
+    value = block.get("phases")
+    if value is None:            # absent or null: every page
+        return []
+    if (not isinstance(value, list) or not value
+            or not all(isinstance(p, str) for p in value)):
+        return [f"{name}.phases must be a non-empty list of phase types or "
+                "phase names (omit it to record on every page)"]
+    valid = set(TRACKER_PHASE_TYPES)
+    phases_cfg = config_data.get("phases")
+    if isinstance(phases_cfg, dict):
+        valid.update(k for k, v in phases_cfg.items()
+                     if isinstance(v, dict) and k not in ("order", "counterbalance"))
+        if isinstance(phases_cfg.get("order"), list):
+            valid.update(p for p in phases_cfg["order"] if isinstance(p, str))
+    elif isinstance(phases_cfg, list):
+        # The list form, `phases: [{name: intake, type: consent}, ...]`, which
+        # the phase loader accepts too.
+        valid.update(p["name"] for p in phases_cfg
+                     if isinstance(p, dict) and isinstance(p.get("name"), str))
+    unknown = [p for p in value if p not in valid]
+    if unknown:
+        return [f"{name}.phases names unknown phase(s) "
+                + ", ".join(repr(p) for p in unknown)
+                + "; valid values are " + ", ".join(sorted(valid))]
+    return []
+
+
+def tracker_active_in_phase(config_data: Dict[str, Any], block_name: str,
+                            phase: Any, page: Any) -> bool:
+    """Whether the ``block_name`` tracker records on this phase and page.
+
+    ``phase`` is a UserPhase (or its value) and ``page`` the phase name from
+    ``phases.order``. Without a ``phases`` list the tracker records on every
+    page, as it did before the key existed. Used both to leave the script off
+    the page and to drop posts from a page rendered before the phase changed.
+    """
+    block = (config_data or {}).get(block_name)
+    allowed = block.get("phases") if isinstance(block, dict) else None
+    if allowed is None:
+        return True
+    return getattr(phase, "value", phase) in allowed or page in allowed
+
+
+def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``corpus_map`` block when enabled and warn on quota conflict.
+
+    Cross-document event annotation needs every annotator to reach the whole
+    corpus (the map is the navigator, not the assignment queue). A restrictive
+    per-user quota alongside ``corpus_map.enabled`` is almost always a mistake,
+    so warn loudly (mirrors validate_search_assignment_compat's spirit).
+    """
+    cm = config_data.get("corpus_map")
+    if not isinstance(cm, dict) or not cm.get("enabled"):
+        return
+
+    errors = []
+    for key in ("clustering", "umap", "knn", "cluster_labeling"):
+        val = cm.get(key)
+        if val is not None and not isinstance(val, dict):
+            errors.append(f"corpus_map.{key} must be a mapping")
+    if errors:
+        raise ConfigValidationError(
+            "Invalid corpus_map configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+    quota = config_data.get("per_annotator_quota")
+    if quota:
+        logger.warning(
+            "corpus_map.enabled is set alongside per_annotator_quota=%s. "
+            "Cross-document event annotation expects annotators to browse the "
+            "whole corpus via the map; a restrictive per-user quota will hide "
+            "documents from the reading pane. Consider removing the quota.",
+            quota,
+        )
 
 
 def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
@@ -799,6 +2957,19 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     """
     if not isinstance(config_data, dict):
         raise ConfigValidationError("Configuration must be a YAML object (dictionary)")
+
+    # Report deprecated keys without touching them, so `potato validate` says
+    # the same thing the server says at boot. On the server path
+    # load_and_validate_config() has already folded and removed them.
+    for _deprecation in deprecated_key_warnings(config_data):
+        logger.warning(_deprecation)
+    for _unread in unread_key_warnings(config_data):
+        logger.warning(_unread)
+
+    # Plugins register annotation and display types, so they load before
+    # anything checks a type name. See potato/plugins.py.
+    validate_plugins_config(config_data)
+    validate_phase_question_files(config_data, config_file_dir)
 
     # Required fields validation. NOTE: 'data_files' is intentionally NOT here —
     # it is one of three mutually-acceptable data sources (data_files /
@@ -832,6 +3003,19 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
         if not isinstance(category_key, str) or not category_key.strip():
             raise ConfigValidationError("item_properties.category_key must be a non-empty string")
 
+    private_keys = item_properties.get('private_keys')
+    if private_keys is not None:
+        if (not isinstance(private_keys, list)
+                or not all(isinstance(k, str) and k.strip() for k in private_keys)):
+            raise ConfigValidationError(
+                "item_properties.private_keys must be a list of field names")
+        shown = {item_properties.get('id_key'), item_properties.get('text_key')}
+        clash = sorted(shown & set(private_keys))
+        if clash:
+            raise ConfigValidationError(
+                f"item_properties.private_keys cannot include {', '.join(clash)}: "
+                "the id and text fields are what the page shows")
+
     # Validate data_files (required unless data_directory or data_sources is provided)
     data_files = config_data.get('data_files', [])
     data_directory = config_data.get('data_directory')
@@ -840,12 +3024,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if not isinstance(data_files, list):
         raise ConfigValidationError("data_files must be a list")
 
-    # data_files can be empty if data_directory or data_sources is configured
-    if not data_files and not data_directory and not data_sources:
-        raise ConfigValidationError(
-            "At least one data source must be configured: "
-            "'data_files', 'data_directory', or 'data_sources'"
-        )
+    # data_files can be empty if data_directory, data_sources, or batch
+    # assignment group data files are configured.
+    if not config_has_data_source(config_data):
+        raise ConfigValidationError(DATA_SOURCE_REQUIRED_MESSAGE)
 
     # Validate data_sources configuration if present
     if data_sources:
@@ -856,6 +3038,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate authentication config if present
     validate_authentication_config(config_data)
+
+    from potato.server_utils.theme import validate_ui_theme
+    validate_ui_theme(config_data)
 
     # Validate data_directory config if present
     validate_data_directory_config(config_data)
@@ -873,6 +3058,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate active learning configuration if present
     validate_active_learning_config(config_data)
 
+    # Validate automation rules if present
+    validate_automation_config(config_data)
+
     # Validate AI support configuration if present
     validate_ai_support_config(config_data)
 
@@ -885,15 +3073,69 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate batch assignment configuration if present
     validate_batch_assignment_config(config_data)
 
+    # Validate RBAC configuration if present
+    validate_rbac_config(config_data)
+
+    # Validate per-cohort scheme sets / group scheme bindings if present
+    validate_cohort_schemes_config(config_data)
+
     # Validate diversity ordering configuration if present
     validate_diversity_config(config_data)
 
     # Validate embedding visualization configuration if present
     validate_embedding_visualization_config(config_data)
 
+    # Validate the project-wide embedder if present
+    validate_embeddings_config(config_data)
+
     # Validate adjudication configuration if present
     if 'adjudication' in config_data:
         validate_adjudication_config(config_data)
+
+    # Warn about phases named in the order that no block defines
+    validate_phase_order(config_data)
+
+    # Between-subjects conditions, and every condition.<factor> reference
+    from potato.server_utils.experiment_conditions import (
+        validate_conditions_config, validate_condition_references)
+    validate_conditions_config(config_data)
+    validate_condition_references(config_data)
+    from potato.server_utils.experiment_conditions import validate_group_by_condition
+    validate_group_by_condition(config_data)
+
+    # Page-level show_when / exit_when and phases.counterbalance
+    validate_phase_flow_config(config_data)
+    validate_annotation_phase_present(config_data)
+
+    # Timed trials on the annotation page
+    from potato.trial_timing import validate_trial_timing_config
+    validate_trial_timing_config(config_data)
+
+    # Embedded jsPsych phase pages (after normalization gave them a slot)
+    from potato.runtimes.phase import validate_runtime_config
+    validate_runtime_config(config_data)
+
+    # Page rules that name questions in phase files. The server checks these
+    # at boot; doing it here too means `potato validate` fails on them.
+    validate_phase_flow_files(config_data, config_file_dir)
+
+    # The files a jsPsych page names (timeline, extra scripts, assets).
+    from potato.runtimes.phase import validate_runtime_files
+    validate_runtime_files(config_data, config_file_dir)
+
+    # Incentive payment rules (price_list / bdm / belief_elicitation)
+    from potato.incentives import validate_incentives_config
+    validate_incentives_config(config_data, config_file_dir)
+
+    # Scheduled sessions (waves, experience sampling, Delphi) and notifications
+    from potato.scheduling.config import validate_schedule_config
+    validate_schedule_config(config_data, config_file_dir)
+
+    # Warn about quota / batch-group keys that will never be read
+    warn_unreachable_quota_keys(config_data)
+    warn_batch_groups_need_the_batch_strategy(config_data)
+    warn_category_assignment_cannot_qualify(config_data)
+    warn_unenforced_coverage_floor(config_data)
 
     # Validate quality control configuration if present
     validate_quality_control_config(config_data)
@@ -903,12 +3145,22 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate instance display configuration if present
     validate_instance_display_config(config_data)
+    validate_mcp_config(config_data)
 
     # Validate format_handling configuration if present
     validate_format_handling_config(config_data)
 
     # Validate layout configuration if present
     validate_layout_config(config_data)
+
+    # A bws scheme is inert without the dataset-level tuple generator.
+    _validate_bws_scheme_has_config(config_data)
+    _validate_event_annotation_labels(config_data)
+
+    # Schemes whose whole surface is served by a block or a companion scheme
+    # they do not declare themselves.
+    _validate_multi_document_event_has_template(config_data)
+    _validate_canvas_companion_schemes(config_data)
 
     # Validate BWS configuration if present
     if 'bws_config' in config_data:
@@ -929,51 +3181,364 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # assignment design it would corrupt via self-selection.
     validate_search_assignment_compat(config_data)
 
+    # Fail loud if live ingestion is combined with an assignment strategy
+    # that can never serve the items it ingests.
+    validate_live_ingestion_assignment_compat(config_data)
+
     # Validate codebook_mode (and apply the crowd force-lock).
     validate_codebook_config(config_data)
 
+    # Validate judge_calibration configuration if present
+    validate_judge_calibration_config(config_data)
+
+    validate_solo_mode_config(config_data)
+
+    validate_labeling_engine_config(config_data)
+    validate_training_backends_config(config_data)
+
+    # Validate declared machine annotators if present.
+    validate_machine_annotators_config(config_data)
+
+    # Validate multi-document event annotation blocks if present
+    validate_event_template_config(config_data)
+    validate_corpus_map_config(config_data)
+
+    # Validate the consensus export's parameters (potato/aggregation/config.py)
+    from potato.aggregation.config import validate_consensus_aggregation_config
+    validate_consensus_aggregation_config(config_data, ConfigValidationError)
+
+    # Validate chain-of-thought segmentation block if present
+    validate_cot_segmentation_config(config_data)
+
+    # Validate keystroke logging / typing dynamics block if present
+    validate_keystroke_logging_config(config_data)
+
+    # Validate text_as_image (instance text rendered to a PNG) if present
+    validate_text_as_image_config(config_data)
+
+    # Validate math rendering (KaTeX) if present
+    from potato.math_rendering import MathConfigError, validate_math_config
+    try:
+        validate_math_config(config_data)
+    except MathConfigError as e:
+        raise ConfigValidationError(str(e))
+
+    # Validate annotation telemetry (drawing dynamics) block if present
+    validate_annotation_telemetry_config(config_data)
+
+    # Validate authenticity paradata and interaction tracking blocks if present
+    validate_authenticity_config(config_data)
+
+    # Validate ui_language (bundled code / _base / inline overrides)
+    validate_ui_language_config(config_data)
+
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
+    validate_scheme_keys(config_data, config_file_dir or project_dir)
+    validate_grid_view_config(config_data)
+
+
+def _phase_file_schemes(config_data: Dict[str, Any],
+                        base_dir: Optional[str]) -> List[Tuple[str, Dict[str, Any]]]:
+    """Schemes declared in phase page files (`phases.<name>.file`).
+
+    Returns ``(label, scheme)`` pairs. Survey and prestudy questions usually
+    live in these files rather than inline, and they are where hand-written
+    schemes are commonest. Paths resolve the way the server resolves them:
+    against the config's directory, then `task_dir`, then the working
+    directory. A file that cannot be found or parsed is skipped here; the path
+    checks report a missing one.
+    """
+    import glob as _glob
+
+    phases = config_data.get("phases") if isinstance(config_data, dict) else None
+    if isinstance(phases, dict):
+        items = [(n, p) for n, p in phases.items() if n not in ("order", "counterbalance")]
+    elif isinstance(phases, list):
+        items = [(p.get("name", f"#{i}") if isinstance(p, dict) else f"#{i}", p)
+                 for i, p in enumerate(phases)]
+    else:
+        return []
+
+    roots = []
+    if base_dir:
+        roots.append(base_dir)
+        task_dir = config_data.get("task_dir")
+        if isinstance(task_dir, str) and task_dir:
+            roots.append(task_dir if os.path.isabs(task_dir)
+                         else os.path.normpath(os.path.join(base_dir, task_dir)))
+    roots.append(os.getcwd())
+
+    found: List[Tuple[str, Dict[str, Any]]] = []
+    for phase_name, phase in items:
+        rel = phase.get("file") if isinstance(phase, dict) else None
+        if not isinstance(rel, str) or not rel:
+            continue
+        candidates = [rel] if os.path.isabs(rel) else [os.path.join(r, rel) for r in roots]
+        paths: List[str] = []
+        for candidate in candidates:
+            paths = sorted(_glob.glob(candidate))
+            if paths:
+                break
+        for path in paths:
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    if path.endswith(".jsonl"):
+                        loaded = [json.loads(line) for line in fh if line.strip()]
+                    elif path.endswith((".yaml", ".yml")):
+                        loaded = yaml.safe_load(fh)
+                    else:
+                        loaded = json.load(fh)
+            except (OSError, ValueError, yaml.YAMLError):
+                continue
+            for scheme in loaded if isinstance(loaded, list) else [loaded]:
+                if isinstance(scheme, dict):
+                    found.append((f"phases.{phase_name} ({os.path.basename(path)})", scheme))
+    return found
+
+
+def validate_plugins_config(config_data: Dict[str, Any]) -> None:
+    """Load the plugins `plugins:` names, and refuse types from unlisted ones."""
+    from potato import plugins
+    try:
+        plugins.load_plugins(plugins.configured_names(config_data))
+    except (ValueError, plugins.PluginError) as exc:
+        raise ConfigValidationError(str(exc))
+    problems = plugins.unlisted_plugin_types(config_data)
+    if problems:
+        raise ConfigValidationError("; ".join(problems))
+
+
+def validate_phase_question_files(config_data: Dict[str, Any],
+                                  config_file_dir: Optional[str] = None) -> None:
+    """Check the questions in survey-phase files the way the server will at boot.
+
+    A missing file is left to the server, which looks in several places.
+    """
+    from potato.server_utils.phase_files import (
+        check_phase_schemes, load_phase_schemes, question_file_phases, resolve_phase_file)
+    for phase_name, filename in question_file_phases(config_data):
+        path = resolve_phase_file(filename, config_file_dir)
+        if path is None:
+            continue
+        try:
+            schemes = load_phase_schemes(path)
+            check_phase_schemes(schemes, filename, phase_name,
+                                config_data.get("plugins") or [])
+            from potato.server_utils.select_label_files import (
+                file_schemes, resolve_select_label_files)
+            resolve_select_label_files(file_schemes(schemes, filename),
+                                       config_data.get("task_dir") or config_file_dir,
+                                       config_file_dir)
+        except (ConfigValidationError, ConfigSecurityError):
+            raise
+        except Exception as exc:
+            raise ConfigValidationError(f"phases.{phase_name}.file: {exc}")
+
+
+def validate_grid_view_config(config_data: Dict[str, Any]) -> None:
+    """`grid_view` names one top-level radio, multiselect or triage scheme."""
+    grid = config_data.get("grid_view")
+    if grid is None:
+        return
+    if not isinstance(grid, dict):
+        raise ConfigValidationError("grid_view must be a mapping")
+    if not grid.get("enabled"):
+        return
+    name = grid.get("scheme")
+    schemes = {s.get("name"): s for s in config_data.get("annotation_schemes") or []
+               if isinstance(s, dict)}
+    if name not in schemes:
+        raise ConfigValidationError(
+            f"grid_view.scheme must name a top-level annotation scheme; "
+            f"'{name}' is not one ({', '.join(map(str, schemes)) or 'none defined'})")
+    kind = schemes[name].get("annotation_type")
+    if kind not in ("radio", "multiselect", "triage"):
+        raise ConfigValidationError(
+            f"grid_view.scheme '{name}' is a {kind}. The grid labels many items "
+            f"with one click, so it takes a radio, multiselect or triage scheme.")
+    size = grid.get("page_size", 24)
+    if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= 200:
+        raise ConfigValidationError("grid_view.page_size must be a whole number from 1 to 200")
+    # An item labelled in the grid counts as done, and the annotator never
+    # sees it on the normal page again, so a second *required* scheme would
+    # end the study with that scheme unanswered on every grid item.
+    def _scheme_is_required(s):  # mirrors flask_server._scheme_is_required
+        lr = s.get("label_requirement", {})
+        return (s.get("required") is True or lr is True
+                or (isinstance(lr, dict) and lr.get("required") is True))
+    required_others = [n for n, s in schemes.items()
+                       if n != name and s.get("annotation_type") != "pure_display"
+                       and _scheme_is_required(s)]
+    if required_others:
+        raise ConfigValidationError(
+            f"grid_view labels only '{name}', and an item labelled in the grid counts as "
+            f"done, so the required scheme(s) {', '.join(map(str, required_others))} would "
+            "never be asked. Make them optional, or drop grid_view for this study.")
+
+
+def validate_scheme_keys(config_data: Dict[str, Any],
+                         base_dir: Optional[str] = None) -> None:
+    """Warn about keys an annotation scheme's type does not declare.
+
+    `validate_unknown_keys` stops at `annotation_schemes`, because what a scheme
+    may carry depends on its `annotation_type`. Without this, a misspelled or
+    invented key on a scheme (`lables`, `default_low` on a range_slider) loaded
+    silently and did nothing, and `validate --strict` passed it.
+
+    The accepted set is the registry's: the type's required and optional
+    fields, the universal ones, and the keys the server writes itself. Messages
+    use the same "Unrecognized config key" prefix, so `--strict` fails on them.
+    Unregistered types are left to the type check.
+    """
+    from potato.server_utils.schemas.registry import (
+        INTERNAL_SCHEME_FIELDS,
+        schema_registry,
+    )
+
+    located = [("annotation_schemes", s)
+               for s in _collect_all_annotation_schemes(config_data)]
+    located += _phase_file_schemes(config_data, base_dir)
+    for index, (where, scheme) in enumerate(located):
+        if not isinstance(scheme, dict):
+            continue
+        scheme_type = scheme.get("annotation_type")
+        accepted = schema_registry.get_accepted_fields(scheme_type) \
+            if isinstance(scheme_type, str) else None
+        if accepted is None:
+            continue
+        accepted = accepted | INTERNAL_SCHEME_FIELDS
+        label = scheme.get("name") or f"#{index}"
+        for key in sorted(k for k in scheme if k not in accepted):
+            full_key = f"{where}[{label}].{key}"
+            matches = difflib.get_close_matches(str(key), accepted, n=3, cutoff=0.6)
+            if matches:
+                logger.warning(
+                    "Unrecognized config key '%s' (a %s scheme does not read it). "
+                    "Did you mean: %s?",
+                    full_key, scheme_type, ", ".join(f"'{m}'" for m in matches))
+            else:
+                logger.warning(
+                    "Unrecognized config key '%s'. A %s scheme does not read it, "
+                    "so it will be ignored.", full_key, scheme_type)
+        _check_label_keys(scheme, scheme_type, f"{where}[{label}]")
+
+
+def _check_label_keys(scheme: Dict[str, Any], scheme_type: str, where: str) -> None:
+    """Warn about keys on a dict label that its type does not read.
+
+    The scheme-level check stops at `labels`, so `description:` on an audio
+    label or `key_value:` on a select label loaded and did nothing. A dict label
+    on a type that prints labels as text is refused: it rendered as the dict's
+    Python repr, or raised.
+    """
+    from potato.server_utils.schemas.registry import (
+        LABEL_BASE_FIELDS, LABEL_FIELDS, STRING_LABEL_TYPES)
+
+    labels = scheme.get("labels")
+    if not isinstance(labels, list):
+        return
+    if scheme_type in STRING_LABEL_TYPES:
+        for i, entry in enumerate(labels):
+            if isinstance(entry, dict):
+                raise ConfigValidationError(
+                    f"{where}.labels[{i}]: a {scheme_type} scheme takes labels as plain "
+                    f"strings, not {{name: ...}} entries (got {sorted(entry)}). Write "
+                    f"'{entry.get('name', '...')}' instead.")
+        return
+    extra = LABEL_FIELDS.get(scheme_type)
+    if extra is None:
+        return
+    accepted = LABEL_BASE_FIELDS | extra
+    if scheme.get("codebook"):
+        # A codebook-backed scheme seeds its codes from these labels, and
+        # schema_bridge._label_details carries the structured prompt fields
+        # (definition, clarifications, examples) into the codebook.
+        from potato.codebook.store import RICH_FIELDS
+        accepted = accepted | frozenset(RICH_FIELDS)
+    for i, entry in enumerate(labels):
+        if not isinstance(entry, dict):
+            continue
+        for key in sorted(k for k in entry if k not in accepted):
+            full_key = f"{where}.labels[{i}].{key}"
+            if key == "key_binding" and "key_value" in accepted:
+                matches = ["key_value"]
+            else:
+                matches = difflib.get_close_matches(str(key), accepted, n=3, cutoff=0.6)
+            if matches:
+                logger.warning(
+                    "Unrecognized config key '%s' (labels on %s schemes do not read "
+                    "it). Did you mean: %s?",
+                    full_key, scheme_type, ", ".join(f"'{m}'" for m in matches))
+            else:
+                logger.warning(
+                    "Unrecognized config key '%s'. Labels on %s schemes do not read "
+                    "it, so it will be ignored; they read %s.",
+                    full_key, scheme_type, ", ".join(sorted(accepted)))
+
+
+def validate_live_ingestion_assignment_compat(config_data: Dict[str, Any]) -> None:
+    """
+    Hard-fail when live ingestion meets the BATCH assignment strategy.
+
+    BATCH only ever assigns items belonging to a pre-declared annotator/item
+    cohort (``_batch_candidate_ids_for_user``). An item ingested at runtime
+    belongs to no cohort, so it lands in the pool, appears in admin views and
+    exports, and is never offered to a single annotator. Stored but
+    unannotatable is the worst kind of failure: it looks like it worked.
+
+    This is an error rather than a warning on purpose -- the closely related
+    F-037 bug shipped precisely because the signal was a log line.
+
+    Raises:
+        ConfigValidationError: If a live source is combined with BATCH
+    """
+    live_indices = [
+        i for i, source in enumerate(config_data.get("data_sources") or [])
+        if isinstance(source, dict)
+        and isinstance(source.get("live_ingestion"), dict)
+        and source["live_ingestion"].get("enabled")
+    ]
+    if not live_indices:
+        return
+
+    strategy = config_data.get("assignment_strategy")
+    if isinstance(strategy, dict):
+        strategy = strategy.get("name")
+
+    if strategy and str(strategy).lower() == "batch":
+        raise ConfigValidationError(
+            f"assignment_strategy 'batch' is incompatible with "
+            f"data_sources[{live_indices[0]}].live_ingestion: BATCH assigns only "
+            f"items belonging to a configured annotator/item cohort, so "
+            f"live-ingested items would be stored but never assigned to any "
+            f"annotator. Use a different assignment_strategy, or disable "
+            f"live_ingestion on this source."
+        )
 
 
 # Assignment strategies whose sampling/ordering self-selection breaks.
 _CLAIM_INCOMPATIBLE_STRATEGIES = {
     "random", "diversity_clustering", "max_diversity",
     "active_learning", "llm_confidence", "least_annotated",
-    "category_based", "batch",
+    "category_based", "batch", "psychometric",
+    # Serves items in a confidence order the annotator did not choose, so a
+    # search-and-claim flow would silently reorder the review queue.
+    "model_review",
+    # The engine's calibration sample is random; an annotator who picked
+    # their own items would make it a sample of what people chose to label.
+    "engine",
 }
 
 
-def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
-    """Hard-fail when ``search.annotator_claim`` is combined with a
-    feature whose integrity depends on the platform — not the annotator —
-    choosing the next item. Read-only admin search is unaffected.
-
-    Solo/QDA mode (single coder over the whole corpus) is always allowed.
-    """
-    search = config_data.get("search")
-    if not isinstance(search, dict) or not search.get("annotator_claim"):
-        return
-
-    # Single-coder modes have no sampling/overlap invariant to protect.
-    if (config_data.get("qda_mode") or {}).get("enabled") or \
-       (config_data.get("solo_mode") or {}).get("enabled"):
-        return
-
-    conflicts = []
-
-    strat = config_data.get("assignment_strategy")
-    if isinstance(strat, dict):
-        strat = strat.get("name")
-    if strat and str(strat).lower() in _CLAIM_INCOMPATIBLE_STRATEGIES:
-        conflicts.append(
-            f"assignment_strategy: {strat} (self-selection breaks "
-            f"sampling/ordering)")
-
+def _overlap_knobs(config_data: Dict[str, Any]) -> List[str]:
+    """``"key: value"`` for each setting that asks for more than one
+    annotator per item. ``num_annotators_per_item`` may be a dict, read
+    through its ``default`` and ``overlap_sample.count``."""
+    knobs = []
     for k in ("max_annotations_per_item", "num_annotators_per_item",
               "min_annotators_per_instance"):
         raw = config_data.get(k, -1)
-        # num_annotators_per_item may now be a dict — extract default + overlap_sample.count
         candidates = []
         if isinstance(raw, dict):
             if raw.get("default") is not None:
@@ -986,12 +3551,57 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
         for cand in candidates:
             try:
                 if int(cand) > 1:
-                    conflicts.append(
-                        f"{k}: {config_data[k]} (inter-annotator overlap "
-                        f"cannot be guaranteed under self-selection)")
+                    knobs.append(f"{k}: {config_data[k]}")
                     break
             except (TypeError, ValueError):
                 continue
+    return knobs
+
+
+def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
+    """Hard-fail when ``search.annotator_claim`` is combined with a
+    feature whose integrity depends on the platform — not the annotator —
+    choosing the next item. Read-only admin search is unaffected.
+
+    Solo/QDA mode is always allowed; QDA mode logs a warning when the
+    config also asks for overlap, since self-selection cannot guarantee it.
+    """
+    search = config_data.get("search")
+    if not isinstance(search, dict) or not search.get("annotator_claim"):
+        return
+
+    # Solo mode is one coder over the whole corpus: no sampling or overlap
+    # invariant to protect.
+    if (config_data.get("solo_mode") or {}).get("enabled"):
+        return
+
+    # QDA mode is exempt too, but a QDA project can still have a team of
+    # coders. Someone who also asked for overlap is told it will not hold,
+    # rather than finding out at the IAA step.
+    if (config_data.get("qda_mode") or {}).get("enabled"):
+        knobs = _overlap_knobs(config_data)
+        if knobs:
+            logger.warning(
+                "search.annotator_claim under qda_mode with %s: annotators "
+                "who claim their own items decide which items get a second "
+                "coder, so the requested overlap is not guaranteed.",
+                ", ".join(knobs))
+        return
+
+    conflicts = []
+
+    strat = config_data.get("assignment_strategy")
+    if isinstance(strat, dict):
+        strat = strat.get("name")
+    if strat and str(strat).lower() in _CLAIM_INCOMPATIBLE_STRATEGIES:
+        conflicts.append(
+            f"assignment_strategy: {strat} (self-selection breaks "
+            f"sampling/ordering)")
+
+    for knob in _overlap_knobs(config_data):
+        conflicts.append(
+            f"{knob} (inter-annotator overlap cannot be guaranteed under "
+            f"self-selection)")
 
     if (config_data.get("attention_checks") or {}).get("enabled"):
         conflicts.append("attention_checks.enabled (annotators could "
@@ -1006,12 +3616,12 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
         conflicts.append("adjudication.enabled (the adjudication queue "
                          "is curated)")
 
-    login_type = (config_data.get("login") or {}).get("type")
-    crowd = (
-        "mturk" in config_data or "prolific" in config_data
-        or login_type in ("mturk", "prolific")
-    )
-    if crowd:
+    # Shared with the codebook force-lock rather than reimplemented. This
+    # was a second inline copy of the legacy-only test, so a study naming
+    # its platform the documented way (`crowdsourcing.provider`) was
+    # allowed a configuration the refusal exists to prevent -- the same
+    # miss, one function away.
+    if _crowd_backend(config_data):
         conflicts.append("crowdsourcing backend (HIT = the assigned "
                          "unit; self-selection breaks payment/coverage)")
 
@@ -1030,25 +3640,87 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
 _CODEBOOK_MODES = ("fixed", "extensible", "open")
 
 
+#: Crowd providers whose annotators are hired by name and pre-authorized
+#: individually, where an open codebook is a legitimate design -- a hired
+#: expert coder doing QDA is a collaborator, not an anonymous worker on a
+#: HIT. Every other provider force-locks, INCLUDING a name this version
+#: does not recognize: a security control that a typo can switch off is
+#: not a control, and a provider added later should arrive locked and be
+#: trusted deliberately rather than by omission.
+_TRUSTED_CROWD_PROVIDERS = frozenset({"expert"})
+
+
 def _crowd_backend(config_data: Dict[str, Any]) -> bool:
+    """Is this a deployment whose annotators are recruited, rather than
+    people the researcher knows?
+
+    Reads `crowdsourcing.provider` as well as the legacy spellings. It
+    used to read only the legacy ones, so the documented way to name a
+    crowd platform -- the key the codebook_mode registry entry itself
+    points at -- did not engage the force-lock. Two configs naming the
+    same platform, one legacy and one current, gave paid annotators
+    opposite protection, and the protected one was the legacy spelling.
+    """
     login_type = (config_data.get("login") or {}).get("type")
-    return (
-        "mturk" in config_data or "prolific" in config_data
-        or login_type in ("mturk", "prolific")
-    )
+    if "mturk" in config_data or "prolific" in config_data:
+        return True
+    if login_type in ("mturk", "prolific"):
+        return True
+
+    crowdsourcing = config_data.get("crowdsourcing") or {}
+    if "provider" in crowdsourcing:
+        # PRESENCE, not truthiness. `provider:` with nothing after it is
+        # `None`, and `provider: ""` is the empty string -- both falsy, so both
+        # used to skip this branch entirely and resolve to `open`, letting a
+        # plain annotator create codes in a shared codebook. Both mean "I was
+        # naming a crowd platform and the value is missing": a half-finished
+        # edit, or a template whose substitution did not happen.
+        #
+        # An unrecognized provider NAME already locks, deliberately -- the
+        # comment on _TRUSTED_CROWD_PROVIDERS says a security control a typo
+        # can switch off is not a control. An absent value is the same kind of
+        # mistake and gets the same answer.
+        provider = crowdsourcing.get("provider")
+        if provider is None or not str(provider).strip():
+            return True
+        return str(provider).strip().lower() not in _TRUSTED_CROWD_PROVIDERS
+    return False
+
+
+def _requested_codebook_mode(config_data: Dict[str, Any]) -> Tuple[Any, str]:
+    """The codebook mode the config asks for, and the key it was written as.
+
+    ``codebook_mode`` wins, then ``codebook.mode``, then
+    ``qda_mode.codebook.mode`` (read only while QDA mode is on). The QDA
+    spelling is documented as equivalent to ``codebook_mode`` and was read
+    by nothing but /qda/status, so a project that set it there got the
+    QDA default (``open``) whatever it asked for. ``(None, "")`` when none
+    is set.
+    """
+    raw = config_data.get("codebook_mode")
+    if raw is not None:
+        return raw, "codebook_mode"
+    codebook = config_data.get("codebook")
+    if isinstance(codebook, dict) and codebook.get("mode") is not None:
+        return codebook["mode"], "codebook.mode"
+    qda = config_data.get("qda_mode")
+    if isinstance(qda, dict) and qda.get("enabled"):
+        qda_codebook = qda.get("codebook")
+        if isinstance(qda_codebook, dict) and qda_codebook.get("mode") is not None:
+            return qda_codebook["mode"], "qda_mode.codebook.mode"
+    return None, ""
 
 
 def get_codebook_mode(config_data: Dict[str, Any]) -> str:
     """Resolve the effective codebook mode.
 
-    Precedence: explicit ``codebook_mode`` / ``codebook.mode`` if set;
+    Precedence: explicit ``codebook_mode`` / ``codebook.mode`` /
+    ``qda_mode.codebook.mode`` if set (see ``_requested_codebook_mode``);
     else ``open`` when solo/QDA mode is enabled; else ``fixed``. A crowd
     backend force-locks ``fixed`` regardless of the request (annotators
     on a paid HIT must not reshape the shared codebook).
     """
-    raw = config_data.get("codebook_mode")
-    if raw is None:
-        raw = (config_data.get("codebook") or {}).get("mode")
+    raw, _ = _requested_codebook_mode(config_data)
 
     if raw is None:
         single = (
@@ -1065,25 +3737,124 @@ def get_codebook_mode(config_data: Dict[str, Any]) -> str:
 
 
 def validate_codebook_config(config_data: Dict[str, Any]) -> None:
-    """Reject an invalid ``codebook_mode`` value, and warn when a crowd
-    backend overrides a requested non-fixed mode."""
-    raw = config_data.get("codebook_mode")
-    if raw is None:
-        raw = (config_data.get("codebook") or {}).get("mode")
-    if raw is None:
-        return
+    """Reject an invalid ``codebook_mode`` value, warn when a crowd
+    backend overrides a requested non-fixed mode, and warn when an open
+    codebook sits behind url_direct self-registration."""
+    raw, key = _requested_codebook_mode(config_data)
 
-    mode = str(raw).strip().lower()
-    if mode not in _CODEBOOK_MODES:
-        raise ConfigValidationError(
-            f"codebook_mode must be one of {', '.join(_CODEBOOK_MODES)}; "
-            f"got {raw!r}."
+    if raw is not None:
+        mode = str(raw).strip().lower()
+        if mode not in _CODEBOOK_MODES:
+            raise ConfigValidationError(
+                f"{key} must be one of {', '.join(_CODEBOOK_MODES)}; "
+                f"got {raw!r}."
+            )
+    else:
+        # The mode the config would have had, computed the same way
+        # `get_codebook_mode` computes it, minus the force-lock.
+        single = (
+            (config_data.get("qda_mode") or {}).get("enabled")
+            or (config_data.get("solo_mode") or {}).get("enabled")
         )
+        mode = "open" if single else "fixed"
+
+    # The warning used to fire only for an author who wrote the mode
+    # explicitly, which is backwards. Someone who wrote `codebook_mode: open`
+    # and was overruled at least knows the key exists and can go looking.
+    # Someone who never wrote it has nothing in their config to connect the
+    # behaviour to -- and QDA is exactly the workflow where an open codebook is
+    # the documented default, so it is the case where the surprise is largest.
     if mode != "fixed" and _crowd_backend(config_data):
         logging.warning(
-            "codebook_mode=%s requested with a crowdsourcing backend; "
-            "force-locking to 'fixed' (paid annotators must not reshape "
-            "the shared codebook).", mode)
+            "codebook_mode=%s%s with a crowdsourcing backend; force-locking "
+            "to 'fixed' (recruited annotators must not reshape the shared "
+            "codebook).",
+            mode, " requested" if raw is not None else " (the default here)")
+        return
+
+    # `login.type: url_direct` with no `crowdsourcing.provider` is NOT
+    # force-locked -- a public self-registration study is a legitimate
+    # design and locking it would change behaviour for people paying
+    # nobody. But the registry hands this config a
+    # LegacyUrlDirectProvider, i.e. Potato's own answer to "is this a
+    # crowd deployment" is yes, and url_direct means any visitor with the
+    # link self-registers. So an open codebook here is reachable by a
+    # passer-by, which is worth one line in the log rather than silence.
+    login_type = (config_data.get("login") or {}).get("type")
+    has_provider = bool((config_data.get("crowdsourcing") or {}).get("provider"))
+    if mode != "fixed" and login_type == "url_direct" and not has_provider:
+        logging.warning(
+            "codebook_mode=%s with login.type: url_direct. Anyone who has "
+            "the link can self-register, so anyone who has the link can "
+            "add, rename and delete codes in the shared codebook. Set "
+            "codebook_mode: fixed, or name the platform with "
+            "crowdsourcing.provider so the force-lock applies.", mode)
+
+
+def _reject_duplicate_scheme_names(schemes: Any, path: str) -> None:
+    """Refuse two annotation schemes sharing a `name`.
+
+    Storage is keyed by scheme name and so is the rendered form: two schemes
+    called `verdict` emit every one of their inputs as `name="verdict"`, which
+    in HTML is one mutually exclusive radio group. The annotator answers the
+    first question, answers the second, and watches the first clear itself --
+    and only one answer reaches the file. Nothing said anything: the config
+    validated, the boot log was quiet, and both questions rendered looking
+    independent.
+
+    Raised rather than warned. There is no configuration in which this is what
+    the author meant -- the second scheme cannot store anything of its own --
+    so the study is not degraded, it is broken, and it loses data while
+    appearing to work.
+
+    Duplicate LABELS inside one scheme have been caught for a long time, with a
+    good message, at render time. This is the same idea one level up, where the
+    consequence is worse and nothing was checking.
+    """
+    if not isinstance(schemes, list):
+        return
+    seen: Dict[str, int] = {}
+    for index, scheme in enumerate(schemes):
+        if not isinstance(scheme, dict):
+            continue
+        name = scheme.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        if name in seen:
+            raise ConfigValidationError(
+                f"{path}[{index}].name '{name}' is already used by "
+                f"{path}[{seen[name]}]. Two schemes with one name share a "
+                f"storage key and one HTML input group, so answering the "
+                f"second clears the first and only one answer is saved. "
+                f"Give each scheme its own name."
+            )
+        seen[name] = index
+
+
+def _reject_second_tracking_video_scheme(schemes: Any, path: str) -> None:
+    """Refuse two video schemes in `tracking` or `combined` mode on one page.
+
+    The object tracker is not scoped to its scheme: its keyboard handler is
+    document-wide, so `t` creates a track in every tracker on the page, and
+    its propagation status is looked up the same way. With tracks now saved,
+    the second scheme would store tracks the annotator never meant to draw.
+    One tracking scheme per page, with several labels, covers the same need.
+    """
+    if not isinstance(schemes, list):
+        return
+    first = None
+    for index, scheme in enumerate(schemes):
+        if (isinstance(scheme, dict) and scheme.get("annotation_type") == "video_annotation"
+                and scheme.get("mode") in ("tracking", "combined")):
+            if first is not None:
+                raise ConfigValidationError(
+                    f"{path}[{index}] is a second video_annotation scheme in "
+                    f"tracking or combined mode (the first is {path}[{first}]). "
+                    f"The object tracker's keyboard shortcuts act on the whole "
+                    f"page, so two trackers would both receive every track you "
+                    f"create. Use one tracking scheme with several labels, or "
+                    f"put the second one in its own phase.")
+            first = index
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
@@ -1131,6 +3902,8 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         if not schemes:
             raise ConfigValidationError("annotation_schemes cannot be empty")
 
+        _reject_duplicate_scheme_names(schemes, "annotation_schemes")
+        _reject_second_tracking_video_scheme(schemes, "annotation_schemes")
         for i, scheme in enumerate(schemes):
             validate_single_annotation_scheme(scheme, f"annotation_schemes[{i}]")
 
@@ -1147,6 +3920,9 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                     if not schemes:
                         raise ConfigValidationError(f"Phase {phase_id} annotation_schemes cannot be empty")
 
+                    _reject_duplicate_scheme_names(
+                        schemes, f"phases[{i}].annotation_schemes")
+                    _reject_second_tracking_video_scheme(schemes, f"phases[{i}].annotation_schemes")
                     for j, scheme in enumerate(schemes):
                         validate_single_annotation_scheme(scheme, f"phases[{i}].annotation_schemes[{j}]")
                 elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
@@ -1160,7 +3936,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         else:
             # Dictionary format
             for phase_name, phase in phases.items():
-                if phase_name == 'order':
+                if phase_name in ('order', 'counterbalance'):
                     continue
                 # Phases can have annotation_schemes, file, type, instrument, or instruments
                 if 'annotation_schemes' in phase:
@@ -1170,6 +3946,9 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                     if not schemes:
                         raise ConfigValidationError(f"Phase {phase_name} annotation_schemes cannot be empty")
 
+                    _reject_duplicate_scheme_names(
+                        schemes, f"phases.{phase_name}.annotation_schemes")
+                    _reject_second_tracking_video_scheme(schemes, f"phases.{phase_name}.annotation_schemes")
                     for j, scheme in enumerate(schemes):
                         validate_single_annotation_scheme(scheme, f"phases.{phase_name}.annotation_schemes[{j}]")
                 elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
@@ -1190,6 +3969,187 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     all_schemes = _collect_all_annotation_schemes(config_data)
     if all_schemes:
         validate_display_logic_references(all_schemes)
+        _validate_turn_level_bindings(config_data, all_schemes)
+        _validate_session_level_schemes(config_data, all_schemes)
+        _validate_rooms_block(config_data)
+        _validate_collab_block(config_data)
+        _validate_pocket_block(config_data)
+
+
+def _validate_collab_block(config_data: Dict[str, Any]) -> None:
+    """The ``collab`` block: modes, transport, and each configured team."""
+    from potato.collab.config import validate_collab_block
+    try:
+        validate_collab_block(config_data)
+    except ValueError as exc:
+        raise ConfigValidationError(str(exc)) from exc
+
+
+def _validate_pocket_block(config_data: Dict[str, Any]) -> None:
+    """Cross-check `pocket` against the schemes it would have to render.
+
+    A scheme pocket cannot show turns the whole phone surface off: /pocket
+    explains itself instead of degrading, which is the right behaviour, but it
+    only says so in the boot log and on a phone. The config validated clean and
+    the author found out from a device.
+    """
+    pocket = config_data.get('pocket') or {}
+    if not isinstance(pocket, dict) or not pocket.get('enabled'):
+        return
+
+    # The capability rule pocket itself applies, imported rather than restated.
+    from potato.pocket.config import pocket_capability
+
+    capable, incompatible = pocket_capability(config_data)
+    if not capable:
+        logger.warning(
+            "pocket.enabled is true but %s cannot be shown on a phone, so "
+            "/pocket will explain rather than degrade and nobody will annotate "
+            "on a device. Remove the scheme, or set pocket.enabled: false.",
+            ", ".join(repr(n) for n in incompatible),
+        )
+        return
+
+    # Quality control now reaches the phone, and the batch is capped so the
+    # configured frequency holds there. Say so, because it costs offline depth
+    # and the author chose `batch_size` for a reason.
+    qc_frequencies = [
+        (name, (config_data.get(name) or {}).get('frequency'))
+        for name in ('attention_checks', 'gold_standards')
+        if isinstance(config_data.get(name), dict)
+        and config_data[name].get('enabled')
+        and (config_data[name] or {}).get('frequency')
+    ]
+    batch_size = pocket.get('batch_size', 25)
+    tightest = min((f for _n, f in qc_frequencies), default=None)
+    try:
+        binds = tightest is not None and int(tightest) < int(batch_size)
+    except (TypeError, ValueError):
+        binds = False
+    if binds:
+        logger.warning(
+            "pocket.batch_size is %s but %s, so /pocket will serve at most %s "
+            "item(s) per request to keep that frequency on the phone. Offline "
+            "runs will be shorter than batch_size suggests.",
+            batch_size,
+            " and ".join(f"{n}.frequency is {f}" for n, f in qc_frequencies),
+            tightest,
+        )
+
+
+def _validate_rooms_block(config_data: Dict[str, Any]) -> None:
+    """Cross-check the rooms block against the schemes it needs.
+
+    ``rooms.enabled: true`` with nothing to vote on parses to
+    ``enabled = False`` and warns at boot, on the rooms logger -- which
+    ``potato validate`` does not listen to. So a config that turns rooms on and
+    then 404s at /rooms validated clean, and the author's next move was to hunt
+    for a typo that was not there.
+    """
+    rooms = config_data.get('rooms') or {}
+    if not isinstance(rooms, dict) or not rooms.get('enabled'):
+        return
+
+    # Top-level schemes only, because that is the list rooms itself reads.
+    # A scheme declared under `phases` is invisible to rooms, so counting it
+    # here would suppress the warning for exactly the config that breaks.
+    top_level = [s for s in (config_data.get('annotation_schemes') or [])
+                 if isinstance(s, dict)]
+    named = rooms.get('schema')
+    scheme_names = [s.get('name') for s in top_level]
+    if named:
+        if named not in scheme_names:
+            logger.warning(
+                "rooms.schema is '%s' but no annotation scheme has that name — "
+                "rooms will refuse to open. Schemes here: %s.",
+                named, scheme_names or 'none',
+            )
+            return
+        # The same test room creation applies. A `text` or geometry scheme
+        # validated clean here and then every room creation returned 400.
+        from potato.rooms.routes import _scheme_labels, votable_schema_error
+        blocked = votable_schema_error(config_data, named)
+        if blocked:
+            raise ConfigValidationError(f"rooms.schema: {blocked}")
+        if not _scheme_labels(config_data, named):
+            raise ConfigValidationError(
+                f"rooms.schema: scheme '{named}' has no labels, so a room has "
+                "nothing to vote on.")
+        return
+
+    # The autopick rooms itself runs. Imported rather than restated so the two
+    # cannot drift into disagreeing about which config is valid.
+    from potato.rooms.config import _autopick_schema
+    if not _autopick_schema(config_data):
+        logger.warning(
+            "rooms.enabled is true but no radio or likert annotation scheme "
+            "was found and rooms.schema is not set — rooms will be disabled "
+            "and /rooms will return 404. Set rooms.schema to the scheme "
+            "members should vote on."
+        )
+
+
+def _validate_session_level_schemes(config_data: Dict[str, Any], schemes: List[Dict[str, Any]]) -> None:
+    """Cross-check session-level schemes against the sessions block.
+
+    session_level schemes never render on the per-instance form, so a
+    config that declares them without enabling sessions would silently
+    lose those questions — warn loudly.
+    """
+    session_schemes = [s for s in schemes
+                       if isinstance(s, dict) and s.get('session_level')]
+    sessions_on = bool((config_data.get('sessions') or {}).get('enabled'))
+    if session_schemes and not sessions_on:
+        logger.warning(
+            "Schemes %s are session_level but 'sessions.enabled' is not set — "
+            "they will not be scoreable anywhere. Add a top-level "
+            "sessions: {enabled: true} block.",
+            [s.get('name') for s in session_schemes],
+        )
+    if sessions_on and not session_schemes:
+        logger.warning(
+            "sessions.enabled is true but no annotation scheme sets "
+            "session_level: true — the /sessions page will have no questions."
+        )
+
+
+def _validate_turn_level_bindings(config_data: Dict[str, Any], schemes: List[Dict[str, Any]]) -> None:
+    """Cross-check turn-level schemes against instance_display fields.
+
+    Hard error when ``turn_binding.field`` references a field key that does
+    not exist; warning when turn slots land on a span_target field (slot
+    widget text changes the container textContent, misaligning span offsets —
+    same caveat as dialogue per_turn_ratings).
+    """
+    turn_schemes = [s for s in schemes if isinstance(s, dict) and s.get('turn_level')]
+    if not turn_schemes:
+        return
+
+    fields = (config_data.get('instance_display') or {}).get('fields') or []
+    field_keys = {f.get('key') for f in fields if isinstance(f, dict)}
+    span_target_keys = {
+        f.get('key') for f in fields
+        if isinstance(f, dict) and f.get('span_target')
+    }
+
+    for scheme in turn_schemes:
+        binding = scheme.get('turn_binding') or {}
+        bound_field = binding.get('field')
+        if bound_field is not None and field_keys and bound_field not in field_keys:
+            raise ConfigValidationError(
+                f"annotation scheme '{scheme.get('name')}': turn_binding.field "
+                f"'{bound_field}' does not match any instance_display field. "
+                f"Available fields: {sorted(k for k in field_keys if k)}"
+            )
+        # Turn-level widgets and span targets on the same field are supported and
+        # tested: the widgets render inside `.turn-anno-slot`, which
+        # shouldSkipForOffsets() in static/span-core.js excludes from the offset
+        # basis, and reconstruct_dialogue_dom_text() omits it correspondingly on
+        # the server. tests/unit/test_dialogue_span_contract.py pins that down.
+        # A warning used to be emitted here claiming the offsets would misalign;
+        # it was wrong, and it steered people away from a combination — rate each
+        # comment AND highlight text in it — that is one of the main reasons to
+        # annotate a conversation at all.
 
 
 def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1204,19 +4164,28 @@ def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[st
     """
     schemes = []
 
+    # Called from normalization, which runs BEFORE validation, so every
+    # container here may still be whatever the author typed. `annotation_schemes:`
+    # with nothing under it is a half-finished edit, not something to crash on.
+    def add(value):
+        if isinstance(value, list):
+            schemes.extend(value)
+
+    if not isinstance(config_data, dict):
+        return schemes
+
     if 'annotation_schemes' in config_data:
-        schemes.extend(config_data['annotation_schemes'])
+        add(config_data['annotation_schemes'])
     elif 'phases' in config_data:
         phases = config_data['phases']
         if isinstance(phases, list):
             for phase in phases:
-                if 'annotation_schemes' in phase:
-                    schemes.extend(phase['annotation_schemes'])
+                if isinstance(phase, dict):
+                    add(phase.get('annotation_schemes'))
         elif isinstance(phases, dict):
             for phase_name, phase in phases.items():
                 if phase_name != 'order' and isinstance(phase, dict):
-                    if 'annotation_schemes' in phase:
-                        schemes.extend(phase['annotation_schemes'])
+                    add(phase.get('annotation_schemes'))
 
     return schemes
 
@@ -1276,6 +4245,254 @@ def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
                 f"Keyword highlighting only works with text content, not images. "
                 f"Set keyword_highlight: false or remove it from the ai_support features."
             )
+
+
+def _validate_event_annotation_labels(config_data: Dict[str, Any]) -> None:
+    """Check an `event_annotation`'s labels against the span schema it names.
+
+    `trigger_labels` and each argument's `entity_types` have to name labels that
+    exist in the schema named by `span_schema` -- that is how the widget decides
+    which span can be a trigger and which can fill a role. With a mismatch the
+    flow simply cannot start: the annotator marks a span, clicks a role, and
+    nothing happens, with Create Event staying disabled and no message saying
+    why. Validation was quiet about it, including under --strict.
+
+    Only names that are certainly wrong are rejected. A `span_schema` naming a
+    scheme that is not in this config is left alone rather than guessed at.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If a label cannot exist in the named span schema
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    by_name = {
+        s['name']: s for s in schemes
+        if isinstance(s, dict) and isinstance(s.get('name'), str)
+    }
+
+    def labels_of(scheme):
+        """The label names a span scheme offers, or None if it does not say."""
+        labels = scheme.get('labels')
+        if not isinstance(labels, list):
+            return None
+        names = set()
+        for label in labels:
+            if isinstance(label, str):
+                names.add(label)
+            elif isinstance(label, dict) and isinstance(label.get('name'), str):
+                names.add(label['name'])
+        return names or None
+
+    for scheme in schemes:
+        if not isinstance(scheme, dict) or scheme.get('annotation_type') != 'event_annotation':
+            continue
+
+        span_schema_name = scheme.get('span_schema')
+        if not span_schema_name:
+            continue
+        span_scheme = by_name.get(span_schema_name)
+        if span_scheme is None:
+            raise ConfigValidationError(
+                f"event_annotation scheme '{scheme.get('name', '<unnamed>')}' names "
+                f"span_schema: {span_schema_name}, but no annotation scheme in this "
+                f"config is called that. Its triggers and arguments are matched "
+                f"against that schema's labels, so nothing can be annotated. "
+                f"Schemes available: {', '.join(sorted(by_name)) or '(none)'}."
+            )
+
+        available = labels_of(span_scheme)
+        if available is None:
+            continue  # the span scheme builds its labels some other way
+
+        for event_type in scheme.get('event_types') or []:
+            if not isinstance(event_type, dict):
+                continue
+            type_name = event_type.get('type', '<unnamed>')
+
+            unknown = [
+                label for label in (event_type.get('trigger_labels') or [])
+                if isinstance(label, str) and label not in available
+            ]
+            if unknown:
+                raise ConfigValidationError(
+                    f"event_annotation scheme '{scheme.get('name', '<unnamed>')}', "
+                    f"event type '{type_name}': trigger_labels names "
+                    f"{unknown!r}, which the span schema '{span_schema_name}' does "
+                    f"not offer. No span could ever be a trigger for this event "
+                    f"type. Its labels are: {', '.join(sorted(available))}."
+                )
+
+            for argument in event_type.get('arguments') or []:
+                if not isinstance(argument, dict):
+                    continue
+                unknown = [
+                    label for label in (argument.get('entity_types') or [])
+                    if isinstance(label, str) and label not in available
+                ]
+                if unknown:
+                    raise ConfigValidationError(
+                        f"event_annotation scheme '{scheme.get('name', '<unnamed>')}', "
+                        f"event type '{type_name}', argument "
+                        f"'{argument.get('role', '<unnamed>')}': entity_types names "
+                        f"{unknown!r}, which the span schema '{span_schema_name}' "
+                        f"does not offer, so no span could ever fill this role. "
+                        f"Its labels are: {', '.join(sorted(available))}."
+                    )
+
+
+def _validate_bws_scheme_has_config(config_data: Dict[str, Any]) -> None:
+    """
+    Require the dataset-level tuple generator whenever a `bws` scheme is present.
+
+    Unlike `pairwise`, which reads its candidates off the item via `items_key`,
+    `bws` gets its tuples from a top-level `bws_config` (or `ibws_config`) block.
+    Without one the scheme still rendered: two questions and a full set of A/B/C/D
+    buttons over an empty `div.bws-items-display`, so the annotator was asked to
+    choose between blanks. Nothing said the config was incomplete -- validation
+    passed, the server booted without a warning, and the scheme's own required
+    fields are just name and description.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If a bws scheme has no tuple source
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    bws_names = [
+        s.get('name', '<unnamed>') for s in schemes
+        if isinstance(s, dict) and s.get('annotation_type') == 'bws'
+    ]
+    if not bws_names:
+        return
+
+    if 'bws_config' in config_data or 'ibws_config' in config_data:
+        return
+
+    raise ConfigValidationError(
+        f"annotation scheme '{bws_names[0]}' has annotation_type: bws, but the "
+        "config has no top-level 'bws_config' (or 'ibws_config') block. A bws "
+        "scheme does not read its candidates off the item -- the tuples come "
+        "from that block, and without it the scheme renders its buttons over an "
+        "empty item list. Add, for example:\n\n"
+        "  bws_config:\n"
+        "    tuple_size: 4\n"
+        "    num_tuples: 100"
+    )
+
+
+def _validate_multi_document_event_has_template(config_data: Dict[str, Any]) -> None:
+    """
+    Require the top-level ``event_template`` block for multi_document_event.
+
+    The scheme's own ``slots:`` list is not enough. The whole widget is driven
+    by the Event Registry at ``/corpus/api/*``, and that blueprint is only
+    registered when ``event_template.enabled`` (or ``corpus_map.enabled``) is
+    true. Without it the page rendered "No events yet. Create one to begin.",
+    "+ New event" did nothing forever, and the only symptom was three 404s in
+    the browser console -- validation passed, the boot log said nothing, and
+    the annotator was told nothing.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If a multi_document_event scheme has no registry
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    names = [
+        s.get('name', '<unnamed>') for s in schemes
+        if isinstance(s, dict) and s.get('annotation_type') == 'multi_document_event'
+    ]
+    if not names:
+        return
+
+    def _enabled(block_name):
+        block = config_data.get(block_name)
+        return isinstance(block, dict) and bool(block.get('enabled', False))
+
+    if _enabled('event_template') or _enabled('corpus_map'):
+        return
+
+    raise ConfigValidationError(
+        f"annotation scheme '{names[0]}' has annotation_type: "
+        "multi_document_event, but the config has no top-level "
+        "'event_template' block with 'enabled: true'. That block is what "
+        "registers the cross-document event registry the widget talks to; "
+        "without it every /corpus/api/* call 404s and '+ New event' does "
+        "nothing. A scheme-level 'slots:' list does not replace it. Add:\n\n"
+        "  event_template:\n"
+        "    enabled: true\n"
+        "    name: service_outage\n"
+        "    allow_annotator_create: true\n"
+        "    slots:\n"
+        "      - name: location\n"
+        "        description: Where it happened"
+    )
+
+
+def _validate_canvas_companion_schemes(config_data: Dict[str, Any]) -> None:
+    """
+    Require an ``image_annotation`` scheme beside the two that draw on it.
+
+    ``region_caption`` and ``grounding_eval`` own the language half of their
+    task -- the caption, the phrase-to-region binding -- and borrow the canvas
+    from an ``image_annotation`` scheme in the same config. Alone they render
+    fully and are unusable: region_caption shows "Draw a region on the image"
+    over a list that can never fill, and grounding_eval offers "Not present in
+    the image" as the only reachable answer for every expression, so the study
+    stores a grounding set whose every verdict is absent.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If such a scheme has no canvas to draw on
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    needy = [
+        s for s in schemes
+        if isinstance(s, dict)
+        and s.get('annotation_type') in ('region_caption', 'grounding_eval')
+    ]
+    if not needy:
+        return
+
+    if any(isinstance(s, dict) and s.get('annotation_type') == 'image_annotation'
+           for s in schemes):
+        return
+
+    scheme = needy[0]
+    kind = scheme.get('annotation_type')
+    what = ('regions to caption' if kind == 'region_caption'
+            else 'regions to bind expressions to')
+    raise ConfigValidationError(
+        f"annotation scheme '{scheme.get('name', '<unnamed>')}' has "
+        f"annotation_type: {kind}, but the config declares no "
+        "'image_annotation' scheme. This scheme does not draw its own canvas "
+        f"-- it reads the {what} off an image_annotation scheme beside it, and "
+        "an 'image' display field is not a canvas. Alone it renders and then "
+        "collects nothing that could ever be drawn. Add, for example:\n\n"
+        "  - annotation_type: image_annotation\n"
+        "    name: regions\n"
+        "    description: Draw the regions\n"
+        "    tools: [bbox]\n"
+        "    labels: [referent]"
+    )
 
 
 def _validate_bws_config(config_data: Dict[str, Any]) -> None:
@@ -1431,6 +4648,41 @@ def _validate_mace_config(config_data: Dict[str, Any]) -> None:
         )
 
 
+def _validate_instrument_questions(inst_id: str, phase_name: str) -> None:
+    """Check that every question in a bundled instrument uses a registered type.
+
+    The name check above only proves the instrument file exists. Its questions
+    are resolved at boot, so an unregistered `annotation_type` inside one used
+    to surface as a dropped phase at runtime with a clean `validate` run --
+    the eight demographics instruments all shipped `textbox`, which is not a
+    registered type (the free-text type is `text`).
+    """
+    try:
+        from potato.survey_instruments import get_instrument_questions
+        from potato.server_utils.schemas.registry import schema_registry
+    except ImportError:
+        return
+
+    try:
+        questions = get_instrument_questions(inst_id)
+    except Exception:
+        # Name validity is the caller's job; an unreadable file is reported
+        # by the loader at boot.
+        return
+
+    supported = set(schema_registry.get_supported_types())
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        ann_type = question.get("annotation_type")
+        if ann_type is not None and ann_type not in supported:
+            raise ConfigValidationError(
+                f"Phase {phase_name}: instrument '{inst_id}' question "
+                f"'{question.get('name', '?')}' has unsupported annotation_type "
+                f"'{ann_type}'. Supported types: {', '.join(sorted(supported))}"
+            )
+
+
 def _validate_phase_instruments(phase: Dict[str, Any], phase_name: str) -> None:
     """
     Validate instrument references in a phase configuration.
@@ -1442,50 +4694,220 @@ def _validate_phase_instruments(phase: Dict[str, Any], phase_name: str) -> None:
     Raises:
         ConfigValidationError: If instrument references are invalid
     """
-    # Validate single instrument reference
+    # Normalize `instrument` (a string) and `instruments` (a list) into one
+    # list of ids so both go through the same name and question checks.
+    inst_ids: List[str] = []
+
     if 'instrument' in phase:
         inst_id = phase['instrument']
         if not isinstance(inst_id, str):
             raise ConfigValidationError(
                 f"Phase {phase_name}: 'instrument' must be a string"
             )
-        try:
-            from potato.survey_instruments import get_registry
-            registry = get_registry()
-            if inst_id not in registry['instruments']:
-                available = sorted(registry['instruments'].keys())[:10]
-                raise ConfigValidationError(
-                    f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
-                    f"Available instruments: {available}..."
-                )
-        except ImportError:
-            # survey_instruments module not available - skip validation
-            pass
+        inst_ids.append(inst_id)
 
-    # Validate multiple instruments
     if 'instruments' in phase:
         inst_list = phase['instruments']
         if not isinstance(inst_list, list):
             raise ConfigValidationError(
                 f"Phase {phase_name}: 'instruments' must be a list"
             )
-        try:
-            from potato.survey_instruments import get_registry
-            registry = get_registry()
-            for inst_id in inst_list:
-                if not isinstance(inst_id, str):
-                    raise ConfigValidationError(
-                        f"Phase {phase_name}: All items in 'instruments' must be strings"
-                    )
-                if inst_id not in registry['instruments']:
-                    available = sorted(registry['instruments'].keys())[:10]
-                    raise ConfigValidationError(
-                        f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
-                        f"Available instruments: {available}..."
-                    )
-        except ImportError:
-            # survey_instruments module not available - skip validation
-            pass
+        for inst_id in inst_list:
+            if not isinstance(inst_id, str):
+                raise ConfigValidationError(
+                    f"Phase {phase_name}: All items in 'instruments' must be strings"
+                )
+            inst_ids.append(inst_id)
+
+    if not inst_ids:
+        return
+
+    try:
+        from potato.survey_instruments import get_registry
+        registry = get_registry()
+    except ImportError:
+        # survey_instruments module not available - skip validation
+        return
+
+    for inst_id in inst_ids:
+        if inst_id not in registry['instruments']:
+            available = sorted(registry['instruments'].keys())[:10]
+            raise ConfigValidationError(
+                f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
+                f"Available instruments: {available}..."
+            )
+        _validate_instrument_questions(inst_id, phase_name)
+
+
+# YAML 1.1 spells booleans a lot of ways, and PyYAML applies all of them to a
+# bare scalar in a list. `labels: [Yes, No]` -- the most ordinary label pair
+# there is -- reaches Potato as `[True, False]`.
+def _label_shape_error(value, path, index, key):
+    """Why `value` cannot be a label, or None if it can.
+
+    Mirrors what `identifier_utils.validate_schema_config` accepts: a string, or
+    a dict carrying a `name`. That check runs in the schema generator, which is
+    reached at BOOT and logs rather than raising, so a config with a bad label
+    validated clean, started clean, and then rendered an error card where the
+    question should have been. Checking the element type here is what lets
+    `--strict` say so.
+    """
+    if isinstance(value, str):
+        return None
+    if isinstance(value, dict):
+        if 'name' not in value:
+            return (f"{path}.{key}[{index}] is a mapping without a 'name' key: "
+                    f"{value!r}")
+        if not isinstance(value['name'], str):
+            return (f"{path}.{key}[{index}].name must be a string, got "
+                    f"{type(value['name']).__name__}: {value['name']!r}")
+        return None
+
+    if isinstance(value, bool):
+        # The overwhelmingly common cause, and the one whose error message is
+        # useless without this sentence: the config says `Yes`, the traceback
+        # says `True`, and nothing connects them.
+        spellings = 'Yes/No, On/Off, Y/N or True/False'
+        return (f"{path}.{key}[{index}] came through as the boolean "
+                f"{value!r}. YAML reads {spellings} in any capitalisation as a "
+                f"boolean, so a label written that way is not a string by the "
+                f"time Potato sees it. Quote it: "
+                f'{key}: ["Yes", "No"].')
+
+    return (f"{path}.{key}[{index}] must be a string or a mapping with a "
+            f"'name' key, got {type(value).__name__}: {value!r}")
+
+
+def validate_label_list_elements(scheme, path):
+    """Check every label-shaped list on a scheme for elements the generators reject.
+
+    Type-agnostic on purpose. Seven call sites validated that `labels` was a
+    list and none of them looked inside it, and each new annotation type added
+    another. Anything with a `labels` or `options` key gets checked here once.
+    """
+    from potato.server_utils.schemas.span import parse_rgb_triple
+
+    for key in ('labels', 'options'):
+        values = scheme.get(key)
+        if not isinstance(values, list):
+            continue
+        for index, value in enumerate(values):
+            message = _label_shape_error(value, path, index, key)
+            if message:
+                raise ConfigValidationError(message)
+            # An inline `color` that cannot be parsed is not fatal -- the label
+            # falls back to the palette and the task still runs. But it is
+            # silent, and the author asked for a specific colour, so say so and
+            # let `--strict` refuse it.
+            if not isinstance(value, dict):
+                continue
+            color = value.get('color')
+            if color in (None, '') or parse_rgb_triple(color):
+                continue
+            logger.warning(
+                "%s.%s[%d] ('%s') has color %r, which Potato cannot read, so "
+                "the label will be drawn in an automatically assigned palette "
+                "color instead. Write it as '#rrggbb', 'rgb(r, g, b)' or "
+                "'(r, g, b)'. Named CSS colors are not read.",
+                path, key, index, value.get('name', '?'), color)
+
+
+def _validate_segment_schemes(segment_schemes, path):
+    """Validate the sub-schemes an audio/video scheme asks per segment.
+
+    They are rendered through the same registry as any top-level scheme, so
+    they have to satisfy the same rules. Without this the failure surfaced as
+    an error card inside the segment panel at annotation time -- the same
+    generator-logs-at-boot problem that let `labels: [Yes, No]` through.
+
+    Nested segment_schemes are rejected: a segment cannot contain segments, and
+    the media types are the only ones that own a timeline.
+    """
+    nested_media = {'audio_annotation', 'video_annotation', 'tiered_annotation'}
+
+    for index, sub_scheme in enumerate(segment_schemes):
+        sub_path = f"{path}.segment_schemes[{index}]"
+
+        if not isinstance(sub_scheme, dict):
+            raise ConfigValidationError(f"{sub_path} must be a mapping")
+        if 'annotation_type' not in sub_scheme:
+            raise ConfigValidationError(f"{sub_path} missing 'annotation_type'")
+        if sub_scheme['annotation_type'] in nested_media:
+            raise ConfigValidationError(
+                f"{sub_path}.annotation_type cannot be "
+                f"'{sub_scheme['annotation_type']}': a segment question cannot "
+                "itself own a timeline."
+            )
+
+        # `description` is optional here and defaults to the name, because a
+        # per-segment question is already labelled by the panel it sits in.
+        checked = dict(sub_scheme)
+        checked.setdefault('description', checked.get('name', ''))
+        validate_single_annotation_scheme(checked, sub_path)
+
+
+def _validate_volume_annotation(scheme: Dict[str, Any], path: str) -> None:
+    """The generator turns these into an error card on every page; report
+    them where `potato validate` can (audit 95, V1)."""
+    from potato.server_utils.schemas import volume_annotation as vol
+    try:
+        vol._labels(scheme.get("labels"))
+        presets = vol._window_presets(scheme.get("window_presets"))
+    except ValueError as e:
+        raise ConfigValidationError(f"{path}: {e}")
+    for key, valid in (("tools", vol.VALID_TOOLS), ("views", vol.VIEWS)):
+        value = scheme.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, list) or not value:
+            raise ConfigValidationError(f"{path}.{key} must be a non-empty list of: {', '.join(valid)}")
+        bad = [v for v in value if v not in valid]
+        if bad:
+            raise ConfigValidationError(
+                f"{path}.{key} has {', '.join(map(str, bad))}; valid: {', '.join(valid)}")
+    if "brush_size" in scheme:
+        size = scheme["brush_size"]
+        if isinstance(size, bool) or not isinstance(size, (int, float)) or size <= 0:
+            raise ConfigValidationError(f"{path}.brush_size must be a positive number of voxels")
+    for key in ("display_tags", "allow_identifying_tags"):
+        value = scheme.get(key)
+        if value is not None and not (isinstance(value, list) and all(isinstance(t, str) for t in value)):
+            raise ConfigValidationError(f"{path}.{key} must be a list of DICOM attribute names")
+    window = scheme.get("default_window")
+    if window is not None:
+        from potato.media.volumes import PRESETS
+        known = {p["name"] for p in presets} | {name for group in PRESETS.values()
+                                                 for name, _c, _w in group}
+        if window not in known:
+            raise ConfigValidationError(
+                f"{path}.default_window '{window}' is not a window preset "
+                f"({', '.join(sorted(known))})")
+
+
+def _plugin_hint(type_name: Any) -> str:
+    """For an unknown annotation type, point at an installed plugin.
+
+    Plugin types exist only once the plugin is loaded, so a config that uses
+    one without listing it got the built-in list and nothing about the
+    plugin to add.
+    """
+    try:
+        from potato import plugins
+        installed = sorted(plugins.discover())
+    except Exception:
+        return ""
+    if not installed:
+        return ""
+    if type_name in installed:
+        return (f". '{type_name}' is the name of an installed plugin: add "
+                f"`plugins: [{type_name}]` to the config to use its types")
+    return (f". If '{type_name}' comes from a plugin, list it under `plugins:`; "
+            f"installed plugins: {', '.join(installed)}")
+
+
+#: The built-in option lists a `select` scheme can name with
+#: `use_predefined_labels` (schemas/select.py, predefined_labels_dict).
+PREDEFINED_SELECT_LABELS = ("country", "ethnicity", "religion")
 
 
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:
@@ -1511,7 +4933,162 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     from potato.server_utils.schemas.registry import schema_registry
     valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
-        raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
+        raise ConfigValidationError(
+            f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}"
+            + _plugin_hint(scheme['annotation_type']))
+
+    if scheme['annotation_type'] == 'volume_annotation':
+        _validate_volume_annotation(scheme, path)
+
+    if scheme['annotation_type'] == 'listening_test':
+        _validate_listening_test(scheme, path)
+
+    if scheme['annotation_type'] == 'interval_label':
+        _validate_interval_label(scheme, path)
+
+    if scheme['annotation_type'] == 'microscopy':
+        _validate_microscopy(scheme, path)
+
+    if scheme['annotation_type'] == 'viewer_selection':
+        _validate_viewer_selection(scheme, path)
+
+    if scheme['annotation_type'] == 'chemical_structure':
+        _validate_chemical_structure(scheme, path)
+
+    if scheme['annotation_type'] == 'peak_picking':
+        _validate_peak_picking(scheme, path)
+
+    if scheme['annotation_type'] == 'spectrogram_annotation':
+        _validate_spectrogram_annotation(scheme, path)
+
+    if scheme['annotation_type'] == 'geo_annotation':
+        _validate_geo_annotation(scheme, path)
+
+    if scheme['annotation_type'] in ('free_list', 'triad_test'):
+        _validate_cultural_domain_scheme(scheme, path)
+
+    if scheme['annotation_type'] == 'ego_network':
+        _validate_ego_network(scheme, path)
+
+    if scheme['annotation_type'] in ('price_list', 'bdm', 'belief_elicitation'):
+        _validate_incentive_scheme(scheme, path)
+
+    if scheme['annotation_type'] == 'interlinear_gloss':
+        _validate_interlinear_gloss(scheme, path)
+
+    if scheme['annotation_type'] in ('list_experiment', 'randomized_response'):
+        _validate_survey_experiment(scheme, path)
+
+    if 'label_source' in scheme:
+        _validate_label_source(scheme, path)
+
+    if 'lextale' in scheme:
+        lt = scheme['lextale']
+        if scheme['annotation_type'] != 'radio' or not isinstance(lt, dict):
+            raise ConfigValidationError(
+                f"{path}.lextale applies to a radio scheme: {{answer_field, word, nonword}}")
+        if not (isinstance(lt.get('answer_field'), str) and lt['answer_field']):
+            raise ConfigValidationError(
+                f"{path}.lextale.answer_field must name the item field holding word / nonword")
+        names = [l if isinstance(l, str) else (l or {}).get('name') for l in scheme.get('labels') or []]
+        for key in ('word', 'nonword'):
+            if str(lt.get(key, key)) not in names:
+                raise ConfigValidationError(
+                    f"{path}.lextale.{key} is '{lt.get(key, key)}', which is not one of the labels")
+
+    if scheme['annotation_type'] == 'cloze':
+        # The generator turns a bad cloze into an error card on the page; say
+        # so here instead, where `potato validate` can report it.
+        from potato.server_utils.schemas.cloze import BLANK, SCORING_MODES
+        has_text, has_source = bool(scheme.get('text')), bool(scheme.get('source_field'))
+        if has_text == has_source:
+            raise ConfigValidationError(
+                f"{path}: a cloze scheme needs exactly one of `text` (one passage) or "
+                "`source_field` (a passage per item)")
+        if has_text and not (isinstance(scheme['text'], str) and BLANK.search(scheme['text'])):
+            raise ConfigValidationError(f"{path}.text must contain at least one [[blank]]")
+        if scheme.get('answer_field') and not has_source:
+            raise ConfigValidationError(f"{path}.answer_field only applies with source_field")
+        if scheme.get('scoring', 'case_insensitive') not in SCORING_MODES:
+            raise ConfigValidationError(
+                f"{path}.scoring must be one of {', '.join(SCORING_MODES)}")
+        if 'tolerance' in scheme:
+            tol = scheme['tolerance']
+            if isinstance(tol, bool) or not isinstance(tol, (int, float)) or tol < 0:
+                raise ConfigValidationError(
+                    f"{path}.tolerance must be a number >= 0 (an absolute difference)")
+            if scheme.get('scoring') not in ('numeric', 'latex'):
+                raise ConfigValidationError(
+                    f"{path}.tolerance only applies with scoring: numeric or latex")
+
+    # Per-object attributes on video tracks and point-cloud objects; the image
+    # type checks its own below, beside its tools.
+    if scheme['annotation_type'] in ('video_annotation', 'spatial_annotation') \
+            and scheme.get('attributes') is not None:
+        from potato.server_utils.schemas.object_attributes import (
+            AttributeConfigError, normalize_attributes)
+        label_names = [l if isinstance(l, str) else (l or {}).get('name')
+                       for l in scheme.get('labels') or []]
+        try:
+            normalize_attributes(scheme['attributes'], [str(n) for n in label_names], path,
+                                 keyframes=True)
+        except AttributeConfigError as e:
+            raise ConfigValidationError(str(e)) from e
+        if scheme['annotation_type'] == 'video_annotation' \
+                and scheme.get('mode', 'segment') not in ('tracking', 'combined'):
+            raise ConfigValidationError(
+                f"{path}.attributes: attributes belong to object tracks, so they need "
+                f"mode 'tracking' or 'combined'")
+
+    # Turn-level binding validation (per-turn annotation framework)
+    if scheme.get('turn_level'):
+        from potato.server_utils.turn_annotations import (
+            TURN_LEVEL_SUPPORTED_TYPES, TURN_BINDING_KEYS,
+        )
+        if scheme['annotation_type'] not in TURN_LEVEL_SUPPORTED_TYPES:
+            raise ConfigValidationError(
+                f"{path}: turn_level is not supported for annotation_type "
+                f"'{scheme['annotation_type']}'. Supported types: "
+                f"{', '.join(sorted(TURN_LEVEL_SUPPORTED_TYPES))}"
+            )
+        binding = scheme.get('turn_binding')
+        if binding is not None:
+            if not isinstance(binding, dict):
+                raise ConfigValidationError(f"{path}.turn_binding must be a dictionary")
+            unknown = set(binding) - TURN_BINDING_KEYS
+            if unknown:
+                raise ConfigValidationError(
+                    f"{path}.turn_binding has unknown keys: {sorted(unknown)}. "
+                    f"Allowed: {sorted(TURN_BINDING_KEYS)}"
+                )
+            for list_key in ('speakers', 'agents', 'step_types', 'tools', 'runs'):
+                if list_key in binding and not isinstance(binding[list_key], list):
+                    raise ConfigValidationError(f"{path}.turn_binding.{list_key} must be a list")
+            if 'turn_range' in binding:
+                tr = binding['turn_range']
+                if (not isinstance(tr, list) or len(tr) != 2
+                        or not all(isinstance(v, int) for v in tr) or tr[0] > tr[1]):
+                    raise ConfigValidationError(
+                        f"{path}.turn_binding.turn_range must be [start, end] with start <= end"
+                    )
+            if binding.get('placement') not in (None, 'inline', 'drawer'):
+                raise ConfigValidationError(
+                    f"{path}.turn_binding.placement must be 'inline' or 'drawer'"
+                )
+
+    # Session-level scoring validation (D1)
+    if scheme.get('session_level'):
+        from potato.sessions.service import SESSION_LEVEL_SUPPORTED_TYPES
+        if scheme['annotation_type'] not in SESSION_LEVEL_SUPPORTED_TYPES:
+            raise ConfigValidationError(
+                f"{path}: session_level is not supported for annotation_type "
+                f"'{scheme['annotation_type']}'. Supported types: "
+                f"{', '.join(sorted(SESSION_LEVEL_SUPPORTED_TYPES))}"
+            )
+        if scheme.get('turn_level'):
+            raise ConfigValidationError(
+                f"{path}: a scheme cannot be both turn_level and session_level"
+            )
 
     # Registry-driven required field check: validate fields that are unconditionally
     # required for this type. Types with alternative forms (e.g., likert accepts either
@@ -1539,13 +5116,40 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                     f"{', '.join(missing)}"
                 )
 
+    # Label element types, for every type that has labels. The blocks below
+    # check that `labels` is a non-empty list and stop there; the element type
+    # is only checked in the generator, at boot, where it logs.
+    validate_label_list_elements(scheme, path)
+
     # Type-specific validation (deep structural checks beyond registry required_fields)
-    if annotation_type in ['radio', 'multiselect', 'select']:
+    if annotation_type == 'select' and 'use_predefined_labels' in scheme:
+        # A built-in list stands in for `labels` (schemas/select.py). Every
+        # documented example of it has no `labels`, and was refused here.
+        predefined = scheme['use_predefined_labels']
+        if predefined not in PREDEFINED_SELECT_LABELS:
+            raise ConfigValidationError(
+                f"{path}.use_predefined_labels must be one of "
+                f"{', '.join(PREDEFINED_SELECT_LABELS)}, not {predefined!r}")
+        if scheme.get('labels'):
+            # Configs written while `labels` was required carry both; the
+            # built-in list is what the page shows.
+            logger.warning(
+                "%s sets use_predefined_labels: %s and labels; the page shows the "
+                "built-in %s list and ignores labels.", path, predefined, predefined)
+
+    elif annotation_type in ['radio', 'multiselect', 'select']:
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for {annotation_type} annotation type")
         if not isinstance(scheme['labels'], list):
+            if annotation_type == 'select' and isinstance(scheme['labels'], str):
+                # normalize_config_before_validation reads a select's label
+                # file into a list (select_label_files.py).
+                raise ConfigValidationError(
+                    f"{path}.labels names the file {scheme['labels']!r}, but this scheme "
+                    f"was not reached when label files were read (see "
+                    f"select_label_files.config_schemes). Give the options as a list.")
             raise ConfigValidationError(f"{path}.labels must be a list")
-        if not scheme['labels']:
+        if not scheme['labels'] and not ('label_source' in scheme and annotation_type != 'select'):
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'likert':
@@ -1572,12 +5176,43 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             if scheme['min_value'] >= scheme['max_value']:
                 raise ConfigValidationError(f"{path}.min_value must be less than max_value")
 
+            starting = scheme['starting_value']
+            if isinstance(starting, (int, float)) and not (
+                    scheme['min_value'] <= starting <= scheme['max_value']):
+                # Not fatal: the generator clamps it and the widget works. This
+                # is here so `validate` says it rather than leaving it to a
+                # boot log nobody reads.
+                logger.warning(
+                    "%s.starting_value %s is outside %s..%s and will be "
+                    "clamped. The browser clamps the control either way; the "
+                    "tooltip used to show the unclamped number, so the "
+                    "annotator was shown a default the slider cannot hold.",
+                    path, starting, scheme['min_value'], scheme['max_value'])
+
+    elif annotation_type == 'number':
+        # `slider` and `range_slider` refuse an inverted range; `number` took
+        # one and rendered `<input type="number" min="10" max="1">`, which
+        # cannot be filled -- Chrome reports every value invalid and one such
+        # field makes `form.checkValidity()` false for the WHOLE page, so a
+        # scheme nobody can answer blocks every other scheme beside it.
+        #
+        # Both spellings are read, because the generator reads both and
+        # checking only one would leave a way around this.
+        low = scheme.get('min_value', scheme.get('min'))
+        high = scheme.get('max_value', scheme.get('max'))
+        if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+            if low > high:
+                raise ConfigValidationError(
+                    f"{path} has a minimum above its maximum ({low} > {high}), "
+                    f"so no value can be entered and the whole page fails "
+                    f"validation")
+
     elif annotation_type == 'span':
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for span annotation type")
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
-        if not scheme['labels']:
+        if not scheme['labels'] and 'label_source' not in scheme:
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
     elif annotation_type == 'multirate':
@@ -1615,17 +5250,32 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if not scheme['tools']:
             raise ConfigValidationError(f"{path}.tools cannot be empty")
 
-        # Validate tools
-        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark', 'fill', 'eraser', 'brush']
+        # Validate tools.
+        #
+        # Imported, not restated. This list used to be a hand-maintained copy of
+        # VALID_TOOLS, so adding a tool in one place and not the other either
+        # rejected a valid config or accepted a tool with no implementation.
+        from potato.server_utils.schemas.image_annotation import VALID_TOOLS
+        valid_tools = list(VALID_TOOLS)
         invalid_tools = [t for t in scheme['tools'] if t not in valid_tools]
         if invalid_tools:
             raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
+
+        if scheme.get('attributes') is not None:
+            from potato.server_utils.schemas.object_attributes import (
+                AttributeConfigError, normalize_attributes)
+            label_names = [l if isinstance(l, str) else (l or {}).get('name')
+                           for l in scheme.get('labels') or []]
+            try:
+                normalize_attributes(scheme['attributes'], [str(n) for n in label_names], path)
+            except AttributeConfigError as e:
+                raise ConfigValidationError(str(e)) from e
 
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for image_annotation type")
         if not isinstance(scheme['labels'], list):
             raise ConfigValidationError(f"{path}.labels must be a list")
-        if not scheme['labels']:
+        if not scheme['labels'] and 'label_source' not in scheme:
             raise ConfigValidationError(f"{path}.labels cannot be empty")
 
         # Validate optional numeric fields
@@ -1636,6 +5286,117 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'max_annotations' in scheme and scheme['max_annotations'] is not None:
             if not isinstance(scheme['max_annotations'], int) or scheme['max_annotations'] < 1:
                 raise ConfigValidationError(f"{path}.max_annotations must be a positive integer or null")
+
+        if 'fill_mode' in scheme:
+            valid_fill_modes = ['region', 'empty']
+            if scheme['fill_mode'] not in valid_fill_modes:
+                raise ConfigValidationError(
+                    f"{path}.fill_mode must be one of {valid_fill_modes}, "
+                    f"got '{scheme['fill_mode']}'")
+
+        if 'viewer' in scheme:
+            # Imported rather than duplicated: a second list here is how
+            # `VALID_TOOLS` came to exist in two places (invariant 9).
+            from potato.server_utils.schemas.image_annotation import VALID_VIEWERS
+            if scheme['viewer'] not in VALID_VIEWERS:
+                raise ConfigValidationError(
+                    f"{path}.viewer must be one of {VALID_VIEWERS}, got "
+                    f"'{scheme['viewer']}'. Use 'deepzoom' for images too "
+                    f"large to send to a browser as one file.")
+
+        if 'tiles' in scheme:
+            tiles = scheme['tiles']
+            if not isinstance(tiles, dict):
+                raise ConfigValidationError(
+                    f"{path}.tiles must be a mapping of tile options "
+                    f"(tile_size, overlap, max_pixels, page, navigator)")
+            for key in ('tile_size', 'overlap', 'max_pixels', 'page'):
+                if key in tiles and (not isinstance(tiles[key], int)
+                                     or isinstance(tiles[key], bool)
+                                     or tiles[key] < 0):
+                    raise ConfigValidationError(
+                        f"{path}.tiles.{key} must be a non-negative integer")
+            if tiles.get('tile_size') is not None and tiles['tile_size'] < 32:
+                raise ConfigValidationError(
+                    f"{path}.tiles.tile_size must be at least 32; smaller "
+                    f"tiles cost more requests than they save bytes.")
+            if scheme.get('viewer') != 'deepzoom':
+                # Not an error — the options are harmless — but silently
+                # ignored options are how a project concludes the feature does
+                # not work.
+                logger.warning(
+                    "%s.tiles is set but viewer is not 'deepzoom', so the tile "
+                    "options are ignored.", path)
+
+        if 'carry_over' in scheme:
+            valid_carry_over = [False, True, 'prompt', 'auto']
+            if scheme['carry_over'] not in valid_carry_over:
+                raise ConfigValidationError(
+                    f"{path}.carry_over must be false, 'prompt', or 'auto'; "
+                    f"got {scheme['carry_over']!r}")
+
+        if 'keybinding_profile' in scheme:
+            from potato.server_utils.schemas.image_annotation import KEYBINDING_PROFILES
+            valid_profiles = sorted(KEYBINDING_PROFILES)
+            if scheme['keybinding_profile'] not in valid_profiles:
+                raise ConfigValidationError(
+                    f"{path}.keybinding_profile must be one of {valid_profiles}, "
+                    f"got '{scheme['keybinding_profile']}'. Use 'legacy' to keep the "
+                    f"keys Potato used before v2.8.")
+
+        if 'fill_tolerance' in scheme:
+            tol = scheme['fill_tolerance']
+            if not isinstance(tol, int) or isinstance(tol, bool) or not (0 <= tol <= 255):
+                raise ConfigValidationError(
+                    f"{path}.fill_tolerance must be an integer 0-255 "
+                    f"(per-channel colour distance)")
+
+    elif annotation_type == 'region_caption':
+        for key in ('min_length', 'max_length'):
+            if key in scheme and (not isinstance(scheme[key], int)
+                                  or isinstance(scheme[key], bool)
+                                  or scheme[key] < 0):
+                raise ConfigValidationError(
+                    f"{path}.{key} must be a non-negative integer")
+        if (scheme.get('min_length') and scheme.get('max_length')
+                and scheme['min_length'] > scheme['max_length']):
+            raise ConfigValidationError(
+                f"{path}.min_length is greater than {path}.max_length, so no "
+                f"caption could ever be valid")
+        distance = scheme.get('agreement_distance', 'token')
+        if distance not in ('token', 'embedding'):
+            raise ConfigValidationError(
+                f"{path}.agreement_distance must be 'token' or 'embedding', "
+                f"got '{distance}'. 'embedding' needs sentence-transformers "
+                f"and falls back to 'token' with a stated warning if it is "
+                f"not installed.")
+
+    elif annotation_type == 'grounding_eval':
+        # Imported rather than duplicated, so a new region type or expression
+        # source is valid in exactly one place (invariant 9).
+        from potato.server_utils.schemas.grounding_eval import (
+            VALID_EXPRESSION_SOURCES, VALID_REGION_TYPES)
+
+        if 'region_type' in scheme and scheme['region_type'] not in VALID_REGION_TYPES:
+            raise ConfigValidationError(
+                f"{path}.region_type must be one of {list(VALID_REGION_TYPES)}, "
+                f"got '{scheme['region_type']}'. Use 'point' for Molmo-style "
+                f"pointing evaluation.")
+
+        source = scheme.get('expression_source', 'field')
+        if source not in VALID_EXPRESSION_SOURCES:
+            raise ConfigValidationError(
+                f"{path}.expression_source must be one of "
+                f"{list(VALID_EXPRESSION_SOURCES)}, got '{source}'. Use "
+                f"'spans' to select phrases out of a caption.")
+
+        if source == 'spans' and 'expressions_field' in scheme:
+            # Not an error, but silently ignored options are how a project
+            # concludes a feature does not work.
+            logger.warning(
+                "%s.expressions_field is set but expression_source is 'spans', "
+                "so the phrases come from the caption and the field is ignored.",
+                path)
 
     elif annotation_type == 'audio_annotation':
         # Validate mode
@@ -1661,6 +5422,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.segment_schemes must be a list")
             if not scheme['segment_schemes']:
                 raise ConfigValidationError(f"{path}.segment_schemes cannot be empty for mode '{mode}'")
+            _validate_segment_schemes(scheme['segment_schemes'], path)
 
         # Validate optional numeric fields
         if 'min_segments' in scheme:
@@ -1695,6 +5457,11 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'max_segments' in scheme and scheme['max_segments'] is not None:
             if not isinstance(scheme['max_segments'], int) or scheme['max_segments'] < 1:
                 raise ConfigValidationError(f"{path}.max_segments must be a positive integer or null")
+
+        if 'segment_schemes' in scheme:
+            if not isinstance(scheme['segment_schemes'], list):
+                raise ConfigValidationError(f"{path}.segment_schemes must be a list")
+            _validate_segment_schemes(scheme['segment_schemes'], path)
 
         if 'timeline_height' in scheme:
             if not isinstance(scheme['timeline_height'], int) or scheme['timeline_height'] < 30:
@@ -1755,6 +5522,13 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             if constraint_type not in valid_constraint_types:
                 raise ConfigValidationError(f"{tier_path}.constraint_type must be one of: {valid_constraint_types}")
 
+            if 'point' in tier and not isinstance(tier['point'], bool):
+                raise ConfigValidationError(f"{tier_path}.point must be true or false")
+            if tier.get('point') and tier_type == 'dependent':
+                raise ConfigValidationError(
+                    f"{tier_path} is a point tier, so it must be independent: a point has "
+                    f"no duration to fit inside a parent annotation")
+
         # Validate parent_tier references (second pass)
         for i, tier in enumerate(scheme['tiers']):
             parent = tier.get('parent_tier')
@@ -1762,6 +5536,11 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.tiers[{i}] references unknown parent_tier: '{parent}'")
             if parent and parent == tier['name']:
                 raise ConfigValidationError(f"{path}.tiers[{i}] cannot be its own parent")
+            if parent and any(t.get('name') == parent and t.get('point')
+                              for t in scheme['tiers']):
+                raise ConfigValidationError(
+                    f"{path}.tiers[{i}] cannot depend on point tier '{parent}': a point "
+                    f"has no duration to subdivide")
 
         # Validate optional numeric fields
         if 'tier_height' in scheme:
@@ -1850,6 +5629,23 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             if not isinstance(scheme['total_points'], int) or scheme['total_points'] < 1:
                 raise ConfigValidationError(f"{path}.total_points must be a positive integer")
 
+        # Both constraints are enforced at the widget, and they could
+        # contradict each other. Four labels, 10 points, `min_per_item: 5`:
+        # filling the declared minimum in every box -- the only thing each
+        # input's `min="5"` allows -- gives "Allocated: 20 / 10, Remaining:
+        # -10". There is no allocation that satisfies both, so the form cannot
+        # be completed at all.
+        total = scheme.get('total_points', 100)
+        minimum = scheme.get('min_per_item', 0)
+        if (isinstance(total, int) and isinstance(minimum, (int, float))
+                and isinstance(scheme.get('labels'), list)):
+            floor = minimum * len(scheme['labels'])
+            if floor > total:
+                raise ConfigValidationError(
+                    f"{path} cannot be completed: min_per_item {minimum} "
+                    f"across {len(scheme['labels'])} labels needs at least "
+                    f"{floor} points, but total_points is {total}")
+
     elif annotation_type == 'semantic_differential':
         if 'pairs' not in scheme:
             raise ConfigValidationError(f"{path} missing 'pairs' field for semantic_differential annotation type")
@@ -1873,9 +5669,26 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.min_value must be less than max_value")
 
     elif annotation_type == 'hierarchical_multiselect':
-        if 'taxonomy' not in scheme:
-            raise ConfigValidationError(f"{path} missing 'taxonomy' field for hierarchical_multiselect annotation type")
-        if not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
+        # Either an explicit taxonomy or a built-in preset (e.g. MAST) is required.
+        # taxonomy_file is resolved into taxonomy by
+        # normalize_config_before_validation; a caller that validates without
+        # normalizing still has the file reference here.
+        preset = scheme.get('taxonomy_preset')
+        taxonomy_file = scheme.get('taxonomy_file')
+        if 'taxonomy' not in scheme and not preset and not taxonomy_file:
+            raise ConfigValidationError(
+                f"{path} requires 'taxonomy', 'taxonomy_preset' or 'taxonomy_file' "
+                f"for hierarchical_multiselect annotation type")
+        if 'taxonomy' not in scheme and not preset:
+            if not isinstance(taxonomy_file, str):
+                raise ConfigValidationError(f"{path}.taxonomy_file must be a path")
+        elif preset:
+            from potato.server_utils.failure_taxonomy import TAXONOMY_PRESETS
+            if str(preset).strip().lower() not in TAXONOMY_PRESETS:
+                raise ConfigValidationError(
+                    f"{path}.taxonomy_preset '{preset}' is not a known preset "
+                    f"(available: {', '.join(sorted(TAXONOMY_PRESETS))})")
+        elif not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
             raise ConfigValidationError(f"{path}.taxonomy must be a non-empty dictionary")
 
     elif annotation_type == 'vas':
@@ -1934,6 +5747,307 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         validate_display_logic_structure(scheme['display_logic'], path)
 
 
+def _validate_survey_experiment(scheme: Dict[str, Any], path: str) -> None:
+    if scheme['annotation_type'] == 'list_experiment':
+        items = scheme.get('items')
+        if not isinstance(items, list) or len(items) < 2 or not all(
+                isinstance(i, str) and i.strip() for i in items):
+            raise ConfigValidationError(f"{path}.items must list at least two statements")
+        if not (isinstance(scheme.get('sensitive_item'), str) and scheme['sensitive_item'].strip()):
+            raise ConfigValidationError(f"{path}.sensitive_item must be the sensitive statement")
+        t = scheme.get('treatment')
+        if not (isinstance(t, dict) and t.get('factor') and t.get('level') is not None):
+            raise ConfigValidationError(
+                f"{path}.treatment must be {{factor: <conditions factor>, level: <level>}}: "
+                "who sees the sensitive statement")
+        pos = scheme.get('sensitive_position')
+        if pos is not None and (isinstance(pos, bool) or not isinstance(pos, int)
+                                or not 0 <= pos <= len(items)):
+            raise ConfigValidationError(
+                f"{path}.sensitive_position must be 0 to {len(items)} (default: last)")
+        return
+    method = scheme.get('method', 'forced_response')
+    if method not in ('forced_response', 'crosswise'):
+        raise ConfigValidationError(f"{path}.method must be forced_response or crosswise")
+    if method == 'crosswise':
+        p = scheme.get('nonsensitive_prevalence')
+        if (isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 < p < 1
+                or abs(p - 0.5) < 0.05):
+            raise ConfigValidationError(
+                f"{path}.nonsensitive_prevalence must be the known probability that the "
+                "non-sensitive statement is true, between 0 and 1 and not close to 0.5 "
+                "(at 0.5 the design cannot estimate anything)")
+        if not (isinstance(scheme.get('nonsensitive_statement'), str)
+                and scheme['nonsensitive_statement'].strip()):
+            raise ConfigValidationError(f"{path}.nonsensitive_statement is required for crosswise")
+        return
+    given = [k for k in ('p_truth', 'p_yes', 'p_no') if k in scheme]
+    if given:
+        if len(given) != 3 or any(isinstance(scheme[k], bool) or not isinstance(scheme[k], (int, float))
+                                  or not 0 <= scheme[k] <= 1 for k in given):
+            raise ConfigValidationError(f"{path}: give all of p_truth, p_yes, p_no, each 0 to 1")
+        if abs(sum(scheme[k] for k in given) - 1) > 1e-6:
+            raise ConfigValidationError(f"{path}: p_truth + p_yes + p_no must be 1")
+        if scheme['p_truth'] <= 0:
+            raise ConfigValidationError(f"{path}.p_truth must be above 0")
+        if not scheme.get('randomizer'):
+            raise ConfigValidationError(
+                f"{path}: with your own probabilities, describe the randomizer in `randomizer` "
+                "(the default text states the default probabilities)")
+
+
+def _validate_listening_test(scheme: Dict[str, Any], path: str) -> None:
+    from potato.listening.plan import METHODS, SCALES
+    method = scheme.get("method", "mushra")
+    if method not in METHODS:
+        raise ConfigValidationError(
+            f"{path}.method must be one of {', '.join(METHODS)}, got {method!r}")
+    for key in ("stimuli_field", "reference_field", "condition_field"):
+        if key in scheme and not (isinstance(scheme[key], str) and scheme[key]):
+            raise ConfigValidationError(f"{path}.{key} must be the name of an item field")
+    anchors = scheme.get("anchors")
+    if anchors is not None:
+        if method != "mushra":
+            raise ConfigValidationError(f"{path}.anchors applies to method: mushra only")
+        if (not isinstance(anchors, list) or not anchors
+                or not all(isinstance(a, int) and not isinstance(a, bool) and 500 <= a <= 20000
+                           for a in anchors)):
+            raise ConfigValidationError(
+                f"{path}.anchors must be a list of low-pass cut-offs in Hz (500 to 20000), "
+                "such as [3500, 7000]")
+    for key in ("hidden_reference", "loop", "require_full_playback", "require_all_played",
+                "require_one_at_100", "allow_replay"):
+        if key in scheme and not isinstance(scheme[key], bool):
+            raise ConfigValidationError(f"{path}.{key} must be true or false")
+    labels = scheme.get("scale_labels")
+    if labels is not None:
+        expected = len(SCALES.get(method, []))
+        if method in ("mushra", "bs1116", "p835", "abx") or expected == 0:
+            raise ConfigValidationError(f"{path}.scale_labels applies to acr, dcr and ccr only")
+        if (not isinstance(labels, list) or len(labels) != expected
+                or not all(isinstance(l, str) and l.strip() for l in labels)):
+            raise ConfigValidationError(
+                f"{path}.scale_labels must be {expected} labels, best first, for method {method}")
+
+
+def _validate_interlinear_gloss(scheme: Dict[str, Any], path: str) -> None:
+    from potato.igt import resolve_abbreviations
+    for key in ("source_field", "morphemes_field", "gloss_field", "translation_field",
+                "language", "metalanguage"):
+        if key in scheme and not (isinstance(scheme[key], str) and scheme[key].strip()):
+            raise ConfigValidationError(f"{path}.{key} must be a non-empty string")
+    tiers = scheme.get("tiers")
+    if tiers is not None:
+        if (not isinstance(tiers, list)
+                or not all(isinstance(t, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", t) for t in tiers)):
+            raise ConfigValidationError(
+                f"{path}.tiers must be a list of tier names such as [pos, notes]")
+        reserved = sorted({"word", "morphemes", "gloss"} & set(tiers))
+        if reserved:
+            raise ConfigValidationError(
+                f"{path}.tiers may not use {', '.join(reserved)}: those lines are always shown")
+        if len(set(tiers)) != len(tiers):
+            raise ConfigValidationError(f"{path}.tiers names a tier twice")
+    if "show_translation" in scheme and not isinstance(scheme["show_translation"], bool):
+        raise ConfigValidationError(f"{path}.show_translation must be true or false")
+    if "abbreviations" in scheme:
+        spec = scheme["abbreviations"]
+        if isinstance(spec, str) and spec.strip().lower() != "leipzig":
+            raise ConfigValidationError(
+                f"{path}.abbreviations must be 'leipzig', a list of labels or a mapping of "
+                f"label to meaning, got {spec!r}")
+        try:
+            resolve_abbreviations(spec)
+        except ValueError as exc:
+            raise ConfigValidationError(f"{path}.{exc}") from None
+
+
+def _validate_incentive_scheme(scheme: Dict[str, Any], path: str) -> None:
+    from potato.server_utils.schemas.incentive_schemes import validate_incentive_scheme
+    try:
+        validate_incentive_scheme(scheme)
+    except ValueError as e:
+        raise ConfigValidationError(f"{path} ({scheme['annotation_type']}): {e}")
+
+
+def _validate_ego_network(scheme: Dict[str, Any], path: str) -> None:
+    """The page builds from the same normalization, so what passes here renders."""
+    from potato.server_utils.schemas.ego_network import EgoNetworkConfigError, normalize_scheme
+    try:
+        normalize_scheme(scheme)
+    except EgoNetworkConfigError as e:
+        raise ConfigValidationError(f"{path} (ego_network): {e}")
+
+
+def _validate_cultural_domain_scheme(scheme: Dict[str, Any], path: str) -> None:
+    """free_list and triad_test: the checks live beside each generator."""
+    if scheme['annotation_type'] == 'free_list':
+        from potato.server_utils.schemas.free_list import validate_scheme
+    else:
+        from potato.server_utils.schemas.triad_test import validate_scheme
+    try:
+        validate_scheme(scheme)
+    except ValueError as e:
+        raise ConfigValidationError(f"{path} ({scheme['annotation_type']}): {e}")
+
+
+def _validate_geo_annotation(scheme: Dict[str, Any], path: str) -> None:
+    """Maps: labels, task, tools, and a basemap the project supplies or
+    configures (no external tiles unless `basemap.tiles` names them)."""
+    from potato.geo.scheme import validate_geo_scheme
+    try:
+        for warning in validate_geo_scheme(scheme, path):
+            logger.warning(warning)
+    except ValueError as e:
+        raise ConfigValidationError(str(e))
+
+
+def _validate_spectrogram_annotation(scheme: Dict[str, Any], path: str) -> None:
+    from potato.server_utils.schemas.spectrogram_annotation import COLORMAPS, FFT_SIZES
+    labels = scheme.get("labels")
+    if not isinstance(labels, list) or not labels:
+        raise ConfigValidationError(f"{path}.labels must be a non-empty list of label names")
+    names = [l.get("name") if isinstance(l, dict) else l for l in labels]
+    if not all(isinstance(n, str) and n.strip() for n in names):
+        raise ConfigValidationError(
+            f"{path}.labels: every label needs a name (quote names YAML would read as "
+            "true/false or a number)")
+    if len(set(names)) != len(names):
+        raise ConfigValidationError(f"{path}.labels has a duplicate name")
+
+    def number(key):
+        value = scheme.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise ConfigValidationError(f"{path}.{key} must be a number of hertz, 0 or more")
+        return float(value)
+
+    low, high = number("min_freq"), number("max_freq")
+    if low is not None and high is not None and high <= low:
+        raise ConfigValidationError(f"{path}.max_freq must be above min_freq")
+    if "fft_size" in scheme and scheme["fft_size"] not in FFT_SIZES:
+        raise ConfigValidationError(
+            f"{path}.fft_size must be one of {', '.join(map(str, FFT_SIZES))}")
+    if "colormap" in scheme and scheme["colormap"] not in COLORMAPS:
+        raise ConfigValidationError(f"{path}.colormap must be one of {', '.join(COLORMAPS)}")
+    for key in ("height", "min_boxes", "max_boxes"):
+        value = scheme.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise ConfigValidationError(f"{path}.{key} must be a whole number, 0 or more")
+    if (scheme.get("min_boxes") is not None and scheme.get("max_boxes") is not None
+            and scheme["max_boxes"] < scheme["min_boxes"]):
+        raise ConfigValidationError(f"{path}.max_boxes must be at least min_boxes")
+    if "source_field" in scheme and not (isinstance(scheme["source_field"], str)
+                                         and scheme["source_field"]):
+        raise ConfigValidationError(f"{path}.source_field must be the name of an item field")
+
+
+def _validate_viewer_selection(scheme: Dict[str, Any], path: str) -> None:
+    """viewer_selection on its own (labels, counts, viewer_field present).
+    Whether viewer_field names a viewer display is checked with the whole
+    config, in _validate_viewer_displays."""
+    from potato.server_utils.schemas.viewer_selection import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
+def _validate_viewer_displays(config_data: Dict[str, Any]) -> None:
+    """Viewer displays (protein_structure, genome_locus): options, the browser
+    bundles they need (naming `potato vendor fetch <name>`), and the display
+    field each viewer_selection scheme binds to."""
+    from potato.server_utils.displays.viewer_display import validate_viewer_config
+    errors = validate_viewer_config(config_data)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
+def _validate_microscopy(scheme: Dict[str, Any], path: str) -> None:
+    from potato.server_utils.schemas.microscopy import validate_scheme
+    problems = validate_scheme(scheme)
+    if problems:
+        raise ConfigValidationError(f"{path}." + f"; {path}.".join(problems))
+
+
+def _validate_peak_picking(scheme: Dict[str, Any], path: str) -> None:
+    """peak_picking on its own (fields, counts, viewer_field present). That
+    viewer_field names a spectrum display is checked with the whole config,
+    in _validate_viewer_displays."""
+    from potato.server_utils.schemas.peak_picking import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
+def _validate_label_source(scheme: Dict[str, Any], path: str) -> None:
+    """Ontology-backed labels (`label_source`) on radio, multiselect, span or
+    image_annotation. The file and its `root` are checked in
+    _validate_label_source_files, which knows the task directory."""
+    from potato.ontology.source import LabelSourceError, check_label_source
+    try:
+        check_label_source(scheme, path)
+    except LabelSourceError as e:
+        raise ConfigValidationError(str(e)) from None
+    # Picker-only schemes may leave `labels` out; every generator reads it.
+    scheme.setdefault('labels', [])
+
+
+def _validate_label_source_files(config_data: Dict[str, Any], base_dir: str) -> None:
+    """Each `label_source.file` exists inside task_dir, parses as OBO, and
+    contains `root` when one is set."""
+    from potato.ontology.source import (LabelSourceError, check_label_source_file,
+                                        iter_label_source_schemes)
+    for path, scheme in iter_label_source_schemes(config_data):
+        ls = scheme.get('label_source')
+        if not isinstance(ls, dict) or ls.get('service') != 'file' or not ls.get('file'):
+            continue
+        try:
+            resolved = validate_path_security(ls['file'], base_dir)
+        except ConfigSecurityError as e:
+            raise ConfigSecurityError(f"{path}.label_source.file: {e}") from None
+        try:
+            check_label_source_file(scheme, path, resolved)
+        except LabelSourceError as e:
+            raise ConfigValidationError(str(e)) from None
+
+
+def _validate_chemical_structure(scheme: Dict[str, Any], path: str) -> None:
+    """chemical_structure options, and RDKit.js when the scheme asks for it.
+
+    ``rdkit: true`` without the bundle is an error naming the fetch command;
+    ``rdkit: auto`` (the default) without it is a warning, because the scheme
+    works with OpenChemLib alone (no InChIKey in the browser)."""
+    from potato.server_utils.schemas.chemical_structure import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+    mode = scheme.get("rdkit", "auto")
+    if mode is False:
+        return
+    from potato import chemistry, vendoring
+    if chemistry.rdkit_bundle_installed():
+        return
+    hint = vendoring.fetch_hint([chemistry.RDKIT_BUNDLE])
+    if mode is True:
+        raise ConfigValidationError(
+            f"{path}.rdkit is true, but the RDKit.js browser library is not installed. "
+            f"Install it with `{hint}`, or set rdkit: auto to run with OpenChemLib only.")
+    logger.warning(
+        f"{path}: RDKit.js is not installed, so the browser does not compute RDKit "
+        f"SMILES, InChI or InChIKey or check structures with RDKit (OpenChemLib "
+        f"still draws, validates valences and writes the molfile and SMILES). "
+        f"Install it with `{hint}`, or set rdkit: false to silence this.")
+
+
+def _validate_interval_label(scheme: Dict[str, Any], path: str) -> None:
+    """interval_label on its own (labels, mode, keys, pre-annotation options)."""
+    from potato.server_utils.schemas.interval_label import validate_scheme
+    errors = validate_scheme(scheme, path)
+    if errors:
+        raise ConfigValidationError("; ".join(errors))
+
+
 def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -> None:
     """
     Validate the structure of a display_logic configuration block.
@@ -1949,7 +6063,8 @@ def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -
     Raises:
         ConfigValidationError: If the display_logic is invalid
     """
-    from potato.server_utils.display_logic import SUPPORTED_OPERATORS
+    from potato.server_utils.display_logic import (
+        SUPPORTED_OPERATORS, iter_leaf_conditions, structure_errors)
 
     if not isinstance(display_logic, dict):
         raise ConfigValidationError(f"{path}.display_logic must be a dictionary")
@@ -1965,12 +6080,12 @@ def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -
     if len(show_when) == 0:
         raise ConfigValidationError(f"{path}.display_logic.show_when must have at least one condition")
 
-    # Validate each condition
-    for i, condition in enumerate(show_when):
-        cond_path = f"{path}.display_logic.show_when[{i}]"
+    shape = structure_errors(show_when, f"{path}.display_logic.show_when")
+    if shape:
+        raise ConfigValidationError(shape[0])
 
-        if not isinstance(condition, dict):
-            raise ConfigValidationError(f"{cond_path} must be a dictionary")
+    # Validate each condition, inside groups too
+    for cond_path, condition in iter_leaf_conditions(show_when, f"{path}.display_logic.show_when"):
 
         # Required fields
         if 'schema' not in condition:
@@ -2002,28 +6117,33 @@ def validate_display_logic_structure(display_logic: Dict[str, Any], path: str) -
                 raise ConfigValidationError(
                     f"{cond_path}: range value must have exactly 2 elements [min, max]"
                 )
-            try:
-                min_val, max_val = float(value[0]), float(value[1])
-                if min_val > max_val:
-                    raise ConfigValidationError(
-                        f"{cond_path}: range min ({min_val}) is greater than max ({max_val})"
-                    )
-            except (ValueError, TypeError):
-                raise ConfigValidationError(f"{cond_path}: range values must be numeric")
+            # The rule's own runtime test (display_logic._is_number): a quoted
+            # number passes float() here and fails when the rule is built.
+            from potato.server_utils.display_logic import _is_number
+            if not all(_is_number(v) for v in value):
+                raise ConfigValidationError(f"{cond_path}: range values must be numeric (numbers, unquoted)")
+            if value[0] > value[1]:
+                raise ConfigValidationError(
+                    f"{cond_path}: range min ({value[0]}) is greater than max ({value[1]})"
+                )
         # Numeric operators need numeric values
-        elif operator in ('gt', 'gte', 'lt', 'lte', 'length_gt', 'length_lt'):
+        elif operator in ('gt', 'gte', 'lt', 'lte', 'length_gt', 'length_lt',
+                          'count_gt', 'count_lt', 'count_equals'):
             if value is None:
                 raise ConfigValidationError(f"{cond_path}: operator '{operator}' requires a value")
-            try:
-                float(value)
-            except (ValueError, TypeError):
+            from potato.server_utils.display_logic import _is_number
+            if not _is_number(value):
                 raise ConfigValidationError(
-                    f"{cond_path}: operator '{operator}' requires a numeric value"
+                    f"{cond_path}: operator '{operator}' requires a numeric value (a number, "
+                    f"unquoted, not true/false), got {value!r}"
                 )
         # Regex operator needs a valid pattern
         elif operator == 'matches':
             if value is None:
                 raise ConfigValidationError(f"{cond_path}: operator 'matches' requires a regex pattern")
+            if not isinstance(value, str):
+                raise ConfigValidationError(
+                    f"{cond_path}: operator 'matches' requires the pattern as a string, got {value!r}")
             try:
                 import re
                 re.compile(value)
@@ -2113,6 +6233,82 @@ def validate_server_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError("server.debug must be a boolean")
 
 
+_SAML_KEYS = {
+    "display_name", "idp_metadata_url", "idp_metadata_file", "idp_entity_id",
+    "idp", "sp_base_url", "sp_entity_id", "sp_cert_file", "sp_key_file",
+    "name_id_format", "user_identity_attribute", "required_attribute",
+    "claim_attributes", "want_assertions_encrypted", "single_logout",
+}
+
+_SAML_IDP_KEYS = {"entity_id", "sso_url", "x509cert", "slo_url"}
+
+
+def _validate_saml_config(auth_config: Dict[str, Any]) -> None:
+    """authentication.method: saml -- the library, and where the IdP is."""
+    import importlib.util
+    if importlib.util.find_spec("onelogin") is None:
+        raise ConfigValidationError(
+            "authentication.method is 'saml', which requires python3-saml. Install it "
+            "with: pip install 'potato-annotation[saml]' (it needs libxmlsec1 on the "
+            "system: brew install libxmlsec1, or apt-get install libxmlsec1-dev)")
+    saml = auth_config.get("saml")
+    if not isinstance(saml, dict):
+        raise ConfigValidationError(
+            "authentication.method is 'saml', which needs an authentication.saml "
+            "section naming the identity provider")
+    unknown = set(saml) - _SAML_KEYS
+    if unknown:
+        raise ConfigValidationError(
+            f"authentication.saml has unknown keys: {', '.join(sorted(unknown))}")
+    sources = [k for k in ("idp_metadata_url", "idp_metadata_file", "idp") if saml.get(k)]
+    if len(sources) != 1:
+        raise ConfigValidationError(
+            "authentication.saml needs exactly one of idp_metadata_url, "
+            "idp_metadata_file or idp {entity_id, sso_url, x509cert}")
+    if saml.get("idp"):
+        idp = saml["idp"]
+        missing = [k for k in ("entity_id", "sso_url", "x509cert")
+                   if not (isinstance(idp, dict) and idp.get(k))]
+        if missing:
+            raise ConfigValidationError(
+                f"authentication.saml.idp is missing: {', '.join(missing)}")
+        # A misspelt slo_url would otherwise turn single logout off unseen.
+        unknown_idp = set(idp) - _SAML_IDP_KEYS
+        if unknown_idp:
+            raise ConfigValidationError(
+                f"authentication.saml.idp has unknown keys: {', '.join(sorted(unknown_idp))} "
+                f"(it takes {', '.join(sorted(_SAML_IDP_KEYS))})")
+    if "single_logout" in saml and not isinstance(saml["single_logout"], bool):
+        # "false" or 0 would otherwise leave single logout on.
+        raise ConfigValidationError(
+            f"authentication.saml.single_logout must be true or false, "
+            f"got {saml['single_logout']!r}")
+    url = saml.get("idp_metadata_url")
+    if url and not str(url).startswith("https://"):
+        raise ConfigValidationError(
+            "authentication.saml.idp_metadata_url must be https: the metadata carries "
+            "the certificate every response is checked against")
+    if bool(saml.get("sp_cert_file")) != bool(saml.get("sp_key_file")):
+        raise ConfigValidationError(
+            "authentication.saml: sp_cert_file and sp_key_file go together")
+    if saml.get("want_assertions_encrypted") and not saml.get("sp_key_file"):
+        raise ConfigValidationError(
+            "authentication.saml.want_assertions_encrypted needs sp_cert_file and "
+            "sp_key_file: the IdP encrypts to that certificate")
+    if not saml.get("user_identity_attribute"):
+        logger.warning(
+            "authentication.saml.user_identity_attribute is not set, so the NameID "
+            "identifies each user. Many IdPs (Shibboleth by default) send a transient "
+            "NameID that changes on every sign-in, and Potato refuses those; set it "
+            "to a stable attribute such as eduPersonPrincipalName "
+            "(urn:oid:1.3.6.1.4.1.5923.1.1.1.6).")
+    rule = saml.get("required_attribute")
+    if rule is not None and not (isinstance(rule, dict) and rule.get("name")
+                                 and isinstance(rule.get("values"), list) and rule["values"]):
+        raise ConfigValidationError(
+            "authentication.saml.required_attribute needs a name and a list of values")
+
+
 def validate_authentication_config(config_data: Dict[str, Any]) -> None:
     """
     Validate authentication configuration section.
@@ -2134,16 +6330,39 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(auth_config, dict):
         raise ConfigValidationError("authentication configuration must be a dictionary")
 
+    # `type` is a long-standing typo for `method` in our own docs and in the
+    # Spaces example config. It is not in the key allowlist, so it produced a
+    # generic "unrecognized key" warning and the auth method silently fell back
+    # to in_memory — on a public host, the worst possible failure mode.
+    if "type" in auth_config and "method" not in auth_config:
+        logger.warning(
+            "authentication.type is not a recognized key; the setting is "
+            "authentication.method. Using '%s' as the method. Update your config — "
+            "this alias will be removed.",
+            auth_config["type"],
+        )
+        auth_config["method"] = auth_config.pop("type")
+
     method = auth_config.get("method", "in_memory")
-    valid_methods = ["in_memory", "database", "clerk", "oauth"]
+    valid_methods = ["in_memory", "database", "clerk", "oauth", "saml"]
     if method not in valid_methods:
         raise ConfigValidationError(
             f"authentication.method must be one of: {', '.join(valid_methods)}. "
             f"Got: '{method}'"
         )
 
+    if method == "saml":
+        _validate_saml_config(auth_config)
+
     # OAuth-specific validation
     if method == "oauth":
+        # Without this, validate passed and `potato start` died with a raw
+        # ModuleNotFoundError from oauth_backend.py.
+        import importlib.util
+        if importlib.util.find_spec("authlib") is None:
+            raise ConfigValidationError(
+                "authentication.method is 'oauth', which requires Authlib. "
+                "Install it with: pip install 'potato-annotation[auth]'")
         # providers is required
         providers = auth_config.get("providers")
         if not providers or not isinstance(providers, dict):
@@ -2164,21 +6383,27 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
                     f"authentication.providers.{name} must be a dictionary"
                 )
 
-            # client_id and client_secret are required
-            if "client_id" not in pconfig:
+            # client_id and client_secret are required. A Hugging Face Space
+            # with `hf_oauth: true` supplies both in its environment.
+            for key, env_name in (("client_id", "OAUTH_CLIENT_ID"),
+                                  ("client_secret", "OAUTH_CLIENT_SECRET")):
+                if key in pconfig:
+                    continue
+                if name == "huggingface" and os.environ.get(env_name):
+                    continue
+                hint = (f" (or run in a Hugging Face Space with hf_oauth: true, "
+                        f"which sets {env_name})") if name == "huggingface" else ""
                 raise ConfigValidationError(
-                    f"authentication.providers.{name}.client_id is required"
-                )
-            if "client_secret" not in pconfig:
-                raise ConfigValidationError(
-                    f"authentication.providers.{name}.client_secret is required"
+                    f"authentication.providers.{name}.{key} is required{hint}"
                 )
 
             # Generic OIDC requires discovery_url
-            if name not in ("google", "github") and "discovery_url" not in pconfig:
+            if name not in ("google", "github", "huggingface") \
+                    and "discovery_url" not in pconfig:
                 raise ConfigValidationError(
                     f"authentication.providers.{name} requires 'discovery_url' "
-                    f"for OIDC providers (only 'google' and 'github' have built-in URLs)"
+                    f"for OIDC providers (only 'google', 'github' and 'huggingface' "
+                    f"have built-in URLs)"
                 )
 
             # Validate optional fields
@@ -2214,7 +6439,6 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
 
         # Warn if secret_key is not set (OAuth needs stable sessions)
         if "secret_key" not in config_data:
-            import os
             if not os.environ.get("POTATO_SECRET_KEY"):
                 logger.warning(
                     "OAuth is configured but no 'secret_key' is set in config "
@@ -2239,6 +6463,546 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
                 "authentication.user_config_path cannot be used with method 'database'. "
                 "The database backend handles its own user persistence."
             )
+
+
+def warn_unreachable_quota_keys(config_data: Dict[str, Any]) -> None:
+    """Warn when a quota key in the config will never be read.
+
+    `_resolve_user_quota` tries `per_annotator_quota.by_user`, then
+    `by_user_role`, then `default`, and only falls through to
+    `max_annotations_per_user` if none of those answered. Setting
+    `default` therefore makes the global unreachable for every
+    annotator, and an author who sets both reasonably reads the global
+    as a ceiling the quota refines. It is not: it is dead config, and
+    nothing in the collected data shows which number was in force.
+
+    The two keys DO compose when `default` is absent, so this warns on
+    `default` specifically rather than on the block.
+    """
+    quota = config_data.get("per_annotator_quota")
+    if not isinstance(quota, dict):
+        return
+
+    if (quota.get("default") is not None
+            and config_data.get("max_annotations_per_user") is not None):
+        logger.warning(
+            "max_annotations_per_user (%s) will never be read: "
+            "per_annotator_quota.default (%s) answers first for every "
+            "annotator, and the global is only a fallback for when no "
+            "quota rule matches. Remove per_annotator_quota.default to "
+            "make the global the study-wide ceiling, or remove "
+            "max_annotations_per_user to stop it looking like one.",
+            config_data["max_annotations_per_user"], quota["default"],
+        )
+
+    # A role declared in user_roles that no by_user_role entry names.
+    # Falling through to the default is the right behaviour and a
+    # perfectly good config, so this warns only on a NEAR miss --
+    # `by_user_role: {exprt: 7}` against `user_roles: {alice: expert}`,
+    # where every expert silently gets the default. Warning on every
+    # unnamed role would refuse correct configs under `--strict`, which
+    # treats warnings as errors.
+    by_role = quota.get("by_user_role")
+    roles = config_data.get("user_roles")
+    if isinstance(by_role, dict) and by_role and isinstance(roles, dict):
+        import difflib
+
+        declared = {str(r) for r in roles.values()}
+        for role in sorted(declared - set(by_role)):
+            near = difflib.get_close_matches(role, list(by_role), n=1,
+                                             cutoff=0.8)
+            if near:
+                logger.warning(
+                    "user_roles declares the role %r, but "
+                    "per_annotator_quota.by_user_role names %r instead. "
+                    "Nothing matches, so every annotator with role %r "
+                    "falls through to the default quota. If those are "
+                    "meant to be the same role, one of them is "
+                    "misspelled.",
+                    role, near[0], role,
+                )
+
+
+def warn_unenforced_coverage_floor(config_data: Dict[str, Any]) -> None:
+    """Warn that `num_annotators_per_item.min` is not enforced.
+
+    It sets `ItemStateManager.min_annotations_per_item`, which is
+    assigned and never read. No assignment or retirement decision
+    consults it, so nothing holds an item open until that many
+    annotators have seen it.
+
+    The name is the problem: inside a mapping that also carries
+    `default`, `min` reads as the floor to that ceiling, so an author
+    writing `{min: 3, default: 5}` believes they have bracketed coverage
+    between two numbers. They get the ceiling, and nothing in the
+    collected data shows otherwise -- the study simply ends with some
+    items at one annotator.
+
+    The flat spelling `min_annotators_per_instance` is handled in
+    `validate_optional_field_types` instead: it names no other setting,
+    so it is now read as a deprecated alias for the cap rather than
+    warned about and discarded. `min` cannot take that route, because a
+    key inside `num_annotators_per_item` cannot be an alias for the
+    mapping it lives in.
+    """
+    nap = config_data.get("num_annotators_per_item")
+    if not (isinstance(nap, dict) and nap.get("min") is not None):
+        return
+
+    logger.warning(
+        "num_annotators_per_item.min is not enforced. Potato reads it, "
+        "stores it, and never consults it when deciding what to assign or "
+        "when an item is finished, so it does not hold items open until "
+        "that many annotators have seen them. num_annotators_per_item's "
+        "`default` is the cap that IS enforced; set it to the coverage you "
+        "need and let items retire when they reach it."
+    )
+
+
+def warn_category_assignment_cannot_qualify(config_data: Dict[str, Any]) -> None:
+    """Warn when `category_based` assignment has no way to qualify anyone.
+
+    The static path serves an annotator only the categories they are
+    qualified for, and the one thing that grants a qualification is
+    passing a **training phase** whose questions carry categories
+    (`calculate_and_set_qualifications`, called from the training
+    handler). With no training block, `qualified_categories` stays empty
+    for every annotator forever, so a categorized item is never a
+    candidate for anybody and only the fallback serves anything.
+
+    The default fallback is what hides it: `uncategorized` hands out
+    exactly the items with no category, so on a mixed corpus the feature
+    looks alive and on a fully categorized one every annotator is served
+    nothing. `category_assignment.dynamic.enabled` takes a different
+    path and is unaffected.
+    """
+    strategy = str(config_data.get("assignment_strategy") or "").lower()
+    if strategy not in ("category_based", "category-based"):
+        return
+
+    cat = config_data.get("category_assignment")
+    cat = cat if isinstance(cat, dict) else {}
+    dynamic = cat.get("dynamic")
+    if isinstance(dynamic, dict) and dynamic.get("enabled"):
+        return
+
+    if isinstance(config_data.get("training"), dict):
+        return
+
+    fallback = cat.get("fallback", "uncategorized")
+    consequence = {
+        "uncategorized": "only items with no category will ever be served",
+        "random": "every annotator is served items from every category, "
+                  "which is what the strategy exists to avoid",
+        "none": "no annotator will be served anything at all",
+    }.get(str(fallback), "only the %r fallback will serve anything" % fallback)
+
+    logger.warning(
+        "assignment_strategy is category_based but this study has no "
+        "training phase and category_assignment.dynamic.enabled is not "
+        "set. Qualifications are granted only by passing training on "
+        "categorized questions, so no annotator will ever qualify for a "
+        "category and %s (fallback: %r). Add a `training` block whose "
+        "questions carry categories, or set "
+        "category_assignment.dynamic.enabled: true.",
+        consequence, fallback,
+    )
+
+
+def warn_batch_groups_need_the_batch_strategy(config_data: Dict[str, Any]) -> None:
+    """Warn when `batch_assignment.groups` carry item lists that nothing
+    will read.
+
+    The groups are loaded whatever the strategy, and their `schemes`
+    binding is honoured whatever the strategy -- but the item lists are
+    only consulted by `_assign_batch`, which runs under
+    `assignment_strategy: batch`. The default is `fixed_order`, so a
+    config that omits the strategy gets cohorts visibly answering
+    different questions (which reads as proof the config took effect)
+    while every annotator is served every item. Nothing in the collected
+    data shows the split did not happen.
+
+    A group that only binds schemes and lists no items is a legitimate
+    config under any strategy, and does not warn.
+    """
+    batch = config_data.get("batch_assignment")
+    if not isinstance(batch, dict):
+        return
+    groups = batch.get("groups")
+    if not isinstance(groups, list):
+        return
+
+    raw_strategy = config_data.get("assignment_strategy")
+    # The mapping form (`assignment_strategy: {name: batch}`) is valid too; the
+    # warning used to fire on it and fail `validate --strict`.
+    if isinstance(raw_strategy, dict):
+        raw_strategy = raw_strategy.get("name")
+    strategy = str(raw_strategy or "").lower()
+    if strategy == "batch":
+        return
+
+    with_items = [g.get("name", i) for i, g in enumerate(groups)
+                  if isinstance(g, dict) and g.get("instances")]
+    if not with_items:
+        return
+
+    logger.warning(
+        "batch_assignment group(s) %s list instances, but "
+        "assignment_strategy is %s. Group item lists are only read under "
+        "`assignment_strategy: batch`, so every annotator will be served "
+        "every item -- any `schemes` binding on the groups still applies, "
+        "which is why the config looks like it took effect. Add "
+        "`assignment_strategy: batch` to honour the item lists.",
+        ", ".join(repr(n) for n in with_items),
+        repr(config_data.get("assignment_strategy")) if strategy
+        else "unset (defaults to fixed_order)",
+    )
+
+
+def validate_phase_order(config_data: Dict[str, Any]) -> None:
+    """Warn about names in `phases.order` that no phase defines.
+
+    The server drops these from the order at load time, but a name that
+    survives validation silently is almost always a typo or a phase block the
+    author forgot to write, and the study runs without the step they asked
+    for. `--strict` turns the warning into a refusal.
+    """
+    phases = config_data.get("phases")
+    if not isinstance(phases, dict):
+        return
+
+    order = phases.get("order")
+    if not isinstance(order, list):
+        return
+
+    for phase_name in order:
+        if not isinstance(phase_name, str):
+            logger.warning(
+                "phases.order entry %r is not a phase name; it will be ignored.",
+                phase_name,
+            )
+            continue
+        # 'annotation' is sequenced through the order but has no phase block:
+        # the main annotation flow owns it, not the phase loader.
+        if phase_name == "annotation":
+            continue
+        if not isinstance(phases.get(phase_name), dict):
+            logger.warning(
+                "Phase '%s' is listed in phases.order but no 'phases.%s' block "
+                "defines it. It will be dropped from the phase order.",
+                phase_name, phase_name,
+            )
+
+    # More than one annotation phase. The names in `phases.order` are the
+    # author's, so nothing stops two of them declaring `type: annotation`, and
+    # the config validates -- but the annotation flow owns the item queue and
+    # finishes the study when the queue is empty. The second phase is never
+    # served: the annotator reaches "Complete" after the first pass, and
+    # nothing anywhere says the phase they configured did not run.
+    #
+    # Warned rather than refused, because the study still works as a
+    # single-pass one, and an author who wanted two passes over the same items
+    # needs to know that is not what they have.
+    annotation_phases = [
+        name for name in order
+        if isinstance(name, str)
+        and (name == "annotation"
+             or (isinstance(phases.get(name), dict)
+                 and phases[name].get("type") == "annotation"))
+    ]
+    if len(annotation_phases) > 1:
+        logger.warning(
+            "phases.order declares %d annotation phases (%s), and only the "
+            "first is ever served: the annotation flow owns the item queue "
+            "and ends the study when it is empty. Use one annotation phase; "
+            "for a second pass over the same items, see adjudication or a "
+            "second annotator.",
+            len(annotation_phases), ", ".join(annotation_phases),
+        )
+
+
+def _phase_flow_rule_errors(spec: Any, where: str, factors: Dict[str, Any]) -> None:
+    """Refuse a malformed `show_when` list (the display_logic grammar)."""
+    from potato.server_utils.display_logic import (
+        DisplayLogicRule, iter_leaf_conditions, structure_errors)
+    from potato.server_utils.phase_flow import CONDITION_PREFIX
+    show_when = spec.get("show_when") if isinstance(spec, dict) else None
+    if not isinstance(show_when, list) or not show_when:
+        raise ConfigValidationError(
+            f"{where}.show_when must be a non-empty list of conditions "
+            "(schema, operator, value), the same form display_logic uses")
+    shape = structure_errors(show_when, f"{where}.show_when")
+    if shape:
+        raise ConfigValidationError(shape[0])
+    for cond_path, cond in iter_leaf_conditions(show_when, f"{where}.show_when"):
+        if not cond.get("schema") or not cond.get("operator"):
+            raise ConfigValidationError(
+                f"{cond_path} needs 'schema' and 'operator'")
+        schema = str(cond["schema"])
+        if schema.startswith(CONDITION_PREFIX):
+            factor = schema[len(CONDITION_PREFIX):]
+            if factor not in factors:
+                declared = ", ".join(sorted(factors)) or "none declared"
+                raise ConfigValidationError(
+                    f"{cond_path} refers to '{schema}', but "
+                    f"conditions.factors has no factor '{factor}' ({declared})")
+            from potato.server_utils.experiment_conditions import check_condition_value
+            check_condition_value(cond_path, cond, factors)
+    try:
+        DisplayLogicRule.from_dict({"show_when": show_when,
+                                    "logic": spec.get("logic", "all")})
+    except (ValueError, KeyError, TypeError) as e:
+        raise ConfigValidationError(f"{where}: {e}")
+
+
+def validate_phase_flow_config(config_data: Dict[str, Any]) -> None:
+    """Check page-level `show_when`, `exit_when` and `phases.counterbalance`.
+
+    The rules are checked for shape here. Whether the questions they name
+    exist is checked at boot, once the phase files are loaded (see
+    `validate_phase_flow_references`).
+    """
+    from potato.server_utils.phase_flow import (
+        COUNTERBALANCE_METHODS, phases_dict)
+    phases = config_data.get("phases")
+    if not phases:
+        return
+    factors = ((config_data.get("conditions") or {}).get("factors") or {}) \
+        if isinstance(config_data.get("conditions"), dict) else {}
+    if not isinstance(factors, dict):
+        factors = {}
+    entries = phases_dict(config_data)
+
+    from potato.phase import UserPhase
+    from potato.runtimes.registry import runtime_kinds
+    known_types = ({m.value for m in UserPhase} - {"login", "done"}) | set(runtime_kinds())
+    for name, entry in entries.items():
+        where = f"phases.{name}"
+        ptype = str(entry.get("type") or name).lower()
+        if "type" in entry and ptype not in known_types:
+            import difflib
+            near = difflib.get_close_matches(ptype, sorted(known_types), n=1)
+            raise ConfigValidationError(
+                f"{where}.type is '{entry['type']}', which is not a phase type"
+                + (f" (did you mean '{near[0]}'?)" if near else "")
+                + f". Phase types: {', '.join(sorted(known_types))}")
+        if "show_when" in entry:
+            if ptype == "annotation" or name == "annotation":
+                raise ConfigValidationError(
+                    f"{where}.show_when: the annotation phase cannot be skipped "
+                    "with show_when. Gate the pages around it instead.")
+            _phase_flow_rule_errors(entry, where, factors)
+            if entry.get("logic", "all") not in ("all", "any"):
+                raise ConfigValidationError(f"{where}.logic must be 'all' or 'any'")
+        if "exit_when" in entry:
+            spec = entry["exit_when"]
+            if not isinstance(spec, dict):
+                raise ConfigValidationError(
+                    f"{where}.exit_when must be a mapping with 'show_when' and "
+                    "an optional 'message'")
+            if ptype in ("annotation", "training"):
+                raise ConfigValidationError(
+                    f"{where}.exit_when is only supported on consent, prestudy, "
+                    "instructions and poststudy pages")
+            _phase_flow_rule_errors(spec, f"{where}.exit_when", factors)
+            if "message" in spec and not isinstance(spec["message"], str):
+                raise ConfigValidationError(f"{where}.exit_when.message must be a string")
+            unknown = set(spec) - {"show_when", "logic", "message"}
+            if unknown:
+                raise ConfigValidationError(
+                    f"{where}.exit_when has unknown key(s): {', '.join(sorted(unknown))}")
+
+        if "randomize_questions" in entry:
+            spec = entry["randomize_questions"]
+            if isinstance(spec, dict):
+                unknown = set(spec) - {"pin_first", "pin_last"}
+                if unknown:
+                    raise ConfigValidationError(
+                        f"{where}.randomize_questions has unknown key(s): "
+                        f"{', '.join(sorted(unknown))}")
+                for key in ("pin_first", "pin_last"):
+                    if key in spec and not (isinstance(spec[key], list) and
+                                            all(isinstance(x, str) for x in spec[key])):
+                        raise ConfigValidationError(
+                            f"{where}.randomize_questions.{key} must be a list of question names")
+            elif not isinstance(spec, bool):
+                raise ConfigValidationError(
+                    f"{where}.randomize_questions must be true/false or "
+                    "{pin_first: [...], pin_last: [...]}")
+            if spec and ptype in ("annotation", "training"):
+                raise ConfigValidationError(
+                    f"{where}.randomize_questions applies to survey pages only")
+
+    groups = phases.get("counterbalance") if isinstance(phases, dict) else None
+    if groups is None:
+        return
+    if not isinstance(groups, list):
+        raise ConfigValidationError(
+            "phases.counterbalance must be a list of {pages: [...], method: ...}")
+    order = phases.get("order") if isinstance(phases.get("order"), list) else list(entries)
+    seen_pages = set()
+    for i, group in enumerate(groups):
+        where = f"phases.counterbalance[{i}]"
+        if not isinstance(group, dict):
+            raise ConfigValidationError(f"{where} must be a mapping")
+        pages = group.get("pages")
+        if not isinstance(pages, list) or len(pages) < 2:
+            raise ConfigValidationError(f"{where}.pages must list at least two phase pages")
+        method = group.get("method", "random")
+        if method not in COUNTERBALANCE_METHODS:
+            raise ConfigValidationError(
+                f"{where}.method must be one of {', '.join(COUNTERBALANCE_METHODS)}, "
+                f"not '{method}'")
+        unknown = set(group) - {"pages", "method"}
+        if unknown:
+            raise ConfigValidationError(
+                f"{where} has unknown key(s): {', '.join(sorted(unknown))}")
+        types = set()
+        for page in pages:
+            if page not in entries:
+                raise ConfigValidationError(f"{where}.pages names '{page}', which no phase defines")
+            if page not in order:
+                raise ConfigValidationError(f"{where}.pages names '{page}', which is not in phases.order")
+            if page in seen_pages:
+                raise ConfigValidationError(f"{where}.pages: '{page}' is already in another group")
+            seen_pages.add(page)
+            types.add(str(entries[page].get("type") or page).lower())
+        if len(types) > 1:
+            raise ConfigValidationError(
+                f"{where}.pages mixes phase types ({', '.join(sorted(types))}). Pages "
+                "of different types never sit next to each other in the study, so only "
+                "pages of one type can be counterbalanced against each other.")
+        if types & {"annotation", "training"}:
+            raise ConfigValidationError(
+                f"{where}: annotation and training pages cannot be counterbalanced")
+
+
+def phase_page_schemes(config_data: Dict[str, Any],
+                       config_file_dir: Optional[str] = None) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+    """``{page: [question schemes]}`` read the way the server reads them, or
+    None when a file cannot be found here (the server, which looks in more
+    places, reports that)."""
+    from potato.server_utils.phase_files import load_phase_schemes, resolve_phase_file
+    from potato.server_utils.phase_flow import phases_dict
+    pages: Dict[str, List[Dict[str, Any]]] = {}
+    for name, entry in phases_dict(config_data).items():
+        kind = str(entry.get("type") or name).lower()
+        if entry.get("_kind"):
+            from potato.runtimes.registry import get_adapter
+            adapter = get_adapter(entry["_kind"])
+            if adapter is not None:
+                pages[name] = adapter.answer_schemes(name, entry)
+            continue
+        if kind in ("training", "annotation"):
+            continue
+        schemes: List[Dict[str, Any]] = []
+        if isinstance(entry.get("annotation_schemes"), list):
+            schemes.extend(s for s in entry["annotation_schemes"] if isinstance(s, dict))
+        ids = [entry["instrument"]] if entry.get("instrument") else list(entry.get("instruments") or [])
+        if ids:
+            try:
+                from potato.survey_instruments import get_instrument_questions
+                for inst in ids:
+                    schemes.extend(get_instrument_questions(inst))
+            except Exception:
+                return None
+        filename = entry.get("file")
+        if isinstance(filename, str) and filename.lower().endswith((".json", ".jsonl", ".yaml", ".yml")):
+            path = resolve_phase_file(filename, config_file_dir)
+            if path is None:
+                return None
+            try:
+                schemes.extend(s for s in load_phase_schemes(path) if isinstance(s, dict))
+            except Exception:
+                return None
+        pages[name] = schemes
+    return pages
+
+
+def validate_phase_flow_files(config_data: Dict[str, Any],
+                              config_file_dir: Optional[str] = None) -> None:
+    from potato.server_utils.phase_flow import has_flow_rules, phases_dict
+    needs = has_flow_rules(config_data) or any(
+        e.get("expose_answers") for e in phases_dict(config_data).values())
+    if not needs:
+        return
+    pages = phase_page_schemes(config_data, config_file_dir)
+    if pages is None:
+        return
+    validate_phase_flow_references(config_data, pages)
+    from potato.server_utils.experiment_conditions import validate_condition_references
+    validate_condition_references(config_data, [s for v in pages.values() for s in v])
+
+
+def validate_phase_flow_references(config_data: Dict[str, Any],
+                                   page_schemes: Dict[str, List[Dict[str, Any]]]) -> None:
+    """At boot, once phase files are loaded: every question a page rule
+    names must be asked somewhere, and before the page that tests it.
+
+    A `show_when` that tests a question asked on that page or later can only
+    ever see it unanswered, so the page is always skipped; that is refused.
+    """
+    from potato.server_utils.phase_flow import CONDITION_PREFIX, phases_dict
+    entries = phases_dict(config_data)
+    # A runtime page answers questions of its own (a headphone check's
+    # `<page>_passed`), which page rules may test like survey answers.
+    page_schemes = dict(page_schemes)
+    from potato.runtimes.registry import get_adapter
+    for name, entry in entries.items():
+        adapter = get_adapter(entry.get("_kind")) if isinstance(entry, dict) else None
+        if adapter is not None and name not in page_schemes:
+            page_schemes[name] = adapter.answer_schemes(name, entry)
+    phases = config_data.get("phases")
+    order = (phases.get("order") if isinstance(phases, dict) and
+             isinstance(phases.get("order"), list) else list(entries))
+    position = {}
+    for idx, name in enumerate(order):
+        for scheme in page_schemes.get(name, []):
+            if isinstance(scheme, dict) and scheme.get("name"):
+                position.setdefault(scheme["name"], idx)
+    for name, entry in entries.items():
+        if entry.get("expose_answers"):
+            page_idx = order.index(name) if name in order else len(order)
+            for q in entry["expose_answers"]:
+                if q not in position:
+                    raise ConfigValidationError(
+                        f"phases.{name}.expose_answers names '{q}', which no phase page asks")
+                if position[q] >= page_idx:
+                    raise ConfigValidationError(
+                        f"phases.{name}.expose_answers names '{q}', which is asked on a "
+                        "later page; the timeline would always receive it empty")
+        spec = entry.get("randomize_questions")
+        if isinstance(spec, dict):
+            asked = {s.get("name") for s in page_schemes.get(name, []) if isinstance(s, dict)}
+            for key in ("pin_first", "pin_last"):
+                for q in spec.get(key) or []:
+                    if q not in asked:
+                        raise ConfigValidationError(
+                            f"phases.{name}.randomize_questions.{key} names '{q}', "
+                            "which is not a question on that page")
+        if name not in order:
+            continue
+        page_idx = order.index(name)
+        for key, spec, strict in (("show_when", entry, True),
+                                  ("exit_when", entry.get("exit_when"), False)):
+            if key not in entry or not isinstance(spec, dict):
+                continue
+            from potato.server_utils.display_logic import iter_leaf_conditions
+            for _cond_path, cond in iter_leaf_conditions(spec.get("show_when") or []):
+                schema = str(cond.get("schema", ""))
+                if schema.startswith(CONDITION_PREFIX):
+                    continue
+                if schema not in position:
+                    raise ConfigValidationError(
+                        f"phases.{name}.{key} refers to question '{schema}', which "
+                        "no phase page asks. Page rules read survey answers and "
+                        "conditions; per-item annotations are not visible to them")
+                asked = position[schema]
+                if (strict and asked >= page_idx) or (not strict and asked > page_idx):
+                    where = "on this page or later" if strict else "after this page"
+                    raise ConfigValidationError(
+                        f"phases.{name}.{key} tests '{schema}', which is asked {where}; "
+                        "it can only ever be unanswered when the rule is checked")
 
 
 def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
@@ -2293,6 +7057,20 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
                 if not isinstance(failure_config, dict):
                     raise ConfigValidationError("attention_checks.failure_handling must be a dictionary")
 
+                # The block is small and fixed, and nothing outside this list is
+                # read. An invented key -- `action: warn` is the natural guess,
+                # and it is not in the docs -- was accepted in silence, left the
+                # thresholds at their defaults, and the author concluded the
+                # feature did nothing.
+                unknown = sorted(set(failure_config) - ATTENTION_FAILURE_HANDLING_KEYS)
+                if unknown:
+                    logger.warning(
+                        "attention_checks.failure_handling: %s not recognized and "
+                        "will be ignored. It accepts %s.",
+                        ", ".join(repr(k) for k in unknown),
+                        ", ".join(sorted(ATTENTION_FAILURE_HANDLING_KEYS)),
+                    )
+
                 if "warn_threshold" in failure_config:
                     warn = failure_config["warn_threshold"]
                     if not isinstance(warn, int) or warn < 1:
@@ -2326,6 +7104,17 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
                 valid_modes = ["training", "mixed", "separate"]
                 if gold_config["mode"] not in valid_modes:
                     raise ConfigValidationError(f"gold_standards.mode must be one of: {', '.join(valid_modes)}")
+                # Accepted, loaded, logged like a working config, and serving
+                # nothing: no code path delivers gold items during the training
+                # phase. Warn here so `validate --strict` catches it before a
+                # study runs to completion measuring no accuracy at all.
+                if gold_config["mode"] == "training":
+                    logger.warning(
+                        "gold_standards.mode is 'training', which serves no "
+                        "gold items: nothing delivers them during the training "
+                        "phase. Use mode: mixed to inject them into the "
+                        "annotation stream, or put practice questions in the "
+                        "training phase's own config to grade during training.")
 
             # Validate frequency
             if "frequency" in gold_config:
@@ -2400,8 +7189,52 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
                 raise ConfigValidationError("agreement_metrics.refresh_interval must be an integer >= 10 seconds")
 
 
+#: How to run a study that is all survey or all jsPsych, until Potato runs one
+#: without an annotation phase.
+_NO_ANNOTATION_WORKAROUND = (
+    "For a study with nothing to annotate (all survey pages, or a jsPsych "
+    "task), add one item to the data file and a radio scheme with a single "
+    "label such as Finish, and list annotation last in phases.order. Not "
+    "pure_display: it saves nothing, so the item never completes and Next "
+    "returns the same page.")
+
+
+def validate_annotation_phase_present(config_data: Dict[str, Any]) -> None:
+    """Refuse a study with no annotation phase, which Potato cannot run yet.
+
+    With no annotation schemes the server crashed at startup (KeyError in
+    front_end). Leaving `annotation` out of `phases.order` did not skip it:
+    the phase was appended after the poststudy pages, so participants met the
+    annotation page after the debrief.
+    """
+    if not _collect_all_annotation_schemes(config_data):
+        raise ConfigValidationError(
+            "annotation_schemes is empty or missing; Potato needs at least one "
+            "annotation scheme. " + _NO_ANNOTATION_WORKAROUND)
+    phases = config_data.get("phases")
+    order = phases.get("order") if isinstance(phases, dict) else None
+    if not isinstance(order, list) or not order:
+        return
+
+    def is_annotation(name):
+        entry = phases.get(name) if isinstance(name, str) else None
+        return name == "annotation" or (
+            isinstance(entry, dict) and str(entry.get("type", "")).lower() == "annotation")
+
+    if not any(is_annotation(name) for name in order):
+        raise ConfigValidationError(
+            "phases.order has no annotation phase. Potato does not skip it: it "
+            "would run after the last page listed, after any debrief. Put "
+            "annotation where it belongs in phases.order. " + _NO_ANNOTATION_WORKAROUND)
+
+
 def validate_instance_reclaim_config(config_data: Dict[str, Any]) -> None:
     """Validate abandoned assignment reclaim configuration."""
+    minutes = config_data.get("assignment_hold_minutes")
+    if minutes is not None and (isinstance(minutes, bool)
+                                or not isinstance(minutes, (int, float)) or minutes <= 0):
+        raise ConfigValidationError(
+            "assignment_hold_minutes must be a positive number of minutes")
     if "instance_reclaim" not in config_data:
         return
 
@@ -2480,6 +7313,39 @@ def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
     if not data_directory.strip():
         raise ConfigValidationError("data_directory cannot be empty")
 
+    # A directory holding nothing this loader reads is the one failure that
+    # looks exactly like success: the server boots clean, `validate` passes,
+    # and the first annotator gets an empty study. Warn rather than raise --
+    # a watched directory is legitimately empty at boot, and the poller will
+    # fill it -- but say so, so `--strict` can refuse a study that would open
+    # with nothing in it.
+    resolved_directory = os.path.join(
+        config_data.get("task_dir") or ".", data_directory)
+    if os.path.isdir(resolved_directory):
+        from potato.directory_watcher import DirectoryWatcher
+        extensions = DirectoryWatcher.SUPPORTED_EXTENSIONS
+        entries = [name for name in sorted(os.listdir(resolved_directory))
+                   if os.path.isfile(os.path.join(resolved_directory, name))
+                   and not name.startswith(".")]
+        readable = [name for name in entries
+                    if name.lower().endswith(extensions)]
+        if not readable:
+            supported = ", ".join(extensions)
+            if entries:
+                shown = ", ".join(entries[:5])
+                if len(entries) > 5:
+                    shown += f", and {len(entries) - 5} more"
+                logger.warning(
+                    "data_directory '%s' holds %d file(s), none with an "
+                    "extension this loader reads (%s): %s. The study will "
+                    "open with no items.",
+                    data_directory, len(entries), supported, shown)
+            elif not config_data.get("watch_data_directory"):
+                logger.warning(
+                    "data_directory '%s' is empty and watch_data_directory is "
+                    "not set, so nothing will ever be loaded from it. The "
+                    "study will open with no items.", data_directory)
+
     # Validate watch_data_directory if present
     if "watch_data_directory" in config_data:
         watch_enabled = config_data["watch_data_directory"]
@@ -2517,11 +7383,10 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(data_sources, list):
         raise ConfigValidationError("data_sources must be a list")
 
-    # Valid source types
-    valid_types = [
-        "file", "url", "google_drive", "dropbox",
-        "s3", "huggingface", "google_sheets", "database"
-    ]
+    # One list of source types: the enum the loader builds sources from.
+    # This list and config_schema's were hand-kept copies of it.
+    from potato.data_sources.base import LIVE_SOURCE_TYPES, SourceType
+    valid_types = [t.value for t in SourceType]
 
     for i, source in enumerate(data_sources):
         if not isinstance(source, dict):
@@ -2540,6 +7405,52 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
                 f"data_sources[{i}] has invalid type '{source_type}'. "
                 f"Valid types: {', '.join(valid_types)}"
             )
+
+        # Live ingestion is cursor-based polling: database tables, and object
+        # stores polled for new objects under a prefix. Silently ignoring the
+        # block on other types would leave an admin believing polling was on
+        # when it was not.
+        if "live_ingestion" in source and source_type not in LIVE_SOURCE_TYPES:
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) does not support "
+                f"'live_ingestion' (only {', '.join(LIVE_SOURCE_TYPES)})"
+            )
+        live_block = source.get("live_ingestion")
+        if live_block is not None and not isinstance(live_block, dict):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}).live_ingestion must be a dictionary")
+        if (source_type in ("s3", "gcs", "azure_blob") and isinstance(live_block, dict)
+                and live_block.get("enabled") and not source.get("prefix")):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion needs 'prefix': "
+                f"new rows arrive as new objects under it")
+        live_dict = live_block if isinstance(live_block, dict) else {}
+        listing = live_dict.get("listing", "full")
+        from potato.data_sources.live_ingestion import LiveIngestionConfig
+        if listing not in LiveIngestionConfig.LISTING_MODES:
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion.listing must be one "
+                f"of {', '.join(LiveIngestionConfig.LISTING_MODES)} (got {listing!r})")
+        if listing == "after_last_key" and float(live_dict.get("overlap_seconds") or 0) > 0:
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion: overlap_seconds "
+                f"does not apply with listing: after_last_key -- rows are taken in key "
+                f"order, not by time, so re-reading a time window would list and "
+                f"download the whole prefix on every poll. Remove overlap_seconds")
+        initial = live_dict.get("initial_cursor")
+        if (listing == "after_last_key" and initial is not None
+                and not str(initial).startswith(source.get("prefix") or "")):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion.initial_cursor "
+                f"{initial!r} is a key, and must be the full key including the prefix "
+                f"{source.get('prefix')!r}; one without it sorts before every key and "
+                f"would read the whole prefix")
+        if listing != "full" and source_type not in ("s3", "gcs"):
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) live_ingestion.listing: "
+                f"{listing!r} works with s3 and gcs only"
+                + ("; Azure's listing cannot start after a key, so give each day or "
+                   "batch its own prefix instead" if source_type == "azure_blob" else ""))
 
         # Type-specific validation
         _validate_data_source_by_type(source, source_type, i)
@@ -2588,11 +7499,21 @@ def _validate_data_source_by_type(source: Dict, source_type: str, index: int) ->
                 f"{prefix} (type=dropbox) requires 'access_token' when using 'path'"
             )
 
-    elif source_type == "s3":
-        if not source.get("bucket"):
-            raise ConfigValidationError(f"{prefix} (type=s3) requires 'bucket'")
-        if not source.get("key"):
-            raise ConfigValidationError(f"{prefix} (type=s3) requires 'key'")
+    elif source_type in ("s3", "gcs", "azure_blob"):
+        bucket_key = "container" if source_type == "azure_blob" else "bucket"
+        if not source.get(bucket_key):
+            raise ConfigValidationError(f"{prefix} (type={source_type}) requires '{bucket_key}'")
+        if not source.get("key") and not source.get("prefix"):
+            raise ConfigValidationError(
+                f"{prefix} (type={source_type}) requires 'key' (one object) or 'prefix' "
+                f"(every data file under it)")
+        if source.get("key") and source.get("prefix"):
+            raise ConfigValidationError(
+                f"{prefix} (type={source_type}) takes 'key' or 'prefix', not both")
+        if (source_type == "azure_blob" and not source.get("connection_string")
+                and not source.get("account_url")):
+            raise ConfigValidationError(
+                f"{prefix} (type=azure_blob) requires 'connection_string' or 'account_url'")
 
     elif source_type == "huggingface":
         if not source.get("dataset"):
@@ -2625,6 +7546,91 @@ def _validate_data_source_by_type(source: Dict, source_type: str, index: int) ->
         if not source.get("query") and not source.get("table"):
             raise ConfigValidationError(
                 f"{prefix} (type=database) requires 'query' or 'table'"
+            )
+
+        _validate_live_ingestion_config(source, index)
+
+
+def _validate_live_ingestion_config(source: Dict, index: int) -> None:
+    """
+    Validate a database source's ``live_ingestion`` block.
+
+    Runs at config load so a bad block fails fast with a pointed message.
+    Without this, ``DataSourceManager._init_sources()`` catches the error per
+    source and continues, so a misconfigured live source disappears behind a
+    single log line and polling silently never happens.
+
+    Raises:
+        ConfigValidationError: If the live_ingestion block is invalid
+    """
+    if "live_ingestion" not in source:
+        return
+
+    prefix = f"data_sources[{index}].live_ingestion"
+    block = source["live_ingestion"]
+
+    if not isinstance(block, dict):
+        raise ConfigValidationError(f"{prefix} must be a dictionary")
+
+    for flag in ("enabled", "replay_on_start"):
+        if flag in block and not isinstance(block[flag], bool):
+            raise ConfigValidationError(f"{prefix}.{flag} must be a boolean (true/false)")
+
+    if not block.get("enabled"):
+        return
+
+    # One source of truth for the key set, shared with the dataclass, so the
+    # two cannot drift apart.
+    from potato.data_sources.live_ingestion import LiveIngestionConfig
+
+    unknown = sorted(set(block) - LiveIngestionConfig.VALID_KEYS)
+    if unknown:
+        raise ConfigValidationError(
+            f"{prefix} has unrecognized key '{unknown[0]}'. "
+            f"Valid keys: {', '.join(sorted(LiveIngestionConfig.VALID_KEYS))}"
+        )
+
+    for key in ("poll_interval_seconds", "overlap_seconds", "safety_lag_seconds",
+                "backoff_initial_seconds", "backoff_max_seconds"):
+        if key in block and not isinstance(block[key], (int, float)):
+            raise ConfigValidationError(f"{prefix}.{key} must be a number")
+
+    for key in ("batch_size", "max_consecutive_failures", "stop_after_items"):
+        if key in block and not isinstance(block[key], int):
+            raise ConfigValidationError(f"{prefix}.{key} must be an integer")
+
+    try:
+        config = LiveIngestionConfig.from_dict(block)
+    except (TypeError, ValueError) as e:
+        raise ConfigValidationError(f"{prefix} is invalid: {e}") from e
+
+    errors = config.validate()
+    if errors:
+        raise ConfigValidationError(f"{prefix}.{errors[0]}")
+
+    query = source.get("query") or ""
+    if ":cursor" in query:
+        # 'col > :cursor' with a NULL bind matches zero rows, forever and
+        # silently. Refuse to start rather than look like an empty table.
+        if block.get("initial_cursor") is None:
+            raise ConfigValidationError(
+                f"data_sources[{index}] (type=database) query contains ':cursor', "
+                f"so {prefix}.initial_cursor is required -- a NULL cursor makes "
+                f"'created_at > :cursor' match zero rows forever"
+            )
+    elif not config.cursor_column:
+        raise ConfigValidationError(
+            f"{prefix} requires 'cursor_column' (or a query containing a "
+            f"':cursor' placeholder)"
+        )
+
+    identifier_re = re.compile(r'\A[\w][\w.$]*\Z', re.ASCII)
+    for key in ("cursor_column", "tiebreaker_column"):
+        value = block.get(key)
+        if value and not identifier_re.match(str(value)):
+            raise ConfigValidationError(
+                f"{prefix}.{key} '{value}' is not a valid SQL identifier "
+                f"(letters, digits, underscores and dots only)"
             )
 
 
@@ -2718,6 +7724,13 @@ def validate_database_config(db_config: Dict[str, Any]) -> None:
     if db_config['type'] == 'mysql':
         if 'password' not in db_config:
             raise ConfigValidationError("MySQL database requires password")
+        import importlib.util
+        if importlib.util.find_spec("mysql") is None or \
+                importlib.util.find_spec("mysql.connector") is None:
+            raise ConfigValidationError(
+                "database.type is 'mysql', but the MySQL driver "
+                "(mysql-connector-python) is not installed. Install it with: "
+                "pip install 'potato-annotation[mysql]'")
 
         # Validate port if specified
         if 'port' in db_config:
@@ -2799,28 +7812,29 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         for i, group in enumerate(batch_config.get('groups') or []):
             if not isinstance(group, dict):
                 continue
-            file_entry = group.get(
-                'instances_file',
-                group.get('items_file', group.get('instance_ids_file')),
-            )
-            if not file_entry:
-                continue
-            if isinstance(file_entry, dict):
-                file_path = file_entry.get("path")
-            else:
-                file_path = file_entry
+            file_entries = [
+                group.get('instances_file', group.get('items_file', group.get('instance_ids_file'))),
+                group.get('data_file', group.get('input_data_file', group.get('input_file'))),
+            ]
+            for file_entry in file_entries:
+                if not file_entry:
+                    continue
+                if isinstance(file_entry, dict):
+                    file_path = file_entry.get("path")
+                else:
+                    file_path = file_entry
 
-            try:
-                validated_path = validate_path_security(file_path, base_dir, project_dir)
-                if not os.path.exists(validated_path):
-                    raise ConfigValidationError(
-                        f"batch_assignment.groups[{i}] file not found: "
-                        f"{file_path} (resolved to: {validated_path})"
+                try:
+                    validated_path = validate_path_security(file_path, base_dir, project_dir)
+                    if not os.path.exists(validated_path):
+                        raise ConfigValidationError(
+                            f"batch_assignment.groups[{i}] file not found: "
+                            f"{file_path} (resolved to: {validated_path})"
+                        )
+                except ConfigSecurityError as e:
+                    raise ConfigSecurityError(
+                        f"batch_assignment.groups[{i}] file: {str(e)}"
                     )
-            except ConfigSecurityError as e:
-                raise ConfigSecurityError(
-                    f"batch_assignment.groups[{i}] file: {str(e)}"
-                )
 
     # Validate data_directory if configured
     if 'data_directory' in config_data:
@@ -2835,6 +7849,9 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                     raise ConfigValidationError(f"data_directory is not a directory: {data_directory} (resolved to: {validated_dir})")
             except ConfigSecurityError as e:
                 raise ConfigSecurityError(f"data_directory: {str(e)}")
+
+    # Ontology files behind `label_source` (ontology-backed labels)
+    _validate_label_source_files(config_data, base_dir)
 
     # Validate output_annotation_dir
     if 'output_annotation_dir' in config_data:
@@ -2909,6 +7926,106 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                             )
                 except ConfigSecurityError as e:
                     raise ConfigSecurityError(f"header_logo: {str(e)}")
+
+
+def warn_about_unreadable_optional_files(config_data: Dict[str, Any],
+                                         project_dir: str) -> List[str]:
+    """Describe optional files a config names that the server will not find.
+
+    These are the paths the server shrugs off: a missing
+    ``keyword_highlights_file`` costs the study its highlights and logs one
+    line at boot. `potato validate` said "OK -- no issues found" for all of
+    them, so the one tool whose job is to catch this before launch was the one
+    that did not.
+
+    Warnings rather than errors, because the server really does start. Under
+    ``--strict`` they fail, which is what CI wants.
+
+    Also names ``header_file`` and ``base_html_template``, which are read by
+    nothing at all: the header and base template paths were made
+    non-configurable and the keys were left behind, so they are inert whether
+    the file exists or not. A custom base template therefore cannot change
+    what a page loads -- issue #177 tried it to keep trackers off the consent
+    page.
+    """
+    messages: List[str] = []
+    if not isinstance(config_data, dict):
+        return messages
+
+    task_dir = config_data.get('task_dir') or '.'
+    try:
+        base_dir = validate_path_security(task_dir, project_dir)
+    except ConfigSecurityError:
+        return messages
+
+    if config_data.get('header_file'):
+        messages.append(
+            "'header_file' is read by nothing: the header template path is no "
+            "longer configurable. Delete the key -- the file it names is "
+            "never opened, present or not."
+        )
+    if config_data.get('base_html_template'):
+        messages.append(
+            "'base_html_template' is read by nothing: every page renders "
+            "through the built-in base_template_v2.html. Delete the key -- the "
+            "template it names is never opened, present or not."
+        )
+
+    for key in ('keyword_highlights_file', 'annotation_codebook_url'):
+        value = config_data.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if value.startswith(("http://", "https://")):
+            continue
+        if key == 'annotation_codebook_url' and value.startswith('/'):
+            # A link the page serves, not a path on disk: /media/<file> is
+            # <media_directory>/<file>; any other site path cannot be checked.
+            if not value.startswith('/media/'):
+                continue
+            from urllib.parse import unquote, urlsplit
+            relative = unquote(urlsplit(value).path)[len('/media/'):]
+            media_dir = config_data.get('media_directory') or 'media'
+            if os.path.isabs(media_dir):
+                # Served from there as configured; no project path to check against.
+                if not os.path.exists(os.path.join(media_dir, relative)):
+                    messages.append(
+                        f"{key} names {value!r}, which is not in {media_dir}. The "
+                        f"server starts anyway and the link is broken.")
+                continue
+            value = os.path.join(media_dir, relative)
+        try:
+            resolved = validate_path_security(value, base_dir, project_dir)
+        except ConfigSecurityError as e:
+            messages.append(f"{key}: {e}")
+            continue
+        if not os.path.exists(resolved):
+            messages.append(
+                f"{key} names {value!r}, which does not exist (looked in "
+                f"{resolved}). The server starts anyway and the feature is "
+                f"silently off."
+            )
+
+    # A map's outline file: missing, the page shows an error box in place of
+    # the map, and nothing else says so.
+    for scheme in config_data.get('annotation_schemes') or []:
+        if not (isinstance(scheme, dict) and scheme.get('annotation_type') == 'geo_annotation'):
+            continue
+        outline = (scheme.get('basemap') or {}).get('geojson') \
+            if isinstance(scheme.get('basemap'), dict) else None
+        if not isinstance(outline, str) or outline.startswith(("http://", "https://", "/media/")):
+            continue
+        try:
+            resolved = validate_path_security(outline, base_dir, project_dir)
+        except ConfigSecurityError as e:
+            messages.append(f"{scheme.get('name')}.basemap.geojson: {e}")
+            continue
+        if not os.path.exists(resolved):
+            messages.append(
+                f"geo_annotation '{scheme.get('name')}': basemap.geojson names {outline!r}, "
+                f"which does not exist (looked in {resolved}); the page will show an error "
+                f"in place of the map.")
+
+    return messages
 
 
 def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:
@@ -3015,6 +8132,19 @@ def validate_training_config(config_data: Dict[str, Any], project_dir: str, conf
             if not isinstance(feedback['allow_retry'], bool):
                 raise ConfigValidationError("training.feedback.allow_retry must be a boolean")
 
+    # The training block's own keys are checked against the allowlist, but
+    # nothing looked inside these two, so a misspelt `min_corect` was ignored
+    # without a word.
+    for block, allowed in (
+            ('passing_criteria', {'min_correct', 'require_all_correct', 'max_mistakes',
+                                  'max_mistakes_per_question', 'max_attempts'}),
+            ('feedback', {'show_explanations', 'allow_retry'})):
+        section = training_config.get(block)
+        if isinstance(section, dict):
+            for key in sorted(set(section) - allowed):
+                logger.warning("Unknown key training.%s.%s is ignored (known: %s)",
+                               block, key, ", ".join(sorted(allowed)))
+
     # Validate failure action
     if 'failure_action' in training_config:
         failure_action = training_config['failure_action']
@@ -3115,6 +8245,10 @@ def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
     ):
         raise ConfigValidationError("batch_assignment.annotator_key must be a non-empty string")
 
+    auto_assign_annotators = batch_config.get('auto_assign_annotators', False)
+    if not isinstance(auto_assign_annotators, bool):
+        raise ConfigValidationError("batch_assignment.auto_assign_annotators must be a boolean")
+
     groups = batch_config.get('groups', [])
     if groups is None:
         return
@@ -3131,8 +8265,15 @@ def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
             'instances_file',
             group.get('items_file', group.get('instance_ids_file')),
         )
+        data_file_entry = group.get(
+            'data_file',
+            group.get('input_data_file', group.get('input_file')),
+        )
 
-        if not isinstance(users, list) or not users:
+        if users is None and auto_assign_annotators:
+            users = []
+
+        if not isinstance(users, list) or (not users and not auto_assign_annotators):
             raise ConfigValidationError(
                 f"batch_assignment.groups[{idx}] must define non-empty annotators/users list"
             )
@@ -3142,12 +8283,13 @@ def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
             )
 
         has_instances = instances is not None
-        has_file = file_entry is not None
+        has_file = file_entry is not None or data_file_entry is not None
 
         if not has_instances and not has_file:
             raise ConfigValidationError(
                 f"batch_assignment.groups[{idx}] must define either "
-                "instances/items/instance_ids or instances_file/items_file/instance_ids_file"
+                "instances/items/instance_ids, instances_file/items_file/"
+                "instance_ids_file, or data_file/input_data_file/input_file"
             )
 
         if has_instances and (not isinstance(instances, list) or not instances):
@@ -3159,19 +8301,21 @@ def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
                 f"batch_assignment.groups[{idx}].instances/items/instance_ids must contain non-empty strings"
             )
 
-        if has_file:
-            if isinstance(file_entry, str):
-                if not file_entry.strip():
+        for checked_file_entry in (file_entry, data_file_entry):
+            if checked_file_entry is None:
+                continue
+            if isinstance(checked_file_entry, str):
+                if not checked_file_entry.strip():
                     raise ConfigValidationError(
                         f"batch_assignment.groups[{idx}] file path must be non-empty"
                     )
-            elif isinstance(file_entry, dict):
-                path = file_entry.get('path')
+            elif isinstance(checked_file_entry, dict):
+                path = checked_file_entry.get('path')
                 if not isinstance(path, str) or not path.strip():
                     raise ConfigValidationError(
                         f"batch_assignment.groups[{idx}] file entry must define a non-empty path"
                     )
-                encoding = file_entry.get('encoding')
+                encoding = checked_file_entry.get('encoding')
                 if encoding is not None and not isinstance(encoding, str):
                     raise ConfigValidationError(
                         f"batch_assignment.groups[{idx}] file encoding must be a string"
@@ -3180,6 +8324,174 @@ def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
                 raise ConfigValidationError(
                     f"batch_assignment.groups[{idx}] file entry must be a path string or mapping"
                 )
+
+        for key in ('max_annotators', 'annotator_count', 'slots'):
+            if key not in group:
+                continue
+            value = group[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ConfigValidationError(
+                    f"batch_assignment.groups[{idx}].{key} must be a positive integer"
+                )
+
+
+def _batch_assignment_has_group_data_files(config_data: Dict[str, Any]) -> bool:
+    batch_config = config_data.get('batch_assignment')
+    if not isinstance(batch_config, dict):
+        return False
+    for group in batch_config.get('groups') or []:
+        if not isinstance(group, dict):
+            continue
+        if group.get('data_file') or group.get('input_data_file') or group.get('input_file'):
+            return True
+    return False
+
+
+DATA_SOURCE_REQUIRED_MESSAGE = (
+    "At least one data source must be configured: "
+    "'data_files', 'data_directory', 'data_sources', or "
+    "'batch_assignment.groups[].data_file'"
+)
+
+
+def config_has_data_source(config_data: Dict[str, Any]) -> bool:
+    """Whether the config names at least one way to get items.
+
+    There are four mutually-acceptable sources, and tools that answer this
+    question by hand keep learning about them one at a time: the preview CLI
+    still asked only about ``data_files``/``data_directory`` when v2.8.0 shipped
+    live database ingestion, so it reported a hard ERROR on a ``data_sources``
+    config the server loads without complaint. Both callers go through here now,
+    so a fifth source is one edit rather than two.
+    """
+    if not isinstance(config_data, dict):
+        return False
+    data_files = config_data.get('data_files')
+    if isinstance(data_files, list) and data_files:
+        return True
+    if config_data.get('data_directory'):
+        return True
+    if config_data.get('data_sources'):
+        return True
+    return _batch_assignment_has_group_data_files(config_data)
+
+
+def validate_rbac_config(config_data: Dict[str, Any]) -> None:
+    """Validate the optional ``rbac`` block.
+
+    Rules:
+      * ``rbac`` is a mapping.
+      * ``roles`` maps role names to lists of known permission strings.
+      * ``user_role_assignments`` / ``sso_role_mapping`` map strings to role
+        names that resolve (built-in defaults or a role declared in ``roles``).
+    """
+    rbac = config_data.get('rbac')
+    if rbac is None:
+        return
+    if not isinstance(rbac, dict):
+        raise ConfigValidationError("rbac must be a dictionary")
+
+    from potato.server_utils.rbac import Permission, DEFAULT_ROLE_PERMISSIONS
+
+    known_roles = set(DEFAULT_ROLE_PERMISSIONS.keys())
+    roles = rbac.get('roles')
+    if roles is not None:
+        if not isinstance(roles, dict):
+            raise ConfigValidationError("rbac.roles must be a mapping of role -> permissions")
+        for role, perms in roles.items():
+            if not isinstance(perms, (list, tuple)):
+                raise ConfigValidationError(
+                    f"rbac.roles['{role}'] must be a list of permissions"
+                )
+            for perm in perms:
+                if perm not in Permission.ALL:
+                    raise ConfigValidationError(
+                        f"rbac.roles['{role}'] has unknown permission '{perm}'. "
+                        f"Valid permissions: {sorted(Permission.ALL)}"
+                    )
+            known_roles.add(role)
+
+    for field in ('user_role_assignments', 'sso_role_mapping'):
+        mapping = rbac.get(field)
+        if mapping is None:
+            continue
+        if not isinstance(mapping, dict):
+            raise ConfigValidationError(f"rbac.{field} must be a mapping")
+        for key, role in mapping.items():
+            if not isinstance(role, str) or role not in known_roles:
+                raise ConfigValidationError(
+                    f"rbac.{field}['{key}'] references unknown role '{role}'. "
+                    f"Declare it under rbac.roles or use a built-in role "
+                    f"({sorted(DEFAULT_ROLE_PERMISSIONS)})."
+                )
+
+    enabled = rbac.get('enabled', True)
+    if not isinstance(enabled, bool):
+        raise ConfigValidationError("rbac.enabled must be a boolean")
+
+
+def validate_cohort_schemes_config(config_data: Dict[str, Any]) -> None:
+    """Validate ``scheme_sets`` and per-group ``schemes`` bindings.
+
+    A ``schemes`` binding (top-level scheme_set or batch group) may be:
+      * a string naming a ``scheme_sets`` entry or a global scheme's ``name``;
+      * a list whose items are global scheme names or inline scheme dicts.
+    Named references must resolve against ``scheme_sets`` or the global
+    ``annotation_schemes``.
+    """
+    scheme_sets = config_data.get('scheme_sets')
+    global_schemes = config_data.get('annotation_schemes') or []
+    global_scheme_names = {
+        s.get('name') for s in global_schemes if isinstance(s, dict) and s.get('name')
+    }
+    scheme_set_names = set()
+
+    if scheme_sets is not None:
+        if not isinstance(scheme_sets, dict):
+            raise ConfigValidationError("scheme_sets must be a mapping of name -> scheme list")
+        scheme_set_names = set(scheme_sets.keys())
+        for name, members in scheme_sets.items():
+            _validate_scheme_binding(
+                members, f"scheme_sets['{name}']",
+                global_scheme_names, scheme_set_names=set(),
+            )
+
+    batch_config = config_data.get('batch_assignment')
+    if isinstance(batch_config, dict):
+        for idx, group in enumerate(batch_config.get('groups') or []):
+            if not isinstance(group, dict) or 'schemes' not in group:
+                continue
+            _validate_scheme_binding(
+                group['schemes'], f"batch_assignment.groups[{idx}].schemes",
+                global_scheme_names, scheme_set_names,
+            )
+
+
+def _validate_scheme_binding(binding, path, global_scheme_names, scheme_set_names):
+    """Validate a single ``schemes`` binding value (str, or list of str/dicts)."""
+    if isinstance(binding, str):
+        if binding not in scheme_set_names and binding not in global_scheme_names:
+            raise ConfigValidationError(
+                f"{path} references unknown scheme set / scheme name '{binding}'"
+            )
+        return
+    if not isinstance(binding, list) or not binding:
+        raise ConfigValidationError(
+            f"{path} must be a non-empty scheme-set name or list of schemes"
+        )
+    for member in binding:
+        if isinstance(member, str):
+            if member not in global_scheme_names:
+                raise ConfigValidationError(
+                    f"{path} references unknown scheme name '{member}' "
+                    f"(not found in annotation_schemes)"
+                )
+        elif isinstance(member, dict):
+            validate_single_annotation_scheme(member, path)
+        else:
+            raise ConfigValidationError(
+                f"{path} entries must be scheme names or inline scheme mappings"
+            )
 
 
 def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
@@ -3217,11 +8529,34 @@ def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
         if not isinstance(cat_config['category_key'], str) or not cat_config['category_key'].strip():
             raise ConfigValidationError("category_assignment.category_key must be a non-empty string")
 
+    # Validate dynamic expertise block. Every reader does
+    # `dynamic.get('enabled')`, so the natural shorthand
+    # `dynamic: true` used to reach them and raise AttributeError while
+    # building the item state manager -- a crash at boot, from a config
+    # that validated.
+    if 'dynamic' in cat_config and not isinstance(cat_config['dynamic'], dict):
+        raise ConfigValidationError(
+            "category_assignment.dynamic must be a dictionary. To turn "
+            "dynamic expertise on, write `dynamic: {enabled: true}`.")
+
     # Validate qualification settings
     if 'qualification' in cat_config:
         qual = cat_config['qualification']
         if not isinstance(qual, dict):
             raise ConfigValidationError("category_assignment.qualification must be a dictionary")
+
+        # Accepted for compatibility but read by nothing: qualifications come
+        # only from the training phase (calculate_and_set_qualifications), so
+        # these promised a prestudy source and a score combination that never
+        # happened.
+        inert = [k for k in ('source', 'combine_method') if k in qual]
+        if inert:
+            logger.warning(
+                "category_assignment.qualification.%s %s not used: "
+                "qualifications are computed from the training phase only. "
+                "Remove %s.",
+                " and ".join(inert), "is" if len(inert) == 1 else "are",
+                "it" if len(inert) == 1 else "them")
 
         # Validate source
         if 'source' in qual:
@@ -3409,6 +8744,55 @@ def validate_diversity_config(config_data: Dict[str, Any]) -> None:
             )
 
 
+def validate_embeddings_config(config_data: Dict[str, Any]) -> None:
+    """Validate the project-wide ``embeddings`` block.
+
+    Deliberately shallow: backend-specific keys belong to the backend, and a
+    validator that enumerates them here goes stale the first time someone adds
+    one. What is checked is what silently misbehaves — an unknown backend name
+    (which would otherwise be discovered only when the corpus map came up
+    empty) and a 'custom' backend with nothing to call.
+
+    Raises:
+        ConfigValidationError: if the block cannot produce an embedder.
+    """
+    if 'embeddings' not in config_data:
+        return
+
+    block = config_data['embeddings']
+    if not isinstance(block, dict):
+        raise ConfigValidationError("embeddings must be a dictionary")
+
+    backend = block.get('backend', 'auto')
+    if not isinstance(backend, str):
+        raise ConfigValidationError("embeddings.backend must be a string")
+
+    from potato.embedders import backend_names
+    known = set(backend_names()) | {'auto'}
+    if backend not in known:
+        raise ConfigValidationError(
+            f"embeddings.backend '{backend}' is not a known backend. "
+            f"Available: {', '.join(sorted(known))}")
+
+    if backend == 'custom' and not (block.get('entrypoint')
+                                    or block.get('endpoint')):
+        raise ConfigValidationError(
+            "embeddings.backend is 'custom' but neither embeddings.entrypoint "
+            "('module.path:callable') nor embeddings.endpoint (an HTTP URL) "
+            "was set")
+
+    entrypoint = block.get('entrypoint')
+    if entrypoint is not None and (not isinstance(entrypoint, str)
+                                   or ':' not in entrypoint):
+        raise ConfigValidationError(
+            "embeddings.entrypoint must look like 'module.path:callable', "
+            f"got {entrypoint!r}")
+
+    for key in ('model', 'source_field', 'cache_dir', 'media_root'):
+        if key in block and block[key] is not None and not isinstance(block[key], str):
+            raise ConfigValidationError(f"embeddings.{key} must be a string")
+
+
 def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None:
     """
     Validate embedding visualization configuration.
@@ -3506,6 +8890,144 @@ def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None
             )
 
 
+# Config blocks that carry LLM endpoint settings (endpoint_type, model,
+# base_url, api_key, max_tokens, ...). Environment variable references
+# (${VAR}) inside these blocks are substituted at load time so a single set
+# of env vars can retarget every config at a different LLM endpoint.
+# Substitution is deliberately NOT applied to the whole config: prompt
+# templates, layouts, and instance text elsewhere may legitimately contain
+# ${...}-looking content.
+_LLM_ENV_SUBSTITUTION_BLOCKS = (
+    "live_agent",
+    "live_coding_agent",
+    "solo_mode",
+    "labeling_engine",
+    "judge_calibration",
+    "agent_proxy",
+    "chat_support",
+)
+
+# Keys whose values must be numeric after env substitution (YAML gives typed
+# scalars, but ${VAR} substitution always yields strings).
+_NUMERIC_LLM_KEYS = {"max_tokens", "temperature", "timeout", "max_turns", "max_steps", "top_p"}
+
+# Top-level secrets that accept ${VAR}. These are not part of an LLM block, but
+# the docs have long shown `secret_key: ${POTATO_SECRET_KEY}` — which silently
+# stored the literal string "${POTATO_SECRET_KEY}" as the Flask signing key.
+# A fixed, publicly documented signing key means anyone can forge a session
+# cookie, so this is a security fix rather than a convenience.
+_SECRET_SUBSTITUTION_KEYS = ("secret_key", "admin_api_key")
+
+
+def _substitute_env_typed(value: Any, key: Optional[str] = None) -> Any:
+    """Recursively substitute ${VAR} references, coercing numeric LLM settings.
+
+    Behaves like credentials.substitute_env_vars, but when a substitution
+    happens under a known-numeric key (e.g. max_tokens), the resulting string
+    is converted back to int/float so downstream API clients receive typed
+    values.
+    """
+    from potato.data_sources.credentials import substitute_env_vars
+
+    if isinstance(value, dict):
+        return {k: _substitute_env_typed(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute_env_typed(v, key) for v in value]
+    if isinstance(value, str):
+        substituted = substitute_env_vars(value)
+        if key in _NUMERIC_LLM_KEYS and isinstance(substituted, str) and substituted != value:
+            try:
+                return int(substituted)
+            except ValueError:
+                try:
+                    return float(substituted)
+                except ValueError:
+                    return substituted
+        return substituted
+    return value
+
+
+def _substitute_llm_block_env_vars(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply env var substitution to the whitelisted LLM config blocks.
+
+    Complements _merge_ai_config_file (which handles ai_support): blocks like
+    live_agent, solo_mode, judge_calibration, and agent_proxy configure their
+    own endpoints and previously received no substitution (solo_mode only
+    expanded api_key itself).
+    """
+    for block_name in _LLM_ENV_SUBSTITUTION_BLOCKS:
+        block = config_data.get(block_name)
+        if isinstance(block, dict):
+            config_data[block_name] = _substitute_env_typed(block)
+
+    # Top-level secret scalars.
+    for key in _SECRET_SUBSTITUTION_KEYS:
+        if isinstance(config_data.get(key), str):
+            config_data[key] = _substitute_env_typed(config_data[key], key)
+
+    # huggingface_backup.token. The documented form is `token: "${HF_TOKEN}"`,
+    # which without this reaches CommitScheduler as that literal string and the
+    # backup silently never authenticates.
+    backup_block = config_data.get("huggingface_backup")
+    if isinstance(backup_block, dict) and isinstance(backup_block.get("token"), str):
+        backup_block["token"] = _substitute_env_typed(backup_block["token"], "token")
+
+    # backup.sinks[*] credentials take the same `${VAR}` form.
+    backup_settings = config_data.get("backup")
+    if isinstance(backup_settings, dict):
+        for sink in backup_settings.get("sinks") or []:
+            if not isinstance(sink, dict):
+                continue
+            for key in ("token", "access_key_id", "secret_access_key",
+                        "bucket", "endpoint_url"):
+                if isinstance(sink.get(key), str):
+                    sink[key] = _substitute_env_typed(sink[key], key)
+
+    # OAuth client secrets, which live per-provider under authentication.providers.
+    auth_block = config_data.get("authentication")
+    if isinstance(auth_block, dict):
+        providers = auth_block.get("providers")
+        if isinstance(providers, dict):
+            for provider_name, provider_cfg in providers.items():
+                if not isinstance(provider_cfg, dict):
+                    continue
+                for key in ("client_secret", "client_id"):
+                    if isinstance(provider_cfg.get(key), str):
+                        provider_cfg[key] = _substitute_env_typed(provider_cfg[key], key)
+
+    # Anywhere else. The deploy preflight (D006) flags a literal credential at
+    # any key path and says to replace it with ${ENV_VAR}; blocks outside the
+    # lists above (trace_ingestion, for one) then kept the literal "${API_KEY}"
+    # as their secret. A credential-named leaf, or a value that is exactly one
+    # ${VAR} reference, is expanded wherever it sits.
+    _substitute_secret_references(config_data)
+
+    return config_data
+
+
+#: Leaf names the deploy preflight treats as credentials (D006); kept in step
+#: with potato/deploy/preflight.py by tests/unit/test_secret_env_substitution.py.
+_SECRET_LEAF_NAMES = ("api_key", "secret_key", "client_secret", "password",
+                      "token", "access_token", "auth_token")
+_WHOLE_ENV_REFERENCE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*\}$")
+
+
+def _substitute_secret_references(node: Any) -> None:
+    if isinstance(node, dict):
+        items = node.items()
+    elif isinstance(node, list):
+        items = enumerate(node)
+    else:
+        return
+    for key, value in list(items):
+        if isinstance(value, str):
+            if "${" in value and (key in _SECRET_LEAF_NAMES
+                                  or _WHOLE_ENV_REFERENCE.match(value)):
+                node[key] = _substitute_env_typed(value, key if isinstance(key, str) else None)
+        else:
+            _substitute_secret_references(value)
+
+
 def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[str, Any]:
     """
     Merge an external ai-config.yaml into the main config if specified.
@@ -3522,18 +9044,23 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
     Returns:
         The config_data with external AI config merged in (modified in place and returned)
     """
-    ai_support = config_data.get("ai_support", {})
+    if "ai_support" not in config_data:
+        return config_data
+
+    ai_support = config_data.get("ai_support")
     if not isinstance(ai_support, dict):
         return config_data
 
     ai_config_file = ai_support.get("ai_config_file")
 
     if not ai_config_file:
-        # No external file specified - apply env var substitution to inline ai_config
-        if "ai_config" in ai_support:
-            from potato.data_sources.credentials import substitute_env_vars
-            ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
-            config_data["ai_support"] = ai_support
+        # No external file specified: substitute env vars across the whole
+        # inline block. `endpoint_type` sits beside `ai_config` rather than
+        # inside it, and used to be skipped, so a config written as
+        # `endpoint_type: ${POTATO_LLM_TEXT_ENDPOINT_TYPE}` reached validation
+        # with the literal `${...}` as its value and was rejected as an
+        # unknown endpoint type.
+        config_data["ai_support"] = _substitute_env_typed(ai_support)
         return config_data
 
     if not isinstance(ai_config_file, str):
@@ -3566,8 +9093,7 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
         return config_data
 
     # Apply environment variable substitution to external config
-    from potato.data_sources.credentials import substitute_env_vars
-    external_config = substitute_env_vars(external_config)
+    external_config = _substitute_env_typed(external_config)
 
     # Extract endpoint_type from external config (top-level key)
     if "endpoint_type" in external_config:
@@ -3581,11 +9107,57 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
     ai_support["ai_config"] = ai_config
 
     # Also apply env var substitution to the final merged ai_config
-    ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+    ai_support["ai_config"] = _substitute_env_typed(ai_support["ai_config"])
 
     config_data["ai_support"] = ai_support
     logger.info(f"Loaded AI endpoint config from {ai_config_file}")
     return config_data
+
+
+#: Boolean keys, mapped back to the words YAML 1.1 ate. `on`/`off` are the only
+#: spellings Potato's own keys use (`automatic_assignment.on`, `textarea.on`),
+#: so a `True` key is always a mis-parsed `on`.
+_YAML_BOOLEAN_KEYS = {True: "on", False: "off"}
+
+
+def _restore_yaml_boolean_keys(node, config_file: str = "", _path: str = ""):
+    """Turn boolean dict *keys* back into the strings they were written as.
+
+    `automatic_assignment: {on: true}` parses as `{True: True}` under YAML 1.1,
+    so `config["automatic_assignment"].get("on")` is None and the feature is
+    silently off. Four shipped example configs had exactly that, three of them
+    disabling automatic assignment without any sign of it.
+
+    It is also a crash: a dict with both a bool and a str key cannot be sorted,
+    so `jsonify` on `/api/schemas` raises `TypeError: '<' not supported between
+    instances of 'str' and 'bool'` and the annotation form never loads.
+
+    Quoting the key in YAML avoids all of this, and the warning says so -- but a
+    config that reads correctly to a human should not need the trick, so the
+    value is repaired rather than rejected.
+    """
+    if isinstance(node, dict):
+        repaired = {}
+        for key, value in node.items():
+            new_key = key
+            if isinstance(key, bool):
+                new_key = _YAML_BOOLEAN_KEYS[key]
+                logger.warning(
+                    "%s: `%s:` at %s was read as the boolean %s, because YAML "
+                    "treats bare on/off/yes/no as booleans. Reading it as "
+                    "`%s` instead; quote the key (`\"%s\":`) to be explicit.",
+                    config_file or "config", new_key,
+                    _path or "the top level", key, new_key, new_key,
+                )
+            repaired[new_key] = _restore_yaml_boolean_keys(
+                value, config_file, f"{_path}.{new_key}" if _path else str(new_key))
+        return repaired
+    if isinstance(node, list):
+        return [
+            _restore_yaml_boolean_keys(item, config_file, f"{_path}[{i}]")
+            for i, item in enumerate(node)
+        ]
+    return node
 
 
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:
@@ -3624,28 +9196,19 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
     except Exception as e:
         raise ConfigValidationError(f"Error reading configuration file {config_file}: {str(e)}")
 
+    # YAML 1.1 turns bare `on`, `off`, `yes` and `no` into booleans, including
+    # when they are *keys*. Fix before anything reads the config.
+    config_data = _restore_yaml_boolean_keys(config_data, config_file)
+
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
 
-    # Merge external AI config file if specified (before validation)
-    config_data = _merge_ai_config_file(config_data, config_file_dir)
+    config_data = normalize_config_before_validation(config_data, config_file_dir)
 
-    # Apply default values for common configuration options
-    if 'task_dir' not in config_data:
-        config_data['task_dir'] = '.'
-        logger.debug("task_dir not specified, defaulting to '.'")
-    if 'site_dir' not in config_data:
-        config_data['site_dir'] = 'default'
-        logger.debug("site_dir not specified, defaulting to 'default'")
-
-    # Resolve task_dir relative to config file directory if it's '.' or a relative path
-    if 'task_dir' in config_data:
-        task_dir = config_data['task_dir']
-        if task_dir == '.' or not os.path.isabs(task_dir):
-            # Resolve relative to config file's directory
-            task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
-            config_data['task_dir'] = task_dir
-            logger.debug(f"Resolved task_dir to: {task_dir}")
+    # Fold deprecated keys onto their replacements before anything reads them.
+    # Removes the legacy key, so the warn-only pass inside
+    # validate_yaml_structure() does not report it a second time.
+    apply_deprecated_key_aliases(config_data)
 
     # Validate the configuration structure
     validate_yaml_structure(config_data, project_dir, config_file_dir)
@@ -3667,7 +9230,7 @@ def init_config(args):
         # if the .yaml config file is given, directly use it
         if args.config_file[-5:] == '.yaml':
             if os.path.exists(args.config_file):
-                print("INFO: when you run the server directly from a .yaml file, please make sure your config file is put in the annotation project folder")
+                print("INFO: when you run the server directly from a .yaml file, please make sure your config file is put in the annotation project folder", file=sys.stderr)
                 config_file = args.config_file
                 # For direct YAML file usage, we'll determine the project_dir from the config file content
                 # after loading it, not from the file path structure
@@ -3694,6 +9257,18 @@ def init_config(args):
 
             # if multiple yaml files found, ask the user to choose which one to use
             else:
+                # A container has no tty, so input() would block forever with no
+                # output and no way to answer it. Fail with the candidate list
+                # instead of hanging.
+                if os.environ.get("POTATO_NONINTERACTIVE") == "1" or not sys.stdin.isatty():
+                    candidates = "\n  ".join(
+                        os.path.join(config_folder, name) for name in yamlfiles
+                    )
+                    raise ConfigValidationError(
+                        f"{len(yamlfiles)} config files found under {config_folder} and "
+                        "no terminal is attached to choose between them. Pass one "
+                        f"explicitly:\n  {candidates}"
+                    )
                 while True:
                     print("multiple config files found, please select the one you want to use (number 0-%d)"%len(yamlfiles))
                     for i,it in enumerate(yamlfiles):
@@ -3750,21 +9325,44 @@ def init_config(args):
         else:
             config_data = load_and_validate_config(config_file, project_dir)
 
+        # config is updated in place and survives re-initialization (tests run
+        # several projects in one process). Project-scoped integration blocks
+        # must not leak from a previous project: a stale `crowdsourcing` block
+        # would select the wrong crowd provider for this one.
+        for project_scoped_key in ('crowdsourcing', 'prolific', 'mturk'):
+            if project_scoped_key not in config_data:
+                config.pop(project_scoped_key, None)
+
         config.update(config_data)
 
         # Only override config settings if command line arguments are explicitly provided
         config_updates = {
-            "verbose": args.verbose,
-            "very_verbose": args.very_verbose,
             # Store an ABSOLUTE path: the server chdir's into task_dir at startup,
             # so a relative path would be re-resolved against the wrong CWD later
             # (e.g. admin export doubled the project path). CWD is still the
             # original launch dir here (chdir happens further below).
             "__config_file__": os.path.abspath(args.config_file),
-            "customjs": args.customjs,
-            "customjs_hostname": args.customjs_hostname,
-            "persist_sessions": args.persist_sessions,
         }
+
+        # The comment above was the whole intent, and these five did not honour
+        # it: they were written into config_updates unconditionally, so argparse's
+        # own default landed on top of the YAML. `persist_sessions: true` in a
+        # config file therefore did nothing at all -- no error, no warning, not
+        # the behaviour -- and `configure_session`'s refusal to run persistent
+        # sessions without a `secret_key` could not fire on the path everyone
+        # uses, because the value never reached it. The same shape silently reset
+        # `customjs_hostname` to None and `customjs`/`verbose`/`very_verbose` to
+        # False for anyone who set them in YAML.
+        #
+        # None of the four flags has a `--no-` counterpart, so absence can never
+        # mean "off" and only the truthy case is a real instruction. The string
+        # argument counts as given when it is a string.
+        for flag in ("verbose", "very_verbose", "customjs", "persist_sessions"):
+            if getattr(args, flag, False):
+                config_updates[flag] = True
+        cli_customjs_hostname = getattr(args, "customjs_hostname", None)
+        if isinstance(cli_customjs_hostname, str):
+            config_updates["customjs_hostname"] = cli_customjs_hostname
 
         # Only override debug if explicitly set to True via command line
         # or if config file doesn't have a debug setting
@@ -3782,6 +9380,34 @@ def init_config(args):
                 config_updates["debug"] = True
             config_updates["debug_phase"] = args.debug_phase
 
+        cli_host = getattr(args, "host", None)
+        if isinstance(cli_host, str):
+            config_updates["host"] = cli_host
+
+        # --ssl-cert / --ssl-key were parsed but never reached app.run(), so a
+        # server started with them served plaintext while the operator believed
+        # it was serving TLS. Carry them into config so run_server can build an
+        # ssl_context; refuse a half-configured pair rather than silently
+        # falling back to HTTP.
+        # Only strings count as "configured". argparse always yields str or None,
+        # but callers that build an args stand-in (create_app's SimpleNamespace,
+        # or a Mock in tests) can hand back arbitrary objects.
+        ssl_cert = getattr(args, "ssl_cert", None)
+        ssl_key = getattr(args, "ssl_key", None)
+        ssl_cert = ssl_cert if isinstance(ssl_cert, str) else None
+        ssl_key = ssl_key if isinstance(ssl_key, str) else None
+        if bool(ssl_cert) != bool(ssl_key):
+            raise ConfigValidationError(
+                "--ssl-cert and --ssl-key must be given together "
+                f"(got ssl_cert={ssl_cert!r}, ssl_key={ssl_key!r})."
+            )
+        if ssl_cert and ssl_key:
+            for label, path in (("--ssl-cert", ssl_cert), ("--ssl-key", ssl_key)):
+                if not os.path.isfile(path):
+                    raise ConfigValidationError(f"{label} file not found: {path}")
+            config_updates["ssl_cert"] = ssl_cert
+            config_updates["ssl_key"] = ssl_key
+
         config.update(config_updates)
 
         # Apply server config values (CLI args take precedence)
@@ -3793,9 +9419,8 @@ def init_config(args):
                 config["port"] = server_config["port"]
                 logger.debug(f"Port set from config file: {server_config['port']}")
 
-            # Apply host from server config
-            if "host" in server_config:
-                # Host can only be set via config (no CLI arg currently)
+            # Apply host from server config if not specified via CLI
+            if "host" in server_config and not isinstance(getattr(args, "host", None), str):
                 config["host"] = server_config["host"]
                 logger.debug(f"Host set from config file: {server_config['host']}")
 
@@ -3816,6 +9441,108 @@ def init_config(args):
         logger.error(f"Unexpected error during configuration initialization: {str(e)}")
         print(f"❌ Unexpected error: {str(e)}")
         raise
+
+
+def validate_automation_config(config_data: Dict[str, Any]) -> None:
+    """Check the shape of `automation.rules` before anything runs them.
+
+    Nothing checked these, so two mistakes were possible in one rule and
+    neither was caught: `actions: [skip]` -- a list of strings rather than of
+    `{type: ...}` dicts -- validated clean, booted with "AutomationManager
+    initialized with 1 rule(s)", and then threw AttributeError on
+    /admin/automation; and `sample` instead of `sample_rate` was read as
+    nothing and silently defaulted to 1.0, so a rule the author meant to fire
+    on half the corpus fired on all of it.
+    """
+    block = (config_data or {}).get("automation")
+    if not isinstance(block, dict) or not block.get("enabled"):
+        return
+
+    from potato.automation.actions import FAST_ACTIONS, HEAVY_ACTIONS
+    known_actions = sorted(FAST_ACTIONS | HEAVY_ACTIONS)
+
+    rules = block.get("rules")
+    if rules is None:
+        return
+    if not isinstance(rules, list):
+        raise ConfigValidationError("automation.rules must be a list of rules")
+
+    known_rule_keys = {"name", "when", "sample_rate", "actions", "enabled"}
+    for index, rule in enumerate(rules):
+        where = f"automation.rules[{index}]"
+        if not isinstance(rule, dict):
+            raise ConfigValidationError(
+                f"{where} must be a mapping with `when` and `actions`")
+
+        for key in sorted(set(rule) - known_rule_keys):
+            suggestion = ""
+            if key == "sample":
+                suggestion = " Did you mean 'sample_rate'?"
+            raise ConfigValidationError(
+                f"{where}.{key} is not a rule key. Accepted: "
+                f"{', '.join(sorted(known_rule_keys))}.{suggestion}")
+
+        if "sample_rate" in rule:
+            try:
+                rate = float(rule["sample_rate"])
+            except (TypeError, ValueError):
+                raise ConfigValidationError(
+                    f"{where}.sample_rate must be a number between 0 and 1")
+            if not 0.0 <= rate <= 1.0:
+                raise ConfigValidationError(
+                    f"{where}.sample_rate must be between 0 and 1 "
+                    f"(got {rule['sample_rate']})")
+
+        actions = rule.get("actions")
+        if actions is None:
+            continue
+        if not isinstance(actions, list):
+            raise ConfigValidationError(
+                f"{where}.actions must be a list of "
+                f"{{type: ...}} mappings, one per action")
+        for action_index, action in enumerate(actions):
+            action_where = f"{where}.actions[{action_index}]"
+            if not isinstance(action, dict):
+                raise ConfigValidationError(
+                    f"{action_where} must be a mapping with a `type`, e.g. "
+                    f"{{type: add_to_queue, priority: 100}}, not "
+                    f"{action!r}. Accepted types: {', '.join(known_actions)}.")
+            atype = action.get("type")
+            if not atype:
+                raise ConfigValidationError(
+                    f"{action_where}.type is required. Accepted types: "
+                    f"{', '.join(known_actions)}.")
+            if atype not in known_actions:
+                raise ConfigValidationError(
+                    f"{action_where}.type '{atype}' is not an action Potato "
+                    f"can run. Accepted types: {', '.join(known_actions)}.")
+
+
+def _validate_estimator_name(key: str, name: str, *, kind: str) -> None:
+    """Reject a classifier/vectorizer name nothing can build.
+
+    The name is either a short alias or a fully qualified import path. A bare
+    word that is neither -- `logistic`, `tfidf` -- used to validate clean and
+    then fail at the first training run with "not enough values to unpack",
+    after which active learning silently trained the fallback estimator. The
+    study ran, the log said the model was trained, and it was not the model
+    the config asked for.
+    """
+    from potato.active_learning_manager import (
+        CLASSIFIER_ALIASES, VECTORIZER_ALIASES)
+
+    aliases = CLASSIFIER_ALIASES if kind == "classifier" else VECTORIZER_ALIASES
+    value = name.strip()
+    if value.lower() in aliases or "." in value:
+        return
+    # An example that is itself a dotted path: some aliases map to another
+    # short name ("clip" -> "image"), which is no example of an import path.
+    dotted = sorted(v for v in set(aliases.values()) if "." in v)
+    example = (f" such as '{dotted[0]}'" if dotted else "")
+    raise ConfigValidationError(
+        f"{key}: '{name}' is not a {kind} Potato can build. Use a short name "
+        f"({', '.join(sorted(set(aliases)))}) or a fully qualified import "
+        f"path{example}.")
 
 
 def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
@@ -3852,6 +9579,10 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
         if not isinstance(classifier_config["name"], str):
             raise ConfigValidationError("active_learning.classifier.name must be a string")
 
+        _validate_estimator_name(
+            "active_learning.classifier.name", classifier_config["name"],
+            kind="classifier")
+
         # Validate hyperparameters if present
         if "hyperparameters" in classifier_config:
             if not isinstance(classifier_config["hyperparameters"], dict):
@@ -3868,6 +9599,10 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
 
         if not isinstance(vectorizer_config["name"], str):
             raise ConfigValidationError("active_learning.vectorizer.name must be a string")
+
+        _validate_estimator_name(
+            "active_learning.vectorizer.name", vectorizer_config["name"],
+            kind="vectorizer")
 
         # Validate hyperparameters if present
         if "hyperparameters" in vectorizer_config:
@@ -4058,6 +9793,62 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
             )
 
 
+def _api_key_is_reachable(endpoint_type: str, endpoint_config: Dict[str, Any],
+                          block: str) -> None:
+    """
+    Refuse a cloud endpoint that has no way to authenticate.
+
+    Three ways an endpoint gets a key, and the check has to know all of them or
+    it rejects working configurations:
+
+    * the config's own ``api_key``;
+    * the environment, which the openai and openai_vision endpoints read
+      (``OPENAI_API_KEY``) -- so a correctly-configured shell used to fail
+      ``validate --strict``;
+    * not at all, when ``base_url`` points at a self-hosted OpenAI-compatible
+      server. Those have no keys, and the endpoint substitutes ``"EMPTY"``
+      itself. The check demanded a key anyway, so the code path written for
+      local servers could not be reached through the validator, and the
+      workaround was to write the placeholder the endpoint would have supplied.
+
+    anthropic, huggingface and gemini read neither a base_url nor the
+    environment, so for those the key really is required.
+
+    Args:
+        endpoint_type: The configured endpoint type
+        endpoint_config: The ``ai_config`` block
+        block: Which top-level block this is, for the message
+
+    Raises:
+        ConfigValidationError: If nothing can supply a key
+    """
+    import os
+
+    openai_shaped = endpoint_type in ("openai", "openai_vision")
+
+    api_key = endpoint_config.get("api_key", "")
+    if api_key and isinstance(api_key, str):
+        return
+    if api_key and not isinstance(api_key, str):
+        raise ConfigValidationError(
+            f"{block}.ai_config.api_key must be a string")
+
+    if openai_shaped:
+        if endpoint_config.get("base_url") or endpoint_config.get("api_base"):
+            return
+        if os.environ.get("OPENAI_API_KEY"):
+            return
+        raise ConfigValidationError(
+            f"{block}.ai_config.api_key is required for the {endpoint_type} "
+            "endpoint. Set it here, set OPENAI_API_KEY in the environment, or "
+            f"set {block}.ai_config.base_url to a self-hosted "
+            "OpenAI-compatible server (vLLM, SGLang, LM Studio, llama.cpp), "
+            "which needs no key.")
+
+    raise ConfigValidationError(
+        f"{block}.ai_config.api_key is required for {endpoint_type} endpoint")
+
+
 def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     """
     Validate AI support configuration.
@@ -4076,6 +9867,25 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     # Validate enabled flag
     if not isinstance(ai_config.get("enabled", False), bool):
         raise ConfigValidationError("ai_support.enabled must be a boolean")
+
+    # The comparison group withholds every assist surface (pre-annotations,
+    # SAM, the labeling engine), not only ai_support's own, so it is checked
+    # whether or not ai_support is enabled. Out-of-range values used to be
+    # clamped: 1.5 or 20 (meaning 20%) withheld AI from everyone, and -0.3 or
+    # "a lot" left no comparison group, all without a word.
+    holdout = ai_config.get("holdout")
+    if holdout is not None:
+        if not isinstance(holdout, dict):
+            raise ConfigValidationError(
+                "ai_support.holdout must be a mapping with fraction (and optionally salt)")
+        if "fraction" in holdout:
+            fraction = holdout["fraction"]
+            if (isinstance(fraction, bool) or not isinstance(fraction, (int, float))
+                    or not 0 <= fraction <= 1):
+                raise ConfigValidationError(
+                    f"ai_support.holdout.fraction must be a number from 0 to 1 (the share "
+                    f"of each annotator's items shown without AI assistance; 0.2 means "
+                    f"20%), got {fraction!r}")
 
     if not ai_config.get("enabled", False):
         return  # Skip validation if not enabled
@@ -4099,7 +9909,20 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(endpoint_type, str):
         raise ConfigValidationError("ai_support.endpoint_type must be a string")
 
+    # Decision models (systemone, laya) answer one-of-N questions and cannot
+    # generate the text hints, keywords and rationales ai_support produces.
+    if endpoint_type in ("systemone", "laya"):
+        raise ConfigValidationError(
+            f"ai_support.endpoint_type {endpoint_type!r} is a decision model, "
+            f"which picks a label but cannot write text, and ai_support's "
+            f"assistants all write text. Use it under solo_mode.labeling_models, "
+            f"as a solo_mode.confidence_routing tier, or as a labeling_engine "
+            f"source with kind: decision instead.")
+
+    # openrouter (and its old spelling open_router) is a registered endpoint
+    # the AI support docs show, and was refused here.
     valid_endpoint_types = ["openai", "anthropic", "huggingface", "ollama", "gemini", "vllm",
+                            "openrouter", "open_router",
                             "yolo", "ollama_vision", "openai_vision", "anthropic_vision"]
     if endpoint_type not in valid_endpoint_types:
         raise ConfigValidationError(f"ai_support.endpoint_type must be one of: {', '.join(valid_endpoint_types)}")
@@ -4117,10 +9940,9 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
                 raise ConfigValidationError("ai_support.ai_config.model must be a non-empty string")
 
         # Validate API key for cloud-based endpoints
-        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini"]:
-            api_key = ai_endpoint_config.get("api_key", "")
-            if not api_key or not isinstance(api_key, str):
-                raise ConfigValidationError(f"ai_support.ai_config.api_key is required for {endpoint_type} endpoint")
+        if endpoint_type in ["openai", "openai_vision", "anthropic",
+                             "huggingface", "gemini"]:
+            _api_key_is_reachable(endpoint_type, ai_endpoint_config, "ai_support")
 
         # Validate base_url for VLLM
         if endpoint_type == "vllm":
@@ -4182,8 +10004,12 @@ def validate_chat_support_config(config_data: Dict[str, Any]) -> None:
         )
 
     endpoint_type = chat_config["endpoint_type"]
+    # Every type here must answer chat_query itself; the base class's
+    # flattening fallback cannot call a query() that requires an output format.
+    # tests/unit/test_chat_query_every_endpoint.py holds this list to that.
     valid_endpoint_types = [
         "openai", "anthropic", "huggingface", "ollama", "gemini", "vllm", "openrouter",
+        "openai_vision", "anthropic_vision", "ollama_vision",
     ]
     if endpoint_type not in valid_endpoint_types:
         raise ConfigValidationError(
@@ -4217,12 +10043,9 @@ def validate_chat_support_config(config_data: Dict[str, Any]) -> None:
                 )
 
         # Validate API key for cloud endpoints
-        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini", "openrouter"]:
-            api_key = ai_cfg.get("api_key", "")
-            if not api_key or not isinstance(api_key, str):
-                raise ConfigValidationError(
-                    f"chat_support.ai_config.api_key is required for {endpoint_type} endpoint"
-                )
+        if endpoint_type in ["openai", "openai_vision", "anthropic",
+                             "huggingface", "gemini", "openrouter"]:
+            _api_key_is_reachable(endpoint_type, ai_cfg, "chat_support")
 
     # Validate UI section
     if "ui" in chat_config:
@@ -4301,105 +10124,108 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearning
     """
     Parse active learning configuration from YAML data.
 
+    Delegates to the single implementation in
+    :func:`potato.active_learning_manager.parse_active_learning_config`. This
+    module used to carry a second, independent parser that understood only the
+    nested ``classifier:``/``vectorizer:`` blocks and applied different
+    defaults. It was the one the documentation described and the tests
+    exercised, while the live server ran the other -- so a config copied out
+    of the guide quietly got defaults instead of the settings it named.
+
     Args:
-        config_data: The configuration data containing active_learning section
+        config_data: The configuration data containing an active_learning section
 
     Returns:
-        ActiveLearningConfig: Parsed active learning configuration
-
-    Raises:
-        ConfigValidationError: If the configuration is invalid
+        ActiveLearningConfig: Parsed configuration, or a default instance when
+        active learning is absent or disabled.
     """
-    from potato.active_learning_manager import ActiveLearningConfig, ResolutionStrategy
+    from potato.active_learning_manager import (
+        ActiveLearningConfig, parse_active_learning_config as _parse)
 
-    if "active_learning" not in config_data:
-        return ActiveLearningConfig()  # Return default config
+    return _parse(config_data) or ActiveLearningConfig()
 
-    al_config = config_data["active_learning"]
 
-    # Parse classifier configuration
-    classifier_name = "sklearn.linear_model.LogisticRegression"
-    classifier_kwargs = {}
-    if "classifier" in al_config:
-        classifier_config = al_config["classifier"]
-        classifier_name = classifier_config.get("name", classifier_name)
-        classifier_kwargs = classifier_config.get("hyperparameters", {})
+def validate_mcp_config(config_data: Dict[str, Any]) -> None:
+    """Validate the `mcp:` block.
 
-    # Parse vectorizer configuration
-    vectorizer_name = "sklearn.feature_extraction.text.CountVectorizer"
-    vectorizer_kwargs = {}
-    if "vectorizer" in al_config:
-        vectorizer_config = al_config["vectorizer"]
-        vectorizer_name = vectorizer_config.get("name", vectorizer_name)
-        vectorizer_kwargs = vectorizer_config.get("hyperparameters", {})
+    Unlike every other unknown key in this file, an unrecognized tool name here
+    RAISES. The warn-only policy is right for a key that turns a feature on: the
+    worst case is the feature stays off. It is wrong for an allowlist. An admin
+    who writes `read_annotaitons` and gets a warning buried in the startup log
+    believes they granted something they did not, and one who typos a name that
+    happens to match a real tool grants something they never intended. Failing
+    at boot is the only safe reading of a security allowlist.
+    """
+    mcp_config = config_data.get("mcp")
+    if mcp_config is None:
+        return
+    if not isinstance(mcp_config, dict):
+        raise ConfigValidationError("'mcp' must be a mapping")
+    if not mcp_config.get("enabled", False):
+        return
 
-    # Parse resolution strategy
-    resolution_strategy = ResolutionStrategy.MAJORITY_VOTE
-    if "resolution_strategy" in al_config:
-        strategy_str = al_config["resolution_strategy"]
-        if strategy_str == "majority_vote":
-            resolution_strategy = ResolutionStrategy.MAJORITY_VOTE
-        elif strategy_str == "random":
-            resolution_strategy = ResolutionStrategy.RANDOM
-        elif strategy_str == "consensus":
-            resolution_strategy = ResolutionStrategy.CONSENSUS
-        elif strategy_str == "weighted_average":
-            resolution_strategy = ResolutionStrategy.WEIGHTED_AVERAGE
+    from potato.mcp_server.live_tools import DESTRUCTIVE_TOOL_NAMES, TOOL_NAMES
 
-    # Parse other parameters
-    min_annotations_per_instance = al_config.get("min_annotations_per_instance", 1)
-    min_instances_for_training = al_config.get("min_instances_for_training", 10)
-    max_instances_to_reorder = al_config.get("max_instances_to_reorder")
-    random_sample_percent = al_config.get("random_sample_percent", 0.2)
-    update_frequency = al_config.get("update_frequency", 5)
-    schema_names = al_config.get("schema_names", [])
+    tools = mcp_config.get("tools", [])
+    if not isinstance(tools, list):
+        raise ConfigValidationError("'mcp.tools' must be a list of tool names")
 
-    # Parse database configuration
-    database_enabled = False
-    database_config = {}
-    if "database" in al_config:
-        db_config = al_config["database"]
-        database_enabled = db_config.get("enabled", False)
-        database_config = {k: v for k, v in db_config.items() if k != "enabled"}
+    unknown = [t for t in tools if t not in TOOL_NAMES]
+    if unknown:
+        raise ConfigValidationError(
+            f"mcp.tools names unknown tool(s): {', '.join(map(str, unknown))}. "
+            f"Valid tools: {', '.join(TOOL_NAMES)}"
+        )
 
-    # Parse model persistence configuration
-    model_persistence_enabled = False
-    model_save_directory = None
-    model_retention_count = 2
-    if "model_persistence" in al_config:
-        model_config = al_config["model_persistence"]
-        model_persistence_enabled = model_config.get("enabled", False)
-        model_save_directory = model_config.get("save_directory")
-        model_retention_count = model_config.get("retention_count", 2)
+    destructive = mcp_config.get("destructive", [])
+    if not isinstance(destructive, list):
+        raise ConfigValidationError("'mcp.destructive' must be a list of tool names")
 
-    # Parse LLM configuration
-    llm_enabled = False
-    llm_config = {}
-    if "llm" in al_config:
-        llm_config = al_config["llm"]
-        llm_enabled = llm_config.get("enabled", False)
+    unknown = [t for t in destructive if t not in TOOL_NAMES]
+    if unknown:
+        raise ConfigValidationError(
+            f"mcp.destructive names unknown tool(s): {', '.join(map(str, unknown))}. "
+            f"Valid tools: {', '.join(TOOL_NAMES)}"
+        )
 
-    return ActiveLearningConfig(
-        enabled=al_config.get("enabled", False),
-        classifier_name=classifier_name,
-        classifier_kwargs=classifier_kwargs,
-        vectorizer_name=vectorizer_name,
-        vectorizer_kwargs=vectorizer_kwargs,
-        min_annotations_per_instance=min_annotations_per_instance,
-        min_instances_for_training=min_instances_for_training,
-        max_instances_to_reorder=max_instances_to_reorder,
-        resolution_strategy=resolution_strategy,
-        random_sample_percent=random_sample_percent,
-        update_frequency=update_frequency,
-        schema_names=schema_names,
-        database_enabled=database_enabled,
-        database_config=database_config,
-        model_persistence_enabled=model_persistence_enabled,
-        model_save_directory=model_save_directory,
-        model_retention_count=model_retention_count,
-        llm_enabled=llm_enabled,
-        llm_config=llm_config
-    )
+    not_destructive = [t for t in destructive if t not in DESTRUCTIVE_TOOL_NAMES]
+    if not_destructive:
+        raise ConfigValidationError(
+            f"mcp.destructive lists tool(s) that are not destructive: "
+            f"{', '.join(not_destructive)}. Destructive tools are: "
+            f"{', '.join(DESTRUCTIVE_TOOL_NAMES)}"
+        )
+
+    ungranted = [t for t in destructive if t not in tools]
+    if ungranted:
+        raise ConfigValidationError(
+            f"mcp.destructive lists {', '.join(ungranted)}, which mcp.tools does "
+            f"not grant. A destructive tool must appear in both."
+        )
+
+    engine_block = config_data.get("labeling_engine")
+    engine_tools = [t for t in tools if str(t).startswith("engine_")]
+    if engine_tools and not (isinstance(engine_block, dict)
+                             and engine_block.get("enabled", False)):
+        logger.warning(
+            f"mcp.tools grants {', '.join(engine_tools)}, but the labeling engine is "
+            f"off (labeling_engine.enabled), so every call to them is refused.")
+
+    scope = mcp_config.get("scope")
+    if scope is not None and not isinstance(scope, dict):
+        raise ConfigValidationError("'mcp.scope' must be a mapping")
+
+    auth = mcp_config.get("auth")
+    if auth is not None and not isinstance(auth, dict):
+        raise ConfigValidationError("'mcp.auth' must be a mapping")
+
+    if tools and config_data.get("debug") and not mcp_config.get("allow_debug"):
+        raise ConfigValidationError(
+            "mcp.enabled is true alongside debug: true. Debug mode opens admin "
+            "pages without a key to requests from this machine, and a tunnel or "
+            "proxy on it can make any caller look local. Turn off debug, or set "
+            "mcp.allow_debug: true to state that you mean it."
+        )
 
 
 def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
@@ -4417,6 +10243,8 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         ConfigValidationError: If the instance_display configuration is invalid
     """
     if "instance_display" not in config_data:
+        # Still checks that no viewer_selection scheme is left without a viewer.
+        _validate_viewer_displays(config_data)
         return  # instance_display is optional (backwards compatible)
 
     display_config = config_data["instance_display"]
@@ -4438,13 +10266,26 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     # Track span targets for validation
     span_targets = []
 
-    # Valid display types - keep in sync with display registry
-    valid_display_types = [
-        "text", "html", "image", "video", "audio", "dialogue", "pairwise",
-        "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
-        "conversation_tree", "interactive_chat", "web_agent_trace",
-        "live_agent", "coding_trace", "live_coding_agent",
-    ]
+    # Valid display types — sourced from the display registry (single source
+    # of truth) so new display types don't require editing this list. Falls
+    # back to a static list if the registry can't be imported.
+    try:
+        from .displays import display_registry
+        valid_display_types = display_registry.get_supported_types()
+    except Exception:
+        valid_display_types = [
+            "text", "html", "image", "video", "audio", "dialogue", "pairwise",
+            "pdf", "document", "spreadsheet", "code", "agent_trace", "eval_trace",
+            "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
+            "live_agent", "coding_trace", "live_coding_agent",
+            "multi_agent_discussion", "cot_trace", "audio_dialogue",
+            "depth_map", "image_region",
+            "protein_structure", "genome_locus",
+            "molecule",
+            "spectrum",
+            "fits_cutout",
+            "time_series",
+        ]
 
     for i, field in enumerate(fields):
         if not isinstance(field, dict):
@@ -4475,8 +10316,23 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
 
         # Validate span_target
         if field.get("span_target"):
-            # Types that support span annotation targets
-            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat"]
+            # Sourced from the registry, like valid_display_types above. This
+            # was a second hardcoded list, and it had drifted: it rejected
+            # `eval_trace` and `coding_trace`, both of which declare span
+            # support, while allowing pdf/spreadsheet/agent_trace, which
+            # declare `supports_span_target = False` because they anchor spans
+            # their own way rather than through the `.text-content` contract.
+            # `get_span_target_capable_types()` is the union and the only
+            # question validation should be asking.
+            try:
+                from .displays import display_registry
+                span_target_types = display_registry.get_span_target_capable_types()
+            except Exception:
+                span_target_types = [
+                    "text", "dialogue", "pdf", "document", "spreadsheet", "code",
+                    "agent_trace", "interactive_chat", "multi_agent_discussion",
+                    "audio_dialogue", "eval_trace", "coding_trace",
+                ]
             if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "
@@ -4516,8 +10372,137 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         if not isinstance(display_config["resizable"], bool):
             raise ConfigValidationError("instance_display.resizable must be a boolean (true/false)")
 
+    # After the per-field checks, so a field that fails one of those (an
+    # unsupported span_target, say) is told so rather than about its viewer
+    # options.
+    _validate_viewer_displays(config_data)
+
     # Check for deprecation warning: using annotation schemas for display-only
     _check_display_only_deprecation(config_data)
+    _check_span_scheme_has_a_target(config_data)
+
+
+#: Options the resizable WRAPPER reads, for every display type, rather than any
+#: one renderer. `InstanceDisplayRenderer._wrap_resizable` runs on every field
+#: unless `resizable` turns it off, and reads all three -- so validating them
+#: against a single type's `optional_fields` refused the option that switches
+#: the wrapper off (`resizable`, declared by 0 of 24 types) and the one that
+#: sets its floor (`min_height`, also 0 of 24). `max_height` is declared by 11
+#: types for their own use, so it happened to pass on those and was refused on
+#: the other 13.
+#:
+#: The schema registry has had `UNIVERSAL_OPTIONAL_FIELDS` for the same reason:
+#: a key read by shared machinery belongs to the machinery, not to each type.
+UNIVERSAL_DISPLAY_OPTIONS = {"resizable", "max_height", "min_height"}
+
+
+def _reject_unknown_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
+    """Reject a display option the renderer will never read.
+
+    ``get_display_options()`` merges the author's options over the renderer's
+    defaults and passes the result through, so an unrecognised key is inert. It
+    does not warn, it does not appear in the log, and the page renders at the
+    default -- which is why a misspelled option was indistinguishable from a
+    correct one, and stayed that way until somebody noticed the page was wrong.
+
+    Not hypothetical. This check found four dead keys already shipped in the
+    repo's own examples, including ``show_turn_numbers`` on nine ``agent_trace``
+    fields, where the option is spelled ``show_step_numbers``.
+
+    A display whose renderer declares no options at all is skipped: for a plugin
+    that never set ``optional_fields`` there is no way to tell "takes no options"
+    from "did not say".
+    """
+    try:
+        from .displays import display_registry
+        definition = display_registry._displays.get(field_type)
+    except Exception:
+        return
+    if definition is None or not definition.optional_fields:
+        return
+
+    accepted = (set(definition.optional_fields or {})
+                | set(definition.required_fields or [])
+                | UNIVERSAL_DISPLAY_OPTIONS)
+    for key in options:
+        if key in accepted:
+            continue
+        suggestion = difflib.get_close_matches(key, sorted(accepted), n=1, cutoff=0.7)
+        hint = f" Did you mean '{suggestion[0]}'?" if suggestion else ""
+        raise ConfigValidationError(
+            f"{path}.display_options.{key} is not an option for display type "
+            f"'{field_type}', so it would be ignored silently.{hint} "
+            f"Accepted options: {', '.join(sorted(accepted))}."
+        )
+
+    _reject_wrongly_shaped_display_options(field_type, options, path,
+                                           definition.optional_fields or {})
+
+
+def _reject_wrongly_shaped_display_options(
+    field_type: str, options: Dict[str, Any], path: str,
+    declared: Dict[str, Any]) -> None:
+    """Reject an option whose value cannot be what the renderer expects.
+
+    display_options were checked for unknown NAMES and for the enums, but not
+    for shape: `pane_labels: true`, where a list of three strings is expected,
+    validated clean and was then read as a list and ignored.
+
+    Only list- and dict-valued options are checked, from the shape of the
+    renderer's own declared default. Scalars are deliberately left alone --
+    several accept more than one type on purpose (`max_width` takes 320 or
+    "20rem", `zoom` takes a mode name or a number) and a blanket check would
+    reject working configs.
+    """
+    for key, value in options.items():
+        default = declared.get(key)
+        if isinstance(default, list) and not isinstance(value, list):
+            raise ConfigValidationError(
+                f"{path}.display_options.{key} must be a list "
+                f"(e.g. {default!r}), not {type(value).__name__}. "
+                f"A value of another shape is read as a list and ignored.")
+        if isinstance(default, dict) and not isinstance(value, dict):
+            raise ConfigValidationError(
+                f"{path}.display_options.{key} must be a mapping, not "
+                f"{type(value).__name__}.")
+
+
+def _warn_display_option_types(field_type: str, options: Dict[str, Any], path: str) -> None:
+    """Warn when a display option's value is not the type its default is.
+
+    Renderers read options straight from the merged dict, so a wrong type
+    surfaced only at render time: `screenshot_max_height: tall` on a
+    web_agent_trace broke the renderer, and the page silently fell back to
+    plain text. The display's own default says what it expects. Only defaults
+    that pin a type are checked (bool, number, list, dict); a string or None
+    default may legitimately take several shapes. Warnings, not errors, so a
+    renderer that accepts more than its default suggests still boots, while
+    `validate --strict` reports it.
+    """
+    from potato.server_utils.displays import display_registry
+
+    display = display_registry.get(field_type)
+    defaults = getattr(display, "optional_fields", None) or {}
+    for key, value in options.items():
+        if key not in defaults or value is None:
+            continue
+        default = defaults[key]
+        if isinstance(default, bool):
+            ok, kind = isinstance(value, bool), "true or false"
+        elif isinstance(default, (int, float)):
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+            kind = "a number"
+        elif isinstance(default, list):
+            ok, kind = isinstance(value, list), "a list"
+        elif isinstance(default, dict):
+            ok, kind = isinstance(value, dict), "a mapping"
+        else:
+            continue
+        if not ok:
+            logger.warning(
+                "%s.display_options.%s is %r, but a %s display expects %s "
+                "(default %r). The page may render wrongly or fall back to "
+                "plain text.", path, key, value, field_type, kind, default)
 
 
 def _validate_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
@@ -4532,6 +10517,9 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
     Raises:
         ConfigValidationError: If options are invalid
     """
+    _reject_unknown_display_options(field_type, options, path)
+    _warn_display_option_types(field_type, options, path)
+
     # Common option validation
     if "max_width" in options:
         max_width = options["max_width"]
@@ -4622,6 +10610,22 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
             if options["view_mode"] not in valid_modes:
                 raise ConfigValidationError(
                     f"{path}.display_options.view_mode must be one of: {', '.join(valid_modes)}"
+                )
+
+        if "annotation_mode" in options:
+            # "link" enables the multi-page anchor+cross-page-linking mode
+            # (text spans + region bboxes as unified linkable anchors).
+            valid_anno_modes = ["span", "bounding_box", "link"]
+            if options["annotation_mode"] not in valid_anno_modes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.annotation_mode must be one of: {', '.join(valid_anno_modes)}"
+                )
+
+        if "ocr" in options:
+            # Opt-in OCR for scanned PDFs in link mode: False | True | "auto".
+            if options["ocr"] not in (True, False, "auto"):
+                raise ConfigValidationError(
+                    f"{path}.display_options.ocr must be true, false, or \"auto\""
                 )
 
         if "text_layer" in options:
@@ -5035,6 +11039,29 @@ def validate_adjudication_config(config_data: Dict[str, Any]) -> None:
             )
 
 
+def _check_span_scheme_has_a_target(config_data: Dict[str, Any]) -> None:
+    """Warn when a span scheme has no field to work on.
+
+    With ``instance_display`` fields the page hides ``#instance-text`` and
+    shows the item through those fields, and only a field marked
+    ``span_target: true`` takes a selection or draws span overlays. A span
+    scheme with no such field loads without complaint, but no span can be made
+    and stored spans are drawn nowhere. ``examples/span/coreference`` shipped
+    that way.
+    """
+    fields = (config_data.get("instance_display") or {}).get("fields") or []
+    if not fields or any(isinstance(f, dict) and f.get("span_target") for f in fields):
+        return
+    span_schemes = [s.get("name") for s in _collect_all_annotation_schemes(config_data)
+                    if isinstance(s, dict) and s.get("annotation_type") == "span"]
+    if span_schemes:
+        logger.warning(
+            f"Span scheme(s) {span_schemes} have no field to annotate: no "
+            f"instance_display field sets span_target: true, so no span can be "
+            f"made or shown. Add span_target: true to the field holding the text."
+        )
+
+
 def _check_display_only_deprecation(config_data: Dict[str, Any]) -> None:
     """
     Check for deprecated display-only pattern and log warning.
@@ -5070,5 +11097,5 @@ def _check_display_only_deprecation(config_data: Dict[str, Any]) -> None:
                 logger.warning(
                     f"Deprecation warning: Using {annotation_type} with min_annotations=0 "
                     f"for display-only is deprecated. Use instance_display instead. "
-                    f"See docs/instance_display.md for migration guide."
+                    f"See docs/annotation-types/instance_display.md for migration guide."
                 )

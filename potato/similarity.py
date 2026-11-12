@@ -2,8 +2,10 @@
 Similarity Engine Module
 
 Provides semantic similarity search for adjudication items using
-sentence-transformers embeddings. Uses a guarded import pattern so the
-system degrades gracefully when sentence-transformers is not installed.
+sentence-transformers embeddings. The heavy stack is detected without being
+imported and loaded only when a model is actually built, so the system degrades
+gracefully when sentence-transformers is absent *and* costs nothing at import
+time when it is present.
 
 Key Components:
 - SimilarityEngine: Manages embeddings, caching, and similarity search
@@ -18,13 +20,50 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Guarded import — same pattern as simpledorff in admin.py
+# Availability is probed WITHOUT importing the heavy stack, the same way
+# diversity_manager.py does it.
+#
+# A guarded `try: from sentence_transformers import ...` looks like it defers
+# the cost, and does not: the guard only helps when the package is ABSENT, which
+# was already the cheap case. Whenever it IS installed the import runs at module
+# import time and drags in transformers + torch — several seconds and several
+# hundred MB of RSS — for every process that touches this module, including ones
+# where similarity search is switched off and the model is never loaded.
+#
+# find_spec answers "is it installed?" without executing it, so the real import
+# happens on the first model load and nowhere else.
+import importlib.util
+
 try:
-    from sentence_transformers import SentenceTransformer
     import numpy as np
-    _SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    _SENTENCE_TRANSFORMERS_AVAILABLE = False
+except ImportError:  # numpy is a core dependency; absence disables this engine
+    np = None
+
+_SENTENCE_TRANSFORMERS_AVAILABLE = (
+    np is not None
+    and importlib.util.find_spec("sentence_transformers") is not None
+)
+
+#: Bound on first use by :func:`_sentence_transformer_class`. Kept as a
+#: module-level name so it stays patchable in tests, and so the import cost is
+#: paid once per process rather than once per engine.
+SentenceTransformer = None
+
+
+def _sentence_transformer_class():
+    """
+    Import ``SentenceTransformer`` at first use.
+
+    Must never be called at import time — that is the whole point of it. The one
+    caller is inside the model-load ``try`` in :meth:`SimilarityEngine.__init__`,
+    so an install that is present-but-broken degrades to a disabled engine with a
+    logged reason rather than taking the server down at boot.
+    """
+    global SentenceTransformer
+    if SentenceTransformer is None:
+        from sentence_transformers import SentenceTransformer as _SentenceTransformer
+        SentenceTransformer = _SentenceTransformer
+    return SentenceTransformer
 
 # Singleton
 _SIMILARITY_ENGINE = None
@@ -69,7 +108,7 @@ class SimilarityEngine:
         try:
             model_name = adj_config.similarity_model
             self.logger.info(f"Loading similarity model: {model_name}")
-            self.model = SentenceTransformer(model_name)
+            self.model = _sentence_transformer_class()(model_name)
             self.enabled = True
             self._load_cache()
             self.logger.info(

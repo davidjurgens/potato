@@ -1,0 +1,566 @@
+"""
+Judge ↔ human alignment: persistence + agreement computation.
+
+Pairs each LLM-judge verdict (from ``potato/ai/judge.py``) with the human gold
+label for the same instance/schema and computes Cohen's κ, a confusion matrix,
+agreement rate, and the list of disagreements. Judge predictions are persisted
+per *prompt version* so the admin report can track κ as the rubric is calibrated.
+
+Layout under ``{task_dir}/judge_alignment/``:
+  predictions.json  -> {prompt_version: {"<instance>::<schema>": JudgePrediction}}
+  comparisons.json  -> [{instance_id, schema, human_label, judge_label, agrees, prompt_version}]
+                       (running log written by the inline capture path)
+
+The κ computation reuses ``potato/agreement.py`` (judge vs. human gold as two
+"annotators"). The pure ``compute_alignment_from_pairs`` is the unit-testable core.
+"""
+
+import json
+import logging
+import os
+from collections import Counter, defaultdict
+from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+# ----- paths / persistence ----------------------------------------------
+
+def _dir(config: Dict[str, Any]) -> str:
+    base = config.get("output_annotation_dir") or config.get("task_dir") or "."
+    return os.path.join(base, "judge_alignment")
+
+
+def _load_json(path: str, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return default
+
+
+def _save_json(path: str, data) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def predictions_path(config: Dict[str, Any]) -> str:
+    return os.path.join(_dir(config), "predictions.json")
+
+
+def comparisons_path(config: Dict[str, Any]) -> str:
+    return os.path.join(_dir(config), "comparisons.json")
+
+
+def position_bias_path(config: Dict[str, Any]) -> str:
+    return os.path.join(_dir(config), "position_bias.json")
+
+
+def load_position_bias(config: Dict[str, Any]) -> Dict[str, dict]:
+    """
+    The last position-bias probe per schema, keyed by schema name.
+
+    Stored rather than recomputed because the probe costs two model calls per
+    item: the alignment page must be able to show the result without paying
+    for it again on every page load.
+    """
+    return _load_json(position_bias_path(config), {})
+
+
+def save_position_bias(config: Dict[str, Any], schema_name: str,
+                       summary: dict) -> None:
+    """Persist one schema's probe summary, replacing any earlier one."""
+    data = load_position_bias(config)
+    data[schema_name] = summary
+    _save_json(position_bias_path(config), data)
+
+
+def load_predictions(config: Dict[str, Any]) -> Dict[str, Dict[str, dict]]:
+    return _load_json(predictions_path(config), {})
+
+
+def save_prediction(config: Dict[str, Any], pred) -> None:
+    """Persist one JudgePrediction (keyed by prompt_version → instance::schema)."""
+    data = load_predictions(config)
+    version = pred.prompt_version or "default"
+    data.setdefault(version, {})[f"{pred.instance_id}::{pred.schema_name}"] = pred.to_dict()
+    _save_json(predictions_path(config), data)
+    from potato.labeling_engine.integration.mirror import mirror
+    mirror("judge_alignment", pred.model_name, version, pred.instance_id, pred.schema_name,
+           pred.predicted_label, pred.confidence, pred.reasoning)
+
+
+def _schema_of_key(key: str) -> str:
+    return key.partition("::")[2]
+
+
+def latest_prompt_version(config: Dict[str, Any],
+                          schema: Optional[str] = None) -> Optional[str]:
+    """The most-populated version: the "current" working set.
+
+    Pass ``schema`` for that schema's version. The version hash includes the
+    schema name, so every schema has versions of its own, and the single
+    most-populated version overall described one schema and left every other
+    one reading "no overlap".
+    """
+    data = load_predictions(config)
+    if schema is not None:
+        data = {v: {k: p for k, p in preds.items() if _schema_of_key(k) == schema}
+                for v, preds in data.items()}
+        data = {v: preds for v, preds in data.items() if preds}
+    if not data:
+        return None
+    return max(data.keys(), key=lambda v: len(data[v]))
+
+
+def record_comparison(config: Dict[str, Any], instance_id: str, schema: str,
+                      human_label: Any, judge_label: Any, prompt_version: str,
+                      username: Optional[str] = None) -> None:
+    """Record a human↔judge comparison in the running log (inline capture).
+
+    One entry per (instance, schema, annotator): a re-save replaces it. This
+    runs on every save, and appending counted one item saved four times as
+    four agreements.
+    """
+    log = _load_json(comparisons_path(config), [])
+    log = [c for c in log
+           if (c.get("instance_id"), c.get("schema"), c.get("username"))
+           != (instance_id, schema, username)]
+    log.append({
+        "username": username,
+        "instance_id": instance_id,
+        "schema": schema,
+        "human_label": str(human_label),
+        "judge_label": str(judge_label),
+        "agrees": str(human_label) == str(judge_label),
+        "prompt_version": prompt_version,
+    })
+    _save_json(comparisons_path(config), log)
+
+
+def running_agreement(config: Dict[str, Any], schema: Optional[str] = None) -> Dict[str, Any]:
+    """Quick running agreement from the comparison log (for the inline badge)."""
+    log = _load_json(comparisons_path(config), [])
+    if schema:
+        log = [c for c in log if c.get("schema") == schema]
+    n = len(log)
+    agree = sum(1 for c in log if c.get("agrees"))
+    pairs = {s: [] for s in {c["schema"] for c in log}}
+    for c in log:
+        unit = f'{c["instance_id"]}::{c.get("username") or ""}'
+        pairs[c["schema"]].append((unit, c["human_label"], c["judge_label"], None, ""))
+    kappa = None
+    if schema and pairs.get(schema):
+        res = compute_alignment_from_pairs({schema: pairs[schema]}).get(schema, {})
+        kappa = res.get("kappa")
+    return {"n": n, "agreements": agree,
+            "agreement_rate": round(agree / n, 3) if n else 0.0, "kappa": kappa}
+
+
+# ----- human label extraction --------------------------------------------
+
+def human_label_for(instance_id: str, schema_name: str, username: str) -> Optional[str]:
+    """The single categorical label a user assigned for a schema, or None."""
+    from potato.flask_server import get_annotations_for_user_on
+    anns = get_annotations_for_user_on(username, instance_id) or {}
+    chosen = anns.get(schema_name)
+    if not chosen:
+        return None
+    # Single-choice: the (first) selected label name.
+    keys = [k for k in chosen.keys()]
+    return keys[0] if keys else None
+
+
+def majority_human_label(instance_id: str, schema_name: str, users: List[str]) -> Optional[str]:
+    votes = []
+    for u in users:
+        lab = human_label_for(instance_id, schema_name, u)
+        if lab is not None:
+            votes.append(lab)
+    if not votes:
+        return None
+    ranked = Counter(votes).most_common(2)
+    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+        # A tie has no majority. Picking one made the "gold" the label of
+        # whichever user registered first.
+        return None
+    return ranked[0][0]
+
+
+# ----- agreement computation (pure core) ----------------------------------
+
+def compute_alignment_from_pairs(
+    pairs_by_schema: Dict[str, List[Tuple[str, Any, Any, Optional[float], str]]],
+) -> Dict[str, Any]:
+    """Compute per-schema judge↔human alignment from resolved pairs.
+
+    pairs_by_schema: {schema: [(instance_id, human_label, judge_label,
+                                judge_confidence|None, reasoning), ...]}
+    Returns {schema: {kappa, interpretation, agreement_rate, n, confusion,
+                      disagreements[]}}.
+    """
+    import pandas as pd
+    from potato.agreement import cohen_kappa_pairwise, interpret_kappa
+
+    out: Dict[str, Any] = {}
+    for schema, pairs in pairs_by_schema.items():
+        pairs = [p for p in pairs if p[1] is not None and p[2] is not None]
+        n = len(pairs)
+        if n == 0:
+            out[schema] = {"kappa": None, "interpretation": "no overlap",
+                           "agreement_rate": 0.0, "n": 0, "confusion": {},
+                           "disagreements": []}
+            continue
+
+        agree = sum(1 for _, h, j, *_ in pairs if str(h) == str(j))
+        confusion: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        disagreements = []
+        rows = []
+        for index, (inst, h, j, conf, reason) in enumerate(pairs):
+            confusion[str(h)][str(j)] += 1
+            # Each pair is its own unit; a repeated instance id would merge.
+            rows.append({"unit": index, "annotator": "human", "annotation": str(h)})
+            rows.append({"unit": index, "annotator": "judge", "annotation": str(j)})
+            if str(h) != str(j):
+                disagreements.append({
+                    "instance_id": inst, "human_label": str(h), "judge_label": str(j),
+                    "judge_confidence": conf, "reasoning": reason,
+                })
+
+        kappa = None
+        interp = "n/a"
+        try:
+            res = cohen_kappa_pairwise(pd.DataFrame(rows))
+            kappa = res.get("mean_kappa")
+            if kappa is not None:
+                interp = interpret_kappa(kappa)
+        except Exception as e:
+            logger.warning(f"Judge alignment: kappa failed for {schema}: {e}")
+
+        out[schema] = {
+            "kappa": round(kappa, 3) if isinstance(kappa, (int, float)) else None,
+            "interpretation": interp,
+            "agreement_rate": round(agree / n, 3),
+            "n": n,
+            "confusion": {h: dict(js) for h, js in confusion.items()},
+            "disagreements": disagreements,
+        }
+    return out
+
+
+# ----- gathering from persisted predictions + live human labels -----------
+
+def judge_scoped_schemas(config: Dict[str, Any]) -> List[dict]:
+    """Annotation schemes the judge should evaluate (categorical only).
+
+    Honors ``judge_alignment.schemas`` allow-list if present; otherwise all
+    radio/select/likert schemes.
+    """
+    schemes = config.get("annotation_schemes", []) or []
+    allow = set((config.get("judge_alignment", {}) or {}).get("schemas", {}).keys())
+    cats = {"radio", "select", "likert"}
+    out = []
+    for s in schemes:
+        if s.get("annotation_type") not in cats:
+            continue
+        if allow and s.get("name") not in allow:
+            continue
+        out.append(s)
+    return out
+
+
+def gather_pairs(config: Dict[str, Any], users: List[str], schema_names: List[str],
+                 prompt_version: Optional[str]) -> Dict[str, List[Tuple]]:
+    """Build (instance, human_gold, judge_label, conf, reasoning) pairs."""
+    preds = load_predictions(config)
+
+    pairs_by_schema: Dict[str, List[Tuple]] = {s: [] for s in schema_names}
+    for schema_name in schema_names:
+        version = prompt_version or latest_prompt_version(config, schema_name)
+        for key, pred in (preds.get(version, {}) if version else {}).items():
+            instance_id, _, schema = key.partition("::")
+            if schema != schema_name:
+                continue
+            gold = majority_human_label(instance_id, schema, users)
+            if gold is None:
+                continue
+            pairs_by_schema[schema].append((
+                instance_id, gold, pred.get("predicted_label"),
+                pred.get("confidence"), pred.get("reasoning", ""),
+            ))
+    return pairs_by_schema
+
+
+def annotated_instance_ids(users: List[str], schema_name: str) -> List[str]:
+    """Instance ids that at least one user has labeled for this schema."""
+    from potato.flask_server import get_user_state
+    ids = set()
+    for u in users:
+        st = get_user_state(u)
+        if not st:
+            continue
+        for iid in st.get_annotated_instance_ids():
+            if human_label_for(iid, schema_name, u) is not None:
+                ids.add(iid)
+    return sorted(ids)
+
+
+def run_judge_batch(config: Dict[str, Any], users: List[str],
+                    rubric_overrides: Optional[Dict[str, str]] = None,
+                    max_per_schema: Optional[int] = None) -> Dict[str, Any]:
+    """Run the judge over human-annotated instances and persist predictions.
+
+    rubric_overrides: {schema_name: rubric} to calibrate + create a new prompt
+    version. Few-shot examples (when enabled) are drawn from high-agreement
+    human labels, excluding the instance being judged.
+    """
+    from potato.ai.judge import JudgeService, compute_prompt_version
+    from potato.item_state_management import get_item_state_manager
+
+    # Apply rubric overrides into a working config copy.
+    cfg = dict(config)
+    ja = dict(cfg.get("judge_alignment", {}) or {})
+    if rubric_overrides:
+        schemas_cfg = dict(ja.get("schemas", {}) or {})
+        for name, rubric in rubric_overrides.items():
+            sc = dict(schemas_cfg.get(name, {}) or {})
+            sc["rubric"] = rubric
+            schemas_cfg[name] = sc
+        ja["schemas"] = schemas_cfg
+        cfg["judge_alignment"] = ja
+
+    service = JudgeService(cfg)
+    ism = get_item_state_manager()
+    few_shot_cfg = (ja.get("few_shot") or {})
+    use_few_shot = bool(few_shot_cfg.get("enabled", False))
+
+    # Project the cost and check it against the cap BEFORE the first call.
+    # Halting halfway leaves a part-judged project and a bill for it, so the
+    # only refusal worth having is the one that happens up front. Raises
+    # SpendCapExceeded, which the caller turns into a 402.
+    work = _judge_batch_work(cfg, users, ism, max_per_schema)
+    projected = estimate_batch_cost(cfg, [text for _iid, text in work])
+    check_batch_against_cap(cfg, projected, "judge_batch")
+
+    n_judged, n_failed, version_seen = 0, 0, None
+    try:
+        for schema in judge_scoped_schemas(cfg):
+            schema_name = schema.get("name")
+            ids = annotated_instance_ids(users, schema_name)
+            if max_per_schema:
+                ids = ids[:max_per_schema]
+            examples = _few_shot_examples(schema_name, use_few_shot, few_shot_cfg)
+            for iid in ids:
+                try:
+                    item = ism.get_item(iid)
+                    text = item.get_text() if item else ""
+                except Exception:
+                    text = ""
+                shots = [e for e in examples if e.get("id") != iid] or None
+                pred = service.judge_instance(iid, schema, text,
+                                              few_shot_examples=shots)
+                if pred is None:
+                    n_failed += 1
+                    continue
+                save_prediction(cfg, pred)
+                version_seen = pred.prompt_version
+                n_judged += 1
+    finally:
+        # Failures count: a call that reached the model and came back empty
+        # was still billed. What must NOT count is the tail of a batch that
+        # stopped early -- that is the drift this replaced.
+        record_batch_spend(cfg, projected, "judge_batch", n_judged + n_failed)
+
+    return {"judged": n_judged, "failed": n_failed,
+            "prompt_version": version_seen,
+            "estimated_cost": projected.rescaled(n_judged + n_failed).to_dict()}
+
+
+def _judge_batch_work(cfg: Dict[str, Any], users: List[str], ism,
+                      max_per_schema: Optional[int]) -> List[tuple]:
+    """``(instance_id, text)`` for everything this batch would judge."""
+    work = []
+    for schema in judge_scoped_schemas(cfg):
+        ids = annotated_instance_ids(users, schema.get("name"))
+        if max_per_schema:
+            ids = ids[:max_per_schema]
+        for iid in ids:
+            try:
+                item = ism.get_item(iid)
+                work.append((iid, item.get_text() if item else ""))
+            except Exception:
+                work.append((iid, ""))
+    return work
+
+
+def estimate_batch_cost(cfg: Dict[str, Any], texts: List[str],
+                        calls_per_item: int = 1):
+    """
+    What a judge run over ``texts`` is projected to cost.
+
+    Split out so the admin UI can ask "what would this cost" without running
+    anything -- which is the whole point. An estimate you can only get by
+    starting the run is not an estimate.
+    """
+    from potato.ai import cost
+
+    ai_support = ((cfg.get("judge_alignment") or {}).get("ai_support")
+                  or cfg.get("ai_support") or {})
+    ai_config = ai_support.get("ai_config") or {}
+    return cost.estimate(
+        texts,
+        model=ai_config.get("model", ""),
+        endpoint_type=ai_support.get("endpoint_type", ""),
+        # The rubric, the label list and the JSON instruction ride along with
+        # every item, so leaving them out understates a short-text project by
+        # more than the items themselves.
+        prompt_overhead_chars=600,
+        max_output_tokens=int(ai_config.get("max_tokens", 100)),
+        calls_per_item=calls_per_item,
+        # A model newer than this release has no row, so without this the cap
+        # would not bind at all for the studies most likely to be expensive.
+        price_overrides=(cfg.get("ai_budget") or {}).get("prices"),
+    )
+
+
+def check_batch_against_cap(cfg: Dict[str, Any], projected, action: str) -> None:
+    """
+    Refuse the run if it would cross the cap.
+
+    Checks only. The spend is recorded by `record_batch_spend` once the run is
+    over, because a batch can be refused, fail on every call, or stop short,
+    and charging the project up front for work that never happened makes the
+    running total drift up and the cap refuse the next batch against money
+    nobody spent.
+    """
+    from potato.ai import cost
+
+    spent = cost.total_spend(cfg).get("cost_usd", 0.0)
+    cost.check_before_running(cfg, projected, spent)
+
+
+def record_batch_spend(cfg: Dict[str, Any], projected, action: str,
+                       n_attempted: int) -> None:
+    """
+    Charge the project for the ``n_attempted`` items that actually ran.
+
+    Call this in a ``finally``: a batch that dies partway still spent money on
+    everything before the exception, and a total that omits it is wrong in the
+    direction that lets the next run through.
+    """
+    from potato.ai import cost
+
+    if n_attempted <= 0:
+        return
+    cost.record_spend(cfg, action, projected.rescaled(n_attempted),
+                      estimated=True)
+
+
+def _few_shot_examples(schema_name: str, enabled: bool, cfg: Dict[str, Any]) -> List[dict]:
+    """Gold few-shot examples from high-agreement human labels (or [])."""
+    if not enabled:
+        return []
+    try:
+        from potato.ai.icl_labeler import get_icl_labeler
+        labeler = get_icl_labeler()
+        if labeler is None:
+            return []
+        by_schema = labeler.refresh_high_confidence_examples()
+        examples = by_schema.get(schema_name, [])[: int(cfg.get("max_examples", 5))]
+        return [{"id": getattr(e, "instance_id", ""),
+                 "text": getattr(e, "instance_text", getattr(e, "text", "")),
+                 "label": getattr(e, "label", getattr(e, "agreed_label", ""))}
+                for e in examples]
+    except Exception as e:
+        logger.warning(f"Judge few-shot example gathering failed: {e}")
+        return []
+
+
+def compute_judge_alignment(config: Dict[str, Any], users: List[str],
+                            prompt_version: Optional[str] = None) -> Dict[str, Any]:
+    """Full report: per-schema alignment for a prompt version + version list."""
+    schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+    version = prompt_version or latest_prompt_version(config)
+    # prompt_version, not `version`: without an explicit one each schema
+    # resolves its own latest version.
+    pairs = gather_pairs(config, users, schemas, prompt_version)
+    per_schema = compute_alignment_from_pairs(pairs)
+
+    preds = load_predictions(config)
+    # Creation order. Versions are named "v_" + a hash, so sorting by name
+    # put them in hash order and "improving" or "declining" was a coin toss.
+    # save_prediction appends new versions, and JSON keeps that order.
+    versions = []
+    for v in preds.keys():
+        v_schemas = [s for s in schemas
+                     if any(_schema_of_key(k) == s for k in preds[v])]
+        v_pairs = gather_pairs(config, users, v_schemas, v)
+        v_report = compute_alignment_from_pairs(v_pairs)
+        kappa_by_schema = {s: r["kappa"] for s, r in v_report.items()
+                           if r.get("kappa") is not None}
+        kappas = list(kappa_by_schema.values())
+        versions.append({
+            "prompt_version": v,
+            "schemas": v_schemas,
+            "n_predictions": len(preds[v]),
+            "mean_kappa": round(sum(kappas) / len(kappas), 3) if kappas else None,
+            "kappa_by_schema": kappa_by_schema,
+        })
+
+    # One trend per schema: a version belongs to one schema, and a single
+    # line through every version mixed different schemas' kappas.
+    trends = {}
+    for schema in schemas:
+        series = [{"mean_kappa": v["kappa_by_schema"][schema]}
+                  for v in versions if schema in v["kappa_by_schema"]]
+        trend = _kappa_trend(series)
+        if trend:
+            trends[schema] = dict(trend, schema=schema)
+    headline = max(trends.values(), key=lambda t: len(t["series"]), default=None)
+
+    return {
+        "prompt_version": version,
+        "prompt_version_by_schema": {
+            s: prompt_version or latest_prompt_version(config, s) for s in schemas},
+        "per_schema": per_schema,
+        "prompt_versions": versions,
+        "kappa_trend": headline,
+        "kappa_trends": trends,
+    }
+
+
+def _kappa_trend(sorted_versions: List[Dict[str, Any]],
+                 width: int = 220, height: int = 40, pad: int = 4) -> Optional[Dict[str, Any]]:
+    """Summarize mean-κ drift across prompt versions for the dashboard sparkline.
+
+    Returns ``None`` until there are ≥2 versions with a κ. Otherwise a dict with
+    the κ ``series``, the first→last ``delta`` and a ``direction``
+    (improving/declining/stable), plus precomputed SVG ``points`` so the template
+    can draw a sparkline without inline math. κ is bounded to [0, 1] for plotting
+    (negative κ — worse than chance — clamps to the floor).
+    """
+    series = [v["mean_kappa"] for v in sorted_versions if v["mean_kappa"] is not None]
+    if len(series) < 2:
+        return None
+    delta = series[-1] - series[0]
+    direction = "improving" if delta > 0.02 else ("declining" if delta < -0.02 else "stable")
+    n = len(series)
+    span_x = width - 2 * pad
+    span_y = height - 2 * pad
+    pts = []
+    for i, k in enumerate(series):
+        x = pad + (span_x * i / (n - 1))
+        y = pad + span_y * (1.0 - min(1.0, max(0.0, k)))  # higher κ → higher on screen
+        pts.append(f"{round(x, 1)},{round(y, 1)}")
+    return {
+        "series": [round(s, 3) for s in series],
+        "delta": round(delta, 3),
+        "direction": direction,
+        "first": round(series[0], 3),
+        "last": round(series[-1], 3),
+        "points": " ".join(pts),
+        "last_x": pts[-1].split(",")[0],
+        "last_y": pts[-1].split(",")[1],
+        "width": width, "height": height,
+    }

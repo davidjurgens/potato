@@ -18,6 +18,84 @@ function spanCoreDebugWarn(...args) {
 }
 
 /**
+ * Span offsets on the wire are Unicode code point offsets, not UTF-16 units.
+ *
+ * A DOM Range and `String.length` both count UTF-16 code units, so an emoji --
+ * or any other non-BMP character -- costs two. Python counts code points, and
+ * every consumer of a stored span slices in Python: the exporter, span IAA,
+ * adjudication. Before this conversion existed, one 🔥 in an item shifted every
+ * span after it by one per surrogate pair, and the exporter wrote out the
+ * shifted text without noticing that `end` had run past the end of the string.
+ *
+ * The conversion lives at the two boundaries of the DOM offset space rather
+ * than at each call site that saves a span: `getOffsetsFromSelection()` hands
+ * back code points, and `getPositionsFromOffsets()` takes them. Everything in
+ * between -- `overlay.dataset.start`, the save payload, `user_state.json` --
+ * is one space, and it is Python's. (`getTextPositions()` needs no conversion:
+ * it locates its own range with `indexOf` and ignores the offsets passed to
+ * it, so it never leaves the UTF-16 space it measures in.)
+ */
+function spanTextHasAstral(text) {
+    // Surrogate pairs are the only place the two spaces disagree, and almost
+    // no corpus has one, so pay for the scan and skip the walk.
+    return typeof text === 'string' && /[\uD800-\uDBFF]/.test(text);
+}
+
+function spanIsSurrogatePairAt(text, i) {
+    const hi = text.charCodeAt(i);
+    if (hi < 0xD800 || hi > 0xDBFF || i + 1 >= text.length) return false;
+    const lo = text.charCodeAt(i + 1);
+    return lo >= 0xDC00 && lo <= 0xDFFF;
+}
+
+/** UTF-16 code unit offset -> code point offset, against `text`. */
+function spanUtf16ToCodePoint(text, utf16Index) {
+    if (!(utf16Index > 0) || !spanTextHasAstral(text)) return utf16Index;
+    let i = 0, cp = 0;
+    while (i < utf16Index && i < text.length) {
+        i += spanIsSurrogatePairAt(text, i) ? 2 : 1;
+        cp += 1;
+    }
+    return cp;
+}
+
+/** Code point offset -> UTF-16 code unit offset, against `text`. */
+function spanCodePointToUtf16(text, cpIndex) {
+    if (!(cpIndex > 0) || !spanTextHasAstral(text)) return cpIndex;
+    let i = 0, cp = 0;
+    while (cp < cpIndex && i < text.length) {
+        i += spanIsSurrogatePairAt(text, i) ? 2 : 1;
+        cp += 1;
+    }
+    return i;
+}
+
+/** Length of `text` in code points -- what Python's `len()` would return. */
+function spanCodePointLength(text) {
+    if (!spanTextHasAstral(text)) return text ? text.length : 0;
+    let i = 0, cp = 0;
+    while (i < text.length) {
+        i += spanIsSurrogatePairAt(text, i) ? 2 : 1;
+        cp += 1;
+    }
+    return cp;
+}
+
+/** Slice `text` by code point offsets, the way Python's `text[start:end]` does. */
+function spanSliceByCodePoints(text, start, end) {
+    if (!spanTextHasAstral(text)) return String(text || '').substring(start, end);
+    return text.substring(spanCodePointToUtf16(text, start),
+                          spanCodePointToUtf16(text, end));
+}
+
+if (typeof window !== 'undefined') {
+    window.spanUtf16ToCodePoint = spanUtf16ToCodePoint;
+    window.spanCodePointToUtf16 = spanCodePointToUtf16;
+    window.spanCodePointLength = spanCodePointLength;
+    window.spanSliceByCodePoints = spanSliceByCodePoints;
+}
+
+/**
  * Centralized Z-Index Management
  * All overlay z-index values defined in one place for consistency.
  * Higher values appear on top of lower values.
@@ -119,24 +197,105 @@ class UnifiedPositioningStrategy {
         });
     }
 
+    // Non-transcript descendants whose text must NOT count toward span offsets.
+    // Kept in sync with the three collectTextNodes walks so the offset space,
+    // getCanonicalText(), and the bounds check all agree on one basis.
+    static shouldSkipForOffsets(node) {
+        return node.id === 'span-overlays' ||
+            node.classList.contains('span-overlays-field') ||
+            node.classList.contains('span-link-simple-arcs') ||
+            node.classList.contains('span-link-arcs-layer') ||
+            node.classList.contains('turn-anno-slot') ||
+            // The legacy dialogue `per_turn_ratings` widget writes real text
+            // (a schema label and every scale value) inside the span container.
+            // It was never skipped, so any dialogue combining spans with
+            // per_turn_ratings measured offsets against text the server's
+            // reconstruct_dialogue_dom_text() does not produce.
+            node.classList.contains('per-turn-rating') ||
+            node.classList.contains('per-turn-rating-group') ||
+            node.hasAttribute('data-span-offset-skip') ||
+            node.nodeName === 'svg' ||
+            node.namespaceURI === 'http://www.w3.org/2000/svg';
+    }
+
     getCanonicalText() {
+        // The server writes the exact rendered text and marks it: use it as
+        // is. Stripping or collapsing it again made it shorter than the
+        // offsets the walk below counts whenever the text held an entity, a
+        // literal "<", or a space next to a line break.
+        if (this.container.getAttribute('data-offset-basis') === 'dom' &&
+                this.container.hasAttribute('data-original-text')) {
+            return this.container.getAttribute('data-original-text');
+        }
         if (this.container.hasAttribute('data-original-text')) {
             const originalText = this.container.getAttribute('data-original-text');
             const cleanText = originalText.replace(/<[^>]*>/g, '').trim();
             return this.normalizeText(cleanText);
         }
-        const textContent = this.container.textContent || '';
-        return this.normalizeText(textContent);
+        // No data-original-text (dialogue / audio_dialogue / MAD span targets):
+        // fall back to DOM text, collected with the SAME skip rules the offset
+        // walk uses so canonical text and offsets share one basis.
+        //
+        // Deliberately NOT normalized: getOffsetsFromSelection() sums raw
+        // node.textContent.length, so the offset space includes the whitespace
+        // between bubble elements. Collapsing it here would make this text
+        // shorter than the offsets it is indexed by — slicing it would return
+        // text shifted by the whitespace preceding the span, and the bounds
+        // check in createSpanWithAlgorithm() would reject spans near the end.
+        let textContent = '';
+        const collect = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                textContent += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) return;
+                for (const child of node.childNodes) collect(child);
+            }
+        };
+        collect(this.container);
+        return textContent;
+    }
+
+    /**
+     * How much of the container's whitespace the browser actually keeps.
+     *
+     * Asked of the computed style rather than a list of class names. The
+     * class allowlist this replaced named the code displays and nothing else,
+     * so a `document` field -- which carries `white-space: pre-wrap` via
+     * `.document-preserve-structure` -- had its newlines collapsed out of the
+     * offset basis while the offset walk went on counting them. The basis
+     * ended up one character short per collapsed run, which put the tail of
+     * every such field past the bounds check in createSpanWithAlgorithm() and
+     * made it silently unselectable.
+     *
+     * @returns {'all'|'newlines'|'none'} how much whitespace to preserve.
+     */
+    preservedWhitespace() {
+        if (!this.container) return 'none';
+        let whiteSpace = '';
+        try {
+            whiteSpace = window.getComputedStyle(this.container).whiteSpace || '';
+        } catch (e) {
+            whiteSpace = '';
+        }
+        if (/^(pre|pre-wrap|break-spaces)$/.test(whiteSpace)) return 'all';
+        if (whiteSpace === 'pre-line') return 'newlines';
+        // Code displays keep their newlines even if the computed style did not
+        // say so -- an unstyled <pre> inside one still lays out as preformatted.
+        if (this.container.closest('.code-display') ||
+            this.container.closest('.code-simple') ||
+            this.container.querySelector('pre')) {
+            return 'newlines';
+        }
+        return 'none';
     }
 
     normalizeText(text) {
-        // For code displays (pre/code elements), preserve newlines for accurate positioning
-        // Check if we're inside a code display
-        if (this.container && (
-            this.container.closest('.code-display') ||
-            this.container.closest('.code-simple') ||
-            this.container.querySelector('pre')
-        )) {
+        const preserved = this.preservedWhitespace();
+        // Nothing to normalise, and nothing to trim: the offset walk sums raw
+        // node.textContent.length, so any character removed here shifts every
+        // offset that follows it.
+        if (preserved === 'all') return text;
+        if (preserved === 'newlines') {
             // Only normalize multiple spaces to single space, keep newlines
             return text.replace(/[ \t]+/g, ' ').trim();
         }
@@ -197,8 +356,12 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip overlay containers - their label/button text must not affect offset calculations
-                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                // Skip non-transcript overlays whose own text must NOT count toward
+                // character offsets (span overlay containers, the span-link arc SVG
+                // with its numbered <text> badges, and the per-turn rating slots that
+                // turn-annotations.js writes dynamic text into). Shared predicate so
+                // every walk + getCanonicalText() agree on one offset basis.
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) {
                     return;
                 }
                 for (const child of node.childNodes) {
@@ -208,47 +371,14 @@ class UnifiedPositioningStrategy {
         };
         collectTextNodes(this.container);
 
-        // Find the offset for start and end
-        let absoluteStart = null;
-        let absoluteEnd = null;
-
-        for (const tn of textNodes) {
-            if (tn.node === startContainer) {
-                absoluteStart = tn.start + startOffset;
-            }
-            if (tn.node === endContainer) {
-                absoluteEnd = tn.start + endOffset;
-            }
-        }
-
-        // Handle case where start/end containers are element nodes
-        if (absoluteStart === null && startContainer.nodeType === Node.ELEMENT_NODE) {
-            // startOffset is the index of the child node
-            if (startOffset < startContainer.childNodes.length) {
-                const childNode = startContainer.childNodes[startOffset];
-                for (const tn of textNodes) {
-                    if (tn.node === childNode || tn.node.parentNode === childNode) {
-                        absoluteStart = tn.start;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (absoluteEnd === null && endContainer.nodeType === Node.ELEMENT_NODE) {
-            if (endOffset > 0 && endOffset <= endContainer.childNodes.length) {
-                const childNode = endContainer.childNodes[endOffset - 1];
-                for (const tn of textNodes) {
-                    if (tn.node === childNode || tn.node.parentNode === childNode) {
-                        absoluteEnd = tn.end;
-                        break;
-                    }
-                }
-            }
-        }
+        const absoluteStart = this.resolveBoundaryOffset(
+            textNodes, startContainer, startOffset);
+        const absoluteEnd = this.resolveBoundaryOffset(
+            textNodes, endContainer, endOffset);
 
         if (absoluteStart === null || absoluteEnd === null) {
-            console.warn('[SpanCore] Could not find absolute offsets for selection', {
+            console.warn('[SpanCore] Could not find absolute offsets for selection ' +
+                '(the selection did not start or end inside the annotatable text)', {
                 startContainer: startContainer.nodeName,
                 endContainer: endContainer.nodeName,
                 startOffset,
@@ -257,7 +387,78 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        return { start: absoluteStart, end: absoluteEnd };
+        // The walk above counts UTF-16 code units, because that is what a DOM
+        // Range offset and node.textContent.length are. Hand back code points:
+        // everything past this return -- the overlay dataset, the save payload,
+        // user_state.json -- is read by Python.
+        const basis = this.getCanonicalText();
+        return {
+            start: spanUtf16ToCodePoint(basis, absoluteStart),
+            end: spanUtf16ToCodePoint(basis, absoluteEnd)
+        };
+    }
+
+    /**
+     * The character offset of a DOM boundary point, in the walk's own space.
+     *
+     * A boundary is a (container, offset) pair. When the container is a text
+     * node the answer is arithmetic. When it is an ELEMENT the boundary sits
+     * *between* that element's children, and the answer is "how much collected
+     * text precedes it".
+     *
+     * That element case used to be two special-cased branches: one that only
+     * ran when `startOffset < childNodes.length`, and one that only ran when
+     * `endOffset > 0`. A drag that begins at the end of an existing span, or
+     * ends at the beginning of one, produces exactly the two boundaries those
+     * branches excluded -- so the selection resolved to null and the span was
+     * refused. Partially overlapping an existing span is the normal way to
+     * mark a longer phrase over a shorter one, and it was the one gesture that
+     * could not be made. (Enclosing a span worked, which is why it first
+     * looked like a same-scheme problem.)
+     *
+     * Measured with a collapsed Range rather than by inspecting child indices,
+     * so every boundary shape a browser can produce resolves the same way.
+     *
+     * @returns {number|null} the offset, or null when the boundary is outside
+     *   the annotatable text entirely.
+     */
+    resolveBoundaryOffset(textNodes, container, offset) {
+        if (!container) return null;
+
+        for (const tn of textNodes) {
+            if (tn.node === container) return tn.start + offset;
+        }
+        if (container.nodeType !== Node.ELEMENT_NODE) return null;
+
+        const probe = document.createRange();
+        try {
+            probe.setStart(container, offset);
+            probe.collapse(true);
+        } catch (e) {
+            return null;
+        }
+
+        // Everything that ends at or before the boundary precedes it. Nothing
+        // ending before it means the boundary sits ahead of all collected
+        // text, which is offset 0 -- not a failure.
+        let resolved = 0;
+        let inRange = false;
+        for (const tn of textNodes) {
+            let position;
+            try {
+                position = probe.comparePoint(tn.node, tn.node.length);
+            } catch (e) {
+                continue;   // a node outside the probe's root
+            }
+            if (position <= 0) {
+                resolved = tn.end;
+                inRange = true;
+            } else {
+                inRange = true;
+                break;
+            }
+        }
+        return inRange ? resolved : null;
     }
 
     createSpanWithAlgorithm(start, end, text, options = {}) {
@@ -266,8 +467,12 @@ class UnifiedPositioningStrategy {
         }
 
         const canonicalText = this.getCanonicalText();
-        if (start < 0 || end > canonicalText.length || start >= end) {
-            console.warn('[SpanCore] Invalid span positions:', { start, end, textLength: canonicalText.length });
+        // Code point length, to match the space `start`/`end` are expressed in.
+        const canonicalLength = spanCodePointLength(canonicalText);
+        if (start < 0 || end > canonicalLength || start >= end) {
+            console.warn('[SpanCore] Refusing a span outside the text it indexes:',
+                { start, end, textLength: canonicalLength,
+                  container: this.container ? this.container.id : null });
             return null;
         }
 
@@ -347,8 +552,12 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip overlay containers - their label/button text must not affect offset calculations
-                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                // Skip non-transcript overlays whose own text must NOT count toward
+                // character offsets (span overlay containers, the span-link arc SVG
+                // with its numbered <text> badges, and the per-turn rating slots that
+                // turn-annotations.js writes dynamic text into). Shared predicate so
+                // every walk + getCanonicalText() agree on one offset basis.
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) {
                     return;
                 }
                 for (const child of node.childNodes) {
@@ -422,6 +631,13 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
+        // `start`/`end` arrive as code point offsets -- from a stored span, an
+        // AI suggestion, or a keyword highlight, all of which were measured in
+        // Python. The walk below counts UTF-16 code units, so convert first.
+        const offsetBasis = this.getCanonicalText();
+        start = spanCodePointToUtf16(offsetBasis, start);
+        end = spanCodePointToUtf16(offsetBasis, end);
+
         // Collect text nodes with cumulative offsets
         const textNodes = [];
         let cumulativeOffset = 0;
@@ -435,8 +651,12 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip overlay containers - their label/button text must not affect offset calculations
-                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                // Skip non-transcript overlays whose own text must NOT count toward
+                // character offsets (span overlay containers, the span-link arc SVG
+                // with its numbered <text> badges, and the per-turn rating slots that
+                // turn-annotations.js writes dynamic text into). Shared predicate so
+                // every walk + getCanonicalText() agree on one offset basis.
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) {
                     return;
                 }
                 for (const child of node.childNodes) {
@@ -561,8 +781,8 @@ class UnifiedPositioningStrategy {
                 segment.style.borderRadius = '3px';
                 segment.style.boxShadow = `0 0 4px ${color}`;
             } else {
-                segment.style.backgroundColor = color;
-                segment.style.border = `1px solid ${color.replace('0.3', '0.8')}`;
+                segment.style.backgroundColor = spanFillColour(color);
+                segment.style.border = `1px solid ${spanEdgeColour(color)}`;
                 segment.style.borderRadius = '4px';
             }
             segment.style.pointerEvents = 'none';
@@ -581,8 +801,16 @@ class UnifiedPositioningStrategy {
             controlsContainer.className = 'span-controls';
             controlsContainer.style.position = 'absolute';
             controlsContainer.style.left = `${segmentLeft}px`;
-            // Position 22px above the segment top (controls are ~18px tall)
-            controlsContainer.style.top = `${segmentTop - 22}px`;
+            // The chip is a fixed 18px tall and sits with its bottom 1px
+            // above the glyphs it labels, inside the gutter that
+            // .span-labels-on opens between lines. It used to sit at -22px
+            // and inherit the text's 2.35 line-height, which made it 30px
+            // tall: it covered the top of its own word and, on wrapped text,
+            // the bottom of the line above.
+            const CHIP_HEIGHT = 18;
+            controlsContainer.style.top = `${segmentTop + VERTICAL_PADDING - 1 - CHIP_HEIGHT}px`;
+            controlsContainer.style.height = `${CHIP_HEIGHT}px`;
+            controlsContainer.style.lineHeight = '1';
             controlsContainer.style.display = 'flex';
             controlsContainer.style.alignItems = 'center';
             controlsContainer.style.gap = '4px';
@@ -596,7 +824,16 @@ class UnifiedPositioningStrategy {
             if (showLabels) {
                 const label = document.createElement('div');
                 label.className = 'span-label';
-                label.textContent = span.label;
+                // A label's `abbreviation` is the chip text; the full name
+                // stays in the tooltip. The picker checkbox carries it, so a
+                // span restored from the server gets it as a new one does.
+                const picker = document.getElementById(`${span.schema}_${span.label}`);
+                const abbreviation = picker && picker.dataset ? picker.dataset.abbreviation : '';
+                label.textContent = abbreviation || span.label;
+                label.title = span.label;
+                // Read by the compact (dot) form, so a collapsed chip still
+                // says which code it is by colour.
+                label.style.setProperty('--span-colour', color);
                 // Override CSS positioning to work in flex container
                 label.style.position = 'static';
                 label.style.top = 'auto';
@@ -605,7 +842,8 @@ class UnifiedPositioningStrategy {
                 label.style.color = 'white';
                 label.style.padding = '2px 6px';
                 label.style.borderRadius = '3px';
-                label.style.fontSize = '11px';
+                label.style.fontSize = '12px';
+                label.style.lineHeight = '14px';
                 label.style.fontWeight = '500';
                 label.style.whiteSpace = 'nowrap';
                 label.style.display = 'block';
@@ -615,7 +853,10 @@ class UnifiedPositioningStrategy {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'span-delete-btn';
             deleteBtn.textContent = '×';
-            deleteBtn.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
+            deleteBtn.type = 'button';
+            deleteBtn.setAttribute('aria-label', `Remove ${span.label} span`);
+            deleteBtn.title = `Remove ${span.label} span`;
+            // Colour comes from span-styles.css (--destructive).
             deleteBtn.style.color = 'white';
             deleteBtn.style.border = 'none';
             deleteBtn.style.borderRadius = '50%';
@@ -635,8 +876,10 @@ class UnifiedPositioningStrategy {
             deleteBtn.style.alignItems = 'center';
             deleteBtn.style.justifyContent = 'center';
             deleteBtn.style.flexShrink = '0';
-            // Reset any CSS positioning that might interfere
-            deleteBtn.style.position = 'static';
+            // Reset any CSS positioning that might interfere. Relative rather
+            // than static so span-styles.css can give the 16px glyph a 24px
+            // hit area with ::after.
+            deleteBtn.style.position = 'relative';
             deleteBtn.style.top = 'auto';
             deleteBtn.style.right = 'auto';
             deleteBtn.style.left = 'auto';
@@ -670,9 +913,97 @@ class UnifiedPositioningStrategy {
 }
 
 /**
+ * A stable colour for a label the server never assigned one to.
+ *
+ * Module-level and exposed on `window` because two very different surfaces
+ * need it: span overlays here, and the drawing palettes that codebook.js
+ * extends with runtime codes. A code minted during open coding has to look the
+ * same wherever it appears, and two hash functions would guarantee it did not.
+ *
+ * @param {string} label
+ * @returns {string} an "(r, g, b)" triple, the shape /api/colors uses
+ */
+function paletteColorFor(label) {
+    const key = String(label == null ? '' : label);
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+    }
+    const palette = SpanManager.FALLBACK_PALETTE;
+    return palette[Math.abs(hash) % palette.length];
+}
+
+if (typeof window !== 'undefined') {
+    window.potatoPaletteColor = paletteColorFor;
+}
+
+/*
+ * A span highlight is painted ON TOP of the text it covers, so its alpha
+ * decides how readable the labelled words are. /api/colors sends label
+ * colours at alpha 0.8 (the same values label chips and image tools use),
+ * and painting that straight onto the text left it at 1.7:1 in the worst
+ * palette colour -- the words being labelled were the hardest text on the
+ * page to read. At 0.2 the worst palette colour keeps the covered text at
+ * 11.6:1, and two overlapping spans of the same colour at 6.9:1. The border
+ * stays at 0.8 so the extent of the span is still obvious.
+ */
+const SPAN_FILL_ALPHA = 0.2;
+const SPAN_EDGE_ALPHA = 0.8;
+
+/**
+ * Parse "rgba(r, g, b, a)", "rgb(r, g, b)", the "(r, g, b)" triple
+ * /api/colors uses, or "#rgb"/"#rrggbb".
+ * @returns {number[]|null} [r, g, b, a], or null for anything else
+ */
+function spanColourParts(colour) {
+    const s = String(colour == null ? '' : colour).trim();
+    const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) {
+        let h = hex[1];
+        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+        return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), 1];
+    }
+    const m = s.match(/^(?:rgba?)?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+}
+
+/** The fill for a highlight segment: the label's hue at no more than SPAN_FILL_ALPHA. */
+function spanFillColour(colour) {
+    const p = spanColourParts(colour);
+    if (!p) return `color-mix(in srgb, ${colour} ${SPAN_FILL_ALPHA * 100}%, transparent)`;
+    return `rgba(${p[0]}, ${p[1]}, ${p[2]}, ${Math.min(p[3], SPAN_FILL_ALPHA)})`;
+}
+
+/** The outline for a highlight segment: the label's hue at SPAN_EDGE_ALPHA. */
+function spanEdgeColour(colour) {
+    const p = spanColourParts(colour);
+    if (!p) return colour;
+    return `rgba(${p[0]}, ${p[1]}, ${p[2]}, ${SPAN_EDGE_ALPHA})`;
+}
+
+if (typeof window !== 'undefined') {
+    window.potatoSpanFillColour = spanFillColour;
+}
+
+/**
  * Frontend Span Manager for Potato Annotation Platform
  */
 class SpanManager {
+    /**
+     * Mirrors SPAN_COLOR_PALETTE in potato/server_utils/schemas/span.py, so a
+     * label coloured here is indistinguishable from one the server coloured.
+     * Kept in step by tests/unit/test_span_palette_parity.py.
+     */
+    static FALLBACK_PALETTE = [
+        '(110, 86, 207)', '(239, 68, 68)', '(113, 113, 122)', '(245, 158, 11)',
+        '(16, 185, 129)', '(59, 130, 246)', '(220, 38, 38)', '(139, 92, 246)',
+        '(156, 163, 175)', '(107, 114, 128)', '(55, 65, 81)', '(249, 115, 22)',
+        '(6, 182, 212)', '(236, 72, 153)', '(5, 150, 105)', '(124, 58, 237)',
+        '(22, 163, 74)', '(234, 88, 12)', '(37, 99, 235)', '(127, 29, 29)',
+        '(168, 85, 247)', '(34, 197, 94)',
+    ];
+
     constructor() {
         this.annotations = { spans: [] };
         this.colors = {};
@@ -697,6 +1028,16 @@ class SpanManager {
         // Discontinuous span support: track active span being extended
         this.discontinuousMode = false;
         this.activeDiscontinuousSpan = null; // Span being extended with additional parts
+
+        // Leaving the page aborts in-flight fetches with "Failed to fetch".
+        // Keyword highlights load in the background, so a quick Next often
+        // lands on one; that is not an error worth logging.
+        this.pageUnloading = false;
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            const markUnloading = () => { this.pageUnloading = true; };
+            window.addEventListener('beforeunload', markUnloading);
+            window.addEventListener('pagehide', markUnloading);
+        }
     }
 
     // ==================== SCHEMA STATE MANAGEMENT ====================
@@ -978,8 +1319,23 @@ class SpanManager {
     // ==================== CORE SPAN MANAGER METHODS ====================
 
     async fetchCurrentInstanceIdFromServer() {
+        // Phase pages have no instance; asking anyway costs a 404 that the
+        // browser logs as a failed load on every consent/instructions page.
+        if (window.config && window.config.is_annotation_page === false) {
+            this.currentInstanceId = null;
+            return null;
+        }
         try {
             const response = await fetch('/api/current_instance');
+            if (response.status === 404) {
+                // Not a failure. Consent, instructions, training and the survey
+                // pages have no instance, and the endpoint's own phase guard
+                // says so with a 404. Reporting that as an error put two red
+                // lines in the console on every phase page and buried the
+                // errors that mean something.
+                this.currentInstanceId = null;
+                return null;
+            }
             if (!response.ok) {
                 throw new Error(`Failed to fetch current instance: ${response.status}`);
             }
@@ -1000,16 +1356,69 @@ class SpanManager {
         }
     }
 
-    async initialize() {
+    /**
+     * The instance this annotation page was rendered for, or null.
+     *
+     * Read from the server-rendered `#instance_id` rather than asked of
+     * /api/current_instance: that request sat on the path to hiding the
+     * loading state, one round trip before the spans could even be requested.
+     * The DOM is also the better answer -- it names the text on screen, where
+     * the server's current instance may already be another one if a second tab
+     * moved the annotator on. Null off the annotation page (phase pages,
+     * adjudication), which keeps asking the server as before.
+     */
+    renderedInstanceId() {
+        if (!window.config || !window.config.is_annotation_page) return null;
+        const el = document.getElementById('instance_id');
+        return (el && el.value) ? el.value : null;
+    }
+
+    /** Make `instanceId` current, as fetchCurrentInstanceIdFromServer() does. */
+    adoptInstanceId(instanceId) {
+        if (this.currentInstanceId !== instanceId && this.currentInstanceId !== null) {
+            this.clearAllStateAndOverlays();
+        }
+        this.currentInstanceId = instanceId;
+        this.lastKnownInstanceId = instanceId;
+        return instanceId;
+    }
+
+    /**
+     * Initialize once, however many callers ask.
+     *
+     * The 1 s retry at the bottom of this file fires whenever initialization
+     * has not *finished*, and over any real network it has not: it waits on
+     * fonts and four requests. The retry then started a second run alongside
+     * the first, which bound every text-selection listener twice.
+     */
+    initialize() {
+        if (!this._initializing) {
+            this._initializing = this.initializeNow().finally(() => {
+                this._initializing = null;
+            });
+        }
+        return this._initializing;
+    }
+
+    async initializeNow() {
         try {
-            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
+            const renderedId = this.renderedInstanceId();
+            const serverInstanceId = renderedId
+                ? this.adoptInstanceId(renderedId)
+                : await this.fetchCurrentInstanceIdFromServer();
             if (!serverInstanceId) {
-                console.error('[SpanManager] Failed to get server instance ID during initialization');
+                // A page with no instance is a page with nothing to span.
+                spanCoreDebugLog('[SpanManager] No current instance; not initialising');
                 return false;
             }
 
             // Set up event listeners early (before async strategy init that might block)
             this.setupEventListeners();
+
+            // Before any strategy measures the text: opening the label gutter
+            // changes line-height, and positions taken beforehand would be
+            // stale the moment it applied.
+            this.applyLabelGutter();
 
             // Check for instance_display span target fields first
             const spanTargetFields = document.querySelectorAll('.display-field[data-span-target="true"]');
@@ -1195,26 +1604,88 @@ class SpanManager {
         }
     }
 
-    getSelectedLabel() {
+    /**
+     * Whether `schemaName` is pinned to a different field than `targetField`.
+     *
+     * A scheme with no `target_field` is unpinned and owns whatever it is
+     * pointed at, so it never counts as belonging elsewhere.
+     */
+    schemaTargetsOtherField(schemaName, targetField) {
+        if (!schemaName || !targetField) return false;
+        const form = document.querySelector(
+            `.annotation-form.span[data-schema-name="${CSS.escape(schemaName)}"]`);
+        if (!form) return false;
+        const owns = form.getAttribute('data-target-field') || '';
+        return owns !== '' && owns !== targetField;
+    }
+
+    /**
+     * A checked span-label checkbox belonging to the field being annotated.
+     *
+     * Prefers a scheme pinned to this field, then an unpinned scheme, and only
+     * then anything checked at all -- which is what the single-scheme studies
+     * this code was written against always resolved to.
+     */
+    findCheckedLabelFor(targetField) {
+        const checked = Array.from(document.querySelectorAll(
+            '.annotation-form.span input[type="checkbox"]:checked'));
+        if (!checked.length) return null;
+        if (!targetField) return checked[0];
+
+        const owns = box => (box.getAttribute('data-target-field')
+            || (box.closest('.annotation-form.span')
+                && box.closest('.annotation-form.span')
+                    .getAttribute('data-target-field'))
+            || '');
+        return checked.find(box => owns(box) === targetField)
+            || checked.find(box => owns(box) === '')
+            || checked[0];
+    }
+
+    getSelectedLabel(targetField) {
         // FIRST: Use the label set by selectLabel() if available
         // This is set by changeSpanLabel() when a checkbox is clicked,
         // and is more reliable than querying the DOM
         if (this.selectedLabel && this.currentSchema) {
-            return this.selectedLabel;
+            // ...unless the drag was in a field that scheme does not target.
+            // With several span schemes the armed one is often not the one
+            // that owns the field under the cursor, and the stored offsets
+            // would then be right while the schema name was wrong.
+            if (!targetField || !this.schemaTargetsOtherField(this.currentSchema,
+                                                              targetField)) {
+                return this.selectedLabel;
+            }
         }
 
-        // FALLBACK: Try to find checked span checkbox (for legacy code paths)
-        const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
+        // FALLBACK: a checked span checkbox.
+        //
+        // This used to take the first checked box in the DOCUMENT, across
+        // every span scheme on the page. Span label checkboxes render checked
+        // by default, so with more than one scheme every scheme is armed
+        // before the annotator touches anything and "first" is just DOM order:
+        // three spans drawn in three different fields all stored under the
+        // first scheme, each with the correct target_field. The offsets were
+        // right and the schema name was wrong, which is the combination that
+        // makes the file look clean.
+        //
+        // Restricting to the scheme that owns the field being annotated is the
+        // disambiguation the page already has -- `target_field` was correct
+        // throughout.
+        const checkedCheckbox = this.findCheckedLabelFor(targetField);
 
         if (checkedCheckbox) {
+            // The owning form states its schema. Splitting the checkbox id on
+            // "_" and calling everything before the last one the schema name
+            // works only while no label contains an underscore, and the answer
+            // is on the form either way.
+            const form = checkedCheckbox.closest('.annotation-form.span');
+            const declared = form && form.getAttribute('data-schema-name');
+
             const checkboxId = checkedCheckbox.id;
             const parts = checkboxId.split('_');
             if (parts.length >= 2) {
-                // ID format is "schemaName_labelName" - extract both
                 const label = parts[parts.length - 1];
-                // Schema name is everything before the last underscore
-                // (handles multi-word schema names like "emotion_spans")
-                const schemaName = parts.slice(0, -1).join('_');
+                const schemaName = declared || parts.slice(0, -1).join('_');
 
                 // Update currentSchema to match the selected checkbox's schema
                 if (schemaName) {
@@ -1222,6 +1693,9 @@ class SpanManager {
                 }
 
                 return label;
+            }
+            if (declared) {
+                this.setCurrentSchema(declared, 'getSelectedLabel');
             }
             return checkedCheckbox.value;
         }
@@ -1231,9 +1705,14 @@ class SpanManager {
 
     async loadAnnotations(instanceId) {
         try {
-            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
-            if (serverInstanceId !== instanceId) {
-                instanceId = serverInstanceId;
+            const renderedId = this.renderedInstanceId();
+            if (instanceId && instanceId === renderedId) {
+                this.adoptInstanceId(instanceId);
+            } else {
+                const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
+                if (serverInstanceId !== instanceId) {
+                    instanceId = serverInstanceId;
+                }
             }
 
             // Find the text content element - may be legacy #text-content or instance_display fields
@@ -1245,18 +1724,20 @@ class SpanManager {
                     textContent = document.getElementById(`text-content-${firstField}`);
                 }
             }
-            const existingSpans = textContent ? textContent.querySelectorAll('.span-highlight') : [];
-            const hasServerRenderedSpans = existingSpans.length > 0;
+            if (!instanceId) {
+                // No instance (a phase page): there are no spans to load, and
+                // asking for /api/spans/null only earned a 404.
+                this.clearAllStateAndOverlays();
+                this.renderSpans();
+                return Promise.resolve();
+            }
 
             const response = await fetch(`/api/spans/${instanceId}`);
 
             if (!response.ok) {
                 if (response.status === 404) {
-                    this.annotations = { spans: [] };
-                    if (!hasServerRenderedSpans) {
-                        this.clearAllStateAndOverlays();
-                        this.renderSpans();
-                    }
+                    this.clearAllStateAndOverlays();
+                    this.renderSpans();
                     return Promise.resolve();
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1273,14 +1754,22 @@ class SpanManager {
                 throw new Error(`JSON parse error: ${jsonError.message}`);
             }
             this.annotations = responseData;
+            if (((responseData && responseData.spans) || []).some(s => s.prelabel)) {
+                this.prelabelsOffered = true;
+            }
 
             // Only update data-original-text on legacy #text-content, not on per-field elements
             // Per-field elements already have correct data-original-text from server rendering
             if (this.annotations && this.annotations.text && textContent) {
                 const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
                 if (!hasFieldStrategies) {
-                    const plainText = this.annotations.text.replace(/<[^>]*>/g, '').trim();
-                    textContent.setAttribute('data-original-text', plainText);
+                    if (this.annotations.text_basis === 'dom') {
+                        textContent.setAttribute('data-original-text', this.annotations.text);
+                        textContent.setAttribute('data-offset-basis', 'dom');
+                    } else {
+                        const plainText = this.annotations.text.replace(/<[^>]*>/g, '').trim();
+                        textContent.setAttribute('data-original-text', plainText);
+                    }
                 }
             }
 
@@ -1293,8 +1782,11 @@ class SpanManager {
 
             this.renderSpans();
 
-            // Load admin keyword highlights after span annotations
-            await this.loadKeywordHighlights(instanceId);
+            // Admin keyword highlights are decoration drawn over the spans. Not
+            // awaited: the page's loading state waits on this method, and the
+            // highlights were one more round trip in front of it. The loader
+            // handles its own errors.
+            this.keywordHighlightsLoaded = this.loadKeywordHighlights(instanceId);
 
         } catch (error) {
             console.error('[SpanManager] Error loading annotations:', error);
@@ -1306,27 +1798,47 @@ class SpanManager {
         return this.annotations?.spans || [];
     }
 
+    /**
+     * A stable colour for a label the server never assigned one to.
+     *
+     * Codes minted at runtime (codebook `open` mode) are not in /api/colors,
+     * and every one of them used to come back as the same default purple —
+     * so in an open-coding project, where minting codes IS the workflow, every
+     * new code highlighted identically and its palette chip had no colour at
+     * all. codebook.js already assumed this existed ("color is hash-derived in
+     * SpanManager (getSpanColor)"); it did not.
+     *
+     * Hash-derived rather than counter-derived so the same code gets the same
+     * colour for every annotator and after every reload, matching how the
+     * server assigns colours from the same palette.
+     *
+     * @returns {string} an "(r, g, b)" triple, the shape /api/colors uses
+     */
+    paletteColorFor(label) {
+        return paletteColorFor(label);
+    }
+
     getSpanColor(label) {
         // Diagnostic logging for color lookup failures
         if (!this.currentSchema) {
             console.warn(`[SpanManager] getSpanColor: No currentSchema set for label '${label}'. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         if (!this.colors || Object.keys(this.colors).length === 0) {
             console.warn(`[SpanManager] getSpanColor: Colors not loaded for label '${label}'. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         if (!this.colors[this.currentSchema]) {
             console.warn(`[SpanManager] getSpanColor: Schema '${this.currentSchema}' not found in colors. Available schemas: ${Object.keys(this.colors).join(', ')}. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         const schemaColors = this.colors[this.currentSchema];
         if (!schemaColors[label]) {
-            console.warn(`[SpanManager] getSpanColor: Label '${label}' not found in schema '${this.currentSchema}'. Available labels: ${Object.keys(schemaColors).join(', ')}. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            // Not a failure: codes minted at runtime are never in /api/colors.
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         const color = schemaColors[label];
@@ -1357,7 +1869,24 @@ class SpanManager {
         // Don't clear currentSchema - keep it for consistency
     }
 
+    /**
+     * Draw the overlays, then say so.
+     *
+     * The event-annotation widget renders its list of saved events before the
+     * overlays exist, so looking an argument's text up by span id returned null
+     * and every argument printed as "?" on any revisit or reload. Nothing
+     * re-rendered the list once the spans arrived, because nothing announced
+     * that they had. Anyone downstream of a span restore needs this signal;
+     * polling for overlays is the alternative and it is worse.
+     */
     renderSpans() {
+        this.renderSpansNow();
+        document.dispatchEvent(new CustomEvent('potato:spansRendered', {
+            detail: {schema: this.currentSchema},
+        }));
+    }
+
+    renderSpansNow() {
         const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
 
         if (hasFieldStrategies) {
@@ -1373,15 +1902,21 @@ class SpanManager {
             const spans = this.getSpans();
             if (!spans || spans.length === 0) return;
 
+            const untargetedField = this.fieldForUntargetedSpans();
             const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
             sortedSpans.forEach((span, index) => {
-                const fieldKey = span.target_field || '';
+                const fieldKey = span.target_field || untargetedField;
                 const strategy = this.fieldStrategies[fieldKey] || this.positioningStrategy;
                 const overlaysEl = document.getElementById(`span-overlays-${fieldKey}`) || document.getElementById('span-overlays');
                 if (strategy && overlaysEl) {
                     this.renderSpanOverlay(span, index, null, overlaysEl, strategy);
                 }
             });
+
+            for (const fieldKey of Object.keys(this.fieldStrategies)) {
+                this.applyControlCompaction(
+                    document.getElementById(`span-overlays-${fieldKey}`));
+            }
         } else {
             // Legacy single-field mode
             const textContent = document.getElementById('text-content');
@@ -1404,7 +1939,144 @@ class SpanManager {
             sortedSpans.forEach((span, index) => {
                 this.renderSpanOverlay(span, index, textContent, spanOverlays);
             });
+            this.applyControlCompaction(spanOverlays);
         }
+    }
+
+    /**
+     * The field a span with no `target_field` is drawn on, or '' for none.
+     *
+     * Such a span indexes the item's text (`text_key`), the text the hidden
+     * legacy `#text-content` holds. On an `instance_display` page there is
+     * no `#span-overlays` for it, so it was drawn nowhere: a span stored
+     * without a field (a prelabel, an import, an API write, or one made
+     * before the field was marked `span_target`) was in the data and absent
+     * from the page. It goes on the span-target field showing that same
+     * text, whose offsets are then the same offsets; never on a field that
+     * shows anything else.
+     */
+    fieldForUntargetedSpans() {
+        if (document.getElementById('span-overlays')) return '';
+        const legacy = document.getElementById('text-content');
+        const itemText = legacy && legacy.getAttribute('data-original-text');
+        if (!itemText) return '';
+        for (const [fieldKey, strategy] of Object.entries(this.fieldStrategies)) {
+            if (strategy && typeof strategy.getCanonicalText === 'function' &&
+                    strategy.getCanonicalText() === itemText &&
+                    document.getElementById(`span-overlays-${fieldKey}`)) {
+                return fieldKey;
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Decide which label chips have to collapse to a dot.
+     *
+     * Chips sit in the gutter above the text they label, anchored at the span's
+     * start. Overlapping codes therefore pile up in the same strip: five codes
+     * on one sentence rendered five wide black chips across it, and the text
+     * underneath was unreadable. Overlapping codes are not an edge case in
+     * qualitative work — they are the point of it.
+     *
+     * The first chip in any collision keeps its text; the rest become colour
+     * dots that name themselves on hover and focus. Pure function over boxes so
+     * it can be tested without a layout engine.
+     *
+     * @param {Array<{left:number,right:number,top:number,bottom:number}>} boxes
+     *        chip rectangles, in render order
+     * @returns {boolean[]} true where that chip must collapse
+     */
+    static planControlCompaction(boxes) {
+        const kept = [];
+        const hits = (a, b) => !(a.right <= b.left || a.left >= b.right ||
+                                 a.bottom <= b.top || a.top >= b.bottom);
+        return (boxes || []).map((box) => {
+            if (!box) return false;
+            if (kept.some((k) => hits(k, box))) return true;
+            kept.push(box);
+            return false;
+        });
+    }
+
+    /**
+     * How far right each collapsed dot must move to clear the kept chips.
+     *
+     * A dot stays at its span's start, which is inside the chip it collided
+     * with whenever the two spans start close together ("alice works": the
+     * dot for "works" landed on the delete button of the chip for "alice").
+     * Drawn later, the dot sat on top of that button, so the kept span could
+     * not be removed. Each dot moves just past any kept chip it overlaps.
+     *
+     * @param {Array} boxes   chip rectangles as measured expanded, in render order
+     * @param {boolean[]} compact  planControlCompaction()'s answer for them
+     * @param {Array} dotBoxes  each collapsed chip's rectangle once collapsed
+     *        (null for a kept one)
+     * @returns {number[]} px to add to each chip's left (0 for most)
+     */
+    static planCompactNudges(boxes, compact, dotBoxes) {
+        const GAP = 2;
+        const hits = (a, b) => !(a.right <= b.left || a.left >= b.right ||
+                                 a.bottom <= b.top || a.top >= b.bottom);
+        const kept = (boxes || []).filter((b, i) => b && !(compact || [])[i]);
+        return (boxes || []).map((_, i) => {
+            const dot = (dotBoxes || [])[i];
+            if (!(compact || [])[i] || !dot) return 0;
+            let dx = 0;
+            for (let pass = 0; pass <= kept.length; pass++) {
+                const moved = {left: dot.left + dx, right: dot.right + dx,
+                               top: dot.top, bottom: dot.bottom};
+                const blocker = kept.find((k) => hits(k, moved));
+                if (!blocker) break;
+                dx = blocker.right + GAP - dot.left;
+            }
+            return dx;
+        });
+    }
+
+    /**
+     * Open a gutter above each line when chips are being drawn into it.
+     *
+     * Applied to the text container rather than baked into the stylesheet so a
+     * span task that has switched labels off keeps the tighter line spacing.
+     */
+    applyLabelGutter() {
+        const showLabels = !document.querySelector(
+            '.annotation-form.span[data-show-span-labels="false"]');
+        const containers = [document.getElementById('instance-text')]
+            .concat(Array.from(document.querySelectorAll('[id^="text-content-"]')));
+        containers.forEach((el) => {
+            if (el) el.classList.toggle('span-labels-on', showLabels);
+        });
+    }
+
+    /** Measure the rendered chips and collapse the ones that collide. */
+    applyControlCompaction(overlaysEl) {
+        if (!overlaysEl) return;
+        const controls = Array.from(
+            overlaysEl.querySelectorAll('.span-controls'));
+        if (controls.length < 2) {
+            controls.forEach((c) => c.classList.remove('is-compact'));
+            return;
+        }
+        // Measure everything expanded first, or an earlier collapse changes
+        // the boxes the later ones are compared against.
+        controls.forEach((c) => {
+            c.classList.remove('is-compact');
+            if (c.dataset.baseLeft !== undefined) c.style.left = c.dataset.baseLeft;
+        });
+        const boxes = controls.map((c) => c.getBoundingClientRect());
+        const compact = SpanManager.planControlCompaction(boxes);
+        compact.forEach((isCompact, i) => {
+            controls[i].classList.toggle('is-compact', isCompact);
+        });
+        const dots = controls.map((c, i) => (compact[i] ? c.getBoundingClientRect() : null));
+        SpanManager.planCompactNudges(boxes, compact, dots).forEach((dx, i) => {
+            if (!dx) return;
+            const c = controls[i];
+            if (c.dataset.baseLeft === undefined) c.dataset.baseLeft = c.style.left;
+            c.style.left = `${(parseFloat(c.dataset.baseLeft) || 0) + dx}px`;
+        });
     }
 
     renderSpanOverlay(span, layerIndex, textContent, spanOverlays, strategy = null) {
@@ -1431,18 +2103,37 @@ class SpanManager {
         }
     }
 
+    /**
+     * The display field a selection was made in, or '' when there is no
+     * per-field container (a single-field page).
+     */
+    fieldOfSelection(selection) {
+        if (!selection || !selection.rangeCount) return '';
+        const startNode = selection.getRangeAt(0).startContainer;
+        const el = startNode.nodeType === Node.TEXT_NODE
+            ? startNode.parentElement : startNode;
+        const container = el ? el.closest('[id^="text-content-"]') : null;
+        return container ? container.id.replace('text-content-', '') : '';
+    }
+
     handleTextSelection(event) {
         const selection = window.getSelection();
 
-        console.warn('[SpanManager] handleTextSelection ENTRY: rangeCount=' + selection.rangeCount + ' isCollapsed=' + selection.isCollapsed + ' selectedLabel=' + this.selectedLabel + ' currentSchema=' + this.currentSchema);
+        spanCoreDebugWarn('[SpanManager] handleTextSelection ENTRY: rangeCount=' + selection.rangeCount + ' isCollapsed=' + selection.isCollapsed + ' selectedLabel=' + this.selectedLabel + ' currentSchema=' + this.currentSchema);
 
         if (!selection.rangeCount || selection.isCollapsed) {
             return;
         }
 
-        const selectedLabel = this.getSelectedLabel();
+        // Which field the drag landed in, BEFORE asking which label is armed.
+        // The label lookup needs it to pick the scheme that owns this field,
+        // and the detection below used to run afterwards -- so the lookup had
+        // to guess, and guessed the first checked box in the document.
+        const selectionField = this.fieldOfSelection(selection);
+
+        const selectedLabel = this.getSelectedLabel(selectionField);
         if (!selectedLabel) {
-            console.warn('[SpanManager] handleTextSelection: no selectedLabel, returning');
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: no selectedLabel, returning');
             return;
         }
 
@@ -1459,13 +2150,13 @@ class SpanManager {
         let overlaysContainer = document.getElementById('span-overlays');
 
         const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
-        console.warn('[SpanManager] handleTextSelection: fieldStrategies=', Object.keys(this.fieldStrategies), 'selectedLabel=', selectedLabel);
+        spanCoreDebugWarn('[SpanManager] handleTextSelection: fieldStrategies=', Object.keys(this.fieldStrategies), 'selectedLabel=', selectedLabel);
 
         if (selection.rangeCount > 0) {
             const startNode = selection.getRangeAt(0).startContainer;
             const el = startNode.nodeType === Node.TEXT_NODE ? startNode.parentElement : startNode;
             const textContentEl = el ? el.closest('[id^="text-content-"]') : null;
-            console.warn('[SpanManager] handleTextSelection: textContentEl=', textContentEl?.id, 'el=', el?.id || el?.className);
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: textContentEl=', textContentEl?.id, 'el=', el?.id || el?.className);
             if (textContentEl) {
                 const fieldKey = textContentEl.id.replace('text-content-', '');
                 if (fieldKey && this.fieldStrategies[fieldKey]) {
@@ -1477,11 +2168,11 @@ class SpanManager {
         }
 
         if (!strategy || !strategy.isInitialized) {
-            console.warn('[SpanManager] handleTextSelection: strategy not ready, targetField=' + targetField);
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: strategy not ready, targetField=' + targetField);
             return;
         }
 
-        console.warn('[SpanManager] handleTextSelection: using strategy for field=' + targetField + ' container=' + (strategy.container ? strategy.container.id : 'NULL') + ' overlays=' + (overlaysContainer ? overlaysContainer.id : 'NULL'));
+        spanCoreDebugWarn('[SpanManager] handleTextSelection: using strategy for field=' + targetField + ' container=' + (strategy.container ? strategy.container.id : 'NULL') + ' overlays=' + (overlaysContainer ? overlaysContainer.id : 'NULL'));
 
         // Handle discontinuous span extension (Ctrl/Cmd+click with existing active span)
         if (isDiscontinuousMode && allowDiscontinuous && this.activeDiscontinuousSpan) {
@@ -1502,7 +2193,18 @@ class SpanManager {
             color: color
         });
         if (!result) {
-            console.warn('[SpanManager] handleTextSelection: createSpanFromSelection returned null for field=' + targetField);
+            // Warn, not debug-warn. A refused selection produces no span and
+            // no message, and the annotator's only evidence is that nothing
+            // happened -- which reads as a slip of the mouse rather than a
+            // refusal. Debug logging is off in every real deployment, so this
+            // was invisible in exactly the cases where it mattered.
+            console.warn('[SpanManager] The selection was not turned into a span',
+                {
+                    field: targetField,
+                    label: selectedLabel,
+                    schema: this.currentSchema,
+                    selected: String(selection).slice(0, 60),
+                });
             return;
         }
 
@@ -1536,9 +2238,9 @@ class SpanManager {
             // Append the overlay to the correct container
             if (overlaysContainer) {
                 overlaysContainer.appendChild(overlay);
-                console.warn('[SpanManager] handleTextSelection: overlay appended to ' + overlaysContainer.id + ' for field=' + targetField);
+                spanCoreDebugWarn('[SpanManager] handleTextSelection: overlay appended to ' + overlaysContainer.id + ' for field=' + targetField);
             } else {
-                console.warn('[SpanManager] handleTextSelection: no overlaysContainer for field=' + targetField);
+                spanCoreDebugWarn('[SpanManager] handleTextSelection: no overlaysContainer for field=' + targetField);
             }
         }
 
@@ -1662,8 +2364,8 @@ class SpanManager {
             segment.style.top = `${pos.y - VERTICAL_PADDING}px`;
             segment.style.width = `${pos.width + 2 * HORIZONTAL_PADDING}px`;
             segment.style.height = `${pos.height + 2 * VERTICAL_PADDING}px`;
-            segment.style.backgroundColor = color;
-            segment.style.border = `2px dashed ${color.replace('0.15', '0.8').replace('0.3', '0.8')}`;
+            segment.style.backgroundColor = spanFillColour(color);
+            segment.style.border = `2px dashed ${spanEdgeColour(color)}`;
             segment.style.borderRadius = '4px';
             segment.style.pointerEvents = 'none';
             overlay.appendChild(segment);
@@ -1694,7 +2396,62 @@ class SpanManager {
     /**
      * Save a span with additional parts (discontinuous span).
      */
+    /**
+     * Store the prelabel spans still on the item as this annotator's.
+     *
+     * /api/spans hands over a model's (or an import's) spans, flagged
+     * `prelabel`, while the annotator has none of their own here. They are
+     * shown and editable but not stored, so an untouched prelabel is saved
+     * on Next, as every other type's is; and before a span of the
+     * annotator's own is saved, because the reload after that save returns
+     * only stored spans and would drop them.
+     */
+    async commitPrelabels() {
+        const spans = (this.annotations && this.annotations.spans) || [];
+        const pending = spans.filter(s => s.prelabel);
+        if (!pending.length || !this.currentInstanceId) {
+            return;
+        }
+        const bySchema = {};
+        for (const span of pending) {
+            const schema = span.schema || this.currentSchema;
+            (bySchema[schema] = bySchema[schema] || []).push({
+                name: span.label, start: span.start, end: span.end,
+                title: span.title || span.label, value: 1,
+                target_field: span.target_field || '', span_id: span.id
+            });
+        }
+        for (const [schema, state] of Object.entries(bySchema)) {
+            const response = await fetch('/updateinstance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({type: 'span', schema: schema, state: state,
+                                      instance_id: this.currentInstanceId})
+            });
+            if (!response.ok) {
+                console.error('[SpanManager] Failed to save prelabel spans:',
+                              await response.text());
+                return;
+            }
+        }
+        pending.forEach(s => { s.prelabel = false; });
+    }
+
+    /**
+     * Before the annotator's first edit is stored: store every prelabel on
+     * the item, links and events included (annotation.js), or this one's
+     * spans where that is not loaded.
+     */
+    async takeOverPrelabels() {
+        if (typeof window.commitAllPrelabels === 'function') {
+            await window.commitAllPrelabels();
+        } else {
+            await this.commitPrelabels();
+        }
+    }
+
     async saveSpanWithParts(span) {
+        await this.takeOverPrelabels();
         try {
             const postData = {
                 type: "span",
@@ -1740,6 +2497,7 @@ class SpanManager {
     }
 
     async saveSpan(span) {
+        await this.takeOverPrelabels();
         try {
             const spanState = {
                 name: span.label,
@@ -1810,25 +2568,15 @@ class SpanManager {
             anyOverlay.remove();
         }
 
-        // Also remove server-rendered inline span-highlight elements
-        // These are rendered by render_span_annotations() on the server
-        const inlineSelector = `.span-highlight[data-annotation-id="${spanId}"]`;
-        document.querySelectorAll(inlineSelector).forEach(inlineSpan => {
-            // Unwrap the span: replace it with its text content
-            const parent = inlineSpan.parentNode;
-            while (inlineSpan.firstChild) {
-                parent.insertBefore(inlineSpan.firstChild, inlineSpan);
-            }
-            inlineSpan.remove();
-        });
-
         // Also remove from local state immediately
         if (this.annotations.spans) {
             this.annotations.spans = this.annotations.spans.filter(s => s.id !== spanId);
         }
 
-        if (!span) {
-            // Even if span not found in state, we already removed the overlay visually
+        if (!span || span.prelabel) {
+            // Even if span not found in state, we already removed the overlay
+            // visually. A prelabel span was never stored, so there is nothing
+            // to delete on the server; the rest stay pending.
             return;
         }
 
@@ -1837,6 +2585,10 @@ class SpanManager {
                 type: "span",
                 schema: span.schema || this.currentSchema,
                 state: [{
+                    // The id picks this span out; without it every span with
+                    // the same label and offsets in another field was deleted too.
+                    id: span.id,
+                    target_field: span.target_field || null,
                     name: span.label,
                     start: span.start,
                     end: span.end,
@@ -1940,6 +2692,7 @@ class SpanManager {
             this.insertKeywordHighlights(keywords);
 
         } catch (error) {
+            if (this.pageUnloading && error instanceof TypeError) return;
             console.error('[SpanManager] Error loading keyword highlights:', error);
         }
     }
@@ -1948,30 +2701,64 @@ class SpanManager {
      * Insert admin keyword highlights using the same visual system as AI spans.
      * @param {Array} keywords - Array of keyword objects with {label, start, end, text, reasoning, schema, color}
      */
-    insertKeywordHighlights(keywords) {
+    /**
+     * @param {Array} keywords
+     * @param {number} attempt  retry counter; see the readiness check below
+     */
+    insertKeywordHighlights(keywords, attempt = 0) {
         if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+            return;
+        }
+
+        // The first call can arrive before the field strategies have finished
+        // initializing (they await fonts), so "not ready" is the normal state
+        // for a moment on every load, not a fault. Retry a few times and warn
+        // only once it is clear the page will never be ready -- a warning that
+        // fires on every healthy load is one nobody reads.
+        const LAST_ATTEMPT = 8;
+        const RETRY_MS = 150;
+        const target = this.overlayTargetFor(
+            keywords[0] && keywords[0].target_field);
+        if (!target || !target.strategy || !target.strategy.isInitialized) {
+            if (attempt < LAST_ATTEMPT) {
+                setTimeout(() => this.insertKeywordHighlights(keywords, attempt + 1),
+                           RETRY_MS);
+                return;
+            }
+            console.warn('[SpanManager] Gave up drawing ' + keywords.length +
+                ' keyword highlight(s): no initialized span overlay container ' +
+                'on this page for field ' +
+                JSON.stringify(keywords[0] && keywords[0].target_field));
             return;
         }
 
         // Clear any existing admin keyword highlights
         this.clearKeywordHighlights();
 
-        const spanOverlays = document.getElementById('span-overlays');
-        if (!spanOverlays) {
-            return;
-        }
-
         const createdOverlays = [];
 
         keywords.forEach((keyword) => {
             const { label, start, end, text, reasoning, schema, color } = keyword;
 
-            if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
+            // Resolve the container and strategy for the field these offsets
+            // index. This used to be `#span-overlays` and
+            // `this.positioningStrategy` unconditionally -- neither of which
+            // exists on an `instance_display` page, where overlays live in
+            // `span-overlays-<field>` and each field has its own strategy. The
+            // function returned at the first `if (!spanOverlays)` with no log,
+            // so the whole feature ended one step before the reader: the file
+            // loaded, the API answered with correct offsets, and the annotator
+            // saw plain text.
+            const where = this.overlayTargetFor(keyword.target_field);
+            if (!where || !where.strategy || !where.strategy.isInitialized) {
+                console.warn('[SpanManager] Nowhere to draw this keyword ' +
+                    'highlight:', { start, end, text, field: keyword.target_field });
                 return;
             }
+            const { strategy, container: spanOverlays } = where;
 
             // Use getPositionsFromOffsets() which respects the provided offsets
-            const positions = this.positioningStrategy.getPositionsFromOffsets(start, end);
+            const positions = strategy.getPositionsFromOffsets(start, end);
             if (!positions || positions.length === 0) {
                 console.warn('[SpanManager] No positions found for admin keyword:', { start, end, text });
                 return;
@@ -1986,7 +2773,7 @@ class SpanManager {
             };
 
             const keywordColor = color || 'rgba(245, 158, 11, 0.8)';
-            const overlay = this.positioningStrategy.createOverlay(span, positions, {
+            const overlay = strategy.createOverlay(span, positions, {
                 isAiSpan: true,  // Use bordered style
                 color: keywordColor
             });
@@ -2011,13 +2798,48 @@ class SpanManager {
      * Clear all admin keyword highlight overlays.
      */
     clearKeywordHighlights() {
-        const spanOverlays = document.getElementById('span-overlays');
-        if (spanOverlays) {
-            const keywordOverlays = spanOverlays.querySelectorAll('.keyword-highlight-overlay');
-            keywordOverlays.forEach(overlay => overlay.remove());
-        }
+        // Every container, not just `#span-overlays`: a multi-field page has
+        // one per field, and leaving those behind stacked a fresh set of
+        // highlights on top of the previous item's on every navigation.
+        document.querySelectorAll('.keyword-highlight-overlay')
+            .forEach(overlay => overlay.remove());
 
         this.keywordHighlights = [];
+    }
+
+    /**
+     * Where to draw an overlay for offsets measured against `targetField`.
+     *
+     * Returns `{strategy, container}` or null when the page has neither.
+     * Multi-field pages (`instance_display`) put overlays in
+     * `span-overlays-<field>` and give each field its own strategy; a legacy
+     * page has one `#span-overlays` and one `positioningStrategy`.
+     */
+    overlayTargetFor(targetField) {
+        const field = targetField || '';
+        const fields = this.fieldStrategies || {};
+
+        if (field && fields[field]) {
+            const container = document.getElementById(`span-overlays-${field}`);
+            if (container) return { strategy: fields[field], container };
+        }
+
+        const legacy = document.getElementById('span-overlays');
+        if (this.positioningStrategy && legacy) {
+            return { strategy: this.positioningStrategy, container: legacy };
+        }
+
+        // Named field is absent or unknown: fall back to the first field that
+        // has both halves, so a keyword whose target_field the page does not
+        // carry still lands somewhere visible rather than nowhere.
+        for (const key of Object.keys(fields)) {
+            const container = document.getElementById(`span-overlays-${key}`);
+            if (container) return { strategy: fields[key], container };
+        }
+        if (legacy && this.positioningStrategy) {
+            return { strategy: this.positioningStrategy, container: legacy };
+        }
+        return null;
     }
 
     // ==================== RESIZE HANDLING ====================
@@ -2217,5 +3039,8 @@ setTimeout(() => {
 
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SpanManager, UnifiedPositioningStrategy, getFontMetrics };
+    module.exports = {
+        SpanManager, UnifiedPositioningStrategy, getFontMetrics,
+        spanFillColour, spanEdgeColour, SPAN_FILL_ALPHA,
+    };
 }

@@ -1,6 +1,6 @@
 # Conditional Schema Branching (Display Logic)
 
-Conditional schema branching allows you to show or hide annotation schemas based on user responses to other schemas. This is useful for:
+Conditional schema branching shows or hides annotation schemas according to what the annotator answered elsewhere on the page. This is useful for:
 
 - Follow-up questions when specific answers are selected
 - Branching survey-style annotation flows
@@ -46,6 +46,23 @@ display_logic:
   logic: all                     # Optional: 'all' (AND) or 'any' (OR)
 ```
 
+### Conditions as references
+
+With a [`conditions`](../workflow/experiment_flow.md#conditions) block, a rule
+can test the participant's assigned level of a factor as
+`condition.<factor>`:
+
+```yaml
+display_logic:
+  show_when:
+    - schema: condition.feedback
+      operator: equals
+      value: immediate
+```
+
+The same grammar gates whole phase pages with `show_when` and ends the study
+with `exit_when`; see [Experiment Flow](../workflow/experiment_flow.md).
+
 ### Supported Operators
 
 #### Value Comparison
@@ -79,6 +96,13 @@ display_logic:
 | `in_range` | Within range (inclusive) | `value: [3, 7]` |
 | `not_in_range` | Outside range | `value: [3, 7]` |
 
+A question that has not been answered matches none of `gt`, `gte`, `lt`, `lte` and
+`in_range`, so `lt 3` on a skipped optional number does not show its follow-up.
+It does match `not_in_range`. To branch on a skipped question, use `empty`.
+
+`equals` with a number compares numbers: `value: 3` matches a likert or slider
+answer of 3, which the form stores as the string `"3"`.
+
 #### Emptiness Checks
 
 | Operator | Description | Example |
@@ -93,6 +117,43 @@ display_logic:
 | `length_gt` | Text length > value | `value: 50` |
 | `length_lt` | Text length < value | `value: 10` |
 | `length_in_range` | Length within range | `value: [10, 100]` |
+
+#### Number Selected (multiselect, ranking)
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `count_gt` | More than `value` options selected | `value: 1` |
+| `count_lt` | Fewer than `value` options selected | `value: 3` |
+| `count_equals` | Exactly `value` options selected | `value: 0` |
+
+A single answer counts as one and an unanswered question as zero.
+
+### Groups: mixing AND and OR
+
+An item of `show_when` can be a group instead of a condition: `all` (every
+item holds), `any` (at least one holds), or `not` (negates one item, or all of
+a list). Groups nest, up to 8 levels.
+
+```yaml
+display_logic:
+  show_when:
+    - schema: age
+      operator: gte
+      value: 18
+    - any:
+        - schema: country
+          operator: equals
+          value: US
+        - not:
+            schema: region
+            operator: empty
+```
+
+This shows the question to adults who are in the US or who named a region.
+The top-level `logic` key still applies to the outer list. Groups work
+everywhere this grammar is used: `display_logic`, page `show_when`, and
+`exit_when`. The survey importers write them when translating Qualtrics,
+SurveyJS, XLSForm or REDCap logic.
 
 ## Examples
 
@@ -264,7 +325,15 @@ When a schema becomes hidden because its conditions are no longer met, the annot
 
 ### Stale Annotations
 
-In the output, annotations for hidden schemas are tracked separately as "stale" to indicate they may no longer be relevant to the current selections.
+On annotation pages, answers to hidden schemas are kept and exported unchanged,
+with no mark in the export. Hiding a schema that has a value records an
+`annotation_stale` interaction event in the behavioral data, with the schema,
+its value and the reason it was hidden.
+
+On survey and other phase pages, answers to questions the page hides are
+dropped when the participant leaves the page, and are left out of the phase
+data the server exports unless `exclude_hidden_survey_answers: false` (see
+[Server-side enforcement](#server-side-enforcement)).
 
 ### Smooth Animations
 
@@ -305,6 +374,99 @@ displayLogicManager.enableDebug();
 ```
 
 This will log all condition evaluations to help diagnose issues.
+
+## SurveyFlow / Phase Questions
+
+The same `display_logic` grammar works for questions in **SurveyFlow phases** —
+`consent`, `prestudy`, and `poststudy` surveys loaded from a JSON/JSONL file (or a survey
+instrument). This lets you build adaptive surveys without splitting the workflow into extra
+phases: show a follow-up only when relevant, reveal a free-text box when "Other" is picked,
+ask for an explanation only on a low rating, and so on.
+
+Because SurveyFlow questions are ordinary annotation schemes, you reference other questions by
+their **`name`** (exactly as on the annotation page), *not* by `id`:
+
+```json
+[
+  {
+    "name": "prior_experience",
+    "annotation_type": "radio",
+    "description": "Have you previously worked on a text-annotation task?",
+    "labels": ["Yes", "No"],
+    "label_requirement": {"required": true}
+  },
+  {
+    "name": "experience_details",
+    "annotation_type": "text",
+    "description": "Please briefly describe your previous annotation experience.",
+    "label_requirement": {"required": true},
+    "display_logic": {
+      "show_when": [
+        {"schema": "prior_experience", "operator": "equals", "value": "Yes"}
+      ],
+      "logic": "all"
+    }
+  }
+]
+```
+
+`experience_details` stays hidden — and is **excluded from required-field validation**, so it
+never blocks the *Continue* button — until the participant answers "Yes". Answer values are
+preserved (not cleared) if a question is hidden again, matching annotation-page behavior.
+
+### Cross-page conditions
+
+A question may condition on an answer given on an **earlier** phase, not just a sibling on the
+same page. For example, a poststudy question can be shown only when a prestudy answer was "Yes":
+
+```json
+{
+  "name": "experience_match",
+  "annotation_type": "radio",
+  "description": "You told us you had prior experience. Did this task match your expectations?",
+  "labels": ["Yes", "No"],
+  "display_logic": {
+    "show_when": [
+      {"schema": "prior_experience", "operator": "equals", "value": "Yes"}
+    ]
+  }
+}
+```
+
+Earlier-phase answers are injected into each phase page by the server, so the condition is
+evaluated on load. References resolve against questions on **any** phase.
+
+### Server-side enforcement
+
+Because the form preserves hidden answers (so nothing is lost if a participant toggles a
+trigger back and forth), a question that was answered and then hidden could otherwise linger in
+the exported data. When `export_include_phase_data: true`, Potato re-evaluates each
+participant's answers server-side (cross-page aware) and **excludes answers to questions they
+never actually saw** from the exported phase responses. Opt out with
+`exclude_hidden_survey_answers: false` (answers are then kept, each tagged with a `hidden`
+boolean instead).
+
+### Scope and limitations
+
+- **JSON/instrument questions only.** An `instructions` phase that points at a raw `.html`
+  file bypasses the schema pipeline, so `display_logic` does not apply there. Put conditional
+  questions in a JSON survey file instead.
+- **Validated at startup.** Invalid survey `display_logic` (unknown operator, a reference to a
+  question that exists on no phase, or a circular dependency) fails fast when the server
+  starts, with a clear error.
+- **Reference by `name`.** Conditions reference other questions by their `name`, the same key
+  used on the annotation page — not by `id`.
+
+### SurveyFlow example project
+
+`examples/advanced/surveyflow-conditional-logic/` demonstrates conditional consent, a prestudy
+survey with two branches (a follow-up gated on prior experience, and an "Other → please
+specify" free-text field), and a poststudy survey that asks for improvement feedback only on a
+low rating.
+
+```bash
+python potato/flask_server.py start examples/advanced/surveyflow-conditional-logic/config.yaml -p 8000
+```
 
 ## Complete Example
 

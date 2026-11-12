@@ -4,7 +4,7 @@ Potato supports both **reviewing** and **creating** web agent browsing traces th
 
 ## Overview
 
-Web agent annotation provides two modes:
+Web agent annotation has two modes:
 
 1. **Review Mode** — View pre-recorded agent browsing traces step-by-step with screenshot overlays showing clicks, bounding boxes, mouse paths, and scroll indicators. Annotators evaluate agent behavior using per-step and trajectory-level annotation schemes.
 
@@ -99,20 +99,11 @@ When the viewer is focused (click on it):
 
 ### Per-Step Annotations
 
-Add `per_step: true` to an annotation scheme to create per-step annotations that appear inline with each step:
-
-```yaml
-annotation_schemes:
-  - annotation_type: radio
-    name: step_correctness
-    per_step: true
-    labels:
-      - name: correct
-      - name: incorrect
-      - name: unnecessary
-```
-
-Per-step annotations are stored as `{scheme_name}_step_{index}` (e.g., `step_correctness_step_0`).
+Each annotation scheme on a web-agent trace answers for the whole trace.
+Potato does not yet attach a separate answer to each step of the trace, and a
+`per_step` key on a scheme is ignored (`potato validate` reports it). To label
+steps one by one, use the `process_reward` schema, which reads a list of steps
+from the item; see [Process Supervision](process_supervision.md).
 
 ### Converting Traces
 
@@ -150,7 +141,7 @@ instance_display:
         max_steps: 50
 ```
 
-### How It Works
+### What gets recorded during a live session
 
 1. The annotator sees a task description and a browser iframe
 2. They browse the website while their interactions are recorded

@@ -1,6 +1,6 @@
 # Webhooks
 
-Potato can send outgoing webhook notifications when annotation events occur, enabling integration with external pipelines, Slack alerts, and custom automation.
+Potato POSTs to a URL of yours when an annotation event happens, so an external pipeline, a Slack channel, or your own automation can react to it.
 
 ## Configuration
 
@@ -49,6 +49,7 @@ webhooks:
 | `task.completed` | User completes all assigned items |
 | `user.phase_completed` | User advances to next workflow phase |
 | `quality.attention_check_failed` | User fails an attention check (and is blocked) |
+| `memo.issue_assigned` | An issue in the Notes panel gets an assignee, when raised or later. The payload carries the memo id, item id, assignee, who assigned it and the status, never the note's text |
 | `webhook.test` | Sent via admin API test endpoint |
 
 ### Wildcard Subscription

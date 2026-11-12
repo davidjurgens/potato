@@ -1,12 +1,12 @@
 /* Agent Chat Panel Styles */
 
 .agent-chat-panel {
-    border: 1px solid #dee2e6;
+    border: 1px solid light-dark(#dee2e6, #484c51);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
     max-height: 500px;
-    background: #fff;
+    background: light-dark(#fff, #1a1a1a);
 }
 
 .agent-chat-messages {
@@ -18,7 +18,7 @@
 }
 
 .agent-chat-placeholder {
-    color: #6c757d;
+    color: light-dark(#6c757d, #bec2c5);
     text-align: center;
     padding: 40px 20px;
     font-style: italic;
@@ -62,21 +62,21 @@
 }
 
 .agent-chat-message.agent .agent-chat-bubble {
-    background: #e9ecef;
-    color: #212529;
+    background: light-dark(#e9ecef, #222528);
+    color: light-dark(#212529, #d3d7da);
     border-bottom-left-radius: 4px;
 }
 
 .agent-chat-message.error .agent-chat-bubble {
-    background: #f8d7da;
-    color: #842029;
+    background: light-dark(#f8d7da, #37181b);
+    color: light-dark(#842029, #dfaaaf);
     border-radius: 8px;
     font-size: 0.9em;
 }
 
 .agent-chat-sender {
     font-size: 0.75em;
-    color: #6c757d;
+    color: light-dark(#6c757d, #bec2c5);
     margin-bottom: 2px;
     padding: 0 4px;
 }
@@ -91,7 +91,7 @@
     align-items: center;
     gap: 4px;
     padding: 8px 14px;
-    background: #e9ecef;
+    background: light-dark(#e9ecef, #222528);
     border-radius: 12px;
     border-bottom-left-radius: 4px;
     width: fit-content;
@@ -116,15 +116,15 @@
 
 /* Input area */
 .agent-chat-input-area {
-    border-top: 1px solid #dee2e6;
+    border-top: 1px solid light-dark(#dee2e6, #484c51);
     padding: 12px;
-    background: #f8f9fa;
+    background: light-dark(#f8f9fa, #1a1d20);
     border-radius: 0 0 8px 8px;
 }
 
 .agent-chat-textarea {
     width: 100%;
-    border: 1px solid #ced4da;
+    border: 1px solid light-dark(#ced4da, #484d51);
     border-radius: 6px;
     padding: 8px 12px;
     resize: none;
@@ -140,7 +140,7 @@
 }
 
 .agent-chat-textarea:disabled {
-    background: #e9ecef;
+    background: light-dark(#e9ecef, #222528);
     cursor: not-allowed;
 }
 
@@ -153,7 +153,7 @@
 
 .agent-chat-step-counter {
     font-size: 0.85em;
-    color: #6c757d;
+    color: light-dark(#6c757d, #bec2c5);
     margin-right: auto;
 }
 

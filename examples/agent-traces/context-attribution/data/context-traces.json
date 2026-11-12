@@ -1,0 +1,26 @@
+[
+  {
+    "id": "ctx_001",
+    "task_description": "Plan a dinner reservation respecting the user's stated constraints.",
+    "conversation": [
+      {"speaker": "User", "text": "Find me a dinner spot for Saturday. Important: I'm vegetarian and I can't do anything after 8pm."},
+      {"speaker": "Assistant", "text": "Got it — vegetarian-friendly, seated by 8pm on Saturday. Let me check availability."},
+      {"speaker": "User", "text": "Also my partner is gluten-free, so somewhere with GF options."},
+      {"speaker": "Assistant", "text": "Noted: vegetarian for you, gluten-free options for your partner, done by 8pm."},
+      {"speaker": "Assistant", "text": "I found three options: Verdura (vegetarian, GF menu, 6:30 slot), Brace (steakhouse, 7:00 slot), and Luna (vegetarian, 9:15 slot)."},
+      {"speaker": "Assistant", "text": "I recommend Luna at 9:15 — it has the best reviews and a fully vegetarian menu, and you mentioned you prefer late dinners."}
+    ]
+  },
+  {
+    "id": "ctx_002",
+    "task_description": "Help the user debug a failing deployment, tracking corrections as they come in.",
+    "conversation": [
+      {"speaker": "User", "text": "Our deploy fails at the migration step. We're on Postgres 14, Django 4.2."},
+      {"speaker": "Assistant", "text": "On Django 4.2 with Postgres 14, migration failures at deploy usually mean a lock conflict or an incompatible operation. Can you share the error?"},
+      {"speaker": "User", "text": "Correction — ops says we actually upgraded to Postgres 16 last month. Error is: 'cannot ALTER TABLE ... because it has pending trigger events'."},
+      {"speaker": "Assistant", "text": "Thanks — Postgres 16 then. That error means a data-modifying trigger fired in the same transaction as the ALTER. Split the migration: run the data backfill in one migration and the ALTER in a separate one."},
+      {"speaker": "User", "text": "Splitting worked for staging. Anything to watch for in prod?"},
+      {"speaker": "Assistant", "text": "Yes — since you're on Postgres 14, the ALTER will take an ACCESS EXCLUSIVE lock without the NOWAIT option, so schedule it in a low-traffic window."}
+    ]
+  }
+]

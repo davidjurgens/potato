@@ -1,0 +1,12 @@
+[
+  {"name": "mood", "annotation_type": "likert", "description": "How do you feel right now?",
+   "size": 7, "min_label": "Very bad", "max_label": "Very good", "required": true},
+  {"name": "energy", "annotation_type": "slider", "description": "How much energy do you have?",
+   "min_value": 0, "max_value": 100, "starting_value": 50, "min_label": "None", "max_label": "A lot",
+   "required": true},
+  {"name": "company", "annotation_type": "radio", "description": "Who are you with?",
+   "labels": ["Alone", "With family", "With friends", "With colleagues", "With strangers"],
+   "required": true},
+  {"name": "activity", "annotation_type": "text", "description": "What were you doing just before this survey? (optional)",
+   "multiline": false, "max_length": 200}
+]

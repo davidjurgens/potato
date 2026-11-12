@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Reviewing variant calls against the reads.
+#
+# Each item is one call. The annotator sees the locus in igv.js with the
+# reference sequence, the call set, the sample's reads and a region track,
+# and answers one radio question: real, artifact, or uncertain. Clicking a
+# call or a region also records it as evidence (optional).
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/variant-review/config.yaml -p 8000
+#
+# The genome, reads and calls are synthetic. Regenerate them with:
+#   python examples/advanced/variant-review/generate_data.py
+
+port: 8000
+annotation_task_name: "Variant call review"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/calls.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+instance_display:
+  fields:
+    - key: note
+      type: text
+      label: "Call"
+    - key: locus
+      type: genome_locus
+      label: "Locus"
+      display_options:
+        # A local, indexed FASTA: the .fai sits next to it. Nothing is
+        # fetched from the internet.
+        reference:
+          fasta: genome/synthetic.fa
+          name: synthetic
+        # A one-base locus opens with this many bases either side.
+        flank: 60
+        tracks:
+          # One file for every item.
+          - name: "Calls (sample1)"
+            url: calls/sample1.vcf.gz
+          # An item field naming the file, so each item can bring its own.
+          # The .bai index is found next to the BAM.
+          - name: "Reads (sample1)"
+            field: bam
+            height: 260
+          - name: "Regions"
+            url: annotation/regions.bed
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: call_review
+    description: "Is this variant call real?"
+    labels:
+      - name: "Real"
+        key_value: "1"
+      - name: "Artifact"
+        key_value: "2"
+      - name: "Uncertain"
+        key_value: "3"
+    label_requirement:
+      required: true
+
+  - annotation_type: multiselect
+    name: evidence_seen
+    description: "What did you see in the reads? (select all that apply)"
+    humanize_labels: false
+    labels:
+      - "Alt allele on both strands"
+      - "Alt allele on one strand only"
+      - "Low base quality at the alt"
+      - "In a homopolymer or repeat"
+      - "Alt allele near read ends"
+
+  - annotation_type: viewer_selection
+    name: evidence
+    description: "Evidence (optional): click the call or region you based this on"
+    viewer_field: locus
+    max_selections: 4

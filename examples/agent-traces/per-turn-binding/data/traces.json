@@ -1,0 +1,41 @@
+[
+  {
+    "id": "trace_001",
+    "task_description": "Find the current population of Reykjavik and convert it to a percentage of Iceland's total population.",
+    "conversation": [
+      {"speaker": "User", "text": "What percentage of Iceland's population lives in Reykjavik?"},
+      {"speaker": "Assistant", "text": "I'll look up both population figures and compute the percentage.", "step_type": "thought"},
+      {"speaker": "Agent (Action)", "text": "search(query=\"Reykjavik population 2024\")", "tool": "search"},
+      {"speaker": "Environment", "text": "Reykjavik proper: ~139,000. Capital Region: ~249,000."},
+      {"speaker": "Agent (Action)", "text": "search(query=\"Iceland total population 2024\")", "tool": "search"},
+      {"speaker": "Environment", "text": "Iceland population: ~387,000 (2024 estimate)."},
+      {"speaker": "Agent (Action)", "text": "calculator(expression=\"139000 / 387000 * 100\")", "tool": "calculator"},
+      {"speaker": "Environment", "text": "35.92"},
+      {"speaker": "Assistant", "text": "About 36% of Iceland's population lives in Reykjavik proper (roughly 139,000 of 387,000). If you count the whole Capital Region, it rises to about 64%."}
+    ]
+  },
+  {
+    "id": "trace_002",
+    "task_description": "Book a table for two at an Italian restaurant in downtown Ann Arbor for Friday at 7pm.",
+    "conversation": [
+      {"speaker": "User", "text": "Book a table for two at an Italian place downtown this Friday at 7."},
+      {"speaker": "Assistant", "text": "Let me find Italian restaurants in downtown Ann Arbor with Friday availability.", "step_type": "thought"},
+      {"speaker": "Agent (Action)", "text": "browser(action=\"open\", url=\"https://opentable.com/ann-arbor-italian\")", "tool": "browser"},
+      {"speaker": "Environment", "text": "Results: Gratzi (7:00 available), Mani Osteria (7:30 available), Paesano (fully booked)."},
+      {"speaker": "Assistant", "text": "Gratzi has exactly 7pm — I'll book that. It also has a Michelin star.", "step_type": "thought"},
+      {"speaker": "Agent (Action)", "text": "browser(action=\"book\", restaurant=\"Gratzi\", time=\"19:00\", party=2)", "tool": "browser"},
+      {"speaker": "Environment", "text": "Reservation confirmed: Gratzi, Friday 7:00 PM, party of 2. Confirmation #GR-4482."},
+      {"speaker": "Assistant", "text": "Done! You're booked at Gratzi this Friday at 7:00 PM for two. Confirmation number GR-4482."}
+    ]
+  },
+  {
+    "id": "trace_003",
+    "task_description": "Summarize the three most recent commits in the potato repository and flag any that touch authentication code.",
+    "conversation": [
+      {"speaker": "User", "text": "Summarize the last three commits and tell me if any touch auth code."},
+      {"speaker": "Agent (Action)", "text": "shell(command=\"git log -3 --stat\")", "tool": "shell"},
+      {"speaker": "Environment", "text": "e99c430 feat(web-agent): normalize bare-host URLs (potato/web_agent.py) | 4aedd53 feat(llm): normalize base_url (potato/ai/config.py) | 810092f feat(auth): route admin blueprints through RBAC (potato/server_utils/rbac.py)"},
+      {"speaker": "Assistant", "text": "Three recent commits: (1) web-agent URL normalization, (2) LLM base_url normalization for local endpoints, (3) admin blueprints routed through RBAC. The third one (810092f) touches authentication code — it changes RBAC routing in potato/server_utils/rbac.py."}
+    ]
+  }
+]

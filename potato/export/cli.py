@@ -17,6 +17,7 @@ import logging
 import glob
 
 import yaml
+from typing import Mapping, Optional
 
 from .base import ExportContext
 from .registry import export_registry
@@ -24,7 +25,145 @@ from .registry import export_registry
 logger = logging.getLogger(__name__)
 
 
-def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
+def _behavioral_changes(user_state: dict, instance_id: str) -> list:
+    """The ``annotation_changes`` recorded against one instance, or an empty list."""
+    from potato.export.single_select import behavioral_changes
+    return behavioral_changes(user_state, instance_id)
+
+
+def _typing_summaries(user_state: dict, instance_id: str) -> dict:
+    """The ``typing_summaries`` recorded against one instance, or an empty dict.
+
+    The sketch that travels with the annotation. Raw keystroke streams live in
+    the project's SQLite database and are exported separately by the
+    ``keystrokes`` exporter.
+    """
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if not isinstance(bd, dict):
+        return {}
+    return bd.get("typing_summaries") or {}
+
+
+def _grouped_by_schema(records) -> dict:
+    """``{link_id: link}`` (or a list of links) as ``{schema: [link, ...]}``.
+    The same for events."""
+    values = records.values() if isinstance(records, dict) else (records or [])
+    grouped: dict = {}
+    for record in values:
+        if isinstance(record, dict):
+            grouped.setdefault(str(record.get("schema", "")), []).append(record)
+    return grouped
+
+
+def _agent_chat_record(row: Optional[dict]) -> dict:
+    """An ``agent_chat_store`` row as it travels on an annotation record."""
+    if not row:
+        return {}
+    return {
+        "field": row.get("field_key"),
+        "proxy_type": row.get("proxy_type"),
+        "step_count": row.get("step_count", 0),
+        "started_at": row.get("started_at"),
+        "finished_at": row.get("finished_at"),
+        "conversation": row.get("conversation") or [],
+    }
+
+
+def _authenticity_summary(user_state: dict, instance_id: str) -> dict:
+    """The merged authenticity summary and verdict for one instance, or {}.
+
+    Per-view snapshots stay in user_state.json; the export carries the merge.
+    """
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if not isinstance(bd, dict):
+        return {}
+    record = bd.get("authenticity") or {}
+    if not isinstance(record, dict) or not record.get("summary"):
+        return {}
+    return {"summary": record.get("summary") or {},
+            "verdict": record.get("verdict") or {}}
+
+
+def _room_provenance(user_state: dict, instance_id: str) -> dict:
+    """Which multiplayer room produced each of this instance's answers.
+
+    The authoritative copy is ``instance_id_to_room_provenance``, written by
+    rooms/manager.py when it persists the votes. The behavioural mirror is read
+    as a fallback so a state file written by a server that only had the mirror
+    still exports the room.
+    """
+    stored = (user_state.get("instance_id_to_room_provenance") or {}).get(instance_id)
+    if isinstance(stored, dict) and stored:
+        return stored
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if isinstance(bd, dict):
+        return bd.get("room_provenance") or {}
+    return {}
+
+
+def _annotator_origin(user_state: dict, instance_id: str,
+                      roster: Optional[Mapping] = None) -> dict:
+    """Whether this annotator was a person, and if not, which machine.
+
+    Reads the raw state dict rather than a UserState object, because this
+    module loads ``user_state.json`` straight off disk -- calling
+    ``annotator_origin.origin_of`` on a plain dict would work, but going
+    through the attribute path would silently return "human" for every row.
+
+    The origin stored on the state wins. A state the server has not yet
+    loaded -- one written by an import script, say -- carries no origin, so
+    the config's ``machine_annotators`` roster is consulted next; without that
+    fallback an offline export would label a declared pipeline as a person.
+    The declaration's ``recorded_at`` is dropped, because it would be the
+    export time rather than when the rater was recorded.
+
+    An absent key with no declaration means a person, which is what every
+    state file written before the field existed holds. ``instance_id`` is
+    unused: origin is a property of the rater, not of one answer, and is
+    accepted so the call site reads like its ``_room`` sibling.
+    """
+    stored = user_state.get("origin")
+    if isinstance(stored, dict) and stored:
+        return stored
+    declared = (roster or {}).get(str(user_state.get("user_id", "")))
+    if declared is not None:
+        origin = declared.to_origin()
+        origin.pop("recorded_at", None)
+        return origin
+    return {"kind": "human"}
+
+
+def _span_times(user_dir: str) -> dict:
+    """When each span was last added or changed, from annotation_history.jsonl.
+
+    ``{instance_id: {"schema:start:end": epoch seconds}}``. Spans get no
+    ``annotation_changes`` entry, so this file is the only record of when one
+    was made. The history stamps server-local time without a zone, read back
+    as local time. A missing or torn file gives what could be read.
+    """
+    from datetime import datetime
+    path = os.path.join(user_dir, "annotation_history.jsonl")
+    out: dict = {}
+    if not os.path.isfile(path):
+        return out
+    with open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            try:
+                action = json.loads(line)
+                if action.get("action_type") not in ("add_span", "update_span"):
+                    continue
+                span = action.get("span_data") or {}
+                key = f"{action.get('schema_name')}:{int(span['start'])}:{int(span['end'])}"
+                ts = datetime.fromisoformat(action["timestamp"]).timestamp()
+            except (ValueError, TypeError, KeyError, AttributeError):
+                continue
+            bucket = out.setdefault(str(action.get("instance_id")), {})
+            bucket[key] = max(ts, bucket.get(key, ts))
+    return out
+
+
+def load_annotations_from_output_dir(output_dir: str, schemas: list,
+                                     config: Optional[Mapping] = None) -> list:
     """
     Load user annotations from the Potato output directory.
 
@@ -34,36 +173,50 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     Args:
         output_dir: Path to the annotation output directory
         schemas: List of annotation scheme configs
+        config: The project config. Only its ``machine_annotators`` block is
+            read, to label declared raters whose state carries no origin yet.
 
     Returns:
         List of annotation dicts
     """
     annotations = []
 
-    if not os.path.isdir(output_dir):
+    from potato.server_utils.stored_states import iter_stored_states, uses_mysql
+    if not uses_mysql(config) and not os.path.isdir(output_dir):
         logger.warning(f"Output directory not found: {output_dir}")
         return annotations
 
-    for user_dir in sorted(os.listdir(output_dir)):
-        user_path = os.path.join(output_dir, user_dir)
-        if not os.path.isdir(user_path):
-            continue
+    from potato.annotator_origin import parse_machine_annotators
+    roster = parse_machine_annotators(config)
 
-        state_file = os.path.join(user_path, "user_state.json")
-        if not os.path.exists(state_file):
-            continue
+    # Finished agent chats (interactive_chat), stored per user and item in the
+    # project database rather than in user_state.json. One query for the whole
+    # export; empty without opening the database when the display has no chat.
+    try:
+        from potato.agent_chat_store import transcripts_by_user_instance
+        agent_chats = transcripts_by_user_instance(config or {})
+    except Exception as e:
+        logger.warning(f"Could not read agent chat transcripts: {e}")
+        agent_chats = {}
 
-        with open(state_file, "r") as f:
-            user_state = json.load(f)
+    from potato.server_utils.presentation_order import source_oriented
 
+    for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
+        span_times = {} if uses_mysql(config) else _span_times(os.path.join(output_dir, user_dir))
 
         # Extract label annotations
         label_data = user_state.get("instance_id_to_label_to_value", {})
         span_data = user_state.get("instance_id_to_span_to_value", {})
 
+        # Span links (span_link, coreference chains) and events have stores
+        # of their own, keyed by instance then by link or event id.
+        link_data = user_state.get("instance_id_to_link_to_value", {}) or {}
+        event_data = user_state.get("instance_id_to_event_to_value", {}) or {}
+
         # Collect all instance IDs
-        all_instances = set(label_data.keys()) | set(span_data.keys())
+        all_instances = (set(label_data.keys()) | set(span_data.keys())
+                         | set(link_data.keys()) | set(event_data.keys()))
 
         for instance_id in all_instances:
             # Labels may be stored as a list of [[{schema, name}, value], ...]
@@ -83,23 +236,86 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                         labels_dict.setdefault(schema, {})[name] = value
                 raw_labels = labels_dict
 
+            # Pairwise answers in data order. Under randomize_order the page
+            # stores the position the annotator saw, so the same preference
+            # could export as "A" for one annotator and "B" for the next.
+            orders = (user_state.get("instance_id_to_presentation_order") or {}).get(
+                instance_id) or {}
+            raw_labels = source_oriented(schemas, raw_labels, orders)
+
             record = {
                 "instance_id": instance_id,
                 "user_id": user_id,
                 "labels": raw_labels,
                 "spans": {},
-                "links": {},
+                # {schema: [link, ...]} and {schema: [event, ...]}. Both were
+                # never read, so every export and every training bundle
+                # lost them: "links" was always empty and "events" absent.
+                "links": _grouped_by_schema(link_data.get(instance_id)),
+                "events": _grouped_by_schema(event_data.get(instance_id)),
                 "image_annotations": {},
+                # Timestamped revision trail for this instance. Exporters use it to
+                # resolve a single-select schema that was stored with several values
+                # by pre-#167 servers; the persisted label order alone cannot (it is
+                # first-write order, not recency). Leading underscore keeps it out of
+                # the flattened output.
+                "_changes": _behavioral_changes(user_state, instance_id),
+                # Per-field typing-dynamics sketch (pauses, bursts, revisions,
+                # pastes) plus the detector verdict. Same underscore convention:
+                # kept out of the flattened columns, written to its own sidecar
+                # file by the tabular exporters.
+                "_typing": _typing_summaries(user_state, instance_id),
+                # Page-level authenticity paradata (page leaves, item copies,
+                # external pastes, automation) and its verdict. Sidecar only.
+                "_authenticity": _authenticity_summary(user_state, instance_id),
+                # Which room, if any, produced each schema's answer. A room
+                # answer is a group answer -- the member saw their peers'
+                # labels at the reveal -- and nothing else in the record says
+                # so, which is what makes an agreement statistic over two
+                # members of one room a measure of the discussion.
+                "_room": _room_provenance(user_state, instance_id),
+                # A live collaborative session's team answer: which session,
+                # and who on the team changed it how many times.
+                "_collab": (user_state.get("instance_id_to_collab_provenance")
+                            or {}).get(instance_id) or {},
+                # Whether this rater was a person or a declared tool or model,
+                # with its version. An agreement number computed over a mix of
+                # the two measures neither group, and nothing else in the
+                # record says which this row is.
+                "_origin": _annotator_origin(user_state, instance_id, roster),
+                # When each span was last saved, keyed "schema:start:end".
+                "_span_times": span_times.get(instance_id, {}),
+                # This annotator's finished agent chat on this item, if any.
+                # The JSONL exporter writes it inline; CSV/TSV write it as
+                # the agent_chat_turns sidecar.
+                "_agent_chat": _agent_chat_record(
+                    agent_chats.get((str(user_id), str(instance_id)))),
             }
 
-            # Process span data
-            instance_spans = span_data.get(instance_id, {})
-            for schema_name, span_list in instance_spans.items():
-                if isinstance(span_list, list):
-                    record["spans"][schema_name] = span_list
-                elif isinstance(span_list, dict):
-                    # Span data might be stored as a dict of span_id -> span_obj
-                    record["spans"][schema_name] = list(span_list.values())
+            # Process span data.
+            # On disk, instance_id_to_span_to_value[instance_id] is serialized
+            # by convert_span_dict() as a LIST of [span_dict, value] pairs
+            # (mirroring the label format handled above). Older/alternate
+            # formats stored a dict keyed by schema name, so handle both.
+            # Output shape: record["spans"] is a dict {schema_name: [span,...]}
+            # which every downstream exporter expects (they call .items()).
+            instance_spans = span_data.get(instance_id, [])
+            if isinstance(instance_spans, list):
+                for entry in instance_spans:
+                    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        span_obj, _value = entry
+                    else:
+                        span_obj = entry
+                    if isinstance(span_obj, dict):
+                        schema_name = span_obj.get("schema", "")
+                        record["spans"].setdefault(schema_name, []).append(span_obj)
+            elif isinstance(instance_spans, dict):
+                for schema_name, span_list in instance_spans.items():
+                    if isinstance(span_list, list):
+                        record["spans"][schema_name] = span_list
+                    elif isinstance(span_list, dict):
+                        # Span data might be stored as a dict of span_id -> span_obj
+                        record["spans"][schema_name] = list(span_list.values())
 
             # Extract image annotations from labels
             # Image annotations are stored as JSON strings in label values
@@ -120,43 +336,147 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
 
             annotations.append(record)
 
+    _add_engine_provenance(annotations, config)
     return annotations
 
 
-def load_phase_responses_from_output_dir(output_dir: str) -> list:
+def _add_engine_provenance(annotations: list, config: Optional[Mapping]) -> None:
+    """Attach ``_engine``: which engine request each human label answered.
+
+    A label the engine asked for carries its purpose (calibration, verify,
+    audit, ...), the probability its item was sampled, and whether the
+    machine's suggestion was visible. Without them a reader of the export
+    cannot tell a random blind label from one given while looking at the
+    machine's answer, and only the first kind estimates anything.
+    """
+    if not config or not (config.get("labeling_engine") or {}).get("enabled"):
+        return
+    task_dir = config.get("task_dir") or "."
+    if not os.path.exists(os.path.join(task_dir, "engine.sqlite")):
+        return
+    try:
+        from potato.labeling_engine.store import EngineStore
+        store = EngineStore(task_dir)
+        by_key = {}
+        for r in store.requests(status=["done"]):
+            if r.user_id is None:
+                continue
+            by_key.setdefault((str(r.user_id), str(r.item_id)), {})[r.schema] = {
+                "purpose": r.purpose, "inclusion_prob": r.inclusion_prob,
+                "visibility": r.visibility, "split": r.split, "request_id": r.id}
+    except Exception:
+        logger.warning("Could not read labeling engine provenance", exc_info=True)
+        return
+    for ann in annotations:
+        found = by_key.get((str(ann.get("user_id")), str(ann.get("instance_id"))))
+        if found:
+            ann["_engine"] = found
+
+
+def load_phase_responses_from_output_dir(
+    output_dir: str,
+    display_logic_schemes: list = None,
+    exclude_hidden: bool = True,
+    single_select_schemas: set = None,
+    config: Optional[Mapping] = None,
+) -> list:
     """
     Load phase/surveyflow responses from the Potato output directory.
 
     Reads phase_to_page_to_label_to_value from each user's user_state.json
     and flattens into a list of records.
 
+    Every record carries a ``sequence`` index — its position within that page's stored
+    responses. Row order in the CSV previously conveyed nothing a consumer could rely
+    on; ``sequence`` makes the ordering explicit and stable (GH #167 suggestion 3).
+
+    When ``single_select_schemas`` is given, schemas that may hold at most one answer
+    but were found holding several (data written before the #167 fix) are resolved to
+    their final answer: the winner is tagged ``superseded: False`` and the stale rows
+    ``superseded: True``, so nothing is dropped but the real answer is unambiguous.
+
+    Server-side enforcement of conditional survey logic: if
+    ``display_logic_schemes`` (the survey/phase scheme dicts, some carrying
+    ``display_logic``) is provided, each user's answers are evaluated against
+    their own responses so that answers to questions the participant never saw
+    (hidden by their condition, cross-page aware) are excluded. This keeps
+    exports honest even though the frontend preserves hidden answers in the
+    form. Pass ``exclude_hidden=False`` to keep them but tag each record with a
+    ``hidden`` boolean instead. When ``display_logic_schemes`` is ``None`` the
+    behavior is unchanged (all responses returned, no ``hidden`` field).
+
     Returns:
-        List of dicts with keys: user_id, phase, page, schema, label_name, value
+        List of dicts with keys: user_id, phase, page, sequence, schema, label_name,
+        value (plus ``hidden`` when ``display_logic_schemes`` is provided, and
+        ``superseded`` when ``single_select_schemas`` is provided).
+
+    ``config`` is read only for its ``database`` block: a MySQL study's states
+    are read from the database rather than ``output_dir``.
     """
+    from potato.export.single_select import resolve_final_label, phase_changes
+
     responses = []
+    single_select_schemas = single_select_schemas or set()
 
-    if not os.path.isdir(output_dir):
-        return responses
-
-    for user_dir in sorted(os.listdir(output_dir)):
-        user_path = os.path.join(output_dir, user_dir)
-        if not os.path.isdir(user_path):
-            continue
-
-        state_file = os.path.join(user_path, "user_state.json")
-        if not os.path.exists(state_file):
-            continue
-
-        with open(state_file, "r") as f:
-            user_state = json.load(f)
-
+    from potato.server_utils.stored_states import iter_stored_states
+    for user_dir, user_state in iter_stored_states(output_dir, config):
         user_id = user_state.get("user_id", user_dir)
         phase_data = user_state.get("phase_to_page_to_label_to_value", {})
+
+        # Compute which schemas this user's answers hide. Cross-page aware:
+        # all phases are merged into one annotation context so a poststudy
+        # question can depend on a prestudy answer.
+        #
+        # The collapse is given the schema types and the behavioral trail, so the
+        # hidden-set is decided by the SAME resolution that stamps `superseded` on
+        # the emitted rows below. Previously the two ran different rules and could
+        # disagree — marking row A the winner while having hidden the schema on the
+        # strength of row B.
+        hidden_schemas = set()
+        if display_logic_schemes:
+            from potato.server_utils.display_logic import (
+                flatten_phase_annotations,
+                compute_hidden_schemas,
+            )
+            from potato.export.single_select import phase_changes
+            dl_types = {
+                s.get("name"): s.get("annotation_type")
+                for s in display_logic_schemes
+                if isinstance(s, dict) and s.get("name")
+            }
+            # The assigned condition (condition.<factor>), lowest layer.
+            flat = {
+                "condition." + str(f): v
+                for f, v in ((user_state.get("flow_record") or {}).get("conditions") or {}).items()
+            }
+            for _phase, _pages in phase_data.items():
+                flat.update(flatten_phase_annotations(
+                    _pages, schema_types=dl_types,
+                    changes=phase_changes(user_state, _phase, None)))
+            hidden_schemas = compute_hidden_schemas(display_logic_schemes, flat)
+
+        def _emit(phase, page, sequence, schema, label_name, value, winners):
+            record = {
+                "user_id": user_id, "phase": phase, "page": page,
+                "sequence": sequence,
+                "schema": schema, "label_name": label_name, "value": value,
+            }
+            if display_logic_schemes:
+                is_hidden = schema in hidden_schemas
+                if is_hidden and exclude_hidden:
+                    return
+                record["hidden"] = is_hidden
+            if schema in winners:
+                # Only tagged for schemas that actually held more than one answer,
+                # so a healthy export is unchanged apart from the sequence column.
+                record["superseded"] = label_name != winners[schema]
+            responses.append(record)
 
         for phase, pages in phase_data.items():
             for page, label_values in pages.items():
                 # label_values is a list of [[{schema, name}, value], ...]
                 if isinstance(label_values, list):
+                    parsed = []
                     for entry in label_values:
                         if isinstance(entry, (list, tuple)) and len(entry) == 2:
                             label_obj, value = entry
@@ -165,24 +485,27 @@ def load_phase_responses_from_output_dir(output_dir: str) -> list:
                                 label_name = label_obj.get("name", "")
                             else:
                                 schema, label_name = str(label_obj), ""
-                            responses.append({
-                                "user_id": user_id,
-                                "phase": phase,
-                                "page": page,
-                                "schema": schema,
-                                "label_name": label_name,
-                                "value": value,
-                            })
+                            parsed.append((schema, label_name, value))
                 elif isinstance(label_values, dict):
-                    for label_obj, value in label_values.items():
-                        responses.append({
-                            "user_id": user_id,
-                            "phase": phase,
-                            "page": page,
-                            "schema": str(label_obj),
-                            "label_name": "",
-                            "value": value,
-                        })
+                    parsed = [(str(label_obj), "", value)
+                              for label_obj, value in label_values.items()]
+                else:
+                    continue
+
+                # Resolve any single-select schema that ended up with several answers.
+                winners = {}
+                by_schema = {}
+                for schema, label_name, _ in parsed:
+                    by_schema.setdefault(schema, []).append(label_name)
+                for schema, names in by_schema.items():
+                    if schema in single_select_schemas and len(names) > 1:
+                        winner, _method = resolve_final_label(
+                            schema, names, phase_changes(user_state, phase, page))
+                        if winner is not None:
+                            winners[schema] = winner
+
+                for sequence, (schema, label_name, value) in enumerate(parsed):
+                    _emit(phase, page, sequence, schema, label_name, value, winners)
 
     return responses
 
@@ -222,18 +545,62 @@ def load_items_from_data_files(config: dict, config_dir: str) -> dict:
             logger.warning(f"Data file not found: {path}")
             continue
 
-        with open(path, "r") as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line)
-                    item_id = str(item.get(id_key, f"item_{line_num}"))
-                    items[item_id] = item
-                except json.JSONDecodeError:
-                    # Try CSV/TSV
-                    logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
+        encoding = (data_file_entry.get("encoding", "utf-8")
+                    if isinstance(data_file_entry, dict) else "utf-8")
+        fmt = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+        if fmt in ("csv", "tsv", "parquet"):
+            # The parser the server uses at boot. Only JSON was read here, so a
+            # CSV-backed project exported with "Loaded 0 items" and every
+            # exporter that needs the item text lost it.
+            try:
+                if fmt == "parquet":
+                    import pandas as pd
+                    records = pd.read_parquet(path).to_dict(orient="records")
+                else:
+                    from potato.data_sources.parsing import parse_delimited, read_text
+                    records = parse_delimited(read_text(path, encoding),
+                                              "," if fmt == "csv" else "\t", path)
+            except Exception as e:
+                logger.warning(f"Could not read data file {path}: {e}")
+                continue
+            for position, item in enumerate(records, 1):
+                if isinstance(item, dict):
+                    items[str(item.get(id_key, f"item_{position}"))] = item
+            continue
+
+        with open(path, "r", encoding=encoding) as f:
+            content = f.read()
+
+        # A whole-file JSON array is as legal a Potato data file as JSON Lines
+        # is — `load_instance_data` accepts both — but reading line by line
+        # yields nothing at all for a pretty-printed array, leaving
+        # ExportContext.items empty and silently stripping every exporter of the
+        # item data it needs. Try the array form first, then fall back.
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = None
+
+        if isinstance(payload, list):
+            for position, item in enumerate(payload, 1):
+                if isinstance(item, dict):
+                    items[str(item.get(id_key, f"item_{position}"))] = item
+            continue
+        if isinstance(payload, dict):
+            items[str(payload.get(id_key, "item_1"))] = payload
+            continue
+
+        for line_num, line in enumerate(content.splitlines(), 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
+                continue
+            if isinstance(item, dict):
+                items[str(item.get(id_key, f"item_{line_num}"))] = item
 
     return items
 
@@ -267,6 +634,11 @@ def build_export_context(config_path: str) -> ExportContext:
     # Determine output directory
     task_dir = config.get("task_dir", ".")
     base_dir = os.path.normpath(os.path.join(config_dir, task_dir))
+    # Exporters resolve project files (media, calibrations, the telemetry
+    # store) against task_dir. Left relative, it resolved against the
+    # caller's working directory, so exporting from anywhere but the project
+    # directory read the wrong files or none.
+    config["task_dir"] = base_dir
     output_annotation_dir = config.get(
         "output_annotation_dir",
         os.path.join(base_dir, "annotation_output")
@@ -274,9 +646,33 @@ def build_export_context(config_path: str) -> ExportContext:
     if not os.path.isabs(output_annotation_dir):
         output_annotation_dir = os.path.join(base_dir, output_annotation_dir)
 
+    # `taxonomy_file` is read into `taxonomy` at server boot; the export reads
+    # the YAML itself, so without this a hierarchical_multiselect built from a
+    # file had no codes in the codebook and qdpx exports.
+    try:
+        from potato.server_utils.taxonomy_files import apply_taxonomy_files
+        apply_taxonomy_files(config, config_dir)
+    except Exception:
+        logger.warning("Could not read a taxonomy_file; its codes are missing "
+                       "from the export", exc_info=True)
+
+    # A `codebook: true` scheme sources its labels from the project database,
+    # not from the YAML -- the server applies that at boot. Reading the file
+    # back gives the labels the study STARTED with, so every code a coder
+    # added mid-study was missing from the codebook and qdpx exports, which in
+    # open coding is most of them.
+    try:
+        from potato.codebook.schema_bridge import apply_codebook_to_schemes
+        apply_codebook_to_schemes(config, task_dir=base_dir, seed=False)
+    except Exception:
+        logger.debug("Could not apply the project codebook to the export "
+                     "schemas; exporting the config\'s labels", exc_info=True)
+
     items = load_items_from_data_files(config, config_dir)
-    annotations = load_annotations_from_output_dir(output_annotation_dir, schemas)
-    phase_responses = load_phase_responses_from_output_dir(output_annotation_dir)
+    annotations = load_annotations_from_output_dir(output_annotation_dir, schemas,
+                                                   config)
+    phase_responses = load_phase_responses_from_output_dir(output_annotation_dir,
+                                                           config=config)
 
     return ExportContext(
         config=config,

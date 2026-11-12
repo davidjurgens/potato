@@ -1,9 +1,8 @@
 """
 Prompt Optimizer for Solo Mode
 
-This module implements DSPy-style automatic prompt optimization.
-It uses labeled examples to iteratively improve prompts for better
-accuracy while maintaining brevity.
+DSPy-style automatic prompt optimization: uses labeled examples to improve a
+prompt's accuracy without letting it grow.
 """
 
 import json
@@ -387,6 +386,17 @@ class PromptOptimizer:
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON from response."""
+        from potato.ai.ai_endpoint import parse_llm_json
+
+        # The shared parser also reads JSON after prose or a <think> block,
+        # which the fence-only code below gave up on.
+        try:
+            parsed = parse_llm_json(response)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict) and set(parsed) != {'response'}:
+            return parsed
+
         content = response.strip()
 
         if '```json' in content:

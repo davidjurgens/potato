@@ -1,0 +1,17 @@
+{% extends "scheduling/base.html" %}
+{% block main_id %}schedule-out-of-window{% endblock %}
+{% block content %}
+<div class="potato-page-icon potato-page-icon-info"><i class="fas fa-clock" aria-hidden="true"></i></div>
+{% if reason == 'upcoming' %}
+<h1 class="potato-page-title sched-center" id="schedule-heading">{{ s.title }} is not open yet</h1>
+<p class="potato-page-subtitle sched-center" id="schedule-window">It opens on
+    <time datetime="{{ s.opens.iso }}" data-epoch="{{ s.opens.epoch }}" id="schedule-window-opens">{{ s.opens.local }}</time>
+    and closes on <time datetime="{{ s.closes.iso }}" data-epoch="{{ s.closes.epoch }}">{{ s.closes.local }}</time> ({{ tz }}).</p>
+{% else %}
+<h1 class="potato-page-title sched-center" id="schedule-heading">{{ s.title }} has closed</h1>
+<p class="potato-page-subtitle sched-center" id="schedule-window">It closed on
+    <time datetime="{{ s.closes.iso }}" data-epoch="{{ s.closes.epoch }}">{{ s.closes.local }}</time> ({{ tz }}).
+    {% if next %}The next session, {{ next.title }}, opens on <time datetime="{{ next.opens.iso }}" data-epoch="{{ next.opens.epoch }}">{{ next.opens.local }}</time>.{% endif %}</p>
+{% endif %}
+<p class="sched-center"><a class="sched-link" href="{{ url_for('schedule_status') }}" id="schedule-back">See your schedule</a></p>
+{% endblock %}

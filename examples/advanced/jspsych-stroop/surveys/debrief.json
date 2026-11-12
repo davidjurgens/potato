@@ -1,0 +1,31 @@
+[
+  {
+    "name": "task_difficulty",
+    "annotation_type": "likert",
+    "description": "The colour-naming task was difficult.",
+    "min_label": "Strongly disagree",
+    "max_label": "Strongly agree",
+    "size": 5
+  },
+  {
+    "name": "task_focus",
+    "annotation_type": "likert",
+    "description": "I stayed focused during the colour-naming task.",
+    "min_label": "Strongly disagree",
+    "max_label": "Strongly agree",
+    "size": 5
+  },
+  {
+    "name": "task_strategy",
+    "annotation_type": "likert",
+    "description": "I tried to ignore what the word said.",
+    "min_label": "Strongly disagree",
+    "max_label": "Strongly agree",
+    "size": 5
+  },
+  {
+    "name": "comments",
+    "annotation_type": "text",
+    "description": "Anything else you want to tell us?"
+  }
+]

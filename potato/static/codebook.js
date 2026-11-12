@@ -26,10 +26,11 @@
 
     function el(id) { return document.getElementById(id); }
 
+    // Quotes too: callers put the result in attribute values as well as text.
     function esc(s) {
-        var d = document.createElement("div");
-        d.textContent = s == null ? "" : String(s);
-        return d.innerHTML;
+        return (s == null ? "" : String(s))
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     function project() {
@@ -45,7 +46,9 @@
     function writeCache(data) {
         try {
             sessionStorage.setItem(cacheKey(), JSON.stringify({
-                revision: data.revision, labels: data.labels,
+                revision: data.revision,
+                content_revision: data.content_revision,
+                labels: data.labels,
                 tree: data.tree, schemes: data.schemes,
                 mode: data.mode, can_add: data.can_add,
                 can_edit: data.can_edit,
@@ -55,30 +58,52 @@
 
     // ---- tray rendering --------------------------------------------------
 
-    function renderTree(nodes, canEdit) {
+    // `depth` drives the --cb-depth indent the stylesheet reads. Nothing
+    // used to set it, so every code in a nested codebook rendered flush
+    // left and a child was indistinguishable from a root code.
+    function renderTree(nodes, depth, canEdit) {
         if (!nodes || !nodes.length) return "";
+        var d = depth || 0;
         return nodes.map(function (n) {
             var dot = n.color
                 ? '<span class="cb-dot" style="background:'
                   + esc(n.color) + '"></span>'
                 : "";
+            // The definition is markdown in the full codebook; the tray
+            // shows it as one plain line, so escape it and leave the
+            // markup to /codebook rather than half-rendering it here.
+            var def = n.definition
+                ? '<p class="cb-def">' + esc(n.definition) + "</p>"
+                : "";
+            // "Edit" opens the structured fields the LLM prompt is built
+            // from (definition, clarifications, examples, exclusions).
             var editBtn = canEdit
                 ? '<button type="button" class="cb-detail-toggle" '
                   + 'data-id="' + esc(n.id) + '" '
                   + 'aria-label="Edit ' + esc(n.name) + '" '
                   + 'aria-expanded="false">Edit</button>'
                 : "";
-            return '<li class="cb-node" data-id="' + esc(n.id) + '">'
-                + '<div class="cb-node-row">' + dot
+            return '<li class="cb-node" data-id="' + esc(n.id) + '"'
+                + ' style="--cb-depth:' + d + '">'
+                + '<div class="cb-node-row" data-code-id="' + esc(n.id) + '">'
+                + dot
                 + '<span class="cb-name">' + esc(n.name) + "</span>"
-                + editBtn + "</div>"
+                + '<button type="button" class="cb-node-edit"'
+                + ' data-code-id="' + esc(n.id) + '"'
+                + ' data-code-name="' + esc(n.name) + '"'
+                + ' title="Edit this code\'s content"'
+                + ' aria-label="Edit content for ' + esc(n.name) + '">'
+                + '&#9998;</button>'
+                + editBtn
+                + "</div>"
+                + def
                 + (canEdit
                     ? '<div class="cb-detail" id="cb-detail-'
                       + esc(n.id) + '" hidden></div>'
                     : "")
                 + (n.children && n.children.length
                     ? '<ul class="cb-children">'
-                      + renderTree(n.children, canEdit) + "</ul>"
+                      + renderTree(n.children, d + 1, canEdit) + "</ul>"
                     : "")
                 + "</li>";
         }).join("");
@@ -94,15 +119,174 @@
         if (box) {
             var tree = (data && data.tree) || [];
             var canEdit = !!(data && data.can_edit);
-            box.innerHTML = tree.length
-                ? '<ul class="cb-root">' + renderTree(tree, canEdit)
-                  + "</ul>"
-                : '<div class="cb-empty">No codes yet.</div>';
+            var link = '<a class="cb-fullpage-link" href="/codebook">'
+                + '&#128214; Open full codebook</a>';
+            box.innerHTML = link + (tree.length
+                ? '<ul class="cb-root">' + renderTree(tree, 0, canEdit) + "</ul>"
+                : '<div class="cb-empty">No codes yet.</div>');
+            // Show inline-edit affordances only when the user may mutate
+            // content (open mode / privileged); otherwise an edit still
+            // queues a proposal, but we keep the tray read-only-looking.
+            box.classList.toggle(
+                "cb-can-edit", !!(data && (data.can_edit || data.can_add)));
         }
         var composer = el("cb-composer");
         if (composer) composer.hidden = !(data && data.can_add);
         var hint = el("cb-mode-hint");
         if (hint && data) hint.textContent = MODE_HINT[data.mode] || "";
+    }
+
+    // ---- panel inline content edit (quick definition / add example) -----
+
+    function cbApi(method, path, body) {
+        var opts = {
+            method: method, credentials: "same-origin",
+            headers: { "Accept": "application/json" },
+        };
+        if (body !== undefined) {
+            opts.headers["Content-Type"] = "application/json";
+            opts.body = JSON.stringify(body);
+        }
+        return fetch(API + path, opts).then(function (r) {
+            return r.json().catch(function () { return {}; })
+                .then(function (j) {
+                    return { ok: r.ok, status: r.status, body: j };
+                });
+        });
+    }
+
+    function closeInlineEdit() {
+        var ex = document.querySelector(".cb-inline-edit");
+        if (ex) ex.parentNode.removeChild(ex);
+    }
+
+    function findBlock(blocks, type) {
+        for (var i = 0; i < (blocks || []).length; i++) {
+            if (blocks[i].block_type === type) return blocks[i];
+        }
+        return null;
+    }
+
+    function openInlineEdit(codeId, name, rowEl) {
+        if (!codeId || !rowEl) return;
+        var existing = rowEl.parentNode.querySelector(".cb-inline-edit");
+        if (existing) { closeInlineEdit(); return; }  // toggle
+        closeInlineEdit();
+        cbApi("GET", "/blocks?code_id=" + encodeURIComponent(codeId))
+            .then(function (res) {
+                var blocks = (res.body && res.body.blocks) || [];
+                var version = (res.body && res.body.scope_version) || 0;
+                buildInlineEdit(codeId, name, rowEl, blocks, version);
+            });
+    }
+
+    function buildInlineEdit(codeId, name, rowEl, blocks, version) {
+        var wrap = document.createElement("div");
+        wrap.className = "cb-inline-edit";
+
+        var defBlock = findBlock(blocks, "definition");
+        var dl = document.createElement("label");
+        dl.className = "cb-inline-label";
+        dl.textContent = "Definition";
+        var defTa = document.createElement("textarea");
+        defTa.className = "cb-inline-ta";
+        defTa.rows = 2;
+        defTa.value = defBlock ? (defBlock.body_md || "") : "";
+        defTa.placeholder = "What does “" + name + "” mean?";
+
+        var el2 = document.createElement("label");
+        el2.className = "cb-inline-label";
+        el2.textContent = "Add an example";
+        var exTa = document.createElement("textarea");
+        exTa.className = "cb-inline-ta";
+        exTa.rows = 2;
+        exTa.placeholder = "> a quote that should get this code (optional)";
+
+        var status = document.createElement("div");
+        status.className = "cb-inline-status";
+        status.setAttribute("role", "status");
+
+        var foot = document.createElement("div");
+        foot.className = "cb-inline-foot";
+        var cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "cb-inline-btn cb-inline-cancel";
+        cancel.textContent = "Cancel";
+        cancel.addEventListener("click", closeInlineEdit);
+        var save = document.createElement("button");
+        save.type = "button";
+        save.className = "cb-inline-btn cb-inline-save";
+        save.textContent = "Save";
+
+        function doSave() {
+            var newBlocks = (blocks || []).map(function (b) {
+                return {
+                    block_type: b.block_type,
+                    custom_label: b.custom_label,
+                    body_md: b.body_md,
+                };
+            });
+            var def = findBlock(newBlocks, "definition");
+            var defVal = defTa.value.trim();
+            if (def) { def.body_md = defTa.value; }
+            else if (defVal) {
+                newBlocks.unshift({ block_type: "definition",
+                    body_md: defTa.value });
+            }
+            if (exTa.value.trim()) {
+                newBlocks.push({ block_type: "example",
+                    body_md: exTa.value });
+            }
+            save.disabled = true;
+            status.textContent = "Saving…";
+            cbApi("PUT", "/blocks", {
+                code_id: codeId, base_version: version, blocks: newBlocks,
+            }).then(function (res) {
+                save.disabled = false;
+                if (res.ok && res.body.queued) {
+                    status.textContent = "Submitted for admin review.";
+                    setTimeout(closeInlineEdit, 1200);
+                    return;
+                }
+                if (res.ok) {
+                    status.textContent = "Saved.";
+                    setTimeout(function () {
+                        closeInlineEdit();
+                        syncCodebook(instanceId());
+                    }, 700);
+                    return;
+                }
+                if (res.status === 409) {
+                    status.textContent =
+                        "Changed elsewhere — reloading latest…";
+                    setTimeout(function () {
+                        closeInlineEdit();
+                        openInlineEdit(codeId, name, rowEl);
+                    }, 900);
+                    return;
+                }
+                status.textContent =
+                    (res.body && res.body.error) || "Save failed.";
+            });
+        }
+        save.addEventListener("click", doSave);
+
+        foot.appendChild(status);
+        foot.appendChild(cancel);
+        foot.appendChild(save);
+        wrap.appendChild(dl);
+        wrap.appendChild(defTa);
+        wrap.appendChild(el2);
+        wrap.appendChild(exTa);
+        wrap.appendChild(foot);
+        // insert after the node row (inside the same <li>)
+        rowEl.parentNode.insertBefore(wrap, rowEl.nextSibling);
+        defTa.focus();
+        // In the narrow tray the editor can open below the fold; bring the
+        // whole box (including Save) into the scroll viewport.
+        if (wrap.scrollIntoView) {
+            wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
     }
 
     // ---- form reconciliation (append missing codebook options) ----------
@@ -125,6 +309,36 @@
     // palette must still gain runtime codes so they are usable as span
     // labels; span *persistence* itself is overlay-based and independent
     // of the palette.
+    /**
+     * The palette chip's fill for a runtime code.
+     *
+     * Built-in codes are rendered server-side at 0.4 alpha over their assigned
+     * colour; runtime codes were left transparent, so a minted code was a
+     * colourless chip that then highlighted in the same default purple as
+     * every other minted code. Both now come from the same hash.
+     */
+    function paletteTriple(name) {
+        if (typeof window.potatoPaletteColor === "function") {
+            return window.potatoPaletteColor(name);
+        }
+        var mgr = window.spanManager;
+        if (mgr && typeof mgr.paletteColorFor === "function") {
+            return mgr.paletteColorFor(name);
+        }
+        return "";
+    }
+
+    function chipColor(name) {
+        var triple = paletteTriple(name);
+        return triple ? "rgba" + triple.replace(")", ", 0.4)") : "";
+    }
+
+    /** Solid colour for a drawing palette button and its swatch. */
+    function chipColour(name) {
+        var triple = paletteTriple(name);
+        return triple ? "rgb" + triple : "";
+    }
+
     function reconcileSpanForm(form, tmpl, labels) {
         var schema = form.getAttribute("data-schema-name") || form.id;
         var have = optionValues(form);
@@ -144,8 +358,11 @@
             input.id = newId;
             input.checked = false;
             input.removeAttribute("data-key");
-            // label/title carry the code name; color is hash-derived in
-            // SpanManager (getSpanColor) so '' here is correct.
+            // The colour is hash-derived by SpanManager.paletteColorFor, so
+            // the chip below and the highlight this label draws agree without
+            // either side inventing a colour. '' here is right: the inline
+            // handler's colour argument is only a hint, and passing a stale
+            // one would override the resolved colour.
             input.setAttribute(
                 "onclick",
                 "onlyOne(this); changeSpanLabel(this, "
@@ -156,7 +373,7 @@
             var swatch = label.querySelector("span");
             if (swatch) {
                 swatch.textContent = name;
-                swatch.style.backgroundColor = "";   // no borrowed color
+                swatch.style.backgroundColor = chipColor(name);
             } else {
                 label.textContent = name;
             }
@@ -165,9 +382,50 @@
         });
     }
 
+    /**
+     * Drawing palettes (image, spatial, episode) render `.label-btn` buttons,
+     * not option inputs, and were skipped entirely — so in an image project
+     * you could mint a code and never draw with it. The buttons are wired by
+     * a delegated handler on the container, so a cloned button works with no
+     * extra binding; it needs the same dataset and colour the server emits.
+     */
+    function reconcileLabelButtons(form, tmpl, labels) {
+        var parent = tmpl.parentElement;
+        if (!parent) return;
+        var have = {};
+        parent.querySelectorAll(".label-btn").forEach(function (b) {
+            have[b.dataset.label] = true;
+        });
+
+        labels.forEach(function (name) {
+            if (have[name]) return;
+            var colour = chipColour(name) || "";
+            var node = tmpl.cloneNode(true);
+            node.dataset.label = name;
+            node.dataset.color = colour;
+            node.classList.remove("active");
+            node.setAttribute("aria-pressed", "false");
+            node.setAttribute("title", name);
+            node.style.setProperty("--label-color", colour);
+            var dot = node.querySelector(".label-color-dot");
+            if (dot) dot.style.backgroundColor = colour;
+            // textContent would drop the swatch; replace only the text node.
+            var text = null;
+            node.childNodes.forEach(function (child) {
+                if (child.nodeType === 3) text = child;
+            });
+            if (text) text.nodeValue = name;
+            else node.appendChild(document.createTextNode(name));
+            parent.appendChild(node);
+            have[name] = true;
+        });
+    }
+
     function reconcileForm(form, labels) {
         var span = form.querySelector(".shadcn-span-option");
         if (span) return reconcileSpanForm(form, span, labels);
+        var labelBtn = form.querySelector(".label-btn");
+        if (labelBtn) return reconcileLabelButtons(form, labelBtn, labels);
         var radio = form.querySelector(".shadcn-radio-option");
         var multi = form.querySelector(".shadcn-multiselect-item");
         var tmpl = radio || multi;
@@ -188,7 +446,12 @@
             input.id = newId;
             input.checked = false;
             input.removeAttribute("data-key");
-            input.setAttribute("label_name", newId);
+            // The code's own name, as a server-rendered option has: the
+            // saved Label is named after label_name, and the server maps
+            // saved names to code ids. Named after the element id, a code
+            // added here was saved as "<schema>__cb__<slug>", which no code
+            // has, so it was never linked and merge/split could not reach it.
+            input.setAttribute("label_name", name);
             if (isCheckbox) input.setAttribute("name", schema + ":::" + name);
             label.setAttribute("for", newId);
             label.textContent = name;   // drops any keybinding badge
@@ -281,6 +544,7 @@
 
     var staleDismissBound = false;
     var staleInstance = null;
+    var staleRevision = null;
 
     function renderBanner(p) {
         var bar = el("cb-stale-banner");
@@ -292,15 +556,29 @@
         if (!staleDismissBound) {
             var x = el("cb-stale-dismiss");
             if (x) x.addEventListener("click", function () {
-                if (staleInstance) dismissed[staleInstance] = true;
+                if (staleInstance) {
+                    dismissed[staleInstance] = true;
+                    // Remembered for this revision: a reload kept bringing
+                    // it back, and a later change should show again.
+                    try {
+                        sessionStorage.setItem("cb-dismissed:" + staleInstance
+                            + ":" + staleRevision, "1");
+                    } catch (e) { /* storage blocked: this page only */ }
+                }
                 bar.hidden = true;
             });
             staleDismissBound = true;
         }
-        if (!p || !p.stale || dismissed[p.instance_id]) {
+        var stored = false;
+        try {
+            stored = !!(p && sessionStorage.getItem("cb-dismissed:" + p.instance_id
+                                                    + ":" + p.current_revision));
+        } catch (e) { /* storage blocked */ }
+        if (!p || !p.stale || dismissed[p.instance_id] || stored) {
             bar.hidden = true;
             return;
         }
+        staleRevision = p.current_revision;
         var added = p.codes_added_since || [];
         staleInstance = p.instance_id;
         msgEl.textContent = added.length
@@ -406,7 +684,10 @@
         return fetch(API + "/version")
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (v) {
-                if (v && cache && cache.revision === v.revision) {
+                // Both revisions must match: the tray shows definitions,
+                // and editing one moves only content_revision.
+                if (v && cache && cache.revision === v.revision
+                        && cache.content_revision === v.content_revision) {
                     return cache;            // cache fresh — done
                 }
                 return fetchFull().then(function (data) {
@@ -420,14 +701,25 @@
             .catch(function () { return cache || null; });
     }
 
+    // The instance whose tray/banner/worklist load has already been started.
+    // init() and annotation.js's loadCurrentInstance() both reach onInstance()
+    // on a page load, and each used to issue the whole chain -- two full
+    // codebook fetches, two provenance calls and two worklist calls for one
+    // page. A real navigation is a full reload, so this resets by itself;
+    // an in-page instance change still gets a fresh load because the id moved.
+    var loadedFor = null;
+
     function onInstance() {
         if (!el("cb-panel")) return;
-        syncCodebook(instanceId());
+        var iid = instanceId();
+        if (loadedFor === iid) return;
+        loadedFor = iid;
+        syncCodebook(iid);
         refreshProvenance();
         refreshAdmin();
     }
 
-    // ---- admin curation (Phase 2 C): merge / proposals -------------------
+    // ---- admin curation (Phase 2 C): merge / split / proposals ----------
     // Admin status is probed once via the gated endpoint (200 -> show
     // the section, 403 -> stay hidden) — same self-gating pattern as the
     // codebook toggle itself.
@@ -488,6 +780,13 @@
         case "merge":
             return "Merge " + q(codeName(pay.src_id)) + " into "
                 + q(codeName(pay.dst_id));
+        case "split":
+            var dest = pay.new_name
+                ? " → " + q(pay.new_name)
+                : (pay.target_id
+                    ? " → " + q(codeName(pay.target_id)) : "");
+            return "Split " + q(codeName(pay.src_id)) + " by "
+                + esc(pay.annotator || "?") + dest;
         case "rename":
             return "Rename " + q(codeName(pay.code_id)) + " → "
                 + q(pay.new_name || "?");
@@ -696,14 +995,23 @@
         }).join("");
     }
 
-    function populateAdmin() {
+    // `proposals` is the body of the probe request when populateAdmin is
+    // called straight from refreshAdmin's probe. Without it the probe and the
+    // populate both GET /admin/proposals, so an adjudicator paid for the same
+    // list twice on every instance.
+    function populateAdmin(proposals) {
         var codes = flatCodes();
         fillCodeSelect(el("cb-merge-src"), codes, "merge from…");
         fillCodeSelect(el("cb-merge-dst"), codes, "into…");
-        fetch(ADMIN_API + "/proposals")
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (d) { renderProposals(d && d.proposals); })
-            .catch(function () { /* best-effort */ });
+        fillCodeSelect(el("cb-split-src"), codes, "split…");
+        if (proposals !== undefined) {
+            renderProposals(proposals);
+        } else {
+            fetch(ADMIN_API + "/proposals")
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) { renderProposals(d && d.proposals); })
+                .catch(function () { /* best-effort */ });
+        }
         fetch(ADMIN_API + "/changes")
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) { renderChanges(d && d.changes); })
@@ -721,7 +1029,11 @@
         fetch(ADMIN_API + "/proposals").then(function (r) {
             adminOK = r.status === 200;
             sec.hidden = !adminOK;
-            if (adminOK) populateAdmin();
+            if (!adminOK) return null;
+            return r.json();
+        }).then(function (d) {
+            if (d === null) return;
+            populateAdmin((d && d.proposals) || []);
         }).catch(function () { sec.hidden = true; });
     }
 
@@ -732,6 +1044,22 @@
             var d = el("cb-merge-dst").value;
             if (!s || !d) { adminErr("Pick both codes."); return; }
             postAdmin("/merge", { src_id: s, dst_id: d }, afterAdminOp);
+        });
+        var sp = el("cb-split-btn");
+        if (sp) sp.addEventListener("click", function () {
+            var body = {
+                src_id: el("cb-split-src").value,
+                annotator: (el("cb-split-annotator").value || "").trim(),
+                new_name: (el("cb-split-name").value || "").trim(),
+            };
+            if (!body.src_id || !body.annotator) {
+                adminErr("Pick a code and an annotator."); return;
+            }
+            postAdmin("/split", body, function () {
+                el("cb-split-name").value = "";
+                el("cb-split-annotator").value = "";
+                afterAdminOp();
+            });
         });
         var notesBtn = el("cb-notes-suggest-btn");
         if (notesBtn) notesBtn.addEventListener("click", function () {
@@ -1466,11 +1794,19 @@
         openInvivo(sel, form);
     }
 
+    // The panel is fixed and 360px wide; the page has to give up that width
+    // or the panel sits on top of the annotation controls. See
+    // `.potato-rail-open` in styles.css.
+    function setRail(open) {
+        document.body.classList.toggle("potato-rail-open", !!open);
+    }
+
     function closePanel() {
         var panel = el("cb-panel");
         var toggle = el("cb-panel-toggle");
         if (panel) panel.hidden = true;
         if (toggle) { toggle.hidden = false; toggle.focus(); }
+        setRail(false);
     }
 
     // ---- resizable panel — drag the left edge to make the tray wider or
@@ -1598,6 +1934,7 @@
             toggle.addEventListener("click", function () {
                 panel.hidden = false;
                 toggle.hidden = true;
+                setRail(true);
                 onInstance();
                 maybeShowOnboarding();
                 var n = el("cb-new-name");
@@ -1623,6 +1960,21 @@
         wireAdmin();
         wireDetailEditor();
 
+        // Inline content edit: delegate clicks on the per-code pencil.
+        var tree = el("cb-tree");
+        if (tree) {
+            tree.addEventListener("click", function (e) {
+                var btn = e.target && e.target.closest
+                    ? e.target.closest(".cb-node-edit") : null;
+                if (!btn) return;
+                e.preventDefault();
+                openInlineEdit(
+                    btn.getAttribute("data-code-id"),
+                    btn.getAttribute("data-code-name"),
+                    btn.closest(".cb-node-row"));
+            });
+        }
+
         var add = el("cb-add-btn");
         if (add) add.addEventListener("click", addCode);
         var input = el("cb-new-name");
@@ -1641,24 +1993,26 @@
 
     function init() {
         if (!window.config || !window.config.is_annotation_page) return;
+        // The tray markup is only in the page when the server says a codebook
+        // is configured, so its presence *is* the gate. This used to probe
+        // GET /api/codebook for a 200 and stay hidden on the 503 -- which meant
+        // every task without a codebook paid for the probe.
         if (!el("cb-panel")) return;
-        fetch(API).then(function (r) {
-            if (r.status === 200) {
-                var t = el("cb-panel-toggle");
-                if (t) t.hidden = false;
-                wire();
-                return r.json();
-            }
-            return null;
-        }).then(function (data) {
-            if (!data) return;
-            writeCache(data);
-            renderTray(data);
-            reconcileForms(data, instanceId());
-            refreshProvenance();
-            refreshProposalBadge();
-            setInterval(refreshProposalBadge, 60000);
-        }).catch(function () { /* leave hidden */ });
+        var t = el("cb-panel-toggle");
+        if (t) t.hidden = false;
+        wire();
+        // The load itself belongs to annotation.js: its reconcile has to run
+        // after generateAnnotationForms(), and init() fires long before that.
+        // Doing it here as well is what produced the duplicate fetches. The
+        // timer is a safety net for a page that renders the tray without the
+        // annotation bootstrap -- it does nothing once onInstance() has run.
+        setTimeout(function () {
+            if (loadedFor === null) onInstance();
+        }, 2000);
+        // The pending-proposals badge on the toggle (empty for anyone who
+        // cannot review proposals: the admin endpoint answers 403).
+        refreshProposalBadge();
+        setInterval(refreshProposalBadge, 60000);
     }
 
     if (document.readyState === "loading") {

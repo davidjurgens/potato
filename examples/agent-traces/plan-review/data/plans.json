@@ -1,0 +1,23 @@
+[
+  {
+    "id": "plan_001",
+    "task_description": "Migrate the users table from MySQL to PostgreSQL with zero data loss and under 5 minutes of downtime.",
+    "steps": [
+      {"speaker": "Agent (Plan)", "text": "Step 1: Take a full mysqldump of the users table.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 2: Drop the users table in MySQL to prevent writes during migration.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 3: Create the PostgreSQL schema and load the dump via pgloader.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 4: Point the application's connection string at PostgreSQL.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 5: Verify row counts match between the dump and the new table.", "step_type": "thought"}
+    ]
+  },
+  {
+    "id": "plan_002",
+    "task_description": "Set up nightly backups for the analytics bucket and verify they can be restored.",
+    "steps": [
+      {"speaker": "Agent (Plan)", "text": "Step 1: Enable versioning on the analytics S3 bucket.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 2: Create a lifecycle rule replicating objects to the backup bucket at 02:00 UTC.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 3: Write a restore-verification job that pulls a random sample from the backup and checksums it against the source.", "step_type": "thought"},
+      {"speaker": "Agent (Plan)", "text": "Step 4: Schedule the verification job weekly and alert on checksum mismatch.", "step_type": "thought"}
+    ]
+  }
+]

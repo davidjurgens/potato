@@ -1,6 +1,6 @@
 # Test Fix Plan
 
-This document outlines the root causes and fixes for test failures in the potato annotation platform test suite.
+Root causes and fixes for the failing tests in the Potato test suite.
 
 ## Summary
 

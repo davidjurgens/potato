@@ -1,7 +1,6 @@
 annotation_task_name: Simple Likert Scale Test
 task_dir: output/simple-likert
 output_annotation_dir: output/simple-likert/annotations
-output_annotation_format: jsonl
 data_files:
 - ../../../data/test_data.json
 item_properties:

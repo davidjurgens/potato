@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Multi-Agent Trace Evaluation Example
 #
 # Demonstrates evaluation of multi-agent system traces from different
@@ -21,7 +22,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 instance_display:
   layout:
@@ -40,7 +41,7 @@ instance_display:
       type: agent_trace
       label: "Agent Interactions"
       display_options:
-        show_turn_numbers: true
+        show_step_numbers: true
         speaker_key: agent
 
 annotation_schemes:

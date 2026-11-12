@@ -37,8 +37,63 @@ annotation_schemes:
 | `codebook_mode` (or `codebook.mode`) | `open` under qda/solo; `fixed` in standard mode | Governs annotator edit rights (see below). |
 | `annotation_schemes[].codebook` | `false` | Opt this scheme into codebook-sourced labels. |
 
-A **crowdsourcing backend force-locks `fixed`** regardless of the
-requested mode — paid annotators must not reshape the shared codebook.
+A **crowd backend force-locks `fixed`** regardless of the requested
+mode — recruited annotators must not reshape the shared codebook. What
+counts as one:
+
+| Configuration | Codebook |
+|---|---|
+| `crowdsourcing.provider`, any value except `expert` | locked |
+| `crowdsourcing.provider` Potato does not recognize | locked |
+| top-level `prolific:` or `mturk:` block | locked |
+| `login.type: prolific` or `mturk` | locked |
+| `crowdsourcing.provider: expert` | as requested |
+| `login.type: url_direct` alone | as requested, with a warning |
+| anything else | as requested |
+
+An unrecognized provider name locks because a control a typo can switch
+off is not a control, and because a provider added later should arrive
+locked and be trusted deliberately.
+
+`crowdsourcing.provider: expert` is exempt. Experts are hired by name and
+pre-authorized by invite token, which makes them collaborators rather
+than anonymous workers on a HIT, and an open codebook is a legitimate
+design for expert coding.
+
+`login.type: url_direct` with no provider named is **not** locked, even
+though the crowd registry treats that config as a crowd deployment. A
+public self-registration study is a legitimate design, and locking it
+would change what existing studies do. It warns instead: anyone who has
+the link can self-register, so anyone who has the link can rename and
+delete codes. Set `codebook_mode: fixed`, or name the platform with
+`crowdsourcing.provider` and the force-lock applies.
+
+### Seeding colors and definitions from the config
+
+The seed takes more than the name. A label written in the object form
+starts its code off with a color and a definition:
+
+```yaml
+  labels:
+  - name: access barriers
+    color: "#4682b4"
+    description: >
+      Anything the speaker names as standing between them and care they
+      wanted: distance, waiting lists, a referral that never arrived.
+  - name: cost concerns
+    color: "#b44682"
+    tooltip: Money, insurance, or the fear of a bill.
+```
+
+`color` becomes the code's dot in the tray and on the full codebook
+page. `description` becomes the code's **Short definition** block, which
+is what the tray shows under the name and what the distiller sends to a
+model.
+`tooltip` is used when there is no `description`; it is the documented
+per-label spelling, so a config that uses it seeds a codebook too.
+
+The seed runs once, on an empty codebook. It never overwrites wording a
+researcher has since edited.
 
 ### Modes
 
@@ -53,8 +108,12 @@ Adjudicators are privileged and may edit in any non-`fixed` mode.
 ## The Codebook tray
 
 When a codebook is enabled, a **Codebook** toggle appears on the right
-edge of the annotation page (below Notes). It lists the codes and, when
-`codebook_mode` is `extensible`/`open`, shows an "Add a code…" composer.
+edge of the annotation page (below Notes). It lists the codes with each
+code's short definition underneath, so an annotator can check what a
+code means without leaving the item they are coding. Definitions are clamped
+to two lines; "Open full codebook" has the whole entry. When
+`codebook_mode` is `extensible`/`open`, the tray also shows an "Add a
+code…" composer.
 
 ### Add a code while coding
 
@@ -106,6 +165,11 @@ instances are surfaced (an instance is listed only if its stamped
 revision precedes the change) — each with a **Go** button to jump
 straight there. Nothing is force-reopened; reviewing is optional.
 
+A change to a code's meaning (its short definition, definition,
+use-when or avoid-when text, saved without **minor**) also puts your
+instances on the worklist, marked "codebook changed", because the codes
+you chose between now mean something different.
+
 Admins/adjudicators can see the project-wide stale set via
 `GET /api/codebook/admin/stale`.
 
@@ -125,13 +189,28 @@ adjudicators get a **Curate** section in the tray to fix this
 - **Split by annotator** moves just one annotator's links from a code
   to a new or existing code — the concrete fix when two coders meant
   different things by the same name. The source stays live for the
-  other annotators.
+  other annotators, and is archived only when no other coder still
+  uses it.
 
 Both are **append-only**: historical links are marked superseded, not
 removed, so the change is fully auditable and the codebook can never
 silently lose data. Affected instances are softly re-flagged so they
 resurface in each annotator's **Review** worklist (dismissible, never a
 hard re-label gate — same policy as ordinary revision changes).
+
+Merge, split and rename also rewrite the label saved in each affected
+annotator's state, so their form shows the code the annotation now
+belongs to and their next save keeps it there. A tab opened before the
+change still has the old name ticked, and its next save posts that name.
+The server moves that name to the code it was renamed or merged into.
+A split moves the name to the split's target only when the split
+archived the source, because no other annotator still used it. When
+other annotators still use the source, it is a live code, so the stale
+tab's next save writes the source back for the split annotator and drops
+their coding on the target. Running the split again with the same target
+(`target_id`) moves it back. Annotations saved before links were recorded
+are linked from the saved labels the first time a merge, split or rename
+touches their code.
 
 Authorship/provenance lives in a **separate change log**, never on the
 code records (those feed the ICL prompt verbatim). The collapsed
@@ -161,7 +240,15 @@ potato codebook path/to/config.yaml --dry-run
 
 Code ids are **deterministic** (`uuid5` over project + parent + name),
 so re-running is a no-op and the same config yields the same ids across
-machines — important because annotations carry a parallel `code_id`.
+machines. The server seeds a fresh codebook the same way, with the same
+ids, and both carry each label's `color` and its `description` (or
+`tooltip`) as the code's short definition. Running the CLI before the
+first server start gives the same codebook the server would have seeded.
+
+Each saved annotation on a `codebook: true` scheme is linked to its
+code by id, one link per coder per instance. The label string stays in
+the annotator's saved state, and merge, split and the review worklist
+follow the link.
 
 ## API
 
@@ -189,15 +276,77 @@ machines — important because annotations carry a parallel `code_id`.
 `/qda/codebook` is the QDA-scoped read view (returns `503` when QDA Mode
 is not enabled).
 
+## Living document (rules, definitions, examples)
+
+A codebook is more than a label list — it is the evolving prose that tells
+humans (and, via distillation, LLMs) how to apply each code. Potato stores
+that prose as an ordered list of **typed blocks** per code and per
+document-level section, and renders it as a **living markdown document** at
+`/codebook`.
+
+- **Typed blocks.** Every block has a type — `short_def`, `definition`,
+  `use_when` (inclusion), `avoid_when` (exclusion), `example`,
+  `counter_example`, `rationale`, `notes`, `keywords`, `background`,
+  `downstream_usage`, or `custom`. The vocabulary is data, not schema —
+  adding a type needs no migration. Pasted markdown is parsed into blocks;
+  anything unrecognized is flagged so the author assigns a type before
+  saving.
+- **Two edit surfaces.** The full-page `/codebook` document (read +
+  typed-block editor, paste-import, history/diff/restore) and quick inline
+  "edit definition / add example" actions from the in-annotation codebook
+  tray.
+- **Three revision counters.** `revision` (structural, label/tree changes)
+  stays the cheap navigation poll; `content_revision` bumps on every prose
+  edit (cache-bust); `sem_revision` bumps only on **semantic** edits —
+  changes to meaning-bearing blocks (`short_def`, `definition`, `use_when`,
+  `avoid_when`) or adding/removing a code — which softly re-flag the
+  instances coded with that code for re-review. Mark any edit **Minor** to
+  suppress the semantic bump.
+- **Optimistic concurrency.** Saves carry a `base_version`; a stale save
+  returns **409** with the current blocks and a diff to rebase onto, never a
+  silent overwrite. Different codes/sections never collide. Locked-mode
+  annotators route content edits through the existing proposal/confirm flow.
+- **Distillation.** A configurable `CodebookDistiller` flattens chosen block
+  types into the prompt appended to AI label suggestions; it refreshes on
+  every content revision.
+
+Content API on `/api/codebook` (session-auth; mutations are gated by
+`codebook_mode`):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/codebook/document` | whole living doc: doc sections + per-code blocks + revisions |
+| GET | `/api/codebook/blocks?code_id=&section=` | one scope's blocks + `scope_version` |
+| PUT | `/api/codebook/blocks` | save a scope (`base_version`, `minor?`); stale → **409** + diff; locked-mode → **proposal** |
+| POST | `/api/codebook/parse` | markdown → typed blocks (with `classified` flags) for paste-import |
+| GET | `/api/codebook/history?scope_kind=&scope_id=` | snapshot timeline for a scope |
+| GET | `/api/codebook/history/<id>` | one snapshot (markdown + blocks) for diff |
+| POST | `/api/codebook/restore` | re-save an older snapshot (audited, never a destructive rewind) |
+| GET | `/api/codebook/distilled` | the current distilled prompt (debug/preview) |
+
+Enable it with a `codebook.distiller` block in config; QDA Mode turns the
+document on by default. See
+[`examples/advanced/codebook-document-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/codebook-document-example/).
+
 ## Example
 
 A runnable example is in
-[`examples/advanced/codebook-example/`](../../examples/advanced/codebook-example/):
+[`examples/advanced/codebook-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/codebook-example/):
 
 ```bash
 python potato/flask_server.py start \
   examples/advanced/codebook-example/config.yaml -p 8000
 ```
+
+The living-document example (typed blocks, full-page editor, distiller):
+
+```bash
+python potato/flask_server.py start \
+  examples/advanced/codebook-document-example/config.yaml -p 8000 \
+  --debug --debug-phase annotation
+```
+Open `/codebook` to author blocks and paste markdown; in the annotation
+tray use the per-code pencil to add a definition or example inline.
 
 ## Related
 

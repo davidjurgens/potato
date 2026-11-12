@@ -1,6 +1,6 @@
 # Multi-Criteria Rubric Evaluation
 
-The Rubric Evaluation schema provides a structured grid for rating items on multiple criteria simultaneously. This is the essential schema for LLM evaluation — enabling MT-Bench-style multi-dimensional scoring with configurable criteria and scale points.
+The rubric evaluation schema is a grid: one row per criterion, one column per scale point, filled in one pass. It is what MT-Bench-style multi-dimensional scoring needs, with the criteria and the scale points both configurable.
 
 ## When to Use Rubric Eval
 

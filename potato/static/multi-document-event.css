@@ -1,0 +1,241 @@
+/* Multi-Document Event Annotation form styling */
+
+.mde-container {
+  border: 1px solid light-dark(#e2e8f0, #434b56);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: light-dark(#fff, #1a1a1a);
+  font-size: 14px;
+}
+
+.mde-header {
+  margin-bottom: 10px;
+}
+
+.mde-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: light-dark(#1e293b, #c9d1de);
+}
+
+.mde-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.mde-section-label {
+  font-weight: 600;
+  color: light-dark(#334155, #c0c9d4);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mde-create-btn {
+  border: 1px solid #2563eb;
+  color: light-dark(#2563eb, #9cb4e8);
+  background: light-dark(#fff, #1a1a1a);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.mde-create-btn:hover {
+  background: light-dark(#eff6ff, #0e1c2f);
+}
+
+.mde-empty {
+  color: #94a3b8;
+  font-style: italic;
+  margin: 4px 0;
+}
+
+.mde-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mde-event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid light-dark(#e2e8f0, #434b56);
+  border-radius: 6px;
+  background: light-dark(#f8fafc, #161c23);
+}
+.mde-event-row.mde-active {
+  border-color: #2563eb;
+  background: light-dark(#eff6ff, #0e1c2f);
+}
+
+.mde-event-open {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: light-dark(#1e293b, #c9d1de);
+  padding: 0;
+}
+.mde-event-open:hover {
+  color: light-dark(#2563eb, #9cb4e8);
+}
+
+.mde-event-meta {
+  color: light-dark(#64748b, #bac0c9);
+  font-size: 12px;
+}
+
+.mde-event-del {
+  border: none;
+  background: none;
+  color: #cbd5e1;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mde-event-del:hover {
+  color: light-dark(#dc2626, #e3a1a1);
+}
+
+.mde-editor {
+  border-top: 1px solid light-dark(#e2e8f0, #434b56);
+  padding-top: 10px;
+}
+
+.mde-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.mde-editor-title {
+  font-weight: 700;
+  color: light-dark(#1e293b, #c9d1de);
+  flex: 1;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 14px;
+  background: light-dark(#f8fafc, #161c23);
+}
+.mde-editor-title:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: light-dark(#fff, #1a1a1a);
+}
+
+.mde-membership {
+  font-size: 12px;
+  color: light-dark(#475569, #bac1cb);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.mde-slot {
+  margin-bottom: 10px;
+}
+
+.mde-slot-label {
+  display: block;
+  font-weight: 600;
+  color: light-dark(#334155, #c0c9d4);
+  margin-bottom: 3px;
+}
+
+.mde-slot-row {
+  display: flex;
+  gap: 6px;
+}
+
+.mde-slot-input {
+  flex: 1;
+  border: 1px solid light-dark(#cbd5e1, #444c55);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 14px;
+}
+.mde-slot-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.mde-cite-btn {
+  border: 1px solid #16a34a;
+  color: #16a34a;
+  background: light-dark(#fff, #1a1a1a);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mde-cite-btn:hover {
+  background: light-dark(#f0fdf4, #122b1a);
+}
+
+.mde-cite-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.mde-cite {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0;
+  color: light-dark(#475569, #bac1cb);
+}
+
+.mde-cite-doc {
+  font-weight: 600;
+  color: #0891b2;
+}
+.mde-cite-text {
+  flex: 1;
+  color: light-dark(#334155, #c0c9d4);
+}
+.mde-cite-del {
+  border: none;
+  background: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.mde-cite-del:hover {
+  color: light-dark(#dc2626, #e3a1a1);
+}
+
+.mde-cite-hint {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: light-dark(#fef9c3, #433f14);
+  border: 1px solid light-dark(#fde047, #6a612f);
+  border-radius: 6px;
+  font-size: 13px;
+  color: light-dark(#713f12, #e7caaf);
+}
+.mde-cite-hint button {
+  margin-left: 8px;
+  border: 1px solid #a16207;
+  background: light-dark(#fff, #1a1a1a);
+  border-radius: 5px;
+  padding: 1px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}

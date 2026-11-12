@@ -1,6 +1,6 @@
 # Category-Based Assignment
 
-Category-based assignment allows you to automatically match annotators with annotation instances based on their demonstrated expertise. Annotators are assessed during training or prestudy phases on category-specific questions, and only receive instances from categories they have qualified for.
+Category-based assignment matches annotators to instances by demonstrated expertise. Annotators are assessed on category-specific questions during the training or prestudy phase, and afterwards receive instances only from the categories they qualified for.
 
 ## Overview
 
@@ -11,6 +11,19 @@ The category-based assignment system works as follows:
 3. **Performance Tracking**: The system tracks each user's accuracy per category during training
 4. **Qualification**: Users who meet the threshold accuracy for a category are "qualified"
 5. **Assignment**: During annotation, users only receive instances from their qualified categories
+
+**A training phase is required.** Step 3 is the only thing that grants a
+qualification, so a study configured for `category_based` with no
+`training` block never qualifies anyone: no categorized item is a
+candidate for any annotator, and only the fallback serves anything. The
+default fallback (`uncategorized`) hides this on a mixed corpus, because
+it hands out exactly the items with no category and so the feature looks
+alive. On a fully categorized corpus every annotator is served nothing.
+The server warns at load when this is the configuration you have.
+
+`category_assignment.dynamic.enabled` is the alternative: it infers
+expertise from annotation behaviour instead of training results and does
+not need a training phase.
 
 ## Configuration
 
@@ -32,7 +45,6 @@ item_properties:
 category_assignment:
   enabled: true
   qualification:
-    source: training      # Where qualification comes from
     threshold: 0.7        # 70% accuracy required
     min_questions: 2      # At least 2 questions per category
   fallback: uncategorized # What to do if user qualifies for nothing
@@ -50,16 +62,24 @@ The field name in your data files that contains the category. Categories can be:
 - A single string: `"category": "economics"`
 - A list of strings: `"category": ["economics", "finance"]`
 
+`category_assignment.category_key` is accepted as the same setting, so either
+placement works. `item_properties.category_key` wins if both are set. Earlier
+versions read only `item_properties.category_key`, so a config using the other
+spelling ran with every item uncategorized, fell through to the
+`uncategorized` fallback, and looked healthy while routing nothing.
+
 #### `category_assignment`
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enabled` | boolean | true | Enable/disable category assignment |
-| `qualification.source` | string | "training" | Where qualification scores come from: "training", "prestudy", or "both" |
 | `qualification.threshold` | float | 0.7 | Minimum accuracy (0.0-1.0) to qualify for a category |
 | `qualification.min_questions` | integer | 1 | Minimum questions answered per category to qualify |
-| `qualification.combine_method` | string | "average" | How to combine scores when source is "both": "average", "max", or "sum" |
 | `fallback` | string | "uncategorized" | Behavior when user doesn't qualify for any category |
+
+Qualification scores come from the training phase only.
+`qualification.source` and `qualification.combine_method` are still accepted,
+but nothing reads them, and Potato logs a warning when either is set.
 
 #### Fallback Options
 
@@ -83,6 +103,19 @@ Your data files should include the category field:
 Instances with `null` category or missing category field are considered "uncategorized" and will be assigned via fallback behavior.
 
 ### Training Data
+
+**Every training question needs a category.** Qualification is computed
+only from per-category training scores, so an uncategorized training set
+qualifies nobody: the annotator passes training and is then served
+nothing. The server warns at load if no training question carries one.
+
+Three keys are accepted, and they mean the same thing:
+
+| Key | Notes |
+|-----|-------|
+| `category` | String or list. Wins if more than one key is present |
+| `categories` | List or string |
+| whatever `item_properties.category_key` names | The same key your corpus is tagged with |
 
 Training instances should include categories to enable per-category assessment:
 
@@ -143,6 +176,10 @@ If threshold is 0.7 (70%) and min_questions is 2:
 | Sports | 1 | 1 | 100% | No (below min_questions) |
 
 User would only receive "Economics" instances.
+
+Each question counts once, by the annotator's first answer to it. With
+`allow_retry`, a question answered wrong and then right counts as one question
+answered wrong.
 
 ## Use Cases
 
@@ -317,13 +354,29 @@ category_assignment:
 | `update_interval_seconds` | integer | 60 | Seconds between expertise recalculation |
 | `base_probability` | float | 0.1 | Minimum probability of receiving any category |
 
+### Reading the scores
+
+`GET /admin/api/expertise` (admin API key) reports each annotator's score per
+category with the counts behind it — agreements, disagreements and total
+evaluated — because a score of 1.0 from four agreements and a score of 1.0
+nothing has ever disagreed with look identical and mean different things. The
+response also echoes the settings in force.
+
+Scores are written to `expertise_scores.json` in the output directory as the
+worker runs and on shutdown, and read back at boot. Earlier versions held them
+in memory only, so a study restarted on day two relearned every score from the
+neutral 0.5 without saying so.
+
+The worker's log line reports annotations **scored**, not the size of the pool
+it walked.
+
 ### Agreement Methods
 
 - **`majority_vote`**: Consensus is reached when >50% agree
 - **`super_majority`**: Consensus requires ≥66% agreement
 - **`unanimous`**: All annotators must agree
 
-### How It Works
+### The expertise update loop
 
 1. **Initial State**: All annotators start with neutral expertise (0.5) for all categories
 
@@ -402,7 +455,6 @@ You can use both training-based qualification AND dynamic expertise:
 category_assignment:
   enabled: true
   qualification:
-    source: training
     threshold: 0.7
     min_questions: 2
   dynamic:

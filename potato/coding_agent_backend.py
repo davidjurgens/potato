@@ -58,7 +58,7 @@ CODING_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "Absolute or relative path to the file"},
+                "file_path": {"type": "string", "description": "Path to the file, relative to the workspace root"},
             },
             "required": ["file_path"],
         },
@@ -138,96 +138,127 @@ CODING_TOOLS_OLLAMA = [
 ]
 
 
-def execute_tool(tool_name: str, tool_input: dict, working_dir: str) -> str:
-    """Execute a coding tool in the working directory.
+def execute_tool(tool_name: str, tool_input: dict, sandbox) -> str:
+    """Execute a coding tool inside a sandbox.
 
     Args:
         tool_name: Tool name (Read, Edit, Write, Bash, Grep, Glob)
         tool_input: Tool input parameters
-        working_dir: Working directory for file operations
+        sandbox: A :class:`potato.sandbox.SandboxBackend`. Annotators can edit
+            tool calls freely, so this boundary is the security control -- see
+            ``potato/sandbox/__init__.py`` for the ladder of backends.
 
     Returns:
-        Tool output as a string
+        Tool output as a string. Errors are returned rather than raised: the
+        output is fed back to the agent as a tool result, and an exception here
+        would kill the session instead of letting the model recover.
     """
     import glob as glob_module
-    import subprocess
+
+    from potato.sandbox import SandboxError, resolve_within
+
+    if isinstance(sandbox, str):
+        # Used to be a working-directory path, and tools ran on the host with
+        # `shell=True`. Failing loudly beats quietly reconstructing a sandbox,
+        # which is how "docker" used to end up meaning "no isolation".
+        raise TypeError(
+            "execute_tool() now takes a SandboxBackend, not a working "
+            "directory path. Build one with potato.sandbox.create_backend()."
+        )
+
+    workspace = sandbox.workspace
 
     try:
         if tool_name == "Read":
-            file_path = tool_input["file_path"]
-            abs_path = os.path.join(working_dir, file_path) if not os.path.isabs(file_path) else file_path
-            with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
-                return f.read()
+            return sandbox.read_file(tool_input["file_path"])
 
         elif tool_name == "Edit":
             file_path = tool_input["file_path"]
-            abs_path = os.path.join(working_dir, file_path) if not os.path.isabs(file_path) else file_path
             old_string = tool_input["old_string"]
             new_string = tool_input["new_string"]
-            with open(abs_path, "r", encoding="utf-8") as f:
-                content = f.read()
+            content = sandbox.read_file(file_path)
             if old_string not in content:
                 return f"Error: old_string not found in {file_path}"
             content = content.replace(old_string, new_string, 1)
-            with open(abs_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            sandbox.write_file(file_path, content)
             return "Edit applied successfully."
 
         elif tool_name == "Write":
             file_path = tool_input["file_path"]
-            abs_path = os.path.join(working_dir, file_path) if not os.path.isabs(file_path) else file_path
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            with open(abs_path, "w", encoding="utf-8") as f:
-                f.write(tool_input["content"])
+            sandbox.write_file(file_path, tool_input["content"])
             return f"File written: {file_path}"
 
         elif tool_name == "Bash":
             command = tool_input["command"]
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True,
-                cwd=working_dir, timeout=60,
-            )
-            output = result.stdout
-            if result.stderr:
-                output += "\n" + result.stderr
-            if result.returncode != 0:
-                output += f"\n[exit code: {result.returncode}]"
-            return output.strip() or "(no output)"
+            # A shell *inside* the sandbox is the point of this tool. In a
+            # network-less, read-only, unprivileged container it is the
+            # contained case; what must not exist is a shell on the host.
+            result = sandbox.exec(["/bin/sh", "-c", command], timeout=60)
+            return result.as_tool_output()
 
         elif tool_name == "Grep":
             pattern = tool_input["pattern"]
             path = tool_input.get("path", ".")
-            abs_path = os.path.join(working_dir, path) if not os.path.isabs(path) else path
-            result = subprocess.run(
-                ["grep", "-rn", pattern, abs_path],
-                capture_output=True, text=True, cwd=working_dir, timeout=30,
-            )
-            return result.stdout.strip() or "(no matches)"
+            # Validate before running, then pass the path through relative so
+            # it resolves against the sandbox's own working directory.
+            resolve_within(workspace, path)
+            result = sandbox.exec(["grep", "-rn", pattern, path], timeout=30)
+            return (result.stdout or "").strip() or "(no matches)"
 
         elif tool_name == "Glob":
+            # Matched on the host against the sandbox workspace, which every
+            # backend exposes as a real directory. Each hit is re-checked, so a
+            # pattern that escapes via `..` or a symlink yields nothing rather
+            # than reaching outside.
             pattern = tool_input["pattern"]
             matches = sorted(glob_module.glob(
-                os.path.join(working_dir, pattern), recursive=True
+                os.path.join(workspace, pattern), recursive=True
             ))
-            # Make paths relative to working_dir
-            rel_matches = [os.path.relpath(m, working_dir) for m in matches]
+            rel_matches = []
+            for m in matches:
+                rel = os.path.relpath(m, workspace)
+                try:
+                    resolve_within(workspace, rel)
+                except SandboxError:
+                    continue
+                rel_matches.append(rel)
             return "\n".join(rel_matches) or "(no matches)"
 
         else:
             return f"Unknown tool: {tool_name}"
 
+    except SandboxError as e:
+        return f"Error: {e}"
     except FileNotFoundError as e:
         return f"Error: File not found: {e}"
     except PermissionError as e:
         return f"Error: Permission denied: {e}"
-    except subprocess.TimeoutExpired:
-        return "Error: Command timed out (60s limit)"
+    except KeyError as e:
+        return f"Error: missing required tool input {e}"
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
 
 
 class CodingAgentBackend(ABC):
     """Abstract interface for coding agent backends."""
+
+    #: Sandbox the agent's own tool calls run inside. Set by the runner before
+    #: :meth:`start`. The agent drives the same executor annotators do, so it
+    #: needs the same boundary -- a backend left without one cannot run tools.
+    _sandbox = None
+
+    def set_sandbox(self, sandbox) -> None:
+        """Attach the sandbox this backend's tool calls execute inside."""
+        self._sandbox = sandbox
+
+    @property
+    def sandbox(self):
+        if self._sandbox is None:
+            raise RuntimeError(
+                "No sandbox attached to this backend. The runner must call "
+                "set_sandbox() before start()."
+            )
+        return self._sandbox
 
     @abstractmethod
     def start(self, task: str, working_dir: str, system_prompt: str = "") -> None:

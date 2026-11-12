@@ -247,7 +247,7 @@ class RuleClusterViz {
     this.tooltip
       .html(`
         <div style="font-weight:600;margin-bottom:4px;line-height:1.3;">${this._esc(d.rule_text || 'No rule text')}</div>
-        <div style="font-size:11px;color:#71717a;line-height:1.5;">
+        <div style="font-size:11px;color:light-dark(#71717a, #c0c0c4);line-height:1.5;">
           Instance: ${this._esc(d.instance_id || '?')}<br>
           Confidence: ${conf}%<br>
           Cluster: ${this._esc(d.category_summary || d.cluster_id || 'Unclustered')}<br>

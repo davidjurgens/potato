@@ -18,6 +18,79 @@ from .base import BaseExporter, ExportContext, ExportResult
 logger = logging.getLogger(__name__)
 
 
+def _prm_step_record(step: Any, i: int) -> Dict[str, Any]:
+    """Normalize one stored PRM step into an export record.
+
+    Always emits ``index``/``reward``; passes through the AI-verification
+    metadata (``source``/``verified``/``ai_reward``/``confidence``) when present
+    so training pipelines can keep or drop unverified / AI-authored labels.
+    """
+    if not isinstance(step, dict):
+        return {"index": i, "reward": 0}
+    rec: Dict[str, Any] = {
+        "index": step.get("index", i),
+        "reward": step.get("reward", 0),
+    }
+    for key in ("source", "verified", "ai_reward", "confidence"):
+        if key in step and step[key] is not None:
+            rec[key] = step[key]
+    return rec
+
+
+def prm_blob_to_step_labels(label_val: Any) -> Dict[int, Any]:
+    """Adapt a stored process_reward blob to a ``{step_index: reward}`` map.
+
+    ``potato.step_agreement`` keys on integer ``step_index`` and expects a
+    ``{step_index: label}`` shape; the process_reward schema instead stores
+    ``{"steps": [{"index", "reward", ...}], "mode"}``. This bridges the two so
+    PRM annotations feed step-level agreement (Krippendorff α / Cohen κ).
+    Returns ``{}`` for anything unparseable.
+    """
+    parsed = label_val
+    if isinstance(label_val, str):
+        try:
+            parsed = json.loads(label_val)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    if not isinstance(parsed, dict):
+        return {}
+    steps = parsed.get("steps")
+    if not isinstance(steps, list):
+        return {}
+    out: Dict[int, Any] = {}
+    for i, s in enumerate(steps):
+        if not isinstance(s, dict):
+            continue
+        idx = s.get("index", i)
+        reward = s.get("reward")
+        if reward is None:
+            continue
+        try:
+            out[int(idx)] = reward
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+#: The label values `_export_swebench` recognizes. A radio scheme outside this
+#: vocabulary contributes nothing to any of the four outputs.
+_SWEBENCH_OUTCOMES = frozenset({
+    "success", "resolved", "correct",
+    "failure", "unresolved", "incorrect",
+    "partial", "partially_resolved",
+})
+
+
+def _label_names(scheme: Dict[str, Any]) -> set:
+    """A scheme's label names, however the config spelled them."""
+    names = set()
+    for label in (scheme.get("labels") or []):
+        name = label.get("name") if isinstance(label, dict) else label
+        if name is not None:
+            names.add(str(name))
+    return names
+
+
 class CodingEvalExporter(BaseExporter):
     """Export coding agent annotations for ML training pipelines."""
 
@@ -59,6 +132,27 @@ class CodingEvalExporter(BaseExporter):
                 files_written.append(path)
                 stats["code_reviews"] = count
 
+        if not files_written:
+            # `success=True` was returned unconditionally, so a study that
+            # cleared the gate but held none of the four shapes printed
+            # "Export successful! Files written:" with nothing under it, exit
+            # 0, and an empty directory.
+            return ExportResult(
+                success=False,
+                format_name=self.format_name,
+                files_written=[],
+                warnings=warnings,
+                errors=[
+                    "Nothing was written: none of the requested types "
+                    f"({', '.join(export_types)}) found data in this study. "
+                    "coding_eval reads process_reward steps, pairwise "
+                    "preferences, code_review annotations, and radio schemes "
+                    "whose labels are SWE-bench outcomes "
+                    f"({', '.join(sorted(_SWEBENCH_OUTCOMES))})."
+                ],
+                stats=stats,
+            )
+
         return ExportResult(
             success=True,
             format_name=self.format_name,
@@ -71,13 +165,27 @@ class CodingEvalExporter(BaseExporter):
         if not context.annotations:
             return False, "No annotations to export"
 
-        # Check for relevant schema types
+        # `radio` used to be in this set, which is the most generic scheme type
+        # Potato has -- nearly every study declares one, so nearly every study
+        # cleared this gate and then got a successful export of nothing. A radio
+        # scheme only reaches this exporter through `_export_swebench`, and only
+        # when its labels are the outcome vocabulary that reads, so that is what
+        # is checked rather than the type.
         schema_types = {s.get("annotation_type") for s in context.schemas}
-        relevant = schema_types & {"process_reward", "code_review", "pairwise", "radio"}
-        if not relevant:
-            return False, "No coding evaluation schemas found (process_reward, code_review, pairwise, radio)"
+        if schema_types & {"process_reward", "code_review", "pairwise"}:
+            return True, ""
 
-        return True, ""
+        if any(s.get("annotation_type") == "radio"
+               and _label_names(s) & _SWEBENCH_OUTCOMES
+               for s in context.schemas):
+            return True, ""
+
+        return False, (
+            "No coding evaluation schemas found. coding_eval needs a "
+            "process_reward, code_review or pairwise scheme, or a radio scheme "
+            "whose labels are SWE-bench outcomes "
+            f"({', '.join(sorted(_SWEBENCH_OUTCOMES))})."
+        )
 
     def _export_prm(self, context: ExportContext, output_dir: str) -> Tuple[Optional[str], int]:
         """Export PRM training data."""
@@ -112,12 +220,20 @@ class CodingEvalExporter(BaseExporter):
                         "instance_id": instance_id,
                         "annotator": ann.get("user_id", ""),
                         "steps": [
-                            {"index": s.get("index", i), "reward": s.get("reward", 0)}
-                            for i, s in enumerate(steps)
+                            _prm_step_record(s, i) for i, s in enumerate(steps)
                         ],
                     }
                     if "mode" in parsed:
                         record["mode"] = parsed["mode"]
+                    # Surface whether the run used LLM pre-labeling that a human
+                    # verified, so downstream training can filter to
+                    # human-confirmed rows.
+                    if any(isinstance(s, dict) and s.get("source") == "ai" for s in steps):
+                        record["ai_prelabeled"] = True
+                    if any(isinstance(s, dict) and "verified" in s for s in steps):
+                        record["all_verified"] = all(
+                            (not isinstance(s, dict)) or s.get("verified", True) for s in steps
+                        )
 
                     f.write(json.dumps(record, ensure_ascii=False) + "\n")
                     count += 1
@@ -130,9 +246,19 @@ class CodingEvalExporter(BaseExporter):
         return output_path, count
 
     def _export_preference(self, context: ExportContext, output_dir: str) -> Tuple[Optional[str], int]:
-        """Export DPO/RLHF preference pairs from pairwise annotations."""
+        """Export DPO/RLHF preference pairs from pairwise annotations.
+
+        Binary pairwise schemes store ``{"selection": "A" | "B" | "tie"}``,
+        already put in data order by the loader, so "A" is the first entry of
+        the item's ``items_key`` list. Ties have no chosen response and are
+        left out. The old reader looked for a ``label`` key, which pairwise
+        never writes, and exported nothing.
+        """
         output_path = os.path.join(output_dir, "preference_pairs.jsonl")
         count = 0
+        pairwise = {s.get("name"): s for s in context.schemas
+                    if s.get("annotation_type") == "pairwise"
+                    and (s.get("mode") or "binary") == "binary"}
 
         with open(output_path, "w") as f:
             for ann in context.annotations:
@@ -140,24 +266,30 @@ class CodingEvalExporter(BaseExporter):
                 labels = ann.get("labels", {})
 
                 for schema_name, value in labels.items():
-                    if not isinstance(value, dict):
+                    scheme = pairwise.get(schema_name)
+                    if scheme is None or not isinstance(value, dict):
+                        continue
+                    chosen = str(value.get("selection") or "").upper()
+                    if chosen not in ("A", "B"):
                         continue
 
-                    label_val = value.get("label", "")
-                    # Pairwise annotations store "A" or "B"
-                    if label_val not in ("A", "B", "a", "b"):
-                        continue
-
-                    # Get the instance data to extract prompt
                     item_data = context.items.get(instance_id, {})
                     prompt = item_data.get("task_description", item_data.get("text", ""))
+                    candidates = item_data.get(scheme.get("items_key", "text"))
+                    have_pair = isinstance(candidates, list) and len(candidates) == 2
+                    idx = 0 if chosen == "A" else 1
 
                     record = {
                         "instance_id": instance_id,
+                        "schema": schema_name,
                         "prompt": prompt,
-                        "chosen": label_val.upper(),
+                        "chosen": candidates[idx] if have_pair else None,
+                        "rejected": candidates[1 - idx] if have_pair else None,
+                        "chosen_position": chosen,
                         "annotator": ann.get("user_id", ""),
                     }
+                    if value.get("justification"):
+                        record["justification"] = value["justification"]
                     f.write(json.dumps(record, ensure_ascii=False) + "\n")
                     count += 1
 

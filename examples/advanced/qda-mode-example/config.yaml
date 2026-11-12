@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 8000
 annotation_task_name: QDA Mode Example
 task_dir: .
 output_annotation_dir: annotation_output/qda-mode-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 data_files:
 - data/qda-mode-example.json
 item_properties:
@@ -62,7 +63,8 @@ cases:
 
 # Universal FTS5 search. annotator_claim is allowed here because QDA Mode is
 # single-coder (no overlap/sampling invariant to protect); it lets the coder
-# jump to any matching excerpt from the Find panel.
+# claim a matching excerpt from the Find panel, which adds it to the end of
+# their queue (page forward with Next to reach it).
 search:
   enabled: true
   backend: fts5

@@ -1,0 +1,7 @@
+[
+ {"id": "chk1",
+  "title": "Attention check",
+  "body": "This is a check, not a real item. Highlight this sentence and mark it Evidence, select A for category, and Low for severity.",
+  "text": "This is a check, not a real item. Highlight this sentence and mark it Evidence, select A for category, and Low for severity.",
+  "expected_answer": {"category": "A", "severity": "Low"}}
+]

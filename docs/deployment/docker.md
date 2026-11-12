@@ -1,0 +1,228 @@
+# Running Potato in Docker
+
+Potato publishes a prebuilt image to GitHub Container Registry. It contains the
+server and its dependencies and nothing else — your project mounts at `/app` at
+run time, so one image serves every task.
+
+```bash
+docker run -p 8000:7860 -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest
+```
+
+Open <http://localhost:8000>. `myproject` is a directory holding `config.yaml`
+and whatever it references (`data/`, `layouts/`).
+
+## Why a prebuilt image
+
+Potato's core dependencies include numpy, pandas, scipy and scikit-learn.
+Installing them on a small VM is slow at best: on a 1 GB machine the build is
+killed for running out of memory, and on 2 GB it takes five to ten minutes,
+repeated on every redeploy. Pulling the image takes under a minute and gives the
+same bytes every time. `potato deploy` uses it for that reason.
+
+## Tags
+
+| Tag | Contents | Size |
+|---|---|---|
+| `latest`, `<version>` | Core dependencies, the backup clients (`huggingface_hub`, `boto3`) and Authlib for SSO logins | ~900 MB |
+| `latest-all`, `<version>-all` | Plus AI SDKs, document formats and export | ~1.5 GB |
+| `sha-<short>` | A specific commit | — |
+
+Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
+Apple Silicon.
+
+Pin a version for a study that will run for months. `latest` follows the
+master branch and moves with every change to it. A `<version>` tag is pushed
+once, when that release is tagged, and is not rebuilt afterwards.
+
+The `-all` variant adds `ai_support`, PDF and DOCX ingestion, and parquet
+export. Both variants include Authlib, so OAuth logins work on either. Neither
+includes the `vision` extra. It pulls multi-gigabyte torch wheels, and
+browser-side segmentation does not need it, because ONNX Runtime Web is already
+vendored in the image.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `POTATO_CONFIG` | `config.yaml` | Config path inside the container |
+| `PORT` | `7860` | Listen port |
+| `GUNICORN_THREADS` | `8` | Concurrent requests |
+| `GUNICORN_TIMEOUT` | `120` | Worker timeout, seconds |
+| `POTATO_SECRET_KEY` | generated | Flask session signing key |
+| `POTATO_ADMIN_API_KEY` | generated | Admin API authentication |
+| `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go. By default, the package directory, or a directory in the system temp dir that only the server's user can use when the package is read-only |
+| `POTATO_BUNDLE_URL` | unset | Download the project from this URL at start (see below) |
+| `POTATO_BUNDLE_SHA256` | unset | Refuse a downloaded project whose checksum differs |
+| `POTATO_BUNDLE_TOKEN` | unset | Sent as `Authorization: Bearer` when downloading |
+| `POTATO_RUN_AS_ROOT` | unset | Set to `1` to keep running as root when started as root |
+
+### Downloading the project at start
+
+Hosts that only run an image (Render, Fly, Railway, ECS) have nowhere to mount a
+project. With `POTATO_BUNDLE_URL` set, the entrypoint downloads a `.tar.gz` of
+the project, checks it against `POTATO_BUNDLE_SHA256`, and unpacks it into
+`/app` before starting. It writes the checksum to `/app/.potato-bundle-sha`, so
+on a persistent disk a restart does not download it again. Collected data (the
+output directory and the SQLite databases) is never replaced by a new version
+of the project. `potato deploy up` sets all three variables for you.
+
+### Debug mode in a container
+
+Keep `debug: false` in a deployed container. With `debug: true`:
+
+- The admin dashboard and admin API skip the key for requests from a loopback
+  address with no proxy forwarding header. On Docker's default bridge network,
+  requests to the published port arrive from the bridge address, so they still
+  need the admin API key. With `--network host`, a request from the host
+  machine itself is a loopback request. A reverse proxy in the same network
+  namespace that adds no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header
+  makes every request look local.
+- `debug_phase` signs every visitor in as one shared account, `debug_user`, and
+  skips them to that phase. That account is not an admin, but every visitor
+  shares its answers.
+
+The server logs a warning at startup when `debug` is on.
+
+### Started as root
+
+Some hosts start the container as root whatever the image says. Railway does
+when its volume needs it. The entrypoint then gives `/app` to the image's
+`potato` user (uid 1000) and continues as that user, so the server never runs as
+root.
+
+Set `POTATO_SECRET_KEY` on anything that outlives a single run. Without it the
+key is random per process, so every restart logs all annotators out.
+
+```bash
+docker run -p 8000:7860 \
+  -v "$PWD/myproject:/app" \
+  -e POTATO_SECRET_KEY="$(openssl rand -hex 32)" \
+  -e POTATO_CONFIG=configs/pilot.yaml \
+  ghcr.io/davidjurgens/potato:latest
+```
+
+## One worker
+
+The image runs a single gunicorn worker and refuses to start with more.
+
+Potato keeps its item pool, its assignment queue and every annotator's state in
+memory, in the process. A second worker gets its own copy of all three: it hands
+out instances the first worker already assigned, and because `user_state.json`
+is rewritten in full on each save, whichever worker saves last discards the
+other's annotations. Nothing reports this; annotations simply go missing.
+
+Raise `GUNICORN_THREADS` for concurrency instead. Threads share one copy of the
+state, so they do not have this problem. The default of 8 comfortably serves the
+dozens of simultaneous annotators a typical study has.
+
+`POTATO_ALLOW_MULTIWORKER=1` overrides the refusal. Do not use it to serve a
+real study.
+
+## File ownership
+
+The image runs as uid 1000. A bind mount keeps the host's ownership, so the
+container can only write to your project directory if that uid can. On Linux it
+usually cannot: a directory you created belongs to your own uid, and one created
+by root belongs to root.
+
+The server checks this at startup and refuses to run rather than dying partway
+through boot. Two ways to satisfy it:
+
+```bash
+sudo chown -R 1000:1000 myproject                  # hand it to the container user
+docker run --user "$(id -u):$(id -g)" ...          # or run as yourself
+```
+
+`--user` also leaves the annotations owned by you rather than by a uid you would
+need root to read.
+
+Docker Desktop on macOS and Windows ignores ownership on bind mounts, so the
+problem never appears there. A setup that works on a Mac can still fail on a
+Linux server.
+
+`POTATO_ALLOW_READONLY_APP=1` skips the check. Potato still writes annotation
+output, `potato.log` and its SQLite databases inside the project, so use it
+only when those paths are writable some other way, such as separate mounts.
+`output_annotation_dir` must be inside the project: a path under the image's
+`/data` volume, or anywhere else outside `/app`, is refused at startup.
+
+`potato deploy` handles ownership on every target it provisions.
+
+## Keeping the data
+
+Annotations are written under `output_annotation_dir` inside the mounted
+project, so with a bind mount they are already on your disk. Nothing else is
+needed for a local run.
+
+For a container whose filesystem does not survive a restart — most managed
+hosts — mount a volume and point the project at it, or use
+`potato deploy pull` to fetch the data down.
+
+Two files matter beyond the annotation output: `project.sqlite` (memos, the
+codebook, cases, search index, review workflow) and `datasets.sqlite`. Both live
+in the project directory and neither is regenerable.
+
+!!! warning "Copying a live SQLite file gives you a corrupt database"
+    `project.sqlite` runs in WAL mode with a live writer. `docker cp` on the
+    file alone yields a corrupt or stale database, and it fails silently — you
+    find out weeks later. Snapshot it first:
+
+    ```bash
+    docker exec <container> sqlite3 /app/project.sqlite ".backup /tmp/snap.sqlite"
+    docker cp <container>:/tmp/snap.sqlite ./project.sqlite
+    ```
+
+    `potato deploy pull` does this for you.
+
+## Health checks
+
+`GET /health` is unauthenticated and reports only whether the server is up:
+`{"status": "ok"}` once it is ready, `503` while it is still loading data. Point
+a load balancer or orchestrator at it. Large tasks take a while to index, so
+allow a generous start period; the image's own `HEALTHCHECK` gives it 90
+seconds.
+
+`GET /admin/health` reports item and annotator counts, and needs the admin API
+key in an `X-API-Key` header.
+
+## Other commands
+
+Anything after the image name replaces the server:
+
+```bash
+docker run --rm -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest \
+  python -m potato.preview_cli config.yaml
+
+docker run --rm -it -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest sh
+```
+
+## Building it yourself
+
+```bash
+git clone https://github.com/davidjurgens/potato
+cd potato
+docker build -t potato .
+docker build --build-arg POTATO_EXTRAS=all -t potato:all .
+```
+
+`POTATO_EXTRAS` takes any extras name from `setup.py`: `ai`, `formats`,
+`export`, `vision`, `all`.
+
+## Troubleshooting
+
+**`config file not found`** — the project did not mount where the server looked.
+The error lists what it found in `/app`; compare that against your `-v`
+argument. A relative host path needs to be absolute or `$PWD`-prefixed.
+
+**`/app is not writable by uid 1000`** — see
+[File ownership](#file-ownership). The server refuses to start rather than
+failing partway through boot.
+
+**Everyone is logged out after a restart** — set `POTATO_SECRET_KEY`.
+
+**The server exits with `GUNICORN_WORKERS`** — see [One worker](#one-worker).
+
+## Related
+
+- [Reverse proxy](reverse-proxy.md) — TLS and path prefixes
+- [Scaling](scaling.md) — how many annotators one instance serves

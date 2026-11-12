@@ -1,0 +1,96 @@
+{
+  "user_id": "vol1",
+  "max_assignments": -1,
+  "instance_id_ordering": [
+    "9001",
+    "9002",
+    "9003"
+  ],
+  "current_instance_index": 0,
+  "current_phase_and_page": [
+    "annotation",
+    "aggregation (imported)"
+  ],
+  "completed_phase_and_pages": [],
+  "instance_id_to_label_to_value": {
+    "9001": [
+      [
+        {
+          "schema": "T0",
+          "name": "Yes"
+        },
+        "Yes"
+      ],
+      [
+        {
+          "schema": "T1",
+          "name": "Ice"
+        },
+        "Ice"
+      ],
+      [
+        {
+          "schema": "T1",
+          "name": "Water"
+        },
+        "Water"
+      ],
+      [
+        {
+          "schema": "T2",
+          "name": "_data"
+        },
+        "[{\"type\": \"landmark\", \"label\": \"Adult\", \"color\": \"#00ff00\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.1, \"y\": 0.2}}, {\"type\": \"landmark\", \"label\": \"Adult\", \"color\": \"#00ff00\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.8, \"y\": 0.8}}, {\"type\": \"bbox\", \"label\": \"Nest\", \"color\": \"#ff0000\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.2, \"y\": 0.2, \"width\": 0.1, \"height\": 0.1}}]"
+      ]
+    ],
+    "9002": [
+      [
+        {
+          "schema": "T0",
+          "name": "Yes"
+        },
+        "Yes"
+      ],
+      [
+        {
+          "schema": "T1",
+          "name": "Rock"
+        },
+        "Rock"
+      ],
+      [
+        {
+          "schema": "T2",
+          "name": "_data"
+        },
+        "[{\"type\": \"landmark\", \"label\": \"Adult\", \"color\": \"#00ff00\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.3, \"y\": 0.6}}]"
+      ]
+    ],
+    "9003": [
+      [
+        {
+          "schema": "T0",
+          "name": "Yes"
+        },
+        "Yes"
+      ],
+      [
+        {
+          "schema": "T1",
+          "name": "Ice"
+        },
+        "Ice"
+      ],
+      [
+        {
+          "schema": "T2",
+          "name": "_data"
+        },
+        "[{\"type\": \"bbox\", \"label\": \"Nest\", \"color\": \"#ff0000\", \"source\": \"import\", \"import_format\": \"zooniverse\", \"coordinates\": {\"x\": 0.01, \"y\": 0.04, \"width\": 0.03, \"height\": 0.08}}]"
+      ]
+    ]
+  },
+  "instance_id_to_span_to_value": {},
+  "phase_to_page_to_label_to_value": {},
+  "phase_to_page_to_span_to_value": {}
+}

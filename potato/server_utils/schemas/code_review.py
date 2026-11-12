@@ -23,6 +23,8 @@ from .identifier_utils import (
     generate_layout_attributes,
 )
 
+from .collab_rebuild import collab_rebuild_js
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CATEGORIES = ["bug", "style", "suggestion", "security", "question"]
@@ -149,30 +151,68 @@ def _generate_internal(
         var SCHEMA = '{esc_schema}';
         var CONFIG = {config_json};
         var _state = {{ verdict: '', comments: [], file_ratings: {{}} }};
+        // New comments get an id unique to this page: in a live session two
+        // annotators adding their first comment must not collide when the
+        // server merges the lists by id. Restored ids are kept as they are.
+        var NONCE = Math.random().toString(36).slice(2, 8);
+        var _commentSeq = 0;
+        var _handlersAttached = false;
 
-        function init() {{
-            // Check for existing value (persistence)
+        function newCommentId() {{
+            _commentSeq += 1;
+            return 'c_' + NONCE + '_' + _commentSeq;
+        }}
+
+        /** The stored answer, or an empty one: an empty input is no answer. */
+        function readInput() {{
             var input = document.getElementById(SCHEMA).querySelector('.code-review-data-input');
+            var state = {{ verdict: '', comments: [], file_ratings: {{}} }};
             if (input && input.value) {{
                 try {{
-                    _state = JSON.parse(input.value);
-                    if (!_state.comments) _state.comments = [];
-                    if (!_state.file_ratings) _state.file_ratings = {{}};
+                    var parsed = JSON.parse(input.value);
+                    if (parsed && typeof parsed === 'object') {{
+                        state.verdict = parsed.verdict || '';
+                        state.comments = Array.isArray(parsed.comments) ? parsed.comments : [];
+                        state.file_ratings = (parsed.file_ratings && typeof parsed.file_ratings === 'object')
+                            ? parsed.file_ratings : {{}};
+                    }}
                 }} catch(e) {{}}
             }}
+            return state;
+        }}
 
+        function init() {{
+            _state = readInput();
             restoreState();
-            attachHandlers();
+            // Once: the radios, the add button and the page-wide diff-line
+            // listener outlive a rebuild, so binding them again doubled
+            // every comment and save.
+            if (!_handlersAttached) {{
+                _handlersAttached = true;
+                attachHandlers();
+            }}
+            detectFiles();
+        }}
+
+        // Redraw from the hidden input (a teammate's answer in a live
+        // session): replace the state, rebuild the comment cards, the verdict
+        // and the ratings. Binds nothing that already exists; never saves.
+        function applyFromInput() {{
+            _state = readInput();
+            restoreState();
             detectFiles();
         }}
 
         function restoreState() {{
-            // Restore verdict
-            if (_state.verdict) {{
-                var radio = document.querySelector(
-                    '#' + SCHEMA + '-verdicts input[value="' + _state.verdict + '"]'
-                );
-                if (radio) radio.checked = true;
+            // Restore verdict (and clear it when the answer has none)
+            var verdicts = document.getElementById(SCHEMA + '-verdicts');
+            if (verdicts) {{
+                verdicts.querySelectorAll('input[type="radio"]').forEach(function(r) {{
+                    r.checked = !!_state.verdict && r.value === _state.verdict;
+                }});
+                verdicts.querySelectorAll('.cr-verdict-option').forEach(function(opt) {{
+                    opt.classList.toggle('cr-checked', opt.querySelector('input:checked') !== null);
+                }});
             }}
 
             // Restore comments
@@ -202,7 +242,7 @@ def _generate_internal(
             var addBtn = document.getElementById(SCHEMA + '-add-comment');
             if (addBtn) {{
                 addBtn.addEventListener('click', function() {{
-                    var comment = {{ category: CONFIG.categories[0], file: '', line: null, text: '' }};
+                    var comment = {{ id: newCommentId(), category: CONFIG.categories[0], file: '', line: null, text: '' }};
                     _state.comments.push(comment);
                     addCommentCard(comment);
                     saveState();
@@ -221,7 +261,7 @@ def _generate_internal(
                 var numEl = line.querySelector('.ct-line-num');
                 if (numEl) lineNum = numEl.textContent;
 
-                var comment = {{ category: CONFIG.categories[0], file: file, line: lineNum ? parseInt(lineNum) : null, text: '' }};
+                var comment = {{ id: newCommentId(), category: CONFIG.categories[0], file: file, line: lineNum ? parseInt(lineNum) : null, text: '' }};
                 _state.comments.push(comment);
                 addCommentCard(comment);
                 saveState();
@@ -362,7 +402,20 @@ def _generate_internal(
         }}
 
         function saveState() {{
-            var data = JSON.stringify(_state);
+            /* "+ Add Comment" appends a row immediately, and an untouched row
+               used to be stored exactly like a written one: two clicks and one
+               Next stored two comments with empty text on an empty file, and
+               any export counting `comments` counted two reviews of a file
+               nobody reviewed. The rows stay on screen -- the annotator is
+               mid-thought -- but only comments with text are saved. */
+            var written = (_state.comments || []).filter(function(c) {{
+                return c && String(c.text || '').trim() !== '';
+            }});
+            var data = JSON.stringify({{
+                verdict: _state.verdict,
+                comments: written,
+                file_ratings: _state.file_ratings
+            }});
             var input = document.getElementById(SCHEMA).querySelector('.code-review-data-input');
             if (input) {{
                 input.value = data;
@@ -380,6 +433,13 @@ def _generate_internal(
             init();
         }}
         document.addEventListener('instanceChanged', init);
+        // annotation.js clears every text input and radio on the page
+        // (clearAllFormInputs) after init() has drawn the answer, and these
+        // controls are not annotation inputs, so nothing restores them: the
+        // verdict and each comment's file path came back blank. Redraw once
+        // the item is loaded; the hidden input still holds the answer.
+        document.addEventListener('potato:instance-ready', applyFromInput);
+        {collab_rebuild_js('code_review', 'applyFromInput')}
     }})();
     </script>
 
@@ -388,12 +448,12 @@ def _generate_internal(
     .cr-title {{ font-weight: 600; font-size: 1em; margin-bottom: 4px; }}
     .cr-section {{ margin-bottom: 12px; }}
     .cr-section-label {{
-        font-size: 0.85em; font-weight: 600; color: var(--muted-foreground, #71717a);
+        font-size: 0.85em; font-weight: 600; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
         margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
     }}
     .cr-verdict-group {{ display: flex; gap: 8px; flex-wrap: wrap; }}
     .cr-verdict-option {{
-        padding: 6px 12px; border: 1px solid var(--border, #e4e4e7);
+        padding: 6px 12px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
         border-radius: var(--radius, 0.5rem);
         cursor: pointer; font-size: 0.9em; transition: all 0.15s;
     }}
@@ -406,47 +466,47 @@ def _generate_internal(
     }}
     .cr-verdict-approve:has(input:checked),
     .cr-verdict-approve.cr-checked {{
-        border-color: #388e3c; background: #e8f5e9;
+        border-color: #388e3c; background: light-dark(#e8f5e9, #1c2b1d);
     }}
     .cr-verdict-request_changes:has(input:checked),
     .cr-verdict-request_changes.cr-checked {{
-        border-color: #d32f2f; background: #ffebee;
+        border-color: #d32f2f; background: light-dark(#ffebee, #310e13);
     }}
     .cr-verdict-option:focus-within {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .cr-add-comment-btn {{
-        padding: 2px 8px; font-size: 0.85em; border: 1px solid var(--border, #e4e4e7);
-        border-radius: 4px; background: var(--card, #fff); cursor: pointer;
-        color: var(--primary, #6e56cf);
+        padding: 2px 8px; font-size: 0.85em; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
+        border-radius: 4px; background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer;
+        color: var(--primary, light-dark(#6e56cf, #b2a8db));
     }}
-    .cr-add-comment-btn:hover {{ background: var(--secondary, #f4f4f5); }}
+    .cr-add-comment-btn:hover {{ background: var(--secondary, light-dark(#f4f4f5, #1f1f21)); }}
     .cr-add-comment-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .cr-comments-list {{ display: flex; flex-direction: column; gap: 6px; }}
     .cr-comment-card {{
-        border: 1px solid var(--border, #e4e4e7); border-radius: var(--radius, 0.5rem); padding: 8px;
-        background: var(--card, #fff);
+        border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: var(--radius, 0.5rem); padding: 8px;
+        background: var(--card, light-dark(#fff, #1a1a1a));
     }}
     .cr-comment-header {{
         display: flex; gap: 6px; align-items: center; margin-bottom: 4px;
     }}
     .cr-comment-category {{
-        padding: 2px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
+        padding: 2px 6px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 4px;
         font-size: 0.85em;
     }}
     .cr-comment-file {{
-        flex: 1; padding: 2px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
+        flex: 1; padding: 2px 6px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 4px;
         font-size: 0.85em; font-family: var(--font-mono, monospace);
     }}
     .cr-comment-line {{
-        padding: 2px 6px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
+        padding: 2px 6px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 4px;
         font-size: 0.85em;
     }}
     .cr-comment-delete {{
-        background: none; border: none; cursor: pointer; color: var(--muted-foreground, #71717a);
+        background: none; border: none; cursor: pointer; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4));
         font-size: 1.2em; padding: 0 4px; line-height: 1;
     }}
     .cr-comment-delete:hover {{ color: var(--destructive, #ef4444); }}
     .cr-comment-text {{
-        width: 100%; padding: 4px 6px; border: 1px solid var(--border, #e4e4e7);
+        width: 100%; padding: 4px 6px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e));
         border-radius: 4px; font-size: 0.85em; resize: vertical;
         box-sizing: border-box;
     }}
@@ -454,19 +514,19 @@ def _generate_internal(
         outline: 2px solid var(--ring, #6e56cf); outline-offset: -1px;
     }}
     .cr-rating-row {{
-        padding: 6px 0; border-bottom: 1px solid var(--secondary, #f4f4f5);
+        padding: 6px 0; border-bottom: 1px solid var(--secondary, light-dark(#f4f4f5, #4b4b4e));
     }}
     .cr-rating-file {{
         font-family: var(--font-mono, monospace); font-size: 0.85em;
-        color: var(--muted-foreground, #71717a); margin-bottom: 4px;
+        color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin-bottom: 4px;
     }}
     .cr-rating-dim {{
         display: inline-flex; align-items: center; gap: 2px; margin-right: 12px;
     }}
-    .cr-dim-label {{ font-size: 0.8em; color: var(--muted-foreground, #71717a); margin-right: 4px; }}
+    .cr-dim-label {{ font-size: 0.8em; color: var(--muted-foreground, light-dark(#71717a, #c0c0c4)); margin-right: 4px; }}
     .cr-star {{
-        width: 24px; height: 24px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
-        background: var(--card, #fff); cursor: pointer; font-size: 0.8em; padding: 0;
+        width: 24px; height: 24px; border: 1px solid var(--border, light-dark(#e4e4e7, #4b4b4e)); border-radius: 4px;
+        background: var(--card, light-dark(#fff, #1a1a1a)); cursor: pointer; font-size: 0.8em; padding: 0;
         transition: all 0.1s;
     }}
     .cr-star:hover {{ border-color: #ffa726; }}

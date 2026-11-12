@@ -1,0 +1,261 @@
+[
+ {
+  "id": 101,
+  "data": {
+   "text": "Alice flew from Paris to Rome."
+  },
+  "annotations": [
+   {
+    "id": 1,
+    "completed_by": 7,
+    "was_cancelled": false,
+    "result": [
+     {
+      "id": "a",
+      "from_name": "sentiment",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "Neutral"
+       ]
+      }
+     },
+     {
+      "id": "b",
+      "from_name": "ner",
+      "to_name": "text",
+      "type": "labels",
+      "value": {
+       "start": 0,
+       "end": 5,
+       "text": "Alice",
+       "labels": [
+        "PER"
+       ]
+      }
+     },
+     {
+      "id": "c",
+      "from_name": "ner",
+      "to_name": "text",
+      "type": "labels",
+      "value": {
+       "start": 16,
+       "end": 21,
+       "text": "Paris",
+       "labels": [
+        "LOC"
+       ]
+      }
+     },
+     {
+      "id": "d",
+      "from_name": "topics",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "travel",
+        "people"
+       ]
+      }
+     },
+     {
+      "id": "e",
+      "from_name": "quality",
+      "to_name": "text",
+      "type": "rating",
+      "value": {
+       "rating": 4
+      }
+     },
+     {
+      "id": "f",
+      "from_name": "summary",
+      "to_name": "text",
+      "type": "textarea",
+      "value": {
+       "text": [
+        "Trip to Rome"
+       ]
+      }
+     },
+     {
+      "id": "g",
+      "from_name": "domain",
+      "to_name": "text",
+      "type": "taxonomy",
+      "value": {
+       "taxonomy": [
+        [
+         "Travel",
+         "Air"
+        ]
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "completed_by": {
+     "id": 9,
+     "email": "bo@example.org"
+    },
+    "was_cancelled": false,
+    "result": [
+     {
+      "id": "h",
+      "from_name": "sentiment",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "Positive"
+       ]
+      }
+     },
+     {
+      "id": "i",
+      "from_name": "ner",
+      "to_name": "text",
+      "type": "labels",
+      "value": {
+       "start": 0,
+       "end": 5,
+       "text": "Alice",
+       "labels": [
+        "PER"
+       ]
+      }
+     },
+     {
+      "id": "j",
+      "from_name": "quality",
+      "to_name": "text",
+      "type": "rating",
+      "value": {
+       "rating": 5
+      }
+     }
+    ]
+   },
+   {
+    "id": 3,
+    "completed_by": 11,
+    "was_cancelled": true,
+    "result": []
+   }
+  ],
+  "predictions": [
+   {
+    "model_version": "sentiment-v1",
+    "score": 0.62,
+    "result": [
+     {
+      "from_name": "sentiment",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "Positive"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "model_version": "sentiment-v2",
+    "score": 0.91,
+    "result": [
+     {
+      "from_name": "sentiment",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "Neutral"
+       ]
+      }
+     },
+     {
+      "from_name": "ner",
+      "to_name": "text",
+      "type": "labels",
+      "value": {
+       "start": 25,
+       "end": 29,
+       "text": "Rome",
+       "labels": [
+        "LOC"
+       ]
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": 102,
+  "data": {
+   "text": "Great food 😀 at Tokyo Grill."
+  },
+  "annotations": [
+   {
+    "id": 4,
+    "completed_by": 7,
+    "was_cancelled": false,
+    "result": [
+     {
+      "id": "k",
+      "from_name": "sentiment",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "Positive"
+       ]
+      }
+     },
+     {
+      "id": "l",
+      "from_name": "ner",
+      "to_name": "text",
+      "type": "labels",
+      "value": {
+       "start": 17,
+       "end": 28,
+       "text": "Tokyo Grill",
+       "labels": [
+        "ORG"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "id": 5,
+    "completed_by": {
+     "id": 9,
+     "email": "bo@example.org"
+    },
+    "was_cancelled": false,
+    "result": [
+     {
+      "id": "m",
+      "from_name": "sentiment",
+      "to_name": "text",
+      "type": "choices",
+      "value": {
+       "choices": [
+        "Positive"
+       ]
+      }
+     }
+    ]
+   }
+  ],
+  "predictions": []
+ }
+]

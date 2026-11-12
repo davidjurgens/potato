@@ -1,0 +1,16 @@
+<View>
+  <Text name="text" value="$text"/>
+  <Header value="What is the overall sentiment?"/>
+  <Choices name="sentiment" toName="text" choice="single">
+    <Choice value="Positive"/><Choice value="Neutral"/><Choice value="Negative"/>
+  </Choices>
+  <Labels name="ner" toName="text">
+    <Label value="PER" background="#ff0000"/><Label value="LOC" background="#00aa00"/><Label value="ORG" background="#0000ff"/>
+  </Labels>
+  <Choices name="topics" toName="text" choice="multiple">
+    <Choice value="travel"/><Choice value="people"/><Choice value="food"/>
+  </Choices>
+  <Rating name="quality" toName="text" maxRating="5"/>
+  <TextArea name="summary" toName="text" rows="3"/>
+  <Taxonomy name="domain" toName="text"><Choice value="Travel"><Choice value="Air"/></Choice></Taxonomy>
+</View>

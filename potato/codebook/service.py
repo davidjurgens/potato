@@ -110,10 +110,54 @@ def create_code(
     return code
 
 
+def _touch_annotations(
+    task_dir: str, project: str, annotation_ids: List[str]
+) -> None:
+    """Re-flag the coder behind each link key, not every coder of the
+    instance. A legacy bare-instance key names no coder, so it still
+    flags the whole instance."""
+    from potato.codebook import revision
+    by_user: Dict[Optional[str], List[str]] = {}
+    for aid in annotation_ids:
+        iid, user = store.split_annotation_key(aid)
+        by_user.setdefault(user, []).append(iid)
+    for user, iids in by_user.items():
+        revision.touch_instances(task_dir, project, iids, username=user)
+
+
+def _backfill(task_dir: str, project: str, code_id: str) -> None:
+    """Link every saved coding of `code_id` that has no link yet, so a
+    retroactive op also reaches annotations saved before links were
+    written. Never allowed to break the op itself."""
+    try:
+        from potato.codebook import saved_labels
+        saved_labels.backfill_links(task_dir, project, code_id)
+    except Exception:
+        logger.exception("codebook: link backfill for %s failed", code_id)
+
+
+def _relabel(task_dir: str, project: str, annotation_ids: List[str],
+             old_name: str, new_name: str) -> None:
+    """Rewrite the label strings saved in user state for the codings a
+    merge/split/rename moved. The links alone are not enough: the form
+    restores from the saved name, and the next save re-derives links
+    from it, so an un-rewritten name points at a code that is archived
+    or renamed."""
+    if not annotation_ids or old_name == new_name:
+        return
+    try:
+        from potato.codebook import saved_labels
+        saved_labels.relabel_saved(
+            task_dir, project, annotation_ids, old_name, new_name)
+    except Exception:
+        logger.exception(
+            "codebook: rewriting saved labels %r -> %r failed",
+            old_name, new_name)
+
+
 def _restamp(task_dir: str, project: str, code_ids: List[str]) -> None:
     """Re-flag exactly the instances whose live links touch `code_ids`
     so the (B) review worklist resurfaces them (soft, dismissible)."""
-    from potato.codebook import revision
     affected: List[str] = []
     seen = set()
     for cid in code_ids:
@@ -121,7 +165,7 @@ def _restamp(task_dir: str, project: str, code_ids: List[str]) -> None:
             if aid not in seen:
                 seen.add(aid)
                 affected.append(aid)
-    revision.touch_instances(task_dir, project, affected)
+    _touch_annotations(task_dir, project, affected)
 
 
 def rename_code(
@@ -138,7 +182,12 @@ def rename_code(
     if clash is not None and clash["id"] != code_id:
         raise DuplicateCodeError(
             f"A code named {new_name!r} already exists at this level")
+    # Before the rename: the backfill finds saved codings by the old name.
+    _backfill(task_dir, project, code_id)
     updated = store.update_code(task_dir, code_id, name=new_name)
+    _relabel(task_dir, project,
+             store.affected_annotation_ids(task_dir, project, code_id),
+             old_name, new_name)
     # Any codebook change bumps the revision (provenance: an instance
     # labeled before this change is flagged stale on revisit).
     from potato.codebook import revision
@@ -316,7 +365,7 @@ def delete_code(
         task_dir, project=project, op="delete", code_id=code_id,
         old_value=code["name"], new_value=None, actor=actor,
         actor_kind=actor_kind, revision=new_rev)
-    revision.touch_instances(task_dir, project, affected)
+    _touch_annotations(task_dir, project, affected)
     _notify(task_dir, project)
     return n
 
@@ -346,6 +395,28 @@ def remove_code(
     return store.unlink_annotation(task_dir, annotation_id, code_id)
 
 
+def sync_annotation_links(
+    task_dir: str, *, project: str, instance_id: str, username: str,
+    code_ids,
+) -> None:
+    """Make one coder's live links on one instance exactly `code_ids` —
+    the codes their saved annotation names. Called on every save, so the
+    links merge/split/restamp read are the codings people actually made.
+
+    A code they dropped is unlinked (a deselection is not a codebook
+    change, so there is no history to keep); rows a merge or split
+    invalidated are not live and are left alone."""
+    key = store.annotation_key(instance_id, username)
+    wanted = set(code_ids)
+    live = set(store.live_code_ids(task_dir, key))
+    for cid in wanted - live:
+        store.set_link_live(
+            task_dir, project=project, annotation_id=key, code_id=cid,
+            created_by=username)
+    for cid in live - wanted:
+        store.unlink_annotation(task_dir, key, cid)
+
+
 def codes_on(task_dir: str, annotation_id: str) -> List[Dict[str, Any]]:
     return store.codes_for_annotation(task_dir, annotation_id)
 
@@ -367,6 +438,7 @@ def merge_codes(
     dst = _require(task_dir, dst_id)
     from potato.codebook import revision, changelog
 
+    _backfill(task_dir, project, src_id)
     affected = store.affected_annotation_ids(task_dir, project, src_id)
     new_rev = revision.bump_revision(task_dir, project)
     change_id = changelog.log_change(
@@ -384,7 +456,70 @@ def merge_codes(
     store.invalidate_links(
         task_dir, project=project, code_id=src_id, change_id=change_id)
     store.archive_code(task_dir, src_id)
-    revision.touch_instances(task_dir, project, affected)
+    _relabel(task_dir, project, affected, src["name"], dst["name"])
+    _touch_annotations(task_dir, project, affected)
     _notify(task_dir, project)
     return {"merged": len(affected), "src_id": src_id,
             "dst_id": dst_id, "change_id": change_id}
+
+
+def split_code(
+    task_dir: str, *, project: str, src_id: str, annotator: str,
+    new_name: Optional[str] = None, target_id: Optional[str] = None,
+    actor: str = "system", actor_kind: str = "human",
+) -> Dict[str, Any]:
+    """Split `src` BY ANNOTATOR: move just `annotator`'s live links from
+    src to a target code (existing `target_id`, or a new code named
+    `new_name`). src stays live for other annotators; it is archived
+    only if it ends up with no live links and no children."""
+    src = _require(task_dir, src_id)
+    if not annotator:
+        raise CodebookError("An annotator must be given to split by")
+    from potato.codebook import revision, changelog
+
+    if target_id:
+        target = _require(task_dir, target_id)
+    elif not new_name:
+        raise CodebookError("Provide either target_id or new_name")
+
+    _backfill(task_dir, project, src_id)
+    affected = store.affected_annotation_ids(
+        task_dir, project, src_id, created_by=annotator)
+    if not affected:
+        # Nothing of this annotator's to move: no new code, no revision
+        # (a bump marks every earlier-stamped instance for review).
+        return {"moved": 0, "src_id": src_id, "target_id": target_id,
+                "change_id": None}
+    if not target_id:
+        target = create_code(
+            task_dir, project=project, name=new_name,
+            created_by=actor, parent_id=src["parent_id"])
+    new_rev = revision.bump_revision(task_dir, project)
+    change_id = changelog.log_change(
+        task_dir, project=project, op="split", code_id=src_id,
+        related_code_id=target["id"], old_value=src["name"],
+        new_value=f"{target['name']} [{annotator}]", actor=actor,
+        actor_kind=actor_kind, revision=new_rev)
+    for aid in affected:
+        link = store.get_link(task_dir, aid, src_id) or {}
+        store.set_link_live(
+            task_dir, project=project, annotation_id=aid,
+            code_id=target["id"], created_by=annotator,
+            started_at=link.get("started_at"),
+            ended_at=link.get("ended_at"))
+    store.invalidate_links(
+        task_dir, project=project, code_id=src_id,
+        change_id=change_id, created_by=annotator)
+    # Archive src only if no other coder still has a live link to it and
+    # it has no children. Links are per coder (store.annotation_key), so
+    # `remaining` is exactly the other annotators' codings.
+    remaining = store.affected_annotation_ids(task_dir, project, src_id)
+    children = Codebook.load(task_dir, project).children(src_id)
+    if not remaining and not children:
+        store.archive_code(task_dir, src_id)
+    _relabel(task_dir, project, affected, src["name"], target["name"])
+    _touch_annotations(task_dir, project, affected)
+    _notify(task_dir, project)
+    return {"moved": len(affected), "src_id": src_id,
+            "target_id": target["id"], "change_id": change_id}
+

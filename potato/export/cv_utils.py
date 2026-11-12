@@ -6,6 +6,9 @@ Shared helper functions for computer vision export formats (COCO, YOLO, VOC).
 
 from typing import Dict, List, Tuple, Any, Optional
 import logging
+import math
+import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,69 @@ def build_category_mapping(annotations: List[dict], schemas: List[dict]) -> Dict
                     seen.add(label)
 
     return {name: idx for idx, name in enumerate(labels)}
+
+
+#: Vertices used when approximating an ellipse as a polygon. 36 keeps the
+#: worst-case radial error under 0.4% of the radius, which is well inside the
+#: boundary noise of any human annotator, while staying small enough that COCO
+#: segmentation lists remain readable.
+ELLIPSE_POLYGON_VERTICES = 36
+
+
+def ellipse_to_polygon(cx: float, cy: float, rx: float, ry: float,
+                       angle: float = 0.0,
+                       vertices: int = ELLIPSE_POLYGON_VERTICES
+                       ) -> List[List[float]]:
+    """
+    Approximate an ellipse as a closed polygon in absolute pixels.
+
+    Every exporter and IoU routine already understands polygons, so producing
+    one here means ellipse support costs nothing downstream — the alternative
+    is teaching each consumer the parametric form separately, which is how
+    geometry types drift apart.
+
+    ``angle`` is in degrees, clockwise, matching fabric's convention.
+    """
+    theta = math.radians(angle)
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+    points: List[List[float]] = []
+    for i in range(vertices):
+        phi = 2.0 * math.pi * i / vertices
+        ex, ey = rx * math.cos(phi), ry * math.sin(phi)
+        points.append([cx + ex * cos_t - ey * sin_t,
+                       cy + ex * sin_t + ey * cos_t])
+    return points
+
+
+def _coerce_keypoints(raw: Any) -> Tuple[List[List[float]], List[int]]:
+    """
+    Normalize a keypoint sequence to ``([[x, y], ...], [v, ...])``.
+
+    Accepts the client's ``[{"x":..,"y":..,"v":..}, ...]`` form, the flat
+    ``[[x, y, v], ...]`` form, and COCO's flat ``[x, y, v, x, y, v, ...]``.
+    A missing visibility flag defaults to 2 (visible), because a point someone
+    bothered to place is visible unless they said otherwise.
+    """
+    points: List[List[float]] = []
+    vis: List[int] = []
+    if not isinstance(raw, (list, tuple)) or not raw:
+        return points, vis
+
+    # COCO's flat triplet stream.
+    if all(isinstance(v, (int, float)) for v in raw):
+        for i in range(0, len(raw) - 2, 3):
+            points.append([float(raw[i]), float(raw[i + 1])])
+            vis.append(int(raw[i + 2]))
+        return points, vis
+
+    for p in raw:
+        if isinstance(p, dict):
+            points.append([float(p.get("x", 0) or 0), float(p.get("y", 0) or 0)])
+            vis.append(int(p.get("v", 2) if p.get("v") is not None else 2))
+        elif isinstance(p, (list, tuple)) and len(p) >= 2:
+            points.append([float(p[0]), float(p[1])])
+            vis.append(int(p[2]) if len(p) >= 3 else 2)
+    return points, vis
 
 
 def polygon_to_bbox(points: List[List[float]]) -> Tuple[float, float, float, float]:
@@ -106,11 +172,53 @@ def normalize_bbox(x: float, y: float, w: float, h: float,
     """
     if img_w <= 0 or img_h <= 0:
         return (0, 0, 0, 0)
-    cx = max(0.0, min(1.0, (x + w / 2) / img_w))
-    cy = max(0.0, min(1.0, (y + h / 2) / img_h))
-    nw = max(0.0, min(1.0, w / img_w))
-    nh = max(0.0, min(1.0, h / img_h))
-    return (cx, cy, nw, nh)
+    clipped = clip_bbox(x, y, w, h, img_w, img_h)
+    if clipped is None:
+        return (0, 0, 0, 0)
+    x, y, w, h = clipped
+    return ((x + w / 2) / img_w, (y + h / 2) / img_h, w / img_w, h / img_h)
+
+
+def clip_bbox(x: float, y: float, w: float, h: float,
+              img_w: float, img_h: float) -> Optional[Tuple[float, float, float, float]]:
+    """The part of an ``(x, y, w, h)`` box inside the image, or None if none is.
+
+    Clamping the centre and the size separately did not clip: a box from
+    x=-10 to 10 in a 100 px image came out centred at 0 with width 0.2, still
+    reaching x=-10.
+    """
+    x0, y0 = max(0.0, float(x)), max(0.0, float(y))
+    x1, y1 = min(float(img_w), float(x) + float(w)), min(float(img_h), float(y) + float(h))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def label_file_paths(file_names: Dict[str, str]) -> Dict[str, str]:
+    """A relative label-file path (no extension) for each item's image.
+
+    The image's own stem, which is what YOLO and VOC tools pair labels with.
+    When two different images share a stem (``a/img.jpg`` and ``b/img.jpg``),
+    both keep their directories, the layout the tools expect for nested image
+    folders. Keying on the stem alone merged them into one file.
+    """
+    def clean(part: str) -> str:
+        return "".join(c if c.isalnum() or c in "-_." else "_" for c in part) or "_"
+
+    def parts_of(name: str) -> List[str]:
+        name = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*", "", str(name))
+        name = os.path.splitext(name.split("?")[0])[0]
+        return [clean(p) for p in re.split(r"[\\/]+", name) if p not in ("", ".", "..")]
+
+    by_stem: Dict[str, set] = {}
+    for iid, name in file_names.items():
+        parts = parts_of(name) or [clean(iid)]
+        by_stem.setdefault(parts[-1], set()).add(tuple(parts))
+    out = {}
+    for iid, name in file_names.items():
+        parts = parts_of(name) or [clean(iid)]
+        out[iid] = "/".join(parts) if len(by_stem[parts[-1]]) > 1 else parts[-1]
+    return out
 
 
 def flatten_polygon(points: List[List[float]]) -> List[float]:
@@ -148,17 +256,71 @@ def extract_image_annotations(annotation: dict) -> List[Tuple[str, List[dict]]]:
     return results
 
 
-def get_image_dimensions(item: dict, default_width: int = 0,
-                         default_height: int = 0) -> Tuple[int, int]:
-    """
-    Extract image dimensions from item metadata.
+def grouped_objects_record(objects: List[dict]) -> dict:
+    """An annotation-shaped record holding one image's grouped objects.
 
-    Checks common field names for image width/height.
+    Exporters that group objects by image size each image after the grouping
+    loop. They used to pass that loop's last annotation record, so an image
+    whose size came from a mask's RLE took the size of whichever image was
+    annotated last. This record holds the image's own objects instead.
+    """
+    return {"image_annotations": {"_grouped": list(objects or [])}}
+
+
+def has_image_annotation_record(annotation: dict) -> bool:
+    """True when an annotator reviewed this image, whatever they drew.
+
+    `extract_image_annotations` drops a schema whose object list is empty, so a
+    record saying "opened, drew nothing" is indistinguishable from no record at
+    all -- and the COCO exporter, which iterates annotations, minted no image
+    entry for it.
+
+    In COCO those are different claims. An image present with no annotations is
+    a NEGATIVE EXAMPLE and therefore training data; an image absent is missing
+    data. A detection set round-tripped through Potato lost every negative it
+    arrived with and every negative its annotators confirmed, and the stats said
+    3 images where 4 went in.
+
+    An item nobody annotated at all has no record here and is still dropped,
+    which is a different question and a defensible one.
+    """
+    image_annotations = annotation.get("image_annotations")
+    if not isinstance(image_annotations, dict):
+        return False
+    return any(isinstance(objects, list)
+               for objects in image_annotations.values())
+
+
+#: Dimensions read off disk, keyed by absolute path. An export walks every
+#: annotation record, and two annotators on one image means two lookups for the
+#: same file.
+_DIMENSION_CACHE: Dict[str, Tuple[int, int]] = {}
+
+
+def get_image_dimensions(item: dict, default_width: int = 0,
+                         default_height: int = 0, *,
+                         config: Any = None,
+                         annotation: Any = None) -> Tuple[int, int]:
+    """
+    The image's pixel dimensions, from whichever source can supply them.
+
+    In order: the item's own metadata, a mask's RLE size, the image file.
+
+    A data file that names an image does not describe one, so for a study built
+    in Potato the metadata keys are simply absent and this used to return
+    ``(0, 0)``. Eleven exporters call it. YOLO refuses the export on a zero,
+    which is right; COCO wrote the zero into its ``images`` record while the
+    annotation beside it carried the true size, so the mask decoded correctly
+    and only a consumer reading ``img['width']`` -- normalization, training,
+    COCOeval -- saw the damage.
 
     Args:
         item: Item data dict
         default_width: Fallback width
         default_height: Fallback height
+        config: Project config, used to locate the image on disk
+        annotation: The annotation record for this item, whose mask RLE carries
+            ``size`` as ``[height, width]``
 
     Returns:
         Tuple of (width, height)
@@ -182,23 +344,250 @@ def get_image_dimensions(item: dict, default_width: int = 0,
                 pass
             break
 
+    if width > 0 and height > 0:
+        return (width, height)
+
+    # A mask states its own size and costs nothing to read. It is also the only
+    # source that works when the image is remote or unreadable.
+    derived = _dimensions_from_masks(annotation)
+    if derived is None and config is not None:
+        derived = _dimensions_from_file(config, item)
+    if derived is not None:
+        return derived
+
+    if width <= 0 or height <= 0:
+        _warn_unmeasurable(item, config)
     return (width, height)
 
 
-def get_image_filename(item: dict) -> Optional[str]:
+_UNMEASURABLE_SEEN: set = set()
+
+
+def _warn_unmeasurable(item: dict, config: Any = None) -> None:
+    """Say once, per image, that its size could not be established.
+
+    Zero is not a neutral fallback here: the client stores normalized
+    coordinates, so every box, polygon and point in the export gets multiplied
+    by it and comes out as ``[0, 0, 0, 0]``. An export that writes zeros with
+    an empty warning list reads as a clean run over annotations that all sit
+    at the origin, which is indistinguishable from an annotator who drew
+    nothing.
+    """
+    name = get_image_filename(item, config) or item.get("id") or "<unnamed item>"
+    if name in _UNMEASURABLE_SEEN:
+        return
+    _UNMEASURABLE_SEEN.add(name)
+    logger.warning(
+        "export: could not determine the pixel size of %s, so its annotations "
+        "are being written against a 0x0 frame and every coordinate will be 0. "
+        "Add `image_width` and `image_height` to the item, or make the file "
+        "readable from the media directory.", name)
+
+
+def _dimensions_from_masks(annotation: Any) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` from a stored mask's RLE, which holds [h, w]."""
+    if not isinstance(annotation, dict):
+        return None
+    image_annotations = annotation.get("image_annotations")
+    if not isinstance(image_annotations, dict):
+        return None
+    for objects in image_annotations.values():
+        if not isinstance(objects, list):
+            continue
+        for obj in objects:
+            if not isinstance(obj, dict):
+                continue
+            size = (obj.get("rle") or {}).get("size") if isinstance(
+                obj.get("rle"), dict) else None
+            if isinstance(size, (list, tuple)) and len(size) >= 2:
+                try:
+                    height, width = int(size[0]), int(size[1])
+                except (ValueError, TypeError):
+                    continue
+                if width > 0 and height > 0:
+                    return (width, height)
+    return None
+
+
+def _dimensions_from_file(config: Any, item: dict) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` by opening the image the item names.
+
+    Returns ``None`` rather than raising for every reason this can fail --
+    no filename, a remote URL, a path outside the media directory, a missing
+    file, Pillow absent. An export must not die because one image cannot be
+    measured; the caller keeps its zeros and YOLO keeps refusing.
+    """
+    filename = get_image_filename(item, config)
+    if not filename or "://" in str(filename):
+        return None
+    try:
+        from potato.media.paths import resolve_media_path
+    except ImportError:  # pragma: no cover
+        return None
+
+    reference = str(filename)
+    for prefix in ("/media/", "media/"):
+        if reference.startswith(prefix):
+            reference = reference[len(prefix):]
+            break
+    reference = reference.lstrip("/")
+
+    try:
+        _, path = resolve_media_path(config, reference, context="export")
+    except Exception:  # pragma: no cover - config shapes vary
+        return None
+    if not path:
+        return None
+    if path in _DIMENSION_CACHE:
+        return _DIMENSION_CACHE[path]
+    if not os.path.isfile(path):
+        return None
+    if os.path.splitext(path)[1].lower() == ".svg":
+        dimensions = _svg_dimensions(path)
+        if dimensions is not None:
+            _DIMENSION_CACHE[path] = dimensions
+        return dimensions
+    try:
+        from PIL import Image
+        with Image.open(path) as image:
+            width, height = int(image.width), int(image.height)
+            # The browser applies EXIF orientation before showing the image, so
+            # the annotator draws in the DISPLAYED frame. PIL reports the
+            # STORED frame. For the four orientations that transpose the axes
+            # the two disagree, and every box in the export is paired with a
+            # width and height that belong to a 90-degree rotation of the
+            # picture the annotator saw -- so a box on the subject's face
+            # normalizes to somewhere off the edge of the frame.
+            #
+            # The tag is read rather than calling ImageOps.exif_transpose(),
+            # which decodes and rotates the whole image to learn two numbers.
+            orientation = image.getexif().get(0x0112)
+            if orientation in (5, 6, 7, 8):
+                width, height = height, width
+            dimensions = (width, height)
+    except Exception:
+        logger.debug("export could not read the dimensions of %s", path)
+        return None
+    if dimensions[0] <= 0 or dimensions[1] <= 0:
+        return None
+    _DIMENSION_CACHE[path] = dimensions
+    return dimensions
+
+
+_SVG_TAG = re.compile(r"<svg\b[^>]*>", re.IGNORECASE | re.DOTALL)
+_SVG_ATTR = re.compile(
+    r"\b(width|height|viewBox)\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
+_SVG_LENGTH = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*(px)?\s*$", re.IGNORECASE)
+
+
+def _svg_dimensions(path: str) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` for an SVG, read from its root element.
+
+    Pillow cannot open an SVG, so the whole family used to fall through to
+    ``(0, 0)`` -- and a zero width is what every normalized coordinate gets
+    multiplied by, so an SVG study exported every box as ``[0, 0, 0, 0]``.
+
+    Read with a bounded regex over the first 8 KB rather than an XML parser:
+    the file is annotator-supplied, and an XML parser on untrusted input buys
+    entity expansion attacks in exchange for nothing this needs. Only the
+    opening tag matters, and it is at the top by definition.
+
+    `width`/`height` win when they are plain lengths. A percentage or a unit
+    this cannot read falls back to `viewBox`, which is always in user units.
+    """
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            head = handle.read(8192)
+    except OSError:
+        return None
+    tag = _SVG_TAG.search(head)
+    if not tag:
+        return None
+    attrs = {name.lower(): value
+             for name, value in _SVG_ATTR.findall(tag.group(0))}
+
+    def length(value):
+        match = _SVG_LENGTH.match(value or "")
+        if not match:
+            return None
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+
+    width = length(attrs.get("width"))
+    height = length(attrs.get("height"))
+    if not width or not height:
+        box = (attrs.get("viewbox") or "").replace(",", " ").split()
+        if len(box) == 4:
+            try:
+                width, height = float(box[2]), float(box[3])
+            except ValueError:
+                return None
+    if not width or not height or width <= 0 or height <= 0:
+        return None
+    return (int(round(width)), int(round(height)))
+
+
+def get_image_filename(item: dict, config: Any = None) -> Optional[str]:
     """
     Extract image filename from item data.
 
+    `source_field` is the scheme key whose only job is to say which field holds
+    the media, and the display layer honours it. It was not among the six names
+    guessed here, so a study whose field is called anything else exported
+    `file_name: "<instance id>"` -- and with no filename there is no file, with
+    no file there are no dimensions, and the client stores normalized
+    coordinates, so every box multiplied by zero and landed at the origin.
+
+    Measured on one image, one box, one field rename:
+
+        source_field: pic         file_name "img1"              [0, 0, 0, 0]
+        source_field: image_url   file_name "/media/scene.png"  [40, 40, 120, 120]
+
+    The page rendered the image correctly in both. This is the fourth time a
+    media field has been known to the display layer and not to a consumer, so
+    the configured answer is asked for first and the guesses are the fallback.
+
     Args:
         item: Item data dict
+        config: Project config, used to read `source_field` off the schemes
 
     Returns:
         Image filename/path string or None
     """
+    for key in _configured_media_keys(config):
+        if key in item and item[key]:
+            return str(item[key])
     for key in ("image", "image_path", "image_url", "file_name", "filename", "img"):
         if key in item and item[key]:
             return str(item[key])
     return None
+
+
+#: Scheme types whose `source_field` names a media file the exporters care
+#: about. A `source_field` on, say, an extractive_qa scheme names a passage.
+_MEDIA_SCHEME_TYPES = frozenset({
+    "image_annotation", "video_annotation", "spatial_annotation",
+    "tiered_annotation", "episode_annotation", "audio_annotation",
+})
+
+
+def _configured_media_keys(config: Any) -> List[str]:
+    """Every `source_field` a media scheme declares, in config order."""
+    if not isinstance(config, dict):
+        return []
+    keys, seen = [], set()
+    for scheme in (config.get("annotation_schemes") or []):
+        if not isinstance(scheme, dict):
+            continue
+        if scheme.get("annotation_type") not in _MEDIA_SCHEME_TYPES:
+            continue
+        field = scheme.get("source_field")
+        if isinstance(field, str) and field and field not in seen:
+            seen.add(field)
+            keys.append(field)
+    return keys
 
 
 # ---------------------------------------------------------------------------
@@ -380,3 +769,967 @@ def rle_to_coco_rle(rle: dict, width: int, height: int) -> Dict[str, Any]:
     encoded = _encode_coco_rle_string(col_counts)
 
     return {"counts": encoded, "size": [height, width]}
+
+
+def _decode_coco_rle_string(s: str) -> List[int]:
+    """
+    Decode a COCO compressed ASCII RLE string back to integer counts.
+
+    Exact inverse of :func:`_encode_coco_rle_string`, ported from pycocotools
+    maskApi.c ``rleFrString()``.
+
+    The delta boundary is ``> 2``, not ``>= 2`` -- it must mirror the encoder's
+    ``x = counts[i] - counts[i - 2] if i > 2`` exactly. An off-by-one here
+    corrupts every mask long enough to reach the third run, silently.
+
+    Args:
+        s: Encoded ASCII string
+
+    Returns:
+        List of integer run counts in column-major order
+    """
+    counts: List[int] = []
+    p = 0
+    n = len(s)
+    while p < n:
+        x = 0
+        k = 0
+        more = True
+        while more:
+            c = ord(s[p]) - 48
+            x |= (c & 0x1F) << (5 * k)
+            more = bool(c & 0x20)
+            p += 1
+            k += 1
+            if not more and (c & 0x10):
+                # Sign-extend: Python ints are arbitrary precision, so this
+                # produces the correct negative value without masking.
+                x |= -1 << (5 * k)
+        if len(counts) > 2:
+            x += counts[-2]
+        counts.append(x)
+    return counts
+
+
+def coco_rle_to_rle(segmentation: dict) -> Dict[str, Any]:
+    """
+    Convert a COCO RLE segmentation to Potato RLE.
+
+    Public inverse of :func:`rle_to_coco_rle`. Handles both COCO dialects
+    without preprocessing:
+
+    - ``{"counts": [ints], "size": [h, w]}``  -- uncompressed
+    - ``{"counts": "ascii", "size": [h, w]}`` -- compressed
+
+    COCO RLE is column-major; Potato RLE is row-major. Both alternate runs
+    starting with a 0-run.
+
+    Args:
+        segmentation: COCO ``segmentation`` dict
+
+    Returns:
+        Potato RLE dict ``{"counts": [ints], "size": [height, width]}``
+
+    Raises:
+        ValueError: if ``size`` is missing or malformed
+    """
+    size = segmentation.get("size") or []
+    if len(size) < 2:
+        raise ValueError(
+            f"COCO RLE segmentation needs size [height, width], got {size!r}"
+        )
+    height, width = int(size[0]), int(size[1])
+
+    raw = segmentation.get("counts")
+    if isinstance(raw, bytes):
+        raw = raw.decode("ascii")
+    if isinstance(raw, str):
+        counts = _decode_coco_rle_string(raw)
+    else:
+        counts = [int(c) for c in (raw or [])]
+
+    total = width * height
+
+    # Expand column-major runs into a column-major bitmap.
+    col_major = [0] * total
+    pos = 0
+    val = 0
+    for count in counts:
+        for _ in range(count):
+            if pos < total:
+                col_major[pos] = val
+                pos += 1
+        val = 1 - val
+
+    # Transpose to row-major: column-major index i is (x=i//height, y=i%height).
+    row_major = [0] * total
+    for i, v in enumerate(col_major):
+        if v:
+            row_major[(i % height) * width + (i // height)] = 1
+
+    return {"counts": _runs_from_bitmap(row_major), "size": [height, width]}
+
+
+def _runs_from_bitmap(bitmap: List[int]) -> List[int]:
+    """Re-run a flat 0/1 bitmap into alternating counts starting with 0s."""
+    counts: List[int] = []
+    current = 0
+    run = 0
+    for v in bitmap:
+        if v == current:
+            run += 1
+        else:
+            counts.append(run)
+            current = 1 - current
+            run = 1
+    counts.append(run)
+    return counts
+
+
+def bitmap_to_rle(bitmap: List[int], height: int, width: int) -> Dict[str, Any]:
+    """
+    Encode a flat row-major 0/1 bitmap as a Potato RLE mask.
+
+    The inverse of :func:`decode_rle`, and the entry point mask importers use
+    when a format ships rasterized pixels rather than outlines (DAVIS and
+    Cityscapes indexed PNGs, per-instance bitmaps). Exposed publicly so those
+    importers do not each reach into a private helper and drift.
+
+    Args:
+        bitmap: Flat list of 0/1 values, ``width * height`` long, row-major
+        height: Mask height in pixels
+        width: Mask width in pixels
+
+    Returns:
+        Potato RLE dict ``{"counts": [ints], "size": [height, width]}``
+
+    Raises:
+        ValueError: If the bitmap length does not match the stated dimensions,
+            which otherwise produces a mask that is silently sheared.
+    """
+    expected = width * height
+    if len(bitmap) != expected:
+        raise ValueError(
+            f"bitmap has {len(bitmap)} pixels but {width}x{height} needs "
+            f"{expected}; encoding it would shear the mask")
+    return {"counts": _runs_from_bitmap(bitmap), "size": [height, width]}
+
+
+def polygons_to_rle(polygons: List[Any], height: int, width: int) -> Dict[str, Any]:
+    """
+    Rasterize one or more polygons into a Potato RLE mask.
+
+    Uses even-odd scanline fill, so a polygon fully inside another is treated
+    as a hole -- which is how COCO's multi-ring ``segmentation`` lists encode
+    holes.
+
+    Args:
+        polygons: List of rings. Each ring may be flat ``[x1, y1, x2, y2, ...]``
+            (COCO's form) or ``[[x, y], ...]`` / ``[{"x":, "y":}, ...]``.
+        height: Mask height in pixels
+        width: Mask width in pixels
+
+    Returns:
+        Potato RLE dict ``{"counts": [ints], "size": [height, width]}``
+    """
+    edges = []
+    for ring in polygons or []:
+        if ring and isinstance(ring[0], (int, float)):
+            pts = [[float(ring[i]), float(ring[i + 1])]
+                   for i in range(0, len(ring) - 1, 2)]
+        else:
+            pts = _coerce_points(ring)
+        if len(pts) < 3:
+            continue
+        for i in range(len(pts)):
+            edges.append((pts[i], pts[(i + 1) % len(pts)]))
+
+    bitmap = [0] * (width * height)
+    for y in range(height):
+        yc = y + 0.5
+        crossings = []
+        for (x0, y0), (x1, y1) in edges:
+            if (y0 <= yc) == (y1 <= yc):
+                continue
+            crossings.append(x0 + (yc - y0) * (x1 - x0) / (y1 - y0))
+        crossings.sort()
+        row = y * width
+        for i in range(0, len(crossings) - 1, 2):
+            start = max(0, int(math.ceil(crossings[i] - 0.5)))
+            end = min(width - 1, int(math.floor(crossings[i + 1] - 0.5)))
+            for x in range(start, end + 1):
+                bitmap[row + x] = 1
+
+    return {"counts": _runs_from_bitmap(bitmap), "size": [height, width]}
+
+
+def rle_to_polygons(rle: dict, width: int, height: int) -> List[List[List[float]]]:
+    """
+    Trace an RLE mask into one outer-boundary polygon per connected component.
+
+    This is LOSSY and is only used behind an explicit opt-in:
+
+    - Holes are dropped. A single outer ring cannot represent them.
+    - The traced contour will not re-rasterize to exactly the source bitmap.
+    - Boundaries follow pixel centers, so they sit half a pixel inside the mask.
+
+    Prefer keeping RLE as RLE. This exists for teams who need polygon
+    editability and accept the fidelity loss.
+
+    Args:
+        rle: Potato RLE dict
+        width: Mask width
+        height: Mask height
+
+    Returns:
+        List of rings, each a list of ``[x, y]`` points.
+    """
+    bitmap = decode_rle(rle, width, height)
+
+    def at(x: int, y: int) -> int:
+        if x < 0 or y < 0 or x >= width or y >= height:
+            return 0
+        return bitmap[y * width + x]
+
+    seen = [False] * (width * height)
+    rings: List[List[List[float]]] = []
+
+    # 8-connected Moore neighborhood, clockwise from due east.
+    neighborhood = [(1, 0), (1, 1), (0, 1), (-1, 1),
+                    (-1, 0), (-1, -1), (0, -1), (1, -1)]
+
+    for start_y in range(height):
+        for start_x in range(width):
+            if not at(start_x, start_y) or seen[start_y * width + start_x]:
+                continue
+
+            # Flood the component so we only trace it once.
+            stack = [(start_x, start_y)]
+            component = []
+            seen[start_y * width + start_x] = True
+            while stack:
+                cx, cy = stack.pop()
+                component.append((cx, cy))
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nx, ny = cx + dx, cy + dy
+                    if (0 <= nx < width and 0 <= ny < height
+                            and at(nx, ny) and not seen[ny * width + nx]):
+                        seen[ny * width + nx] = True
+                        stack.append((nx, ny))
+
+            if len(component) < 3:
+                continue
+
+            # Moore-neighbor trace clockwise from the component's top-left.
+            contour = [[float(start_x), float(start_y)]]
+            cur = (start_x, start_y)
+            backtrack = 4  # came from the west
+            guard = 8 * len(component) + 16
+
+            for _ in range(guard):
+                found = False
+                for step in range(1, 9):
+                    idx = (backtrack + step) % 8
+                    dx, dy = neighborhood[idx]
+                    nx, ny = cur[0] + dx, cur[1] + dy
+                    if at(nx, ny):
+                        backtrack = (idx + 4 + 1) % 8
+                        cur = (nx, ny)
+                        contour.append([float(nx), float(ny)])
+                        found = True
+                        break
+                if not found:
+                    break
+                if cur == (start_x, start_y):
+                    contour.pop()
+                    break
+
+            if len(contour) >= 3:
+                rings.append(contour)
+
+    return rings
+
+
+# ---------------------------------------------------------------------------
+# Coordinate contract (client <-> exporter)
+# ---------------------------------------------------------------------------
+#
+# The browser writes annotations in ONE shape, defined by
+# ImageAnnotationManager._serializeAnnotations() / _getObjectCoordinates() in
+# potato/static/image-annotation.js:
+#
+#   {"type": "bbox",     "label", "color", "coordinates": {x, y, width, height}}
+#   {"type": "polygon",  "label", "color", "coordinates": [{x, y}, ...]}
+#   {"type": "polyline", "label", "color", "coordinates": [{x, y}, ...]}
+#   {"type": "ellipse",  "label", "color", "coordinates": {cx, cy, rx, ry, angle}}
+#   {"type": "landmark", "label", "color", "coordinates": {x, y}}
+#   {"type": "keypoint_set", "label", "color", "skeleton": "<name>",
+#                            "coordinates": [{x, y, v}, ...]}
+#   {"type": "cuboid_2d", "label", "color",
+#                         "coordinates": {front: [{x,y} x4], back: [{x,y} x4]}}
+#   {"type": "freeform", "label", "color", "coordinates": {path, left, top,
+#                                                          scaleX, scaleY,
+#                                                          pathOffset, angle}}
+#   {"type": "mask",     "label", "color", "rle": {counts: [...], size: [h, w]}}
+#
+# Shape coordinates are NORMALIZED to [0, 1] against the image; masks are not.
+# Freeform's `path` and `pathOffset` are the exception within `coordinates`:
+# they stay in fabric's own path space, because that is the space `path` is
+# expressed in and rescaling one without the other would be meaningless.
+#
+# Every exporter used to read flat, absolute-pixel fields (obj["x"],
+# obj["points"], ...) that the client has never written. The result was that
+# real annotation sessions exported bboxes as [0, 0, 0, 0] with area 0, and
+# polygons hit `if not points: continue` and vanished silently -- only masks
+# survived, because the mask half of the contract was fixed earlier (see the
+# comment at image-annotation.js:1321). The unit tests hand-built the flat
+# shape, so they passed while the exporters were broken.
+#
+# normalize_annotation_object() is now the single place that understands the
+# client shape. to_client_object() is its exact inverse and is the only thing
+# that should synthesize annotations for the client (used by the importers).
+#
+# THIS CONTRACT COVERS 2D ONLY. 3D spatial annotations (cuboid_3d, point_3d,
+# polyline_3d, segment_3d) have their own pair in potato/export/spatial_utils.py
+# and are NOT handled here. They are not normalized, they are in metres in a
+# sensor frame rather than pixels, and they carry an orientation -- so they
+# cannot pass through a function whose whole job is "normalized image
+# coordinates to pixels, given a width and a height". See the module docstring
+# there for the full reasoning.
+
+
+def _coerce_points(raw: Any) -> List[List[float]]:
+    """
+    Normalize a point sequence to [[x, y], ...].
+
+    Accepts the client's [{"x": .., "y": ..}, ...] form and the flat
+    [[x, y], ...] form that legacy/hand-written data uses.
+    """
+    points: List[List[float]] = []
+    if not isinstance(raw, (list, tuple)):
+        return points
+    for p in raw:
+        if isinstance(p, dict):
+            if "x" in p and "y" in p:
+                points.append([float(p["x"]), float(p["y"])])
+        elif isinstance(p, (list, tuple)) and len(p) >= 2:
+            points.append([float(p[0]), float(p[1])])
+    return points
+
+
+def _get_dim(source: dict, *names: str, default: float = 0.0) -> float:
+    """Read the first present key out of ``names`` as a float."""
+    for name in names:
+        if name in source and source[name] is not None:
+            try:
+                return float(source[name])
+            except (TypeError, ValueError):
+                return default
+    return default
+
+
+def _has_path_offset(coords: dict) -> bool:
+    """True if a freeform annotation carries fabric's pathOffset."""
+    offset = coords.get("pathOffset")
+    return isinstance(offset, dict) and "x" in offset and "y" in offset
+
+
+def _freeform_points(coords: dict, img_w: float, img_h: float) -> List[List[float]]:
+    """
+    Convert a freeform (fabric path) annotation to an absolute-pixel polyline.
+
+    The client records {path, left, top, scaleX, scaleY, pathOffset, angle}.
+
+    With ``pathOffset`` present the reconstruction is exact: fabric positions a
+    path by treating ``pathOffset`` (the path bounding box's centre in the
+    path's own coordinate space) as the object's origin, so the same transform
+    fabric applies can be reproduced here, rotation included.
+
+    Annotations written before the client recorded ``pathOffset`` can only be
+    approximated: anchoring the path's own minimum corner at (left, top)
+    reproduces the geometry for an unrotated, unscaled brush stroke and drifts
+    otherwise. Callers surface the accompanying warning for that case only.
+    """
+    raw_path = coords.get("path") or []
+    endpoints: List[List[float]] = []
+    for cmd in raw_path:
+        if not isinstance(cmd, (list, tuple)) or len(cmd) < 3:
+            continue
+        # Every fabric path command ends with its destination point.
+        try:
+            endpoints.append([float(cmd[-2]), float(cmd[-1])])
+        except (TypeError, ValueError):
+            continue
+
+    if not endpoints:
+        return []
+
+    left = _get_dim(coords, "left") * img_w
+    top = _get_dim(coords, "top") * img_h
+    scale_x = _get_dim(coords, "scaleX", default=1.0) or 1.0
+    scale_y = _get_dim(coords, "scaleY", default=1.0) or 1.0
+
+    if not _has_path_offset(coords):
+        min_x = min(p[0] for p in endpoints)
+        min_y = min(p[1] for p in endpoints)
+        return [
+            [left + (p[0] - min_x) * scale_x, top + (p[1] - min_y) * scale_y]
+            for p in endpoints
+        ]
+
+    offset = coords["pathOffset"]
+    off_x = float(offset.get("x") or 0.0)
+    off_y = float(offset.get("y") or 0.0)
+    angle = math.radians(float(coords.get("angle") or 0.0))
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+
+    points: List[List[float]] = []
+    for px, py in endpoints:
+        # Into the object's local space, then scale, rotate, translate --
+        # the order fabric itself uses in calcTransformMatrix().
+        lx = (px - off_x) * scale_x
+        ly = (py - off_y) * scale_y
+        points.append([
+            left + lx * cos_a - ly * sin_a,
+            top + lx * sin_a + ly * cos_a,
+        ])
+    return points
+
+
+#: Provenance keys carried on a stored shape or mask, written by the client
+#: (see PROVENANCE_KEYS in potato/static/image-annotation.js) and preserved by
+#: every conversion in this module.
+#:
+#: ``source`` is the one fact that cannot be reconstructed after the event: an
+#: accepted detection and a hand-drawn box are byte-identical once stored, so a
+#: study that pre-labels with a model cannot report its own acceptance rate
+#: from its own data unless the shape says where it came from. Values are
+#: ``human``, ``ai`` and ``import``; ``ai_model`` names the model,
+#: ``confidence`` is its own score, ``edited`` marks a non-human shape the
+#: annotator has since changed, ``carried_over`` marks one copied forward from
+#: the previous item rather than made here, and ``import_format`` names the
+#: file format an imported one arrived in.
+PROVENANCE_KEYS = ("source", "ai_model", "confidence", "edited",
+                   "carried_over", "import_format")
+
+
+def carry_provenance(target: dict, src: dict) -> dict:
+    """Copy whichever provenance keys ``src`` declares onto ``target``.
+
+    Absent means unknown, which is what a shape stored before provenance
+    existed honestly is. It must not be rewritten to ``human`` on the way past.
+    """
+    if not isinstance(src, dict) or not isinstance(target, dict):
+        return target
+    for key in PROVENANCE_KEYS:
+        value = src.get(key)
+        # NOT `if not value`. That short form is the natural way to write this
+        # and it eats `confidence: 0.0`, `edited: False` and
+        # `carried_over: False`, all of which are real answers. `0 == ""` is
+        # False in Python, so this test catches only genuinely empty strings.
+        if value is None or value == "":
+            continue
+        target[key] = value
+    return target
+
+
+def normalize_annotation_object(obj: dict, img_w: float,
+                                img_h: float) -> Optional[dict]:
+    """
+    Convert one stored image-annotation object into canonical absolute pixels.
+
+    This accepts the shape the browser actually writes (normalized, nested
+    under ``coordinates``) as well as the older flat absolute-pixel shape that
+    hand-written fixtures and pre-2.x data use.
+
+    The two are distinguished STRUCTURALLY, never by magnitude: a ``coordinates``
+    key means the client shape. Guessing from magnitude is not possible --
+    a 1x1 pixel box at the origin is [0, 0, 1, 1] in both coordinate spaces.
+
+    Args:
+        obj: One annotation object from ``annotation["image_annotations"][schema]``
+        img_w: Image width in pixels
+        img_h: Image height in pixels
+
+    Returns:
+        Canonical dict, or None if ``obj`` is not a usable annotation::
+
+            {"type", "label", "color",
+             "bbox": [x, y, w, h],          # absolute px, always present
+             "points": [[x, y], ...] | None,  # absolute px
+             "rle": {...} | None,             # passed through untouched
+             "area": float,
+             "instance": int | None,
+             "iscrowd": 0 | 1,
+             "warnings": [str]}
+    """
+    if not isinstance(obj, dict):
+        return None
+
+    obj_type = obj.get("type", "")
+    warnings: List[str] = []
+
+    result: Dict[str, Any] = {
+        "type": obj_type,
+        "label": obj.get("label", ""),
+        "color": obj.get("color", ""),
+        "bbox": None,
+        "points": None,
+        "rle": None,
+        "area": 0.0,
+        "instance": obj.get("instance"),
+        "iscrowd": int(obj.get("iscrowd", 0) or 0),
+        "warnings": warnings,
+    }
+    carry_provenance(result, obj)
+
+    # Masks carry no `coordinates`; the RLE is already resolution-absolute.
+    if obj_type == "mask":
+        rle = obj.get("rle") or {}
+        counts = rle.get("counts")
+        if not counts:
+            return None
+        size = rle.get("size") or []
+        mask_h = int(size[0]) if len(size) >= 2 else int(img_h)
+        mask_w = int(size[1]) if len(size) >= 2 else int(img_w)
+        decoded = decode_rle(rle, mask_w, mask_h)
+        result["rle"] = rle
+        result["bbox"] = rle_bbox(decoded, mask_w, mask_h)
+        result["area"] = float(rle_area(decoded))
+        # A brush mask with no explicit flag is keyed by label, so it merges
+        # every stroke of that class into one region -- which is exactly what
+        # COCO means by iscrowd=1. Imported per-instance masks carry an
+        # explicit iscrowd=0 and an instance index, and keep them.
+        crowd = obj.get("iscrowd", 1)
+        result["iscrowd"] = 1 if crowd is None else int(crowd)
+        return result
+
+    coords = obj.get("coordinates")
+    normalized = coords is not None
+
+    if obj_type == "bbox":
+        source = coords if normalized else obj
+        if not isinstance(source, dict):
+            return None
+        x = _get_dim(source, "x")
+        y = _get_dim(source, "y")
+        w = _get_dim(source, "width", "w")
+        h = _get_dim(source, "height", "h")
+        if normalized:
+            x, y, w, h = x * img_w, y * img_h, w * img_w, h * img_h
+        result["bbox"] = [x, y, w, h]
+        result["area"] = float(w * h)
+        return result
+
+    if obj_type == "polygon":
+        raw = coords if normalized else obj.get("points")
+        points = _coerce_points(raw)
+        if not points:
+            return None
+        if normalized:
+            points = [[p[0] * img_w, p[1] * img_h] for p in points]
+        result["points"] = points
+        bx, by, bw, bh = polygon_to_bbox(points)
+        result["bbox"] = [bx, by, bw, bh]
+        result["area"] = polygon_area(points)
+        return result
+
+    if obj_type == "polyline":
+        # An OPEN path: lane markings, vessels, cracks, coastlines. It has
+        # length but no interior, so `area` stays 0 and the bbox is the extent
+        # of the vertices. Treating it as a closed polygon would invent an
+        # interior the annotator never claimed.
+        raw = coords if normalized else obj.get("points")
+        points = _coerce_points(raw)
+        if len(points) < 2:
+            return None
+        if normalized:
+            points = [[p[0] * img_w, p[1] * img_h] for p in points]
+        result["points"] = points
+        result["bbox"] = list(polygon_to_bbox(points))
+        result["area"] = 0.0
+        result["closed"] = False
+        return result
+
+    if obj_type == "ellipse":
+        source = coords if normalized else obj
+        if not isinstance(source, dict):
+            return None
+        cx = _get_dim(source, "cx", "x")
+        cy = _get_dim(source, "cy", "y")
+        rx = _get_dim(source, "rx")
+        ry = _get_dim(source, "ry")
+        angle = float(source.get("angle", 0.0) or 0.0)
+        if normalized:
+            cx, cy, rx, ry = cx * img_w, cy * img_h, rx * img_w, ry * img_h
+        if rx <= 0 or ry <= 0:
+            return None
+
+        result["ellipse"] = {"cx": cx, "cy": cy, "rx": rx, "ry": ry,
+                             "angle": angle}
+        # A polygon approximation so every exporter that understands polygons
+        # understands ellipses for free, rather than each learning the maths.
+        result["points"] = ellipse_to_polygon(cx, cy, rx, ry, angle)
+        # The tight bbox of a ROTATED ellipse is not the rotated corner box:
+        # half-extents are sqrt((rx cos)^2 + (ry sin)^2) and its transpose.
+        theta = math.radians(angle)
+        hw = math.hypot(rx * math.cos(theta), ry * math.sin(theta))
+        hh = math.hypot(rx * math.sin(theta), ry * math.cos(theta))
+        result["bbox"] = [cx - hw, cy - hh, 2 * hw, 2 * hh]
+        result["area"] = math.pi * rx * ry
+        return result
+
+    if obj_type == "freeform":
+        if normalized and isinstance(coords, dict) and "path" in coords:
+            points = _freeform_points(coords, img_w, img_h)
+            # The client records pathOffset since the path:created fix; older
+            # annotations predate it and can only be approximated. Warn about
+            # the ones that are actually approximate rather than all of them.
+            if not _has_path_offset(coords):
+                warnings.append(
+                    "freeform reconstructed from a fabric path without pathOffset; "
+                    "geometry is approximate. Re-saving this annotation in the "
+                    "browser records the offset and makes it exact."
+                )
+        else:
+            raw = coords if normalized else obj.get("points")
+            points = _coerce_points(raw)
+            if normalized:
+                points = [[p[0] * img_w, p[1] * img_h] for p in points]
+        if not points:
+            return None
+        result["points"] = points
+        bx, by, bw, bh = polygon_to_bbox(points)
+        result["bbox"] = [bx, by, bw, bh]
+        result["area"] = polygon_area(points)
+        return result
+
+    if obj_type == "keypoint_set":
+        # An ORDERED set with COCO visibility flags (0 unlabelled, 1 labelled
+        # but occluded, 2 visible). Order is the whole point — index 5 means
+        # "left shoulder" only because the skeleton says so — which is why this
+        # is one object rather than N landmarks. Exploding it into landmarks (as
+        # the COCO importer used to) loses the ordering, the skeleton, and the
+        # visibility flags, and there is no way to reassemble them on export.
+        raw = coords if normalized else obj.get("keypoints")
+        points, vis = _coerce_keypoints(raw)
+        if not points:
+            return None
+        if normalized:
+            points = [[p[0] * img_w, p[1] * img_h] for p in points]
+
+        result["points"] = points
+        result["visibility"] = vis
+        result["skeleton"] = obj.get("skeleton") or ""
+        # The bbox spans only the points the annotator actually marked; an
+        # unlabelled keypoint is stored as (0, 0, 0) and would otherwise drag
+        # the box to the image corner.
+        marked = [p for p, v in zip(points, vis) if v]
+        result["bbox"] = list(polygon_to_bbox(marked)) if marked else [0.0, 0.0, 0.0, 0.0]
+        result["area"] = 0.0
+        return result
+
+    if obj_type == "cuboid_2d":
+        # A 3D box PROJECTED into the image (KITTI-style), not true 3D — that
+        # is Wave 8's `spatial_annotation`, which lives in sensor coordinates.
+        source = coords if normalized else obj
+        if not isinstance(source, dict):
+            return None
+        front = _coerce_points(source.get("front"))
+        back = _coerce_points(source.get("back"))
+        if len(front) != 4 or len(back) != 4:
+            return None
+        if normalized:
+            front = [[p[0] * img_w, p[1] * img_h] for p in front]
+            back = [[p[0] * img_w, p[1] * img_h] for p in back]
+
+        result["front"] = front
+        result["back"] = back
+        # `points` is the full 8-vertex hull so consumers that only understand
+        # point lists still get something usable.
+        result["points"] = front + back
+        result["bbox"] = list(polygon_to_bbox(front + back))
+        # The visible extent is what a detector would be scored on, so area is
+        # the front face rather than the whole hull.
+        result["area"] = polygon_area(front)
+        return result
+
+    if obj_type == "landmark":
+        source = coords if normalized else obj
+        if not isinstance(source, dict):
+            return None
+        x = _get_dim(source, "x")
+        y = _get_dim(source, "y")
+        if normalized:
+            x, y = x * img_w, y * img_h
+        result["points"] = [[x, y]]
+        result["bbox"] = [x, y, 0.0, 0.0]
+        result["area"] = 0.0
+        return result
+
+    return None
+
+
+def to_client_object(obj_type: str, label: str, color: str = "", *,
+                     img_w: float, img_h: float,
+                     bbox: Optional[List[float]] = None,
+                     points: Optional[List[List[float]]] = None,
+                     rle: Optional[dict] = None,
+                     ellipse: Optional[dict] = None,
+                     keypoints: Optional[Any] = None,
+                     skeleton: str = "",
+                     cuboid: Optional[dict] = None,
+                     instance: Optional[int] = None,
+                     iscrowd: int = 0,
+                     provenance: Optional[dict] = None) -> Optional[dict]:
+    """
+    Build one annotation object in the shape the browser expects.
+
+    Exact inverse of :func:`normalize_annotation_object`. Inputs are absolute
+    pixels; shape outputs are normalized to [0, 1]. This is the only function
+    that should synthesize annotations for the client.
+
+    Args:
+        obj_type: One of bbox, polygon, polyline, ellipse, freeform, landmark, mask
+        label: Label name (must match a label in the schema config)
+        color: Display color
+        img_w: Image width in pixels
+        img_h: Image height in pixels
+        bbox: [x, y, w, h] absolute pixels (bbox type)
+        points: [[x, y], ...] absolute pixels (polygon/polyline/freeform/landmark)
+        rle: Potato RLE dict, passed through untouched (mask type)
+        ellipse: {cx, cy, rx, ry, angle} absolute pixels (ellipse type)
+        instance: Optional instance index, used to key per-instance masks
+        iscrowd: COCO crowd flag, preserved for round-tripping
+        provenance: Optional dict carrying any of PROVENANCE_KEYS, saying where
+            this annotation came from (a person, a model, an imported file)
+
+    Returns:
+        Client-shaped dict, or None if the inputs are unusable.
+    """
+    obj: Dict[str, Any] = {"type": obj_type, "label": label, "color": color}
+    carry_provenance(obj, provenance or {})
+    if instance is not None:
+        obj["instance"] = instance
+    if iscrowd:
+        obj["iscrowd"] = int(iscrowd)
+
+    if obj_type == "mask":
+        if not rle or not rle.get("counts"):
+            return None
+        obj["rle"] = rle
+        # Masks are the one type whose iscrowd default is 1 -- a brush mask is
+        # keyed by label, so it merges every stroke of that class, which is what
+        # COCO means by a crowd region. An imported per-instance mask therefore
+        # has to say iscrowd=0 out loud; omitting it would silently promote it
+        # back to a crowd region on export and collapse instance segmentation.
+        obj["iscrowd"] = int(iscrowd)
+        return obj
+
+    if img_w <= 0 or img_h <= 0:
+        return None
+
+    if obj_type == "bbox":
+        if not bbox or len(bbox) < 4:
+            return None
+        x, y, w, h = bbox[0], bbox[1], bbox[2], bbox[3]
+        obj["coordinates"] = {
+            "x": x / img_w,
+            "y": y / img_h,
+            "width": w / img_w,
+            "height": h / img_h,
+        }
+        return obj
+
+    if obj_type in ("polygon", "freeform", "polyline"):
+        if not points:
+            return None
+        if obj_type == "polyline" and len(points) < 2:
+            return None
+        obj["coordinates"] = [
+            {"x": p[0] / img_w, "y": p[1] / img_h} for p in points
+        ]
+        if obj_type == "polyline":
+            obj["closed"] = False
+        return obj
+
+    if obj_type == "ellipse":
+        if not ellipse:
+            return None
+        rx = float(ellipse.get("rx", 0) or 0)
+        ry = float(ellipse.get("ry", 0) or 0)
+        if rx <= 0 or ry <= 0:
+            return None
+        obj["coordinates"] = {
+            "cx": float(ellipse.get("cx", 0) or 0) / img_w,
+            "cy": float(ellipse.get("cy", 0) or 0) / img_h,
+            "rx": rx / img_w,
+            "ry": ry / img_h,
+            "angle": float(ellipse.get("angle", 0) or 0),
+        }
+        return obj
+
+    if obj_type == "keypoint_set":
+        pts, vis = _coerce_keypoints(keypoints if keypoints is not None else points)
+        if not pts:
+            return None
+        obj["coordinates"] = [
+            {"x": p[0] / img_w, "y": p[1] / img_h, "v": v}
+            for p, v in zip(pts, vis)
+        ]
+        obj["skeleton"] = skeleton or ""
+        return obj
+
+    if obj_type == "cuboid_2d":
+        front = _coerce_points((cuboid or {}).get("front"))
+        back = _coerce_points((cuboid or {}).get("back"))
+        if len(front) != 4 or len(back) != 4:
+            return None
+        obj["coordinates"] = {
+            "front": [{"x": p[0] / img_w, "y": p[1] / img_h} for p in front],
+            "back": [{"x": p[0] / img_w, "y": p[1] / img_h} for p in back],
+        }
+        return obj
+
+    if obj_type == "landmark":
+        if not points:
+            return None
+        obj["coordinates"] = {
+            "x": points[0][0] / img_w,
+            "y": points[0][1] / img_h,
+        }
+        return obj
+
+    return None
+
+
+def build_coco_category_map(
+    schemas: List[dict], annotations: List[dict]
+) -> Tuple[Dict[str, int], List[dict]]:
+    """
+    Build COCO category IDs, honoring original IDs when the config carries them.
+
+    COCO datasets in the wild use sparse category IDs -- COCO 2017 runs 1..90
+    with gaps. Renumbering them densely on export means a file cannot survive
+    an import/export round trip, so a ``label_id`` recorded on the label config
+    (which the COCO importer writes) is preserved verbatim.
+
+    Labels without a ``label_id`` are assigned IDs above the highest explicit
+    one, so explicit and derived IDs never collide.
+
+    This is deliberately separate from :func:`build_category_mapping`, which
+    returns dense 0-indexed IDs that YOLO requires.
+
+    Args:
+        schemas: annotation_scheme config dicts
+        annotations: Annotation records (to discover labels absent from config)
+
+    Returns:
+        (label name -> COCO category id, COCO ``categories`` list)
+    """
+    explicit: Dict[str, int] = {}
+    supercategory: Dict[str, str] = {}
+    ordered: List[str] = []
+    seen = set()
+
+    for schema in schemas:
+        if schema.get("annotation_type") != "image_annotation":
+            continue
+        for label_def in schema.get("labels", []):
+            if isinstance(label_def, str):
+                name, meta = label_def, {}
+            else:
+                name, meta = label_def.get("name", ""), label_def
+            if not name or name in seen:
+                continue
+            ordered.append(name)
+            seen.add(name)
+            if meta.get("label_id") is not None:
+                try:
+                    explicit[name] = int(meta["label_id"])
+                except (TypeError, ValueError):
+                    pass
+            if meta.get("supercategory"):
+                supercategory[name] = str(meta["supercategory"])
+
+    for ann in annotations:
+        for _schema_name, objects in ann.get("image_annotations", {}).items():
+            if not isinstance(objects, list):
+                continue
+            for obj in objects:
+                if not isinstance(obj, dict):
+                    continue
+                label = obj.get("label", "")
+                if label and label not in seen:
+                    ordered.append(label)
+                    seen.add(label)
+
+    category_map: Dict[str, int] = {}
+    next_id = max(explicit.values(), default=0) + 1
+    for name in ordered:
+        if name in explicit:
+            category_map[name] = explicit[name]
+        else:
+            category_map[name] = next_id
+            next_id += 1
+
+    categories = [
+        {
+            "id": category_map[name],
+            "name": name,
+            "supercategory": supercategory.get(name, ""),
+        }
+        for name in sorted(ordered, key=lambda n: category_map[n])
+    ]
+    return category_map, categories
+
+
+def items_without_image_annotations(
+        context: Any, reviewed_counts_as_present: bool = False) -> List[str]:
+    """Instance ids in the study that carry no image annotation from anyone.
+
+    Every CV exporter here walks ``context.annotations``, so an item nobody
+    marked produces no record and is absent from the output entirely -- no
+    image entry, no empty annotation list, nothing. For detector training an
+    image with no objects is a negative example, and dropping it changes what
+    the model learns.
+
+    ``reviewed_counts_as_present`` is for a format that WRITES the confirmed
+    negative, which COCO now does: an annotator who opened the image and drew
+    nothing gets an image entry with no annotations. Without this flag the
+    warning would name that item as absent from a file it is in, which is a
+    worse lie than the silence it replaced.
+    """
+    annotated = set()
+    for annotation in getattr(context, "annotations", None) or []:
+        present = bool(extract_image_annotations(annotation))
+        if not present and reviewed_counts_as_present:
+            present = has_image_annotation_record(annotation)
+        if present:
+            annotated.add(annotation.get("instance_id", ""))
+    return [iid for iid in (getattr(context, "items", None) or {})
+            if iid not in annotated]
+
+
+def blank_item_warning(context: Any, destination: str = "this export",
+                       reviewed_counts_as_present: bool = False):
+    """The warning for items that carry no image annotation, or ``None``.
+
+    Says nothing about whether they should be there -- most of these formats
+    are annotation interchange rather than dataset manifests, and the right
+    answer differs by format. What is not defensible is the silence: a
+    researcher reconciling "I had 300 images" against a file listing 214
+    cannot tell whether the rest errored or were simply blank.
+    """
+    blank = items_without_image_annotations(
+        context, reviewed_counts_as_present=reviewed_counts_as_present)
+    if not blank:
+        return None
+    shown = ", ".join(sorted(blank)[:5])
+    more = f", and {len(blank) - 5} more" if len(blank) > 5 else ""
+    return (
+        f"{len(blank)} item(s) carry no image annotation and are absent from "
+        f"{destination}: {shown}{more}. For detector training an image with "
+        f"no objects is a negative example; if you need them, add them to the "
+        f"output manually or export a format that lists images separately."
+    )

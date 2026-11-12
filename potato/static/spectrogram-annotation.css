@@ -1,0 +1,102 @@
+/* Spectrogram box annotation (annotation_type: spectrogram_annotation).
+   Uses the page's theme tokens, so it follows light and dark mode. */
+form.spectrogram-annotation, .spectrogram-annotation fieldset, .spectrogram-annotation .sg-root {
+    width: 100%; min-width: 0; box-sizing: border-box; }
+.spectrogram-annotation fieldset { border: 0; padding: 0; margin: 0; }
+.spectrogram-annotation .sg-title { font-weight: 600; margin-bottom: 0.4rem; }
+.spectrogram-annotation .sg-instructions { margin: 0 0 0.75rem; color: var(--muted-foreground); }
+.spectrogram-annotation .sg-root { display: flex; flex-direction: column; gap: 0.6rem; outline: none; }
+.spectrogram-annotation .sg-root:focus-visible { box-shadow: 0 0 0 2px var(--ring, var(--primary)); border-radius: 0.5rem; }
+.spectrogram-annotation .sg-loading, .spectrogram-annotation .sg-keys,
+.spectrogram-annotation .sg-status { color: var(--muted-foreground); font-size: 0.85rem; margin: 0; }
+.spectrogram-annotation .sg-status:empty { display: none; }
+.spectrogram-annotation .sg-error { color: var(--destructive, #dc2626); margin: 0; }
+
+.spectrogram-annotation .sg-toolbar { display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 0.5rem; }
+.spectrogram-annotation .sg-transport, .spectrogram-annotation .sg-zoom { display: flex; align-items: center; gap: 0.5rem; }
+.spectrogram-annotation .sg-time, .spectrogram-annotation .sg-zoom-level, .spectrogram-annotation .sg-num {
+    font-variant-numeric: tabular-nums; font-size: 0.85rem; color: var(--muted-foreground); }
+.spectrogram-annotation .sg-btn, .spectrogram-annotation .sg-label {
+    min-height: 2.25rem; padding: 0.3rem 0.8rem; border: 1px solid var(--border);
+    border-radius: 0.5rem; background: var(--card); color: var(--card-foreground, inherit);
+    font: inherit; cursor: pointer; }
+.spectrogram-annotation .sg-btn:hover, .spectrogram-annotation .sg-label:hover { background: var(--secondary, var(--muted)); }
+.spectrogram-annotation .sg-btn:focus-visible, .spectrogram-annotation .sg-label:focus-visible,
+.spectrogram-annotation .sg-row-label:focus-visible {
+    outline: 2px solid var(--ring, var(--primary)); outline-offset: 2px; }
+.spectrogram-annotation .sg-play { min-width: 5rem; font-weight: 500; }
+.spectrogram-annotation .sg-play[aria-pressed="true"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.spectrogram-annotation .sg-zoom .sg-btn { min-width: 2.25rem; padding: 0.3rem 0.5rem; }
+
+.spectrogram-annotation .sg-labels { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.spectrogram-annotation .sg-label { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.6rem; }
+.spectrogram-annotation .sg-label[aria-pressed="true"] { border-color: var(--primary);
+    box-shadow: inset 0 0 0 1px var(--primary); font-weight: 600; }
+.spectrogram-annotation .sg-label kbd { font: inherit; font-size: 0.75rem; padding: 0 0.3rem;
+    border: 1px solid var(--border); border-radius: 0.25rem; color: var(--muted-foreground); }
+.spectrogram-annotation .sg-swatch { display: inline-block; width: 0.75rem; height: 0.75rem;
+    border-radius: 0.2rem; flex: none; }
+
+.spectrogram-annotation .sg-stage { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); gap: 0.25rem; }
+.spectrogram-annotation .sg-faxis { position: relative; font-size: 0.72rem; color: var(--muted-foreground); }
+.spectrogram-annotation .sg-ftick { position: absolute; right: 0.25rem; transform: translateY(-50%);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+.spectrogram-annotation .sg-viewport { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: var(--muted, #f1f5f9); }
+.spectrogram-annotation .sg-wrap-outer { width: 100%; }
+.spectrogram-annotation .sg-wrap { position: relative; width: 100%; touch-action: none; cursor: crosshair;
+    user-select: none; -webkit-user-select: none; }
+.spectrogram-annotation .sg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.spectrogram-annotation .sg-boxes { position: absolute; inset: 0; }
+.spectrogram-annotation .sg-taxis { position: relative; height: 1.3rem; font-size: 0.72rem; color: var(--muted-foreground);
+    border-top: 1px solid var(--border); background: var(--card); }
+.spectrogram-annotation .sg-ttick { position: absolute; top: 0.15rem; transform: translateX(-50%);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+.spectrogram-annotation .sg-ttick:first-child { transform: none; }
+.spectrogram-annotation .sg-ttick.sg-ttick-last { transform: translateX(-100%); }
+
+.spectrogram-annotation .sg-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+    background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55); pointer-events: none; }
+
+.spectrogram-annotation .sg-box, .spectrogram-annotation .sg-ghost {
+    position: absolute; box-sizing: border-box; border: 2px solid var(--sg-color, #2563eb);
+    background: color-mix(in srgb, var(--sg-color, #2563eb) 14%, transparent);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); border-radius: 2px; }
+.spectrogram-annotation .sg-box { cursor: move; outline: none; }
+.spectrogram-annotation .sg-box.sg-machine { border-style: dashed; }
+.spectrogram-annotation .sg-box.sg-band { border-top-width: 0; border-bottom-width: 0; }
+.spectrogram-annotation .sg-box.sg-selected { border-width: 3px;
+    box-shadow: 0 0 0 1px #fff, 0 0 0 3px rgba(0, 0, 0, 0.6); z-index: 2; }
+.spectrogram-annotation .sg-box:focus-visible { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ring, var(--primary)); z-index: 3; }
+.spectrogram-annotation .sg-ghost { pointer-events: none; border-style: dashed; }
+.spectrogram-annotation .sg-tag { position: absolute; left: -2px; bottom: 100%; margin-bottom: 2px;
+    padding: 0 0.3rem; font-size: 0.7rem; line-height: 1.1rem; white-space: nowrap; color: #fff;
+    background: var(--sg-color, #2563eb); border-radius: 2px; pointer-events: none;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.6); max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.spectrogram-annotation .sg-tag-inside .sg-tag { bottom: auto; top: 0; left: 0; margin: 0; }
+.spectrogram-annotation .sg-tag-right .sg-tag { left: auto; right: -2px; }
+.spectrogram-annotation .sg-tag-inside.sg-tag-right .sg-tag { right: 0; }
+.spectrogram-annotation .sg-handle { position: absolute; width: 12px; height: 12px; background: #fff;
+    border: 2px solid var(--sg-color, #2563eb); border-radius: 2px; display: none; }
+.spectrogram-annotation .sg-selected .sg-handle { display: block; }
+.spectrogram-annotation .sg-handle-nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.spectrogram-annotation .sg-handle-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+
+.spectrogram-annotation .sg-list-wrap { overflow-x: auto; }
+.spectrogram-annotation .sg-list { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.spectrogram-annotation .sg-list caption { caption-side: top; text-align: left; font-weight: 500; padding-bottom: 0.25rem; }
+.spectrogram-annotation .sg-list th { text-align: left; font-weight: 500; color: var(--muted-foreground);
+    border-bottom: 1px solid var(--border); padding: 0.25rem 0.4rem; }
+.spectrogram-annotation .sg-list td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.spectrogram-annotation .sg-list tr.sg-row-selected td { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.spectrogram-annotation .sg-row-label { max-width: 14rem; padding: 0.2rem 0.3rem; border: 1px solid var(--border);
+    border-radius: 0.375rem; background: var(--card); color: var(--card-foreground, inherit); font: inherit; }
+.spectrogram-annotation .sg-row-actions { display: flex; gap: 0.3rem; }
+.spectrogram-annotation .sg-row-actions .sg-btn { min-height: 2rem; padding: 0.15rem 0.55rem; font-size: 0.8rem; }
+
+@media (max-width: 560px) {
+    .spectrogram-annotation .sg-stage { grid-template-columns: 2.25rem minmax(0, 1fr); }
+    .spectrogram-annotation .sg-list td, .spectrogram-annotation .sg-list th { padding: 0.25rem 0.25rem; }
+    .spectrogram-annotation .sg-row-label { max-width: 8rem; }
+}

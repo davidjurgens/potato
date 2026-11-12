@@ -39,6 +39,10 @@ def cli_reset_password(args):
     if not authenticator.is_valid_username(username):
         print(f"Error: User '{username}' does not exist.")
         sys.exit(1)
+    if not authenticator.has_settable_password(username):
+        print(f"Error: '{username}' signs in through SSO; its password is "
+              f"managed by the identity provider.")
+        sys.exit(1)
 
     # Get new password
     new_password = getpass.getpass("New password: ")

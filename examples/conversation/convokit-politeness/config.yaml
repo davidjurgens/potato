@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# ConvoKit: Wikipedia Politeness
+#
+# Re-annotate the Stanford Politeness Corpus — requests from Wikipedia talk pages,
+# originally rated by crowdworkers (Danescu-Niculescu-Mizil et al., ACL 2013).
+#
+# Two things make this example worth having alongside `convokit-awry`:
+#
+#   1. **It is the LEGACY corpus format.** This corpus is still shipped with the
+#      pre-rename field names — `user` instead of `speaker`, `root` instead of
+#      `conversation_id`, `users.json` instead of `speakers.json`, and an
+#      `index.json` whose type values are bare strings rather than lists. Potato
+#      detects and maps all of that; nothing in this config mentions it.
+#
+#   2. **It is utterance-level, not conversation-level.** Each request is an
+#      independent judgement with no thread around it, so items are built with
+#      `--unit utterance --context-window 0`.
+#
+# The corpus's own crowdworker score is promoted to `Binary` (-1 impolite,
+# +1 polite) and shown alongside your annotation, which makes this an
+# adjudication / agreement setup rather than annotation from scratch. Its
+# per-annotator ratings live in a pickle sidecar and are skipped by default —
+# see `--load-binary-meta` in the ConvoKit integration docs.
+#
+# Get the data:
+#   ./setup_data.sh
+#
+# Then run from the repository root:
+#   python potato/flask_server.py start examples/conversation/convokit-politeness/config.yaml -p 8000
+
+annotation_task_name: "Wikipedia Politeness"
+
+data_files:
+  - data/politeness.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    # A single-utterance item still uses the `dialogue` display rather than
+    # `text`. It keeps the turn structure the exporter needs to attach spans back
+    # onto the utterance they were drawn in, and it means one config shape works
+    # whether or not context turns are included.
+    - key: conversation
+      type: dialogue
+      label: "Request"
+      span_target: true
+      display_options:
+        speaker_extraction: false
+        turn_meta_fields:
+          - Normalized Score
+
+annotation_schemes:
+  - annotation_type: likert
+    name: politeness
+    description: "How polite is this request?"
+    size: 5
+    min_label: "Impolite"
+    max_label: "Polite"
+
+  # Mark the linguistic devices the politeness literature is built on. Spans are
+  # scoped to the field, so they export back onto this utterance's own offsets.
+  - annotation_type: span
+    name: strategies
+    description: "Highlight the politeness strategies used"
+    labels:
+      - please
+      - gratitude
+      - greeting
+      - hedge
+      - apology
+      - direct_question
+      - direct_start
+
+  - annotation_type: radio
+    name: agrees_with_corpus
+    description: "Does your judgement agree with the corpus label shown above?"
+    labels:
+      - agree
+      - disagree
+      - unclear
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

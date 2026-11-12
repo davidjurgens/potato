@@ -1,7 +1,8 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 annotation_task_name: Soft Label Sentiment Distribution
 task_dir: .
 output_annotation_dir: annotation_output/soft-label/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/soft-label-example.json

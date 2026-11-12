@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ ui_lang.catalog_page_title|default('Catalog · Semantic Curation') }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .cat-lede { color: var(--muted-foreground); font-size: 0.9375rem; max-width: 72ch;
+              line-height: 1.6; margin: 0 0 1.5rem; }
+  .cat-card { margin-bottom: 1.25rem; }
+  .cat-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .cat-row { display: flex; gap: 0.6rem; align-items: flex-end; flex-wrap: wrap; }
+  .cat-field { display: flex; flex-direction: column; gap: 0.2rem; }
+  .cat-field label { font-size: 0.75rem; font-weight: 600; color: var(--heading-color); }
+  .cat-field input { padding: 0.4rem 0.55rem; border: 1px solid var(--border);
+                     border-radius: var(--radius); font: inherit; background: var(--background);
+                     color: var(--foreground); }
+  .cat-field input.num { width: 6rem; }
+  table.cat-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; margin-top: 0.75rem; }
+  table.cat-table th, table.cat-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+  table.cat-table th { background: var(--muted); font-weight: 600; }
+  td.cat-score { text-align: right; font-variant-numeric: tabular-nums; }
+  .cat-bar { display: inline-block; height: 0.5rem; border-radius: 3px;
+             background: var(--primary); vertical-align: middle; margin-left: 0.4rem; }
+  .cat-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+  .cat-empty { color: var(--muted-foreground); font-style: italic; }
+  .cat-status { font-size: 0.85rem; min-height: 1.2em; }
+  .cat-status.err { color: hsl(0 65% 45%); }
+  .cat-status.ok { color: hsl(140 45% 32%); }
+  .cat-pill { font-size: 0.7rem; background: var(--muted); border-radius: var(--radius);
+              padding: 0.05rem 0.45rem; font-weight: 600; }
+  .cat-warn { background: hsl(40 80% 95%); color: hsl(28 60% 28%); border: 1px solid hsl(40 70% 85%);
+              border-radius: var(--radius); padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-bottom: 1rem; }
+  .cat-cluster { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin-top: 0.6rem; }
+  .cat-cluster-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .cat-cluster-desc { font-size: 0.85rem; color: var(--muted-foreground); margin-top: 0.2rem; }
+  .cat-cluster-ex { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; color: var(--muted-foreground); }
+  .cat-cluster-ex li { margin-bottom: 0.15rem; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>{{ ui_lang.catalog_heading|default('Catalog') }}</h1>
+  <p class="cat-lede">
+    {{ ui_lang.catalog_lede_1|default('Find') }} <em>{{ ui_lang.catalog_lede_what|default('what to review') }}</em> {{ ui_lang.catalog_lede_2|default('by similarity. Build an embedding index over your items, search for traces like a given query or example, and save') }}
+    <strong>{{ ui_lang.catalog_lede_slices|default('dynamic slices') }}</strong> {{ ui_lang.catalog_lede_3|default('— semantic + metadata filters that auto-include new matching traces and can be curated into a dataset.') }}
+  </p>
+
+  {% if not embeddings_available %}
+  <div class="cat-warn">{{ ui_lang.catalog_embeddings_warn_1|default('Embeddings are unavailable — install') }} <code>sentence-transformers</code>
+    {{ ui_lang.catalog_embeddings_warn_2|default('(or configure an embedder) to build the index.') }}</div>
+  {% endif %}
+
+  <section class="dashboard-card cat-card" aria-labelledby="idx-h">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+      <h2 id="idx-h">{{ ui_lang.catalog_index_heading|default('Index') }}</h2>
+      <div class="cat-row">
+        <span class="cat-empty"><span id="idx-count">{{ indexed }}</span> {{ ui_lang.catalog_items_indexed|default('item(s) indexed') }}</span>
+        <button class="shadcn-button shadcn-button-outline" id="build-btn">{{ ui_lang.catalog_build_index|default('Build index') }}</button>
+      </div>
+    </div>
+    <span class="cat-status" id="build-status" role="status" aria-live="polite"></span>
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="search-h">
+    <h2 id="search-h">{{ ui_lang.catalog_search_heading|default('Similarity search') }}</h2>
+    <div class="cat-row">
+      <div class="cat-field" style="flex:1;min-width:220px;">
+        <label for="q">{{ ui_lang.catalog_query_text_label|default('Query text') }}</label>
+        <input type="text" id="q" placeholder="{{ ui_lang.catalog_query_text_placeholder|default('e.g. agent failed to call the tool') }}">
+      </div>
+      <div class="cat-field">
+        <label for="anchor">{{ ui_lang.catalog_anchor_label|default('…or anchor instance id') }}</label>
+        <input type="text" id="anchor" placeholder="{{ ui_lang.catalog_anchor_placeholder|default('instance id') }}" class="cat-mono">
+      </div>
+      <div class="cat-field"><label for="topk">{{ ui_lang.catalog_topk_label|default('Top-k') }}</label>
+        <input type="number" id="topk" class="num" value="10" min="1"></div>
+      <div class="cat-field"><label for="thr">{{ ui_lang.catalog_threshold_label|default('Threshold') }}</label>
+        <input type="number" id="thr" class="num" value="0.0" min="0" max="1" step="0.05"></div>
+      <button class="shadcn-button shadcn-button-primary" id="search-btn">{{ ui_lang.catalog_search_button|default('Search') }}</button>
+    </div>
+    <span class="cat-status" id="search-status" role="status" aria-live="polite"></span>
+    <div id="results"></div>
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="disc-h">
+    <h2 id="disc-h">{{ ui_lang.catalog_discover_heading|default('Discover failure modes') }}</h2>
+    <p class="cat-empty" style="margin:0 0 0.5rem;">
+      {{ ui_lang.catalog_discover_desc|default('Cluster the indexed traces and let the judge propose a candidate failure-mode label per cluster (a project-specific taxonomy you then confirm or edit).') }}
+    </p>
+    <div class="cat-row">
+      <div class="cat-field"><label for="disc-k">{{ ui_lang.catalog_clusters_label|default('Clusters (k)') }}</label>
+        <input type="number" id="disc-k" class="num" value="6" min="2" max="30"></div>
+      <button class="shadcn-button shadcn-button-primary" id="disc-btn">{{ ui_lang.catalog_discover_button|default('Discover') }}</button>
+    </div>
+    <span class="cat-status" id="disc-status" role="status" aria-live="polite"></span>
+    <div id="disc-results"></div>
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="topics-h">
+    <h2 id="topics-h">{{ ui_lang.catalog_topics_heading|default('Topics') }}</h2>
+    <p class="cat-empty" style="margin:0 0 0.5rem;">
+      {{ ui_lang.catalog_topics_desc|default('Persisted pattern groups: refresh re-clusters the indexed traces into named topics (LLM-suggested names when a judge is configured), and newly ingested traces are auto-assigned to the nearest topic. Curate any topic into a dataset.') }}
+    </p>
+    <div class="cat-row" style="margin-bottom:0.5rem;">
+      <div class="cat-field"><label for="t-k">{{ ui_lang.catalog_clusters_label|default('Clusters (k)') }}</label>
+        <input type="number" id="t-k" class="num" value="6" min="2" max="30"></div>
+      <button class="shadcn-button shadcn-button-primary" id="t-refresh">{{ ui_lang.catalog_topics_refresh|default('Refresh topics') }}</button>
+    </div>
+    <span class="cat-status" id="topic-status" role="status" aria-live="polite"></span>
+    {% if topics %}
+    <table class="cat-table">
+      <thead><tr><th scope="col">{{ ui_lang.catalog_th_topic|default('Topic') }}</th><th scope="col">{{ ui_lang.catalog_th_description|default('Description') }}</th><th scope="col">{{ ui_lang.catalog_th_size|default('Size') }}</th><th scope="col">{{ ui_lang.catalog_th_actions|default('Actions') }}</th></tr></thead>
+      <tbody>
+        {% for t in topics %}
+        <tr data-topic="{{ t.name }}">
+          <td>{{ t.name }}</td>
+          <td>{{ t.description }}</td>
+          <td class="cat-mono">{{ t.size }}</td>
+          <td>
+            <button class="shadcn-button shadcn-button-outline t-members" data-name="{{ t.name }}">{{ ui_lang.catalog_members_button|default('Members') }}</button>
+            <button class="shadcn-button shadcn-button-outline t-todataset" data-name="{{ t.name }}">{{ ui_lang.catalog_to_dataset_button|default('→ Dataset') }}</button>
+            <button class="shadcn-button shadcn-button-outline t-delete" data-name="{{ t.name }}">{{ ui_lang.catalog_delete_button|default('Delete') }}</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="cat-empty">{{ ui_lang.catalog_no_topics|default('No topics yet — refresh to discover them.') }}</p>{% endif %}
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="slices-h">
+    <h2 id="slices-h">{{ ui_lang.catalog_slices_heading|default('Dynamic slices') }}</h2>
+    <div class="cat-row" style="margin-bottom:0.5rem;">
+      <div class="cat-field"><label for="s-name">{{ ui_lang.catalog_slice_name_label|default('Name') }}</label>
+        <input type="text" id="s-name" placeholder="error-traces"></div>
+      <div class="cat-field" style="flex:1;min-width:200px;"><label for="s-query">{{ ui_lang.catalog_slice_query_label|default('Query') }}</label>
+        <input type="text" id="s-query" placeholder="{{ ui_lang.catalog_slice_query_placeholder|default('semantic query (optional)') }}"></div>
+      <div class="cat-field"><label for="s-thr">{{ ui_lang.catalog_slice_threshold_label|default('Threshold') }}</label>
+        <input type="number" id="s-thr" class="num" value="0.5" min="0" max="1" step="0.05"></div>
+      <button class="shadcn-button shadcn-button-outline" id="s-save">{{ ui_lang.catalog_save_slice_button|default('Save slice') }}</button>
+    </div>
+    <span class="cat-status" id="slice-status" role="status" aria-live="polite"></span>
+    {% if slices %}
+    <table class="cat-table">
+      <thead><tr><th scope="col">{{ ui_lang.catalog_th_slice|default('Slice') }}</th><th scope="col">{{ ui_lang.catalog_th_query_anchor|default('Query / anchor') }}</th><th scope="col">{{ ui_lang.catalog_th_threshold|default('Threshold') }}</th><th scope="col">{{ ui_lang.catalog_th_actions|default('Actions') }}</th></tr></thead>
+      <tbody>
+        {% for s in slices %}
+        <tr data-slice="{{ s.name }}">
+          <td>{{ s.name }}{% if s.builtin %} <span class="cat-mono">({{ ui_lang.catalog_builtin|default('built-in') }})</span>{% endif %}</td>
+          <td class="cat-mono">{{ s.query or s.anchor_id or ui_lang.catalog_all_placeholder|default('(all)') }}</td>
+          <td class="cat-mono">{{ '%.2f'|format(s.threshold) }}</td>
+          <td>
+            <button class="shadcn-button shadcn-button-outline s-resolve" data-name="{{ s.name }}">{{ ui_lang.catalog_resolve_button|default('Resolve') }}</button>
+            <button class="shadcn-button shadcn-button-outline s-todataset" data-name="{{ s.name }}">{{ ui_lang.catalog_to_dataset_button|default('→ Dataset') }}</button>
+            {% if training_enabled %}<button class="shadcn-button shadcn-button-outline s-totrain" data-name="{{ s.name }}" title="{{ ui_lang.catalog_to_training_title|default('Every later training run trains on these items once they have a human label, instead of holding some out') }}">{{ ui_lang.catalog_to_training_button|default('Train on these') }}</button>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="cat-empty">{{ ui_lang.catalog_no_slices|default('No slices saved yet.') }}</p>{% endif %}
+  </section>
+</main>
+
+<script>window.UI_LANG = {{ ui_lang|tojson }};</script>
+<script>
+(function () {
+  var L = window.UI_LANG || {};
+  async function post(url, body) {
+    const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+                              body: JSON.stringify(body || {})});
+    return {ok: r.ok, data: await r.json().catch(() => ({}))};
+  }
+
+  const buildBtn = document.getElementById("build-btn");
+  buildBtn.addEventListener("click", async () => {
+    const st = document.getElementById("build-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_building || "Building…"); buildBtn.disabled = true;
+    try {
+      const r = await post("{{ url_for('curation.api_build') }}", {});
+      if (r.ok) { st.className = "cat-status ok"; st.textContent = (L.catalog_status_indexed_prefix || "Indexed ") + r.data.indexed + (L.catalog_status_indexed_suffix || " item(s).");
+                  document.getElementById("idx-count").textContent = r.data.indexed; }
+      else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+    } finally { buildBtn.disabled = false; }
+  });
+
+  const searchBtn = document.getElementById("search-btn");
+  async function runSearch() {
+    const st = document.getElementById("search-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_searching || "Searching…"); searchBtn.disabled = true;
+    try {
+      const body = {query: document.getElementById("q").value,
+                    anchor_id: document.getElementById("anchor").value,
+                    top_k: parseInt(document.getElementById("topk").value) || 10,
+                    threshold: parseFloat(document.getElementById("thr").value) || 0.0};
+      const r = await post("{{ url_for('curation.api_search') }}", body);
+      if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); return; }
+      st.className = "cat-status"; st.textContent = r.data.results.length + (L.catalog_status_results_suffix || " result(s)");
+      const rows = r.data.results.map(h =>
+        `<tr><td class="cat-mono">${esc(h.instance_id)}</td><td class="cat-score">${h.score.toFixed(3)}` +
+        `<span class="cat-bar" style="width:${Math.max(0, Math.round(h.score*80))}px"></span></td></tr>`).join("");
+      document.getElementById("results").innerHTML = r.data.results.length
+        ? `<table class="cat-table"><thead><tr><th scope="col">{{ ui_lang.catalog_th_instance|default('Instance') }}</th><th scope="col">{{ ui_lang.catalog_th_similarity|default('Similarity') }}</th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<p class="cat-empty">${L.catalog_no_matches || "No matches."}</p>`;
+    } finally { searchBtn.disabled = false; }
+  }
+  searchBtn.addEventListener("click", runSearch);
+  // Enter in the query or anchor field triggers search.
+  ["q", "anchor"].forEach(id => document.getElementById(id).addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); runSearch(); }
+  }));
+
+  document.getElementById("s-save").addEventListener("click", async () => {
+    const st = document.getElementById("slice-status");
+    const name = document.getElementById("s-name").value.trim();
+    if (!name) { st.className = "cat-status err"; st.textContent = (L.catalog_status_name_required || "Name required."); return; }
+    const r = await post("{{ url_for('curation.api_save_slice') }}", {
+      name, query: document.getElementById("s-query").value,
+      threshold: parseFloat(document.getElementById("s-thr").value) || 0.0});
+    if (r.ok) { st.className = "cat-status ok"; st.textContent = (L.catalog_status_saved || "Saved."); setTimeout(() => location.reload(), 600); }
+    else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+  });
+
+  document.querySelectorAll(".s-resolve").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("slice-status"); st.className = "cat-status";
+    const r = await fetch(`/admin/catalog/api/slices/${b.dataset.name}/resolve`);
+    const d = await r.json();
+    st.textContent = `${b.dataset.name}: ${d.count} ${L.catalog_status_matching_instances || "matching instance(s)"}`;
+  }));
+
+  document.querySelectorAll(".s-todataset").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("slice-status");
+    const dataset = prompt((L.catalog_prompt_curate_prefix || "Curate slice '") + b.dataset.name + (L.catalog_prompt_curate_suffix || "' into which dataset?"));
+    if (!dataset) return;
+    st.className = "cat-status"; st.textContent = (L.catalog_status_curating || "Curating…");
+    const r = await post(`/admin/catalog/api/slices/${b.dataset.name}/to_dataset`, {dataset});
+    if (r.ok) { st.className = "cat-status ok"; st.textContent = `${L.catalog_status_imported_prefix || "Imported "}${r.data.imported}${L.catalog_status_imported_mid || " into '"}${dataset}${L.catalog_status_imported_suffix || "'."}`; }
+    else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+  }));
+
+  document.querySelectorAll(".s-totrain").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("slice-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_pinning || "Pinning…");
+    b.disabled = true;
+    try {
+      const r = await post("{{ url_for('training.api_pin') if training_enabled else '' }}", {slice: b.dataset.name});
+      if (r.ok) {
+        st.className = "cat-status ok";
+        st.textContent = `${b.dataset.name}: ${r.data.pinned} ${L.catalog_status_pinned_mid || "item(s) added to the next training run's train split"} (${r.data.total} ${L.catalog_status_pinned_total || "pinned in all"}).`;
+      } else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+    } finally { b.disabled = false; }
+  }));
+
+  // Escape untrusted text (LLM labels + trace excerpts) before innerHTML.
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g,
+      c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  const discBtn = document.getElementById("disc-btn");
+  discBtn.addEventListener("click", async () => {
+    const st = document.getElementById("disc-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_clustering || "Clustering & labeling…"); discBtn.disabled = true;
+    try {
+      const r = await post("{{ url_for('curation.api_discover') }}",
+                           {k: parseInt(document.getElementById("disc-k").value) || 6});
+      if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); return; }
+      st.className = "cat-status ok"; st.textContent = `${r.data.count} ${L.catalog_status_candidate_modes || "candidate failure mode(s)"}`;
+      document.getElementById("disc-results").innerHTML = r.data.clusters.map(c => `
+        <div class="cat-cluster">
+          <div class="cat-cluster-head">
+            <strong>${esc(c.suggested_label) || (L.catalog_unlabeled || "(unlabeled — add a code)")}</strong>
+            <span class="cat-empty">${c.size} ${L.catalog_traces_suffix || "trace(s)"}</span>
+          </div>
+          ${c.suggested_description ? `<div class="cat-cluster-desc">${esc(c.suggested_description)}</div>` : ""}
+          <ul class="cat-cluster-ex">${c.examples.slice(0,3).map(e => `<li>${esc(String(e).slice(0,160))}</li>`).join("")}
+            ${c.size > 3 ? `<li class="cat-empty">+${c.size - 3} ${L.catalog_more_traces_suffix || "more trace(s)"}</li>` : ""}</ul>
+        </div>`).join("");
+    } finally { discBtn.disabled = false; }
+  });
+
+  // ----- Topics (persisted pattern groups) -----
+  const topicRefresh = document.getElementById("t-refresh");
+  if (topicRefresh) topicRefresh.addEventListener("click", async () => {
+    const st = document.getElementById("topic-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_clustering || "Clustering & labeling…"); topicRefresh.disabled = true;
+    try {
+      const r = await post("{{ url_for('curation.api_topics_refresh') }}",
+                           {k: parseInt(document.getElementById("t-k").value) || 6});
+      if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); return; }
+      st.className = "cat-status ok"; st.textContent = `${r.data.count} ${L.catalog_status_topics || "topic(s)"}`;
+      setTimeout(() => location.reload(), 700);
+    } finally { topicRefresh.disabled = false; }
+  });
+
+  document.querySelectorAll(".t-members").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("topic-status"); st.className = "cat-status";
+    const r = await fetch(`/admin/catalog/api/topics/${encodeURIComponent(b.dataset.name)}/members`);
+    const d = await r.json();
+    st.textContent = r.ok
+      ? `${b.dataset.name}: ${(d.member_ids || []).length} ${L.catalog_status_matching_instances || "matching instance(s)"} — ${(d.member_ids || []).slice(0, 8).join(", ")}${(d.member_ids || []).length > 8 ? "…" : ""}`
+      : (d.error || (L.catalog_status_failed || "Failed."));
+  }));
+
+  document.querySelectorAll(".t-todataset").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("topic-status");
+    const dataset = prompt((L.catalog_prompt_topic_prefix || "Curate topic '") + b.dataset.name + (L.catalog_prompt_curate_suffix || "' into which dataset?"));
+    if (!dataset) return;
+    st.className = "cat-status"; st.textContent = (L.catalog_status_curating || "Curating…");
+    const r = await post(`/admin/catalog/api/topics/${encodeURIComponent(b.dataset.name)}/to_dataset`, {dataset});
+    if (r.ok) { st.className = "cat-status ok"; st.textContent = `${L.catalog_status_imported_prefix || "Imported "}${r.data.imported}${L.catalog_status_imported_mid || " into '"}${dataset}${L.catalog_status_imported_suffix || "'."}`; }
+    else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+  }));
+
+  document.querySelectorAll(".t-delete").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm((L.catalog_confirm_delete_topic || "Delete topic '") + b.dataset.name + "'?")) return;
+    const r = await fetch(`/admin/catalog/api/topics/${encodeURIComponent(b.dataset.name)}`, {method: "DELETE"});
+    if (r.ok) location.reload();
+  }));
+})();
+</script>
+</body>
+</html>

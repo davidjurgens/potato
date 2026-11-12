@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Politeness codebook v2.3</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem;
+    color: #16161d; background: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e7e7ea; background: #16161d; }
+    code { background: #26262e; }
+    th { background: #26262e; }
+    td, th { border-color: #3a3a44; }
+    .meta { color: #a0a0ab; }
+  }
+  h1 { font-size: 1.75rem; margin-bottom: .25rem; }
+  h2 { margin-top: 2.5rem; border-bottom: 1px solid currentColor; padding-bottom: .3rem; }
+  h3 { margin-top: 1.75rem; }
+  .meta { color: #666; font-size: .9rem; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  td, th { border: 1px solid #d5d5dd; padding: .55rem .7rem; text-align: left;
+           vertical-align: top; }
+  th { background: #f3f3f7; }
+  code { background: #f3f3f7; padding: .1rem .3rem; border-radius: 3px; }
+  .rule { border-left: 4px solid #6c4ed9; padding-left: 1rem; margin: 1.25rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Politeness codebook</h1>
+<p class="meta">Version 2.3 &middot; last revised after the round-2 adjudication
+meeting &middot; supersedes v2.2</p>
+
+<p>This is the authoritative document for the politeness annotation task. The
+banner on the annotation screen is a summary of it; where the two disagree,
+this document wins. Changes since v2.2 are marked
+<strong>[new in 2.3]</strong>.</p>
+
+<h2>1. What you are judging</h2>
+
+<p>Rate how the message would land <strong>on the person receiving it</strong>,
+assuming that person is a peer &mdash; not someone you manage and not someone
+who manages you. This framing matters because the same sentence reads
+differently up and down a hierarchy, and a dataset in which annotators silently
+assumed different power relations is not measuring one construct.</p>
+
+<p>You are <em>not</em> judging:</p>
+<ul>
+  <li>whether the message is <em>effective</em>;</li>
+  <li>whether you would have written it that way;</li>
+  <li>whether the request itself is reasonable;</li>
+  <li>whether the writer is a polite <em>person</em>.</li>
+</ul>
+
+<h2>2. The three labels</h2>
+
+<h3>Polite</h3>
+<p>The writer does visible work to lower the imposition on the reader. Look for
+at least one of:</p>
+<ul>
+  <li><strong>Hedging</strong> &mdash; <em>when you get a chance</em>,
+      <em>if you have a moment</em>, <em>no rush</em>.</li>
+  <li><strong>Gratitude or apology for the ask</strong> &mdash; <em>thanks so
+      much</em>, <em>sorry to add to your pile</em>.</li>
+  <li><strong>An offer that costs the writer something</strong> &mdash;
+      <em>happy to take this one off your plate</em>.</li>
+  <li><strong>Explicit release of pressure</strong> &mdash; <em>whenever, this
+      is not blocking me</em>.</li>
+</ul>
+<p>Absence of rudeness is not politeness. A message that simply does not offend
+is <strong>Neutral</strong>.</p>
+
+<h3>Neutral</h3>
+<p>The message states its business plainly. No softening, but no pressure cue
+and nothing that would sting. In our pilot, <strong>61%</strong> of real
+workplace messages landed here, so if you find yourself using Neutral rarely,
+re-read rule&nbsp;2.</p>
+
+<h3>Impolite</h3>
+<p>The message would make a reasonable peer wince. The recurring forms:</p>
+<ul>
+  <li><strong>Sarcasm</strong>, including sarcastic politeness markers.</li>
+  <li><strong>Blame or accusation</strong> &mdash; <em>you never told me</em>.</li>
+  <li><strong>Pointed reminders</strong> &mdash; <em>third time asking</em>.</li>
+  <li><strong>Public callouts</strong> &mdash; naming someone's failure in a
+      channel rather than a direct message.</li>
+  <li><strong>Deadline as leverage</strong> &mdash; a deadline invoked to
+      pressure rather than to inform.</li>
+</ul>
+
+<h2>3. Rules that settle most disagreements</h2>
+
+<div class="rule">
+<p><strong>Rule 1 &mdash; Judge the message, not the sender.</strong> You can
+almost always imagine a workplace where a blunt message is normal. Rate the text
+as written, to a peer.</p>
+</div>
+
+<div class="rule">
+<p><strong>Rule 2 &mdash; Terse is not impolite.</strong> This is the single
+largest source of disagreement in this task: it accounted for 38% of the
+adjudicated conflicts in round 1. A bare imperative with no pressure cue
+(&ldquo;Send me the slides before the meeting.&rdquo;) is
+<strong>Neutral</strong>.</p>
+</div>
+
+<div class="rule">
+<p><strong>Rule 3 &mdash; Politeness markers can be sarcastic.</strong>
+&ldquo;Thanks so much for <em>finally</em> getting to this&rdquo; contains a
+thank-you and is <strong>Impolite</strong>. Read to the end before labeling.</p>
+</div>
+
+<div class="rule">
+<p><strong>Rule 4 &mdash; Ignore formatting and typos.</strong> All-caps,
+missing punctuation, and spelling errors are not politeness signals here. This
+is a deliberate scope decision, not an oversight: register and care-in-writing
+are a separate construct we annotate elsewhere.</p>
+</div>
+
+<div class="rule">
+<p><strong>Rule 5 &mdash; When genuinely torn, choose Neutral.</strong> Do not
+alternate to split the difference. A consistent fallback keeps your
+disagreements interpretable; alternating makes them noise.</p>
+</div>
+
+<div class="rule">
+<p><strong>Rule 6 &mdash; Emoji do not upgrade a message.</strong>
+<strong>[new in 2.3]</strong> A demand with a smiley is still a demand. Judge
+the words; treat emoji as tone-neutral. Added after round 2, where two
+annotators had been reading a trailing 🙂 as a politeness marker and two had
+been ignoring it.</p>
+</div>
+
+<h2>4. Worked examples</h2>
+
+<table>
+  <tr><th style="width: 46%;">Message</th><th style="width: 14%;">Label</th>
+      <th>Why</th></tr>
+  <tr>
+    <td>Hi Sam, could you send me the Q3 report when you get a chance? No rush
+        at all &mdash; thanks so much!</td>
+    <td><strong>Polite</strong></td>
+    <td>Hedge, explicit release of time pressure, thanks. Three markers.</td>
+  </tr>
+  <tr>
+    <td>Send me the slides before the meeting.</td>
+    <td><strong>Neutral</strong></td>
+    <td>Bare imperative, no pressure cue. Rule 2.</td>
+  </tr>
+  <tr>
+    <td>Please have this to me by 3pm, it is blocking the release.</td>
+    <td><strong>Neutral</strong></td>
+    <td>The deadline informs rather than pressures &mdash; the reason is given.
+        Compare the next row.</td>
+  </tr>
+  <tr>
+    <td>I need this by 3pm. I have already told you twice.</td>
+    <td><strong>Impolite</strong></td>
+    <td>Pointed reminder used as reproach.</td>
+  </tr>
+  <tr>
+    <td>Thanks so much for finally getting to this.</td>
+    <td><strong>Impolite</strong></td>
+    <td>Sarcastic politeness marker. Rule 3.</td>
+  </tr>
+  <tr>
+    <td>can you fix this 🙂</td>
+    <td><strong>Neutral</strong></td>
+    <td>Emoji do not upgrade. Rule 6, new in 2.3.</td>
+  </tr>
+</table>
+
+<h2>5. Edge cases we have already ruled on</h2>
+
+<table>
+  <tr><th style="width: 40%;">Case</th><th>Ruling</th></tr>
+  <tr>
+    <td>Message is only a link, or only a file.</td>
+    <td><strong>Neutral</strong>. There is no politeness work either way.</td>
+  </tr>
+  <tr>
+    <td>Message is warm but the request is unreasonable.</td>
+    <td>Rate the <em>wording</em>. An unreasonable ask phrased kindly is
+        <strong>Polite</strong>.</td>
+  </tr>
+  <tr>
+    <td>Message is in a language you do not read fluently.</td>
+    <td>Skip it. Do not guess &mdash; a guess here is indistinguishable from a
+        judgment in the exported data.</td>
+  </tr>
+  <tr>
+    <td>Message quotes someone else being rude.</td>
+    <td>Rate the writer's own words, not the quotation.</td>
+  </tr>
+  <tr>
+    <td>Message is a template or autoreply.</td>
+    <td><strong>Neutral</strong> unless the template itself contains one of the
+        Impolite forms.</td>
+  </tr>
+</table>
+
+<h2>6. Change log</h2>
+<ul>
+  <li><strong>2.3</strong> &mdash; added rule 6 (emoji are tone-neutral) and the
+      autoreply edge case.</li>
+  <li><strong>2.2</strong> &mdash; split &ldquo;deadline as leverage&rdquo; from
+      &ldquo;deadline as information&rdquo; after 11 conflicts on that pattern.</li>
+  <li><strong>2.1</strong> &mdash; rule 4 narrowed: formatting explicitly out of
+      scope.</li>
+  <li><strong>2.0</strong> &mdash; three labels replaced the original five-point
+      scale.</li>
+</ul>
+
+</body>
+</html>
