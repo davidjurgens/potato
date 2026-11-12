@@ -391,3 +391,47 @@ class TestUnsetKeyReference:
             with pytest.raises(AIEndpointRequestError, match="API key is required"):
                 AnthropicEndpoint({"ai_config": {"api_key": self.UNSET}})
         mock_anthropic.Anthropic.assert_not_called()
+
+
+class TestUnsetKeyReferenceOutsideEndpoints:
+    """The agent runner and coding-agent backends read ``api_key`` themselves.
+
+    Each took the unresolved ``${VAR}`` text over its own environment
+    fallback, the same bug as the endpoints above.
+    """
+
+    UNSET = "${POTATO_TEST_KEY_THAT_IS_NOT_SET}"
+
+    def test_agent_runner_anthropic_uses_its_own_variable(self):
+        from potato.agent_runner import AgentConfig
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-env"}, clear=False) as env:
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            cfg = AgentConfig.from_config({"ai_config": {"api_key": self.UNSET}})
+        assert cfg.api_key == "sk-ant-env"
+
+    def test_agent_runner_openai_vision_uses_its_own_variable(self):
+        from potato.agent_runner import AgentConfig
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-from-env"}, clear=False) as env:
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            cfg = AgentConfig.from_config({"endpoint_type": "openai_vision",
+                                           "ai_config": {"api_key": self.UNSET}})
+        assert cfg.api_key == "sk-from-env"
+
+    def test_anthropic_coding_backend_drops_it(self):
+        from potato.coding_agent_backends.anthropic_backend import AnthropicToolUseBackend
+        with patch.dict("os.environ", {}, clear=False) as env:
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            backend = AnthropicToolUseBackend({"ai_config": {"api_key": self.UNSET}})
+        assert backend._api_key == ""
+
+    def test_openai_coding_backend_uses_its_own_variable(self):
+        from potato.coding_agent_backends.openai_backend import OpenAIToolUseBackend
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-from-env"}, clear=False) as env:
+            env.pop("POTATO_TEST_KEY_THAT_IS_NOT_SET", None)
+            backend = OpenAIToolUseBackend({"ai_config": {"api_key": self.UNSET}})
+        assert backend._api_key == "sk-from-env"
+
+    def test_a_real_key_is_left_alone(self):
+        from potato.coding_agent_backends.openai_backend import OpenAIToolUseBackend
+        backend = OpenAIToolUseBackend({"ai_config": {"api_key": "sk-real"}})
+        assert backend._api_key == "sk-real"

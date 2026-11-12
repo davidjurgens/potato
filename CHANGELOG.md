@@ -31,7 +31,9 @@ All notable changes to the Potato annotation platform are documented in this fil
   literal text `${VAR}`, so the server started normally and every AI call
   failed with a 401. The key is now treated as missing: the endpoint uses its
   own environment variable (such as `OPENAI_API_KEY`) if that is set; otherwise
-  the server logs which variable is unset and runs with AI support off.
+  the server logs which variable is unset and runs with AI support off. The
+  live web agent and the coding agent's Anthropic and OpenAI backends read
+  `api_key` the same way and now fall back to their environment variable too.
 - In Firefox, answers on consent, instructions, prestudy and poststudy pages
   never reached the server, so a required question blocked the annotator with
   "Navigation failed. Please try again." The Firefox-only instance_id fix

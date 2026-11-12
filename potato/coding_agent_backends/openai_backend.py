@@ -65,7 +65,8 @@ class OpenAIToolUseBackend(CodingAgentBackend):
 
     def __init__(self, config: dict):
         self._config = config
-        ai = config.get("ai_config", {})
+        from potato.ai.ai_endpoint import without_unresolved_api_key
+        ai = without_unresolved_api_key(config.get("ai_config", {}))
         self._model = ai.get("model", "gpt-4o-mini")
         self._base_url = _normalize_base_url(ai.get("base_url", "")) or None
         # vLLM/local servers ignore the key; SDK requires non-empty.

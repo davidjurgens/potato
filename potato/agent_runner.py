@@ -92,7 +92,8 @@ class AgentConfig:
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "AgentConfig":
         """Create AgentConfig from a live_agent YAML config dict."""
-        ai_config = config.get("ai_config", {})
+        from potato.ai.ai_endpoint import without_unresolved_api_key
+        ai_config = without_unresolved_api_key(config.get("ai_config", {}))
         viewport = config.get("viewport", {})
         endpoint_type = config.get("endpoint_type", "anthropic_vision")
 

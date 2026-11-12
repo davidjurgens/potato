@@ -206,7 +206,7 @@ _LAST_USAGE = threading.local()
 _UNRESOLVED_ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
-def _without_unresolved_api_key(ai_config: Dict[str, Any]) -> Dict[str, Any]:
+def without_unresolved_api_key(ai_config: Dict[str, Any]) -> Dict[str, Any]:
     """Drop an ``api_key`` that is still a ``${VAR}`` reference.
 
     Config loading leaves ``${VAR}`` as written when VAR is not set. The
@@ -214,7 +214,8 @@ def _without_unresolved_api_key(ai_config: Dict[str, Any]) -> Dict[str, Any]:
     the provider's own environment fallback) and sent it with every request:
     no error at startup, and a 401 per AI call. Without it, each endpoint
     falls back to its environment variable or refuses to start with "API key
-    is required", the same as a config that set no key.
+    is required", the same as a config that set no key. The agent runner and
+    the coding-agent backends read ``api_key`` the same way and use this too.
     """
     key = ai_config.get("api_key") if isinstance(ai_config, dict) else None
     match = _UNRESOLVED_ENV_REFERENCE.search(key) if isinstance(key, str) else None
@@ -273,7 +274,7 @@ class BaseAIEndpoint(ABC):
         self.description = config.get("description", "")
         self.annotation_type = config.get("annotation_type", "")
         self.ai_config = config.get("ai_config", {})
-        self.ai_config = _without_unresolved_api_key(self.ai_config)
+        self.ai_config = without_unresolved_api_key(self.ai_config)
 
         # Model configuration
         self.model = self.ai_config.get("model", self._get_default_model())
