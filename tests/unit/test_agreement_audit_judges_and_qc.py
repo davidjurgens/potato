@@ -102,7 +102,8 @@ class TestSoloAgreement:
         from potato.solo_mode.manager import SoloModeManager
         scheme = {"name": "sentiment", "annotation_type": annotation_type,
                   "labels": ["positive", "negative"]}
-        config = {"solo_mode": {"enabled": True, "labeling_models": []},
+        config = {"solo_mode": {"enabled": True, "labeling_models": [],
+                                "state_dir": create_test_directory("solo_agreement")},
                   "annotation_schemes": [scheme]}
         mgr = SoloModeManager(parse_solo_mode_config(config),
                               {"annotation_schemes": [scheme]})

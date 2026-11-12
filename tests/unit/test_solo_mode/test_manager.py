@@ -24,6 +24,11 @@ from potato.solo_mode.manager import (
     clear_solo_mode_manager,
 )
 from potato.solo_mode.config import SoloModeConfig, parse_solo_mode_config
+from tests.helpers.test_utils import create_test_directory
+
+# Solo state goes under tests/output. Without a state_dir it defaults to the
+# repo's annotation_output/.solo_mode, which init_solo_mode_manager loads.
+STATE_DIR = create_test_directory("solo_manager")
 
 
 def _make_solo_config(**overrides):
@@ -32,6 +37,7 @@ def _make_solo_config(**overrides):
         'solo_mode': {
             'enabled': True,
             'labeling_models': [],
+            'state_dir': STATE_DIR,
             **overrides,
         },
         'annotation_schemes': [

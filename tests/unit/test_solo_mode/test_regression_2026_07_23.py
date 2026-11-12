@@ -19,6 +19,12 @@ from potato.solo_mode.manager import (
 )
 from potato.solo_mode.config import parse_solo_mode_config
 from potato.solo_mode.phase_controller import SoloPhase
+from tests.helpers.test_utils import create_test_directory
+
+# Solo state goes under tests/output. Without a state_dir it defaults to the
+# repo's annotation_output/.solo_mode, which init_solo_mode_manager in other
+# tests then loads.
+STATE_DIR = create_test_directory("solo_regression_2026_07_23")
 
 
 def _make_solo_config(**overrides):
@@ -26,6 +32,7 @@ def _make_solo_config(**overrides):
         'solo_mode': {
             'enabled': True,
             'labeling_models': [],
+            'state_dir': STATE_DIR,
             **overrides,
         },
         'annotation_schemes': [
@@ -141,7 +148,8 @@ class TestLikertLabelDerivation:
 
     def _likert_manager(self):
         config_data = {
-            'solo_mode': {'enabled': True, 'labeling_models': []},
+            'solo_mode': {'enabled': True, 'labeling_models': [],
+                          'state_dir': STATE_DIR},
             'annotation_schemes': [{
                 'name': 'positivity', 'annotation_type': 'likert',
                 'description': 'tone', 'size': 5,
@@ -176,7 +184,8 @@ class TestAnnotationTypeUIs:
         scheme = {'name': 's', 'annotation_type': atype, 'description': 'd'}
         if labels is not None:
             scheme['labels'] = labels
-        config_data = {'solo_mode': {'enabled': True, 'labeling_models': []},
+        config_data = {'solo_mode': {'enabled': True, 'labeling_models': [],
+                                     'state_dir': STATE_DIR},
                        'annotation_schemes': [scheme]}
         return SoloModeManager(parse_solo_mode_config(config_data),
                                {'annotation_schemes': [scheme]})

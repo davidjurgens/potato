@@ -10,6 +10,11 @@ import pytest
 from potato.solo_mode.anchoring import AnchoringTracker
 from potato.solo_mode.config import SuggestionsConfig, parse_solo_mode_config
 from potato.solo_mode.manager import LLMPrediction, SoloModeManager
+from tests.helpers.test_utils import create_test_directory
+
+# Solo state goes under tests/output. Without a state_dir it defaults to the
+# repo's annotation_output/.solo_mode, which init_solo_mode_manager loads.
+STATE_DIR = create_test_directory("solo_anchoring")
 
 
 SCHEMES = [{'name': 'sentiment', 'annotation_type': 'radio',
@@ -154,7 +159,7 @@ class TestManagerHandoff:
 
     def _manager(self, **suggestions):
         cfg = parse_solo_mode_config({'solo_mode': {
-            'enabled': True, 'labeling_models': [],
+            'enabled': True, 'labeling_models': [], 'state_dir': STATE_DIR,
             'thresholds': {'end_human_annotation_agreement': 0.9,
                            'minimum_validation_sample': 4},
             'suggestions': suggestions,

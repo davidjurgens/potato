@@ -19,6 +19,11 @@ from potato.solo_mode.evaluation import (
     JobRegistry, load_gold, resolve_gold_path, score,
 )
 from potato.solo_mode.manager import PromptVersion, SoloModeManager
+from tests.helpers.test_utils import create_test_directory
+
+# Solo state goes under tests/output. Without a state_dir it defaults to the
+# repo's annotation_output/.solo_mode, which init_solo_mode_manager loads.
+STATE_DIR = create_test_directory("solo_evaluation")
 
 
 class TestScore:
@@ -116,7 +121,7 @@ def _manager(tmp_path, gold=True):
     (tmp_path / 'gold.json').write_text(json.dumps([
         {'id': 'g1', 'label': 'pos'}, {'id': 'g2', 'label': 'neg'},
         {'id': 'g3', 'label': 'pos'}]))
-    sm = {'enabled': True,
+    sm = {'enabled': True, 'state_dir': STATE_DIR,
           'labeling_models': [{'endpoint_type': 'openai', 'model': 'm'}]}
     if gold:
         sm['gold'] = {'file': 'gold.json'}
