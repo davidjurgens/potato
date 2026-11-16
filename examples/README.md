@@ -216,10 +216,10 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 262 examples, generated from the configs themselves.
+All 263 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
-### advanced/ (78)
+### advanced/ (79)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -279,6 +279,7 @@ The `Types` column lists the annotation types each one uses.
 | [`pdf-link-scroll/`](advanced/pdf-link-scroll/) | PDF Linking — Scroll View | `radio` |
 | [`per-cohort-schemas/`](advanced/per-cohort-schemas/) | Per-Cohort Schemas Example | `radio`, `text` |
 | [`pocket-mode/`](advanced/pocket-mode/) | Pocket — Sentiment Triage | `radio` |
+| [`prior-answers/`](advanced/prior-answers/) | Prior Answers — Own Definition | `radio` |
 | [`protein-binding-site/`](advanced/protein-binding-site/) | Binding-site residues | `radio`, `viewer_selection` |
 | [`psychometrics/`](advanced/psychometrics/) | Psychometrics — Sarcasm with Error Bars | `radio` |
 | [`qda-mode-example/`](advanced/qda-mode-example/) | QDA Mode Example | `multiselect`, `span` |

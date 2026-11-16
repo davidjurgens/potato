@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Prior answers — show each annotator their own survey answer while annotating
+#
+# A prestudy page asks the participant to define the concept in their own
+# words. On every annotation page, a closed box labelled "Definition" holds that
+# participant's answer. The annotator clicks the box to read it again.
+#
+# The answer is read from the participant's stored state on the server, so it
+# follows them to another browser or device.
+#
+# Run from the repo root:
+#   python potato/flask_server.py start examples/advanced/prior-answers/config.yaml -p 8000
+
+annotation_task_name: "Prior Answers — Own Definition"
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+- data/statements.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+phases:
+  order:
+  - definition
+  - annotation
+  definition:
+    type: prestudy
+    file: surveys/definition.json
+
+# One entry per survey question to show. `schema` is the question name in
+# surveys/definition.json.
+prior_answers:
+- schema: concept_definition
+  title: Definition
+  # Defaults: a box the annotator opens with a click, closed at the start.
+  collapsible: true
+  collapsed_default: true
+
+annotation_schemes:
+- annotation_type: radio
+  name: populist
+  description: Is this statement populist, by your own definition?
+  labels:
+  - "Yes"
+  - "No"
+  - Unsure
+  sequential_key_binding: true
+
+site_dir: default

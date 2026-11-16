@@ -2699,6 +2699,9 @@ def load_phase_data(config: dict) -> None:
     # earlier page. Checked here because the questions live in phase files.
     from potato.server_utils.experiment_conditions import validate_condition_references
     validate_condition_references(config, _all_phase_schemes_for_dl)
+    # prior_answers names questions that live in phase files, so it is checked here.
+    from potato.server_utils.prior_answers import validate_prior_answer_references
+    validate_prior_answer_references(config, _all_phase_schemes_for_dl)
     from potato.server_utils.phase_flow import has_flow_rules
     if has_flow_rules(config):
         from potato.server_utils.config_module import validate_phase_flow_references
@@ -3479,18 +3482,8 @@ def get_current_page_html(config, username):
     # client's currentAnnotations so display-logic.js can reuse one transform.
     # The current page is excluded here — its answers already flow through the
     # normal currentAnnotations pipeline and must win over prior answers.
-    prior_raw = {}
-    for other_phase, pages_dict in user_state.phase_to_page_to_label_to_value.items():
-        for other_page, labels_dict in pages_dict.items():
-            if other_phase == phase and other_page == page:
-                continue
-            for label_obj, value in labels_dict.items():
-                try:
-                    schema = label_obj.get_schema()
-                    label = label_obj.get_name()
-                except AttributeError:
-                    continue
-                prior_raw.setdefault(schema, {})[label] = value
+    from potato.server_utils.prior_answers import collect_prior_answers
+    prior_raw = collect_prior_answers(user_state, exclude=(phase, page))
 
     if prior_raw:
         # Escape "<" so an answer containing "</script>" cannot break out of the
@@ -3520,6 +3513,19 @@ def get_current_page_html(config, username):
     mark_arrival_values(soup)
     from potato.server_utils.phase_flow import apply_condition_markup
     return apply_condition_markup(str(soup), context.get('potato_conditions'))
+
+def _prior_answer_blocks(username: str) -> list:
+    """The ``prior_answers`` blocks for ``username``; empty when the key is unset."""
+    if not config.get("prior_answers"):
+        return []
+    from potato.server_utils.prior_answers import render_prior_answer_blocks
+    try:
+        user_state = get_user_state_manager().get_user_state(username)
+    except Exception as e:
+        logger.warning(f"prior_answers: no user state for {username}: {e}")
+        return []
+    return render_prior_answer_blocks(config, user_state)
+
 
 def _sanitize_codebook_url(url: str) -> str:
     """Sanitize codebook URL to prevent javascript: and other dangerous protocols."""
@@ -4426,6 +4432,9 @@ def render_page_with_annotations(username: str, *, instance_id: str = None,
         # Annotation instructions (collapsible banner)
         annotation_instructions=render_annotation_instructions(
             config.get("annotation_instructions", "")),
+        # The participant's own earlier survey answers (prior_answers). Read
+        # from the viewer: on a collaborative page `username` is the team.
+        prior_answer_blocks=_prior_answer_blocks(viewer),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(viewer),
         # Annotator progress dashboard nav link (opt-in, off by default)

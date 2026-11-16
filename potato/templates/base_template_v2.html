@@ -720,6 +720,22 @@
                     {% endif %}
                     {% endif %}
 
+                    {# prior_answers: the participant's own earlier survey answers.
+                       answer_html is escaped on the server (prior_answers.py). #}
+                    {% for block in prior_answer_blocks | default([]) %}
+                    {% if block.collapsible %}
+                    <details class="prior-answer-block" data-prior-answer-schema="{{ block.schema }}"{% if block.open %} open{% endif %}>
+                        <summary>{{ block.title }}</summary>
+                        <div class="prior-answer-content">{{ block.answer_html | safe }}</div>
+                    </details>
+                    {% else %}
+                    <section class="prior-answer-block" data-prior-answer-schema="{{ block.schema }}">
+                        <div class="prior-answer-title">{{ block.title }}</div>
+                        <div class="prior-answer-content">{{ block.answer_html | safe }}</div>
+                    </section>
+                    {% endif %}
+                    {% endfor %}
+
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
                         {{ TASK_LAYOUT }}

@@ -134,6 +134,7 @@ nav:
             - Triad Tests: annotation-types/survey/triad_test.md
     - Workflow Phases:
         - Multi-Phase Workflows: workflow/surveyflow.md
+        - Prior Answers: workflow/prior_answers.md
         - Experiment Flow: workflow/experiment_flow.md
         - Runtime Phases: workflow/runtime_phases.md
         - jsPsych Phase: workflow/jspsych_phase.md

@@ -430,6 +430,7 @@ Move the pages into `phases`:
 ## Related Documentation
 
 - [Conditional Logic](../configuration/conditional_logic.md) - Show/hide survey questions based on prior answers
+- [Prior Answers](prior_answers.md) - Show a participant's own survey answer on every annotation page
 - [Experiment Flow](experiment_flow.md) - Page branching, screen-outs, conditions, counterbalancing
 - [Runtime Phases](runtime_phases.md) - jsPsych timelines, the headphone check, and external tasks as phase pages
 - [jsPsych Phase](jspsych_phase.md) - Run a jsPsych timeline as a phase page

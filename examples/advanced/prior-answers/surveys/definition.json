@@ -1,0 +1,10 @@
+[
+  {
+    "name": "concept_definition",
+    "annotation_type": "text",
+    "description": "In your own words, how would you define populism?",
+    "multiline": true,
+    "rows": 4,
+    "label_requirement": {"required": true}
+  }
+]

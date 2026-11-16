@@ -5141,6 +5141,43 @@ body > .container-fluid {
   color: var(--text-color);
 }
 
+/* prior_answers: the participant's own earlier survey answer, shown above
+   the annotation forms. Same frame as the instructions banner. */
+.prior-answer-block {
+  margin-bottom: var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.prior-answer-block summary,
+.prior-answer-title {
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  font-size: var(--text-base);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.prior-answer-block summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.prior-answer-block summary:hover {
+  background: var(--accent);
+}
+
+.prior-answer-content {
+  padding: 0.75rem 1rem;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-color);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .annotation-instructions-content h4 {
   margin: 0.75rem 0 0.35rem;
   font-size: var(--text-base);

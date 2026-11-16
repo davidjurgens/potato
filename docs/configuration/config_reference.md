@@ -201,6 +201,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `highlight_linebreaks` |  | boolean |  | Make line breaks visible in item text |  |
 | `keyword_highlight_settings` |  | object |  | Styling for keyword highlights |  |
 | `keyword_highlights_file` |  | string |  | File of keywords to highlight in item text. A CSV or TSV with a `keyword` header column (plus optional label, schema, color) is the documented form; one keyword per line, and JSON/JSONL/YAML holding a keyword list, an object list or a {keyword: label} map, are read too. A `*` in a keyword matches any run of word characters. See docs/administration/productivity.md |  |
+| `prior_answers` |  | array |  | Show each annotator their own answer to an earlier survey question (for example a prestudy definition) on every annotation page, in a box above the annotation forms. One entry per question | `collapsed_default`, `collapsible`, `schema`, `title` |
 
 ## Annotation Features
 
