@@ -93,7 +93,7 @@ def render_prior_answer_blocks(config: Dict[str, Any], user_state
                                ) -> List[Dict[str, Any]]:
     """The ``prior_answers`` blocks for one participant, ready for the template.
 
-    Each block is ``{schema, title, answer_html, collapsible, open}``. A block
+    Each block is ``{schema, title, answer_html, lines, collapsible, open}``. A block
     whose question the participant left empty is omitted, so an optional
     question does not leave an empty box on every page.
     """
@@ -118,6 +118,9 @@ def render_prior_answer_blocks(config: Dict[str, Any], user_state
             "schema": name,
             "title": str(title),
             "answer_html": Markup("<br>").join(escape(line) for line in lines),
+            # Plain text for clients that build the box themselves (Pocket);
+            # they set it as textContent, so it is not escaped here.
+            "lines": list(lines),
             "collapsible": bool(collapsible),
             "open": not entry.get("collapsed_default", True),
         })

@@ -11,6 +11,7 @@ All notable changes to the Potato annotation platform are documented in this fil
   prestudy and show it back, in a box the annotator opens with a click, while
   they label. The answer comes from the participant's saved state, so it
   follows them to another browser or device. Answers are escaped as HTML.
+  Pocket Mode shows the same boxes above its cards.
   See `docs/workflow/prior_answers.md` and `examples/advanced/prior-answers/`.
 
 - Painting points for `segment_3d` in the point cloud viewer. A brush labels
@@ -32,6 +33,14 @@ All notable changes to the Potato annotation platform are documented in this fil
   `docs/advanced/collaborative_sessions.md`.
 
 ### Fixed
+
+- In Pocket Mode, each new card slid in from 24px to the right. For the
+  length of the animation the page was wider than the screen, and on a phone it
+  could be panned sideways.
+
+- Pocket Mode in dark mode drew dark text on dark cards, so the item text, the
+  question and the answer options were hard to read. The text and border
+  colours now follow the theme like the card backgrounds do.
 
 - An AI endpoint's `api_key` (in `ai_support`, and in other endpoints built the
   same way) written as `${VAR}` with VAR unset was sent to the provider as the

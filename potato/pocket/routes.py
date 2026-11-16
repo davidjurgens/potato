@@ -183,6 +183,29 @@ def page():
     )
 
 
+def _prior_answer_blocks(username: str) -> list:
+    """The ``prior_answers`` boxes the annotation page shows, for Pocket too.
+
+    A phone is routed here instead of /annotate, so without this a study that
+    shows each annotator their own prestudy definition showed it on desktops
+    only. They travel in /api/task, not in the /pocket page: the service worker
+    caches that page for every account on the device, and the next person to
+    sign in would see the previous one's answers. Failures leave the box out
+    rather than the task.
+    """
+    if not _app_config.get("prior_answers"):
+        return []
+    try:
+        from potato.server_utils.prior_answers import render_prior_answer_blocks
+        from potato.user_state_management import get_user_state_manager
+        user_state = get_user_state_manager().get_user_state(username)
+        return render_prior_answer_blocks(_app_config, user_state)
+    except Exception:
+        logger.warning("pocket: prior_answers unavailable for %s", username,
+                       exc_info=True)
+        return []
+
+
 @pocket_bp.route("/api/routing", methods=["GET"])
 @api_login_required
 def routing():
@@ -229,6 +252,9 @@ def task():
         "schemas": [_scheme_spec(s)
                     for s in _app_config.get("annotation_schemes", []) or []],
         "batch_size": _pocket_config.batch_size,
+        "prior_answers": [
+            {k: b[k] for k in ("schema", "title", "lines", "collapsible", "open")}
+            for b in _prior_answer_blocks(session["username"])],
     })
 
 

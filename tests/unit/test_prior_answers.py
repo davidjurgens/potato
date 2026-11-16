@@ -57,6 +57,15 @@ def test_text_answer_is_escaped_and_titled_from_description():
     assert block["open"] is False
 
 
+def test_lines_are_the_unescaped_answer_for_text_content_clients():
+    """Pocket builds the box with textContent, so it needs the raw lines."""
+    state = _State({("prestudy", "pre"): {
+        ("party", "None"): "None", ("party", "free_response"): "<i>Pirates</i>"}})
+    [block] = render_prior_answer_blocks(_config([{"schema": "party"}]), state)
+    assert block["lines"] == ["None", "<i>Pirates</i>"]
+    assert block["answer_html"] == "None<br>&lt;i&gt;Pirates&lt;/i&gt;"
+
+
 def test_title_and_open_state_come_from_the_entry():
     [block] = render_prior_answer_blocks(_config([
         {"schema": "definition", "title": "Definition", "collapsed_default": False}]), _state())

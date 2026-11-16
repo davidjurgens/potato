@@ -3,11 +3,11 @@
  * shell and static assets; network-only for APIs (saves are queued in
  * localStorage by pocket.js, not here). */
 
-var CACHE = 'potato-pocket-v1';
+var CACHE = 'potato-pocket-v2';
 var SHELL = [
     '/pocket',
-    '/static/css/pocket.css?v=1',
-    '/static/pocket.js?v=1',
+    '/static/css/pocket.css?v=3',
+    '/static/pocket.js?v=2',
     '/static/pocket-icon.svg'
 ];
 

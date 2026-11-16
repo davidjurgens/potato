@@ -1,13 +1,22 @@
-/* Potato Pocket — mobile-first annotation surface (light theme). */
+/* Potato Pocket — mobile-first annotation surface. Light and dark: the
+   theme sets color-scheme on <html> (_theme_head.html), and light-dark()
+   follows it. */
 
 :root {
-    --pk-ink: #26233d;
-    --pk-ink-soft: #6d6a85;
-    --pk-ink-faint: #a5a2bd;
-    --pk-line: #e6e3f2;
+    /* Text and rule colours are light-dark() pairs like the surfaces they sit
+       on. They were light-only, so a phone in dark mode drew #26233d text on
+       #1a1a1a cards and the item, the options and the question were
+       unreadable. */
+    --pk-ink: light-dark(#26233d, #e7e4f3);
+    --pk-ink-soft: light-dark(#6d6a85, #aaa6c4);
+    --pk-ink-faint: light-dark(#a5a2bd, #858099);
+    --pk-line: light-dark(#e6e3f2, #3a3550);
+    /* --pk-accent stays one colour: it is a fill under white text (Save &
+       next). Accent used AS text goes through --pk-accent-ink. */
     --pk-accent: #5b21b6;
     --pk-accent-soft: #7c3aed;
-    --pk-accent-bg: #f4f0fd;
+    --pk-accent-ink: light-dark(#5b21b6, #c4b0fb);
+    --pk-accent-bg: light-dark(#f4f0fd, #2d2445);
     --pk-good: #166534;
     --pk-good-bg: #dcf5e2;
     --pk-warn: #b45309;
@@ -101,6 +110,62 @@ body {
     width: 100%;
     margin: 0 auto;
     min-height: 0;
+    /* pk-card-in slides each card in from 24px right, which widened the page
+       past a 412px phone for the length of the animation, so the page could
+       be panned sideways. clip, not hidden: no scroll container. */
+    overflow-x: clip;
+}
+
+/* prior_answers: the participant's own earlier survey answer, above the
+   card stack and as wide as it. */
+.pk-prior-answers {
+    max-width: 640px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 12px 16px 0;
+    display: grid;
+    gap: 8px;
+}
+
+.pk-prior-answers .prior-answer-block {
+    background: light-dark(#ffffff, #1a1a1a);
+    border: 1px solid var(--pk-line);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.pk-prior-answers summary,
+.pk-prior-answers .prior-answer-title {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: var(--pk-ink, light-dark(#1f1a2e, #d3cfdf));
+    background: var(--pk-accent-bg);
+}
+
+.pk-prior-answers summary {
+    cursor: pointer;
+    /* 44px touch target from padding + line-height: display:flex would drop
+       the disclosure triangle, which is the only sign the box opens. */
+    padding-top: 12px;
+    padding-bottom: 12px;
+    line-height: 20px;
+}
+
+.pk-prior-answers summary:focus-visible {
+    outline: 2.5px solid var(--pk-accent-soft);
+    outline-offset: -2.5px;
+}
+
+.pk-prior-answers .prior-answer-content {
+    padding: 10px 14px 12px;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: var(--pk-ink, light-dark(#1f1a2e, #d3cfdf));
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 40vh;           /* a long definition must not push the card off screen */
+    overflow-y: auto;
 }
 
 .pk-loading, .pk-message {
@@ -218,7 +283,7 @@ body {
 .pk-opt.selected {
     border-color: var(--pk-accent-soft);
     background: var(--pk-accent-bg);
-    color: var(--pk-accent);
+    color: var(--pk-accent-ink);
 }
 
 .pk-opt .pk-check { display: none; margin-right: 6px; }
@@ -267,7 +332,7 @@ body {
     text-align: right;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: var(--pk-accent);
+    color: var(--pk-accent-ink);
 }
 
 /* Textarea */

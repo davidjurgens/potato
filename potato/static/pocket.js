@@ -35,6 +35,35 @@
         return d.innerHTML;
     }
 
+    /**
+     * The participant's own earlier survey answers (config `prior_answers`),
+     * the same boxes /annotate shows above its forms. They come from
+     * /pocket/api/task rather than the page, which the service worker caches
+     * for every account on the device. Built with textContent only: the
+     * answers are participant text and arrive unescaped.
+     */
+    function renderPriorAnswers(blocks) {
+        var host = document.getElementById('pk-prior-answers');
+        if (!host) return;
+        host.textContent = '';
+        blocks.forEach(function (block) {
+            var box = document.createElement(block.collapsible ? 'details' : 'section');
+            box.className = 'prior-answer-block';
+            box.setAttribute('data-prior-answer-schema', block.schema || '');
+            if (block.collapsible && block.open) box.open = true;
+            var title = document.createElement(block.collapsible ? 'summary' : 'div');
+            if (!block.collapsible) title.className = 'prior-answer-title';
+            title.textContent = block.title || '';
+            var content = document.createElement('div');
+            content.className = 'prior-answer-content';
+            content.textContent = (block.lines || []).join('\n');
+            box.appendChild(title);
+            box.appendChild(content);
+            host.appendChild(box);
+        });
+        host.hidden = !blocks.length;
+    }
+
     function haptic() {
         if (navigator.vibrate) navigator.vibrate(12);
     }
@@ -590,6 +619,7 @@
     function boot() {
         fetchTask().then(function (task) {
             state.task = task;
+            renderPriorAnswers(task.prior_answers || []);
             if (!task.capable) {
                 renderMessage(
                     '<strong>This task isn&rsquo;t phone-sized.</strong>' +

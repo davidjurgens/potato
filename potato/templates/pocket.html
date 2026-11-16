@@ -9,7 +9,7 @@
 <link rel="manifest" href="{{ url_prefix }}/pocket/manifest.webmanifest">
 <link rel="icon" href="{{ url_prefix }}/static/pocket-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{{ url_prefix }}/static/pocket-icon.svg">
-<link rel="stylesheet" href="{{ url_prefix }}/static/css/pocket.css?v=2">
+<link rel="stylesheet" href="{{ url_prefix }}/static/css/pocket.css?v=3">
 </head>
 <body>
 <header class="pk-header">
@@ -25,6 +25,12 @@
     </div>
 </header>
 
+{# The participant's prior_answers boxes. Filled by pocket.js from
+   /pocket/api/task, never rendered here: the service worker caches this page
+   for every account on the device. Outside #pk-main, whose contents
+   pocket.js replaces on every card. #}
+<div class="pk-prior-answers" id="pk-prior-answers" hidden></div>
+
 <main class="pk-main" id="pk-main">
     <div class="pk-loading" id="pk-loading">
         <span class="pk-spinner" aria-hidden="true"></span> Loading your queue&hellip;
@@ -34,6 +40,6 @@
 <div class="pk-sync" id="pk-sync" hidden></div>
 
 <script>window.pocketTaskName = {{ task_name | tojson }};</script>
-<script src="{{ url_prefix }}/static/pocket.js?v=1"></script>
+<script src="{{ url_prefix }}/static/pocket.js?v=2"></script>
 </body>
 </html>

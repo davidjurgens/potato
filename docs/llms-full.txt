@@ -29710,6 +29710,7 @@ Potato escapes all answer text as HTML. A participant who types `<b>` sees the c
 ## Rules
 
 - Potato shows the answer of the participant who opens the page. On a [collaborative session](../advanced/collaborative_sessions.md) page, Potato shows the answer of the viewer, not of the team.
+- On a phone or tablet that Potato sends to [Pocket Mode](../advanced/pocket_mode.md), the same boxes show above the cards. Pocket fetches the answers from the server when it starts and does not store them on the phone.
 - Potato does not show a box when the participant gave no answer. Thus an optional question that the participant skipped adds no empty box.
 - If the participant answers the same question on two survey pages, Potato shows the last answer.
 - `schema` must name a question on a survey page. If no survey page has that question, the server does not start. The error message lists the survey questions that it found.
