@@ -127,6 +127,10 @@ body {
     gap: 8px;
 }
 
+/* display: grid above beats the [hidden] attribute's UA rule, which left an
+   empty 12px strip above the cards on every study without prior_answers. */
+.pk-prior-answers[hidden] { display: none; }
+
 .pk-prior-answers .prior-answer-block {
     background: light-dark(#ffffff, #1a1a1a);
     border: 1px solid var(--pk-line);

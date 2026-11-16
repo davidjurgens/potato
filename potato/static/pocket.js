@@ -16,6 +16,12 @@
 
     var QUEUE_KEY = 'pocket_save_queue_v1';
     var ITEMS_KEY = 'pocket_items_v1';
+    // The task description (schemes, capability), kept so Pocket can start
+    // with no connection. Without it the offline fallback in boot() never ran:
+    // it needed the task, and the task only arrived from the request that had
+    // just failed. Stored without prior_answers, which are the participant's
+    // own words and are not kept on the device.
+    var TASK_KEY = 'pocket_task_v1';
 
     var state = {
         task: null,       // /pocket/api/task payload
@@ -74,6 +80,56 @@
         catch (e) { return []; }
     }
 
+    /**
+     * Whose saves these are. The queue is one list per device, and a record
+     * used to carry no account: when one person queued saves offline and
+     * someone else signed in on the same phone, the next flush posted the
+     * first person's answers under the second person's session.
+     *
+     * Records now carry the account Pocket last heard from the server, and a
+     * flush posts only the records of `confirmedUser`, the account that
+     * /pocket/api/task answered for in this page. The task kept for offline
+     * starts names an account too, but nothing on the device can check it
+     * against the session cookie, so it labels new records and is never
+     * trusted to send them. A record from before this field is the old
+     * behaviour: it goes with whoever is signed in, and so does every record
+     * when the server names no account.
+     *
+     * `userChecked` is kept apart from the name so that a task without one
+     * ends the check instead of starting it again on every flush.
+     */
+    var confirmedUser = null;
+    var userChecked = false;
+
+    /**
+     * The account signed in on this phone, from the readable `pocket_user`
+     * cookie the server keeps equal to the session (the session cookie itself
+     * is HttpOnly). Null once signed out. Readable offline, which is the
+     * point: it is how an offline start knows whose batch it may open.
+     */
+    function signedInAccount() {
+        var m = String(document.cookie || '').match(/(?:^|;\s*)pocket_user=([^;]*)/);
+        if (!m) return null;
+        try { return decodeURIComponent(m[1]) || null; } catch (e) { return null; }
+    }
+
+    function queueOwner() {
+        if (userChecked) return confirmedUser;
+        return signedInAccount() || (state.task && state.task.username) || null;
+    }
+
+    function confirmUser(task) {
+        confirmedUser = task.username || null;
+        userChecked = true;
+    }
+
+    function isMine(record) {
+        var owner = queueOwner();
+        return !record.user || !owner || record.user === owner;
+    }
+
+    function myQueue() { return loadQueue().filter(isMine); }
+
     function saveQueue(queue) {
         localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
         renderSyncChip();
@@ -82,8 +138,21 @@
     // -------------------------------------------------------------- server --
     function fetchTask() {
         return fetch('/pocket/api/task').then(function (r) {
+            if (r.status === 401 || r.status === 403) throw authError(r.status);
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
+        }).then(function (task) {
+            var stored = {};
+            Object.keys(task).forEach(function (k) {
+                if (k !== 'prior_answers') stored[k] = task[k];
+            });
+            try { localStorage.setItem(TASK_KEY, JSON.stringify(stored)); } catch (e) { }
+            return task;
+        }, function (err) {
+            // fetch() rejects with a TypeError when there is no network; an
+            // HTTP error arrives as a response and was thrown above.
+            if (err instanceof TypeError) err.offline = true;
+            throw err;
         });
     }
 
@@ -139,9 +208,29 @@
     /** Set when the server has refused us; cleared by a successful save. */
     var signedOut = false;
 
+    var confirming = false;
+
+    /** Ask the server who is signed in, then send that account's saves. */
+    function confirmUserThenFlush() {
+        if (confirming) return;
+        confirming = true;
+        fetchTask().then(function (task) {
+            confirming = false;
+            confirmUser(task);
+            if (!state.task) state.task = task;
+            flushQueue();
+        }, function (err) {
+            confirming = false;
+            if (err && err.needsLogin) signedOut = true;
+            renderSyncChip();
+        });
+    }
+
     function flushQueue() {
-        var queue = loadQueue();
-        if (!queue.length || !navigator.onLine) { renderSyncChip(); return; }
+        if (!navigator.onLine || !loadQueue().length) { renderSyncChip(); return; }
+        if (!userChecked) { confirmUserThenFlush(); return; }
+        var queue = myQueue();
+        if (!queue.length) { renderSyncChip(); return; }
         var record = queue[0];
         postSave(record).then(function () {
             signedOut = false;
@@ -149,7 +238,7 @@
                 return !(q.instance_id === record.instance_id && q.ts === record.ts);
             });
             saveQueue(rest);
-            if (rest.length) {
+            if (rest.some(isMine)) {
                 flushQueue();
             } else {
                 renderSyncChip(true);
@@ -182,9 +271,12 @@
     }
 
     // ---------------------------------------------------------------- sync --
+    var othersNoticeUntil = 0;   // the notice below shows for 5 s per page
+
     function renderSyncChip(justSynced) {
         var chip = document.getElementById('pk-sync');
-        var queue = loadQueue();
+        var queue = myQueue();
+        var others = loadQueue().length - queue.length;
         if (queue.length) {
             chip.hidden = false;
             chip.classList.remove('pk-ok');
@@ -204,7 +296,23 @@
             chip.hidden = false;
             chip.classList.add('pk-ok');
             chip.textContent = 'All saves synced ✓';
-            setTimeout(function () { chip.hidden = true; }, 2200);
+            setTimeout(function () { renderSyncChip(); }, 2200);
+        } else if (others && (!othersNoticeUntil || Date.now() < othersNoticeUntil)) {
+            // Someone else's unsent answers. They stay on the phone and go up
+            // when that account signs in here; saying nothing would leave
+            // them invisible to everyone who could act on it. Said once per
+            // page and then hidden: the chip floats over the answer options,
+            // and this person has nothing to do about it.
+            if (!othersNoticeUntil) {
+                othersNoticeUntil = Date.now() + 5000;
+                // Re-render rather than hide: by then the chip may be saying
+                // something else, such as this person's own queued saves.
+                setTimeout(function () { renderSyncChip(); }, 5050);
+            }
+            chip.hidden = false;
+            chip.classList.remove('pk-ok', 'pk-blocked');
+            chip.textContent = others + ' save' + (others === 1 ? '' : 's') +
+                ' from another account on this phone, sent when it signs in here';
         } else {
             chip.hidden = true;
         }
@@ -252,6 +360,7 @@
         var item = currentItem();
         if (!item || !answersComplete()) return;
         var record = {
+            user: queueOwner(),
             instance_id: item.instance_id,
             annotations: flatAnnotations(),
             ts: Date.now(),
@@ -308,7 +417,7 @@
 
     function renderDone() {
         renderProgress();
-        var queue = loadQueue();
+        var queue = myQueue();
         showingPendingDone = queue.length > 0;
         if (queue.length) {
             // "Every item in your queue is annotated" is the sentence someone
@@ -619,6 +728,8 @@
     function boot() {
         fetchTask().then(function (task) {
             state.task = task;
+            confirmUser(task);
+            flushQueue();
             renderPriorAnswers(task.prior_answers || []);
             if (!task.capable) {
                 renderMessage(
@@ -638,21 +749,37 @@
                 localStorage.setItem(ITEMS_KEY, JSON.stringify(batch));
                 if (state.items.length) renderCard(); else renderDone();
             });
-        }).catch(function () {
-            // Offline boot: fall back to the cached batch
-            var cached = null;
+        }).catch(function (err) {
+            // Offline boot: fall back to the cached task and batch. Only when
+            // the network failed -- a server that answered "sign in" must not
+            // be worked around with the last account's queue.
+            var cached = null, task = state.task;
             try { cached = JSON.parse(localStorage.getItem(ITEMS_KEY)); } catch (e) { }
-            if (cached && cached.items && cached.items.length && state.task) {
+            if (!task && err && err.offline) {
+                try { task = JSON.parse(localStorage.getItem(TASK_KEY)); } catch (e) { }
+            }
+            // The stored task and batch belong to the account that last
+            // loaded them, which need not be who is signed in now: the phone
+            // may have signed out, or someone else may have signed in through
+            // the desktop page. They open only for that same account.
+            var account = signedInAccount();
+            var sameAccount = !!(account && task && (!task.username || task.username === account));
+            if ((err && err.needsLogin) || (err && err.offline && !account)) {
+                signedOut = true;
+                renderMessage('<strong>You&rsquo;re signed out.</strong>' +
+                    '<span><a href="/login">Sign in again</a> to load your queue.</span>');
+            } else if (sameAccount && cached && cached.items && cached.items.length && task.capable) {
+                state.task = task;
                 state.items = cached.items;
                 state.total = cached.total;
                 state.done = cached.done;
+                state.idx = 0;
                 renderCard();
             } else {
                 renderMessage('<strong>Couldn&rsquo;t load your queue.</strong>' +
                     '<span>Check your connection (or log in at <code>/login</code>) and retry.</span>');
             }
         });
-        flushQueue();
         renderSyncChip();
     }
 
@@ -681,7 +808,9 @@
     }, FLUSH_INTERVAL_MS);
 
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/pocket/sw.js').catch(function () {
+        // scope '/pocket', not the default '/pocket/': the page is /pocket,
+        // and a worker scoped to the directory never controlled it.
+        navigator.serviceWorker.register('/pocket/sw.js', { scope: '/pocket' }).catch(function () {
             /* PWA is progressive enhancement */
         });
     }

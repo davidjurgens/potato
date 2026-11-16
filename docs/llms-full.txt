@@ -58670,9 +58670,21 @@ it — a single-radio task is the ideal case (one tap = one labeled item).
   from a restart or a deploy. A server that refuses the save rather than
   failing to answer is a different case: the chip turns red and says to sign
   in again, because retrying a 401 will not fix it. Nothing is discarded
-  either way. A service worker caches the app shell after the first visit, so
-  the page loads with no connection. Field-research note: prefetch a batch on
-  wifi, annotate anywhere, sync when back in coverage.
+  either way. A service worker keeps a copy of the page after the first visit,
+  so Pocket opens with no connection and shows the batch it last fetched; the
+  `prior_answers` boxes need the server and are left out. Each queued save
+  records the account that made it and goes up only while that account is
+  signed in, so on a shared phone the queue holds each person's answers until
+  they sign in again. Pocket opens offline only for the account that is
+  signed in. The server keeps a readable `pocket_user` cookie naming that
+  account, with the same lifetime as the sign-in, so it survives a browser
+  restart. It removes the cookie on sign-out, so a phone that has signed out, or where
+  someone else has signed in since the batch was saved, shows a message
+  instead of the saved batch. The cookie changes only when the server answers,
+  so a session that expires while the phone is offline still counts as signed
+  in until it reconnects.
+  Field-research note: prefetch a batch on wifi, annotate anywhere, sync when
+  back in coverage.
 - **Install as an app** — the page ships a web manifest; "Add to Home
   Screen" gives a standalone app with its own icon.
 
@@ -58712,13 +58724,13 @@ no per-item tracking.
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/pocket` | GET | session (redirects to login) | The mobile page |
-| `/pocket/api/task` | GET | session | Task name, schema specs, capability verdict |
+| `/pocket/api/task` | GET | session | Signed-in account, task name, schema specs, capability verdict |
 | `/pocket/api/batch?n=` | GET | session | Next unannotated items for the card stack |
 | `/pocket/api/routing` | GET | session | Routing facts (works even when Pocket is disabled) |
 | `/pocket/api/device_hint` | POST | session | Client-side touch detection report |
 | `/pocket/api/devices` | GET | admin | Per-annotator device usage for the dashboard |
 | `/pocket/manifest.webmanifest` | GET | — | PWA manifest |
-| `/pocket/sw.js` | GET | — | Service worker (served under /pocket for scope) |
+| `/pocket/sw.js` | GET | — | Service worker, registered with scope `/pocket` (sent with `Service-Worker-Allowed: /pocket`) |
 
 ## Troubleshooting
 

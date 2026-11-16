@@ -42,6 +42,22 @@ All notable changes to the Potato annotation platform are documented in this fil
   question and the answer options were hard to read. The text and border
   colours now follow the theme like the card backgrounds do.
 
+- Pocket Mode could not start without a connection, though the docs said it
+  could. Its service worker was registered with the scope `/pocket/`, which
+  does not include the page at `/pocket`, so a reload with no network showed
+  the browser's offline error. The page's own offline fallback could not run
+  either: it needed the task description, which comes from the request that
+  had just failed. Pocket now opens offline on the batch it last fetched, for
+  the account that fetched it. A phone that has signed out, or where another
+  account has signed in since, gets a message instead of that batch.
+
+- On a phone shared by several annotators, Pocket's unsent saves went up under
+  whichever account was signed in when they were sent, so one person's answers
+  could be stored as another's. Each queued save now records its account and
+  is sent only while that account is signed in. When someone else opens
+  Pocket on the phone, the sync chip shows for a few seconds how many saves are
+  waiting for another account.
+
 - An AI endpoint's `api_key` (in `ai_support`, and in other endpoints built the
   same way) written as `${VAR}` with VAR unset was sent to the provider as the
   literal text `${VAR}`, so the server started normally and every AI call

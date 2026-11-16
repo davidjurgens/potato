@@ -14,6 +14,7 @@ same payload the desktop page sends — Pocket Mode adds no new write path.
 import logging
 from functools import wraps
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 from flask import (
     Blueprint,
@@ -67,6 +68,52 @@ def clear_pocket() -> None:
     global _app_config, _pocket_config
     _app_config = None
     _pocket_config = None
+
+
+#: Readable cookie naming the signed-in account, for pocket.js to check while
+#: offline. See _mirror_signed_in_account.
+POCKET_USER_COOKIE = "pocket_user"
+
+
+@pocket_bp.after_app_request
+def _mirror_signed_in_account(response):
+    """Keep ``pocket_user`` equal to the session's account.
+
+    Pocket opens offline from the task and batch it stored on the phone, and
+    nothing on the phone could tell whether that account was still signed in:
+    the session cookie is HttpOnly. A phone signed out (or signed in as
+    someone else through the desktop page) still opened the last account's
+    batch with no connection and queued answers under that account.
+
+    This cookie is set on any response while someone is signed in and removed
+    on the first response after they are not, whichever route did it --
+    /logout, a SAML logout, /auth for another account. pocket.js opens offline
+    only when it names the account the stored task belongs to. It names the
+    account and grants nothing: the server reads only the session.
+    """
+    if _pocket_config is None or request.path.startswith("/static/"):
+        return response
+    try:
+        user = session.get("username")
+    except Exception:
+        return response
+    current = request.cookies.get(POCKET_USER_COOKIE)
+    wanted = quote(str(user), safe="") if user else None
+    from flask import current_app
+    interface = current_app.session_interface
+    # Same lifetime as the session cookie, refreshed whenever Flask refreshes
+    # that one. As a browser-session cookie it died with the browser while
+    # the permanent session lived on, so a phone that prefetched on wifi and
+    # was restarted in the field opened offline as "signed out".
+    if wanted and (wanted != current or interface.should_set_cookie(current_app, session)):
+        response.set_cookie(
+            POCKET_USER_COOKIE, wanted, path="/", httponly=False,
+            expires=interface.get_expiration_time(current_app, session),
+            samesite=current_app.config.get("SESSION_COOKIE_SAMESITE") or "Lax",
+            secure=bool(current_app.config.get("SESSION_COOKIE_SECURE")))
+    elif not wanted and current:
+        response.delete_cookie(POCKET_USER_COOKIE, path="/")
+    return response
 
 
 def pocket_required(f):
@@ -246,6 +293,10 @@ def devices():
 def task():
     capable, incompatible = pocket_capability(_app_config)
     return jsonify({
+        # The account this session belongs to. Pocket labels each queued save
+        # with it and sends only the signed-in account's saves, so a shared
+        # phone does not post one person's answers under another's session.
+        "username": session["username"],
         "task_name": _app_config.get("annotation_task_name", "Annotation Task"),
         "capable": capable,
         "incompatible_schemes": incompatible,
@@ -451,7 +502,14 @@ def manifest():
 @pocket_bp.route("/sw.js", methods=["GET"])
 @pocket_required
 def service_worker():
-    """Serve the service worker from /pocket so its scope covers the shell."""
+    """Serve the service worker for the /pocket page.
+
+    A worker's default scope is its script's directory, ``/pocket/`` with the
+    slash, which does not cover the page at ``/pocket``: the worker installed
+    and filled its cache but never controlled the page, so Pocket could not
+    load offline. pocket.js registers with ``scope: '/pocket'``, which is
+    outside that directory and needs the ``Service-Worker-Allowed`` header.
+    """
     from flask import current_app
     import os
 
@@ -462,4 +520,5 @@ def service_worker():
     except OSError:
         return Response("// service worker unavailable", mimetype="application/javascript")
     return Response(body, mimetype="application/javascript",
-                    headers={"Cache-Control": "no-cache"})
+                    headers={"Cache-Control": "no-cache",
+                             "Service-Worker-Allowed": "/pocket"})
