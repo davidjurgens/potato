@@ -6,6 +6,13 @@ All notable changes to the Potato annotation platform are documented in this fil
 
 ### Added
 
+- `prior_answers` shows each annotator their own answer to an earlier survey
+  question on every annotation page. A study can ask for a definition in a
+  prestudy and show it back, in a box the annotator opens with a click, while
+  they label. The answer comes from the participant's saved state, so it
+  follows them to another browser or device. Answers are escaped as HTML.
+  See `docs/workflow/prior_answers.md` and `examples/advanced/prior-answers/`.
+
 - Painting points for `segment_3d` in the point cloud viewer. A brush labels
   every point within its radius on screen, a lasso labels the points inside an
   outline, and Erase or Shift + drag removes labels. Each class is saved as one

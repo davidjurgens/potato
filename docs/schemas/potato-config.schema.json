@@ -7022,6 +7022,48 @@
       "description": "Legacy pre-study screening block. Not read, and named at boot if set; add a phase with `type: prestudy` under `phases`",
       "type": "object"
     },
+    "prior_answers": {
+      "description": "Show each annotator their own answer to an earlier survey question (for example a prestudy definition) on every annotation page, in a box above the annotation forms. One entry per question",
+      "examples": [
+        [
+          {
+            "schema": "concept_definition",
+            "title": "Definition"
+          }
+        ]
+      ],
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "collapsed_default": {
+            "default": true,
+            "description": "Start the collapsible box closed",
+            "type": "boolean"
+          },
+          "collapsible": {
+            "default": true,
+            "description": "Show the answer in a box that the annotator opens with a click. `false` always shows it",
+            "type": "boolean"
+          },
+          "schema": {
+            "description": "Name of a question on a survey page (consent, prestudy, poststudy and similar phases) whose answer is shown",
+            "examples": [
+              "concept_definition"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "description": "Heading of the box. Defaults to the question's description",
+            "examples": [
+              "Definition"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
     "prolific": {
       "additionalProperties": true,
       "properties": {

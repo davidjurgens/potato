@@ -325,6 +325,8 @@ KNOWN_CONFIG_KEYS = {
 
     # === Content ===
     "annotation_instructions": None,
+    # A list of entries; the sub-keys belong to each entry (see prior_answers.py).
+    "prior_answers": {"schema", "title", "collapsible", "collapsed_default"},
     # Read by CredentialManager.from_config(). The top-level
     # `env_substitution` alias that used to sit here was read by nothing;
     # the working form has always been nested under this key.
@@ -3958,6 +3960,10 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
 
     # Validate keyword_highlight is not enabled for image-based tasks
     _validate_keyword_highlight_for_images(config_data)
+
+    # prior_answers: shape only; the names are checked at boot (phase files).
+    from potato.server_utils.prior_answers import validate_prior_answers_block
+    validate_prior_answers_block(config_data)
 
     # Validate display_logic cross-references (schema references and circular dependencies)
     all_schemes = _collect_all_annotation_schemes(config_data)

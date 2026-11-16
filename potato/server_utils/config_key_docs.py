@@ -1340,6 +1340,32 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "annotation_instructions": _D(
         "Instructions shown on every annotation page, as inline text; a filename here renders as that filename", type="string", category=CONTENT,
     ),
+    "prior_answers": _D(
+        "Show each annotator their own answer to an earlier survey question "
+        "(for example a prestudy definition) on every annotation page, in a "
+        "box above the annotation forms. One entry per question",
+        type="array", category=CONTENT,
+        example=[{"schema": "concept_definition", "title": "Definition"}],
+        see_also=("phases", "annotation_instructions"),
+    ),
+    "prior_answers.schema": _D(
+        "Name of a question on a survey page (consent, prestudy, poststudy and "
+        "similar phases) whose answer is shown",
+        type="string", category=CONTENT, example="concept_definition",
+    ),
+    "prior_answers.title": _D(
+        "Heading of the box. Defaults to the question's description",
+        type="string", category=CONTENT, example="Definition",
+    ),
+    "prior_answers.collapsible": _D(
+        "Show the answer in a box that the annotator opens with a click. "
+        "`false` always shows it",
+        type="boolean", default=True, category=CONTENT,
+    ),
+    "prior_answers.collapsed_default": _D(
+        "Start the collapsible box closed",
+        type="boolean", default=True, category=CONTENT,
+    ),
     "credentials": _D(
         "How credentials in the config are resolved before use",
         type="object", category=SERVER,

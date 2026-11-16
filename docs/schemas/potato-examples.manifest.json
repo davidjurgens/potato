@@ -1,6 +1,6 @@
 {
   "categories": {
-    "advanced": 78,
+    "advanced": 79,
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 8,
@@ -19,7 +19,7 @@
     "text": 2,
     "video": 8
   },
-  "count": 262,
+  "count": 263,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -1272,6 +1272,28 @@
       "path": "examples/advanced/pocket-mode/config.yaml",
       "run": "potato start examples/advanced/pocket-mode/config.yaml -p 8000",
       "task_name": "Pocket \u2014 Sentiment Triage"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/statements.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/prior-answers",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "prior-answers",
+      "path": "examples/advanced/prior-answers/config.yaml",
+      "run": "potato start examples/advanced/prior-answers/config.yaml -p 8000",
+      "task_name": "Prior Answers \u2014 Own Definition"
     },
     {
       "annotation_types": [

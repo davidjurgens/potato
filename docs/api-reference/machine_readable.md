@@ -23,7 +23,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **184 top-level config keys**, **80 annotation types**, and
+It currently covers **185 top-level config keys**, **80 annotation types**, and
 **31 display types**.
 
 ### Editor validation
@@ -118,7 +118,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **262 example projects** in the repository, across 18
+A derived index of the **263 example projects** in the repository, across 18
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.
