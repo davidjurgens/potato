@@ -206,7 +206,7 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 
 ## Paper-Specific Projects
 
-Research paper annotation projects are available in the **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** repository.
+The **[Potato Showcase](https://www.potatoannotator.com/showcase)** has 500+ worked task designs from many domains, including annotation projects from published research papers.
 
 <!-- BEGIN GENERATED INDEX -->
 
