@@ -22,6 +22,24 @@ logger = logging.getLogger(__name__)
 from potato.ai.ai_endpoint import normalize_confidence  # noqa: E402
 
 
+def format_icl_section(examples) -> str:
+    """The in-prompt worked examples block.
+
+    Marked as reference-only and fenced off from "Text to label:" because
+    small models otherwise answer about an example instead of the item
+    (seen with llama3.1:8b: its reasoning for one tweet described the
+    example tweet above it). Keeps the "## Examples" heading other code
+    looks for.
+    """
+    lines = ["## Examples (already labeled — for reference only; do not label these)"]
+    for i, ex in enumerate(examples, 1):
+        lines.append(f'Example {i} text: "{ex["text"]}"')
+        lines.append(f'Example {i} correct label: {ex["label"]}')
+        lines.append("")
+    lines.append("--- End of examples. Label ONLY the text below. ---")
+    return "\n".join(lines) + "\n\n"
+
+
 @dataclass
 class LabelingResult:
     """Result of labeling a single instance."""
@@ -594,12 +612,7 @@ class LLMLabelingThread(threading.Thread):
                 except TypeError:
                     examples = self.examples_getter()
                 if examples:
-                    icl_lines = ["## Examples"]
-                    for ex in examples:
-                        icl_lines.append(f'Text: "{ex["text"]}"')
-                        icl_lines.append(f'Label: {ex["label"]}')
-                        icl_lines.append("")
-                    icl_section = "\n".join(icl_lines) + "\n"
+                    icl_section = format_icl_section(examples)
             except Exception:
                 pass
 

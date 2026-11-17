@@ -123,6 +123,18 @@
             color: var(--foreground, #09090b);
         }
 
+        /* Skipped: behind the current step but never entered. A dashed
+           outline (not the green check) so it doesn't read as done. */
+        .phase-step.skipped .step-number {
+            border-style: dashed;
+            background: var(--card, white);
+            color: var(--muted-foreground, #71717a);
+        }
+        .phase-step.skipped .step-label small {
+            font-size: inherit;
+            font-style: italic;
+        }
+
         /* ── Layout shell ───────────────────────────────────────── */
         .solo-main {
             display: flex;
@@ -619,14 +631,24 @@
             {% for phase_id, phase_label in phases %}
                 {% set step_index = phase_order.index(phase_id) if phase_id in phase_order else 0 %}
                 {% set is_active = phase == phase_id or step_for_phase.get(phase) == loop.index %}
-                {% set is_completed = (not is_active) and step_index < current_index %}
-                <div class="phase-step {% if is_active %}active{% elif is_completed %}completed{% endif %}"
+                {% set is_past = (not is_active) and step_index < current_index %}
+                {# A past step none of whose phases was ever entered was skipped,
+                   not completed (e.g. "Skip Edge Cases" jumps straight past
+                   Edge Cases, Contrast Sets and Verify Prompt). #}
+                {% set step_no = loop.index %}
+                {% set ns = namespace(visited=(visited_solo_phases is not defined)) %}
+                {% for raw, s in step_for_phase.items() %}
+                    {% if s == step_no and visited_solo_phases is defined and raw in visited_solo_phases %}{% set ns.visited = true %}{% endif %}
+                {% endfor %}
+                {% set is_skipped = is_past and not ns.visited %}
+                {% set is_completed = is_past and not is_skipped %}
+                <div class="phase-step {% if is_active %}active{% elif is_completed %}completed{% elif is_skipped %}skipped{% endif %}"
                      {% if is_active %}aria-current="step"{% endif %}>
                     <span class="step-number"
-                          {% if is_completed %}aria-label="completed step {{ loop.index }}, {{ phase_label }}"{% else %}aria-hidden="true"{% endif %}>
+                          {% if is_completed %}aria-label="completed step {{ loop.index }}, {{ phase_label }}"{% elif is_skipped %}aria-label="skipped step {{ loop.index }}, {{ phase_label }}"{% else %}aria-hidden="true"{% endif %}>
                         {{ loop.index }}
                     </span>
-                    <span class="step-label">{{ phase_label }}</span>
+                    <span class="step-label">{{ phase_label }}{% if is_skipped %} <small>(skipped)</small>{% endif %}</span>
                 </div>
             {% endfor %}
         </nav>

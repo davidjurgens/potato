@@ -840,6 +840,13 @@ def home():
     elif phase == UserPhase.TRAINING:
         return training() #redirect(url_for("training"))
     elif phase == UserPhase.ANNOTATION:
+        # A Solo Mode project is annotated through /solo (setup, prompt,
+        # edge cases, human+LLM annotation); the regular annotation page
+        # bypasses all of it, and labels made there are invisible to Solo
+        # Mode. Send annotators to Solo Mode's entry instead.
+        if (config.get("solo_mode", {}).get("enabled", False)
+                and 'solo_mode' in app.blueprints):
+            return redirect(url_for("solo_mode.entry"))
         return annotate() # redirect(url_for("annotate"))
     elif phase == UserPhase.POSTSTUDY:
         return poststudy() #redirect(url_for("poststudy"))

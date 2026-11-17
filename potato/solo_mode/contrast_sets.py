@@ -332,24 +332,42 @@ class ContrastSetGenerator:
             pair.reviewed_at = datetime.now()
             return True
 
+    def skip_pair(self, pair_id: Optional[str] = None) -> int:
+        """Mark one unwritten pair (or, with no id, every unwritten pair) as
+        skipped: it leaves the queue but teaches nothing, so it is excluded
+        from rule proposal. Returns the number of pairs skipped."""
+        with self._lock:
+            targets = ([self.pairs[pair_id]] if pair_id in self.pairs
+                       else [] if pair_id else list(self.pairs.values()))
+            n = 0
+            for pair in targets:
+                if pair.human_verdict is None:
+                    pair.human_verdict = 'skipped'
+                    pair.reviewed_at = datetime.now()
+                    n += 1
+            return n
+
     def get_unreviewed_pairs(self) -> List[ContrastPair]:
         with self._lock:
             return [p for p in self.pairs.values() if p.human_verdict is None]
 
     def get_reviewed_pairs(self) -> List[ContrastPair]:
+        """Pairs the human actually wrote an edit for (skipped ones excluded)."""
         with self._lock:
             return [
-                p for p in self.pairs.values() if p.human_verdict is not None
+                p for p in self.pairs.values() if p.human_verdict == 'authored'
             ]
 
     def get_status(self) -> Dict[str, Any]:
         with self._lock:
             total = len(self.pairs)
             reviewed = len(self.get_reviewed_pairs())
+            unreviewed = len(self.get_unreviewed_pairs())
             return {
                 'total_pairs': total,
                 'reviewed': reviewed,
-                'unreviewed': total - reviewed,
+                'skipped': total - reviewed - unreviewed,
+                'unreviewed': unreviewed,
             }
 
     def try_claim_rule_proposal(self) -> bool:
@@ -408,7 +426,7 @@ def propose_rules_from_contrast_pairs(
     from potato.codebook import changelog, update_code_fields
     from potato.codebook.codebook import Codebook
 
-    written = [p for p in pairs if p.human_verdict is not None]
+    written = [p for p in pairs if p.human_verdict == 'authored']
     if not written:
         return []
 

@@ -88,7 +88,19 @@
 
     <div class="solo-nav">
         <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-secondary">&larr; Back to Prompt</a>
-        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit</button>
+        <span style="display: inline-flex; gap: 8px; flex-wrap: wrap;">
+            {# Contrast sets are optional. formnovalidate + their own action
+               value so a skip never needs an edit in the textarea. #}
+            <button type="submit" class="btn btn-secondary" name="action" value="skip_one"
+                    formnovalidate title="Skip this excerpt without writing an edit">
+                Skip this one
+            </button>
+            <button type="submit" class="btn btn-secondary" name="action" value="skip_all"
+                    formnovalidate title="Skip the remaining excerpts and continue">
+                Skip the rest
+            </button>
+            <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit</button>
+        </span>
     </div>
 </form>
 {% elif all_reviewed %}

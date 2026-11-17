@@ -218,6 +218,24 @@ class SoloModeManager:
 
         # Instance tracking
         self.human_labeled_ids: Set[str] = set()
+        # The human's label value per instance/schema. Kept separately from
+        # predictions: a label submitted before the LLM has labeled that
+        # instance has no prediction to hang on, and used to be dropped
+        # (only the id was kept, nothing was saved to disk, and Back showed
+        # the item as unlabeled). {instance_id: {schema_name: label}}
+        self.human_label_values: Dict[str, Dict[str, Any]] = {}
+        # On-demand labeling (the item the human is looking at): which
+        # instances have a call in flight, and whether any does. See
+        # get_or_create_llm_suggestion() / _wait_for_on_demand_idle().
+        self._on_demand_lock = threading.Lock()
+        self._on_demand_inflight: Dict[str, threading.Event] = {}
+        self._on_demand_active = 0
+        self._on_demand_idle = threading.Event()
+        self._on_demand_idle.set()
+        # Human labels still waiting for an LLM prediction to be compared
+        # against; set_llm_prediction() compares them as soon as one lands.
+        # {instance_id: {schema_name: {label, user_id, suggestion_visible}}}
+        self._uncompared_human_labels: Dict[str, Dict[str, Dict[str, Any]]] = {}
         # Which *specific* user labeled which instance. human_labeled_ids
         # above stays a flat union (it drives instance selection — once
         # anyone labels an instance, it leaves the pool for everyone, i.e.
@@ -1277,6 +1295,14 @@ class SoloModeManager:
         if result:
             self._save_state()
         return result
+
+    def skip_contrast_pairs(self, pair_id: Optional[str] = None) -> int:
+        """Skip one unwritten contrast pair, or all of them (pair_id=None),
+        and persist. Skipped pairs teach nothing and propose no rules."""
+        n = self.contrast_set_generator.skip_pair(pair_id)
+        if n:
+            self._save_state()
+        return n
 
     def propose_rules_from_contrast_pairs(self) -> Dict[str, Any]:
         """Group written contrast pairs by the label pair they contrast,
@@ -2360,12 +2386,10 @@ class SoloModeManager:
             # Inject the single example into the current prompt
             example_text = candidate.payload.get('text', '')
             example_label = candidate.payload.get('label', '')
-            example_section = (
-                "\n\n## Examples\n"
-                f'Text: "{example_text[:200]}"\n'
-                f"Label: {example_label}\n"
-            )
-            return current_prompt + example_section
+            from .llm_labeler import format_icl_section
+            example_section = format_icl_section(
+                [{'text': example_text[:200], 'label': example_label}])
+            return current_prompt + "\n\n" + example_section
 
         if candidate.kind == CandidateKind.PRINCIPLE:
             return current_prompt + f"\n\nKey principle: {candidate.payload}\n"
@@ -2897,6 +2921,36 @@ class SoloModeManager:
             self.confidence_history[instance_id].append(
                 (prediction.prompt_version, prediction.confidence_score)
             )
+            # A human label submitted before this prediction existed is
+            # compared now. Only for an instance still counted as labeled:
+            # one flagged for relabel (after a prompt change) waits for the
+            # human's fresh answer instead.
+            waiting = self._uncompared_human_labels.get(instance_id, {}).pop(
+                schema_name, None)
+            if not self._uncompared_human_labels.get(instance_id, True):
+                self._uncompared_human_labels.pop(instance_id, None)
+            # The same instance can be labeled twice under one prompt (the
+            # annotate page's prefetch, the compare-on-submit call and the
+            # background thread can overlap). A duplicate that lands after
+            # the human's answer was compared replaced that prediction and
+            # erased the comparison above; carry the answer over and compare
+            # it against the new prediction instead. A prediction from a
+            # newer prompt version is a real re-annotation and is left to
+            # the relabel flow.
+            if (waiting is None and previous is not None
+                    and previous is not prediction
+                    and previous.human_label is not None
+                    and prediction.human_label is None
+                    and previous.prompt_version == prediction.prompt_version):
+                owner = next((u for u, ids in self._labeled_by_user.items()
+                              if instance_id in ids), 'anonymous')
+                waiting = {'label': previous.human_label, 'user_id': owner,
+                           'suggestion_visible': None}
+        if waiting is not None and instance_id in self.human_labeled_ids:
+            self.record_human_label(
+                instance_id, schema_name, waiting['label'],
+                waiting.get('user_id', 'anonymous'),
+                suggestion_visible=waiting.get('suggestion_visible'))
         from potato.labeling_engine.integration.mirror import mirror
         mirror("solo_mode", prediction.model_name, prediction.prompt_version, instance_id,
                schema_name, prediction.predicted_label, prediction.confidence_score)
@@ -3004,9 +3058,22 @@ class SoloModeManager:
             if suggestion_visible:
                 self.anchoring.mark_shown(instance_id)
 
+            self.human_label_values.setdefault(instance_id, {})[schema_name] = label
+
             prediction = self.get_llm_prediction(instance_id, schema_name)
             if prediction is None:
+                # No LLM label yet: keep the human's answer (and persist it)
+                # so set_llm_prediction() can compare it the moment one
+                # lands, instead of the comparison silently never happening.
+                self._uncompared_human_labels.setdefault(instance_id, {})[
+                    schema_name] = {
+                        'label': label, 'user_id': user_id,
+                        'suggestion_visible': suggestion_visible,
+                    }
+                self._save_state()
                 return None
+            self._uncompared_human_labels.get(instance_id, {}).pop(
+                schema_name, None)
 
             # Detect a re-submission of the same (instance, schema): the
             # prediction already carries a human_label. Double-submits (double
@@ -4684,6 +4751,8 @@ class SoloModeManager:
             self.task_description = ""
             self.predictions = {}
             self.human_labeled_ids = set()
+            self.human_label_values = {}
+            self._uncompared_human_labels = {}
             self._labeled_by_user = {}
             self.llm_labeled_ids = set()
             self.disagreement_ids = set()
@@ -4934,6 +5003,12 @@ class SoloModeManager:
                         self._last_labeling_error = result.labeling_result.error
             else:
                 for inst in remaining:
+                    # Let the item the human is looking at go first, then
+                    # skip anything that got labeled on demand meanwhile.
+                    self._wait_for_on_demand_idle()
+                    if self.get_llm_prediction(
+                            inst['instance_id'], inst['schema_name']) is not None:
+                        continue
                     attempted.append(inst)
                     result = self.llm_labeling_thread._label_instance(
                         inst['instance_id'], inst['text'], inst['schema_name']
@@ -5115,6 +5190,8 @@ class SoloModeManager:
                         for iid, schemas in self.predictions.items()
                     },
                     'human_labeled_ids': list(self.human_labeled_ids),
+                    'human_label_values': self.human_label_values,
+                    'uncompared_human_labels': self._uncompared_human_labels,
                     'labeled_by_user': {
                         u: list(ids) for u, ids in self._labeled_by_user.items()
                     },
@@ -5229,6 +5306,9 @@ class SoloModeManager:
                 }
 
                 self.human_labeled_ids = set(state.get('human_labeled_ids', []))
+                self.human_label_values = state.get('human_label_values', {})
+                self._uncompared_human_labels = state.get(
+                    'uncompared_human_labels', {})
                 self._labeled_by_user = {
                     u: set(ids)
                     for u, ids in state.get('labeled_by_user', {}).items()
@@ -5437,37 +5517,70 @@ class SoloModeManager:
         if existing is not None:
             return existing
 
-        text = self._get_instance_text(instance_id)
-        if not text:
-            return None
-
-        schemes = self.app_config.get('annotation_schemes', [])
-        schema_info = schemes[0] if schemes else {}
-        schema_name = schema_info.get('name', 'default')
+        # One on-demand call per instance at a time: the annotate page's
+        # prefetch and the compare-on-submit call usually overlap. The
+        # second caller waits for the first's answer instead of labeling
+        # the item again (a duplicate used to replace the compared
+        # prediction). While any on-demand call runs, the background batch
+        # yields (see _wait_for_on_demand_idle) so the item in front of the
+        # human isn't stuck behind a batch of ten.
+        with self._on_demand_lock:
+            done = self._on_demand_inflight.get(instance_id)
+            owner = done is None
+            if owner:
+                done = threading.Event()
+                self._on_demand_inflight[instance_id] = done
+                self._on_demand_active += 1
+                self._on_demand_idle.clear()
+        if not owner:
+            done.wait(timeout=300)
+            return self.get_llm_prediction_for_instance(instance_id)
 
         try:
-            result = self.llm_labeling_thread._label_instance(
-                instance_id, text, schema_name)
-        except Exception as e:
-            logger.warning(
-                f"On-demand LLM suggestion failed for {instance_id}: {e}")
-            return None
+            text = self._get_instance_text(instance_id)
+            if not text:
+                return None
 
-        if (result is None or getattr(result, 'error', None)
-                or result.label is None):
-            return None
+            schemes = self.app_config.get('annotation_schemes', [])
+            schema_info = schemes[0] if schemes else {}
+            schema_name = schema_info.get('name', 'default')
 
-        self.set_llm_prediction(instance_id, schema_name, LLMPrediction(
-            instance_id=instance_id,
-            schema_name=schema_name,
-            predicted_label=result.label,
-            confidence_score=result.confidence,
-            uncertainty_score=result.uncertainty,
-            prompt_version=result.prompt_version or self.current_prompt_version,
-            model_name=result.model_name,
-            reasoning=result.reasoning,
-        ))
-        return self.get_llm_prediction_for_instance(instance_id)
+            try:
+                result = self.llm_labeling_thread._label_instance(
+                    instance_id, text, schema_name)
+            except Exception as e:
+                logger.warning(
+                    f"On-demand LLM suggestion failed for {instance_id}: {e}")
+                return None
+
+            if (result is None or getattr(result, 'error', None)
+                    or result.label is None):
+                return None
+
+            self.set_llm_prediction(instance_id, schema_name, LLMPrediction(
+                instance_id=instance_id,
+                schema_name=schema_name,
+                predicted_label=result.label,
+                confidence_score=result.confidence,
+                uncertainty_score=result.uncertainty,
+                prompt_version=result.prompt_version or self.current_prompt_version,
+                model_name=result.model_name,
+                reasoning=result.reasoning,
+            ))
+            return self.get_llm_prediction_for_instance(instance_id)
+        finally:
+            with self._on_demand_lock:
+                self._on_demand_inflight.pop(instance_id, None)
+                self._on_demand_active -= 1
+                if self._on_demand_active <= 0:
+                    self._on_demand_active = 0
+                    self._on_demand_idle.set()
+            done.set()
+
+    def _wait_for_on_demand_idle(self, timeout: float = 120.0) -> None:
+        """Called by the background batch before each item: give way to any
+        on-demand call (the item the human is looking at) first."""
+        self._on_demand_idle.wait(timeout=timeout)
 
     def get_annotation_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get annotation statistics for the status display.
@@ -5608,7 +5721,10 @@ class SoloModeManager:
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
         prediction = self.get_llm_prediction(instance_id, schema_name)
-        return prediction.human_label if prediction else None
+        if prediction is not None and prediction.human_label is not None:
+            return prediction.human_label
+        # No prediction yet (or it was replaced): fall back to the stored value.
+        return self.human_label_values.get(instance_id, {}).get(schema_name)
 
     def get_llm_labeling_stats(self) -> Dict[str, Any]:
         """Get LLM labeling statistics."""

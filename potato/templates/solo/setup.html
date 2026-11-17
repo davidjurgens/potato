@@ -116,7 +116,7 @@
                 </a>
             </p>
         {% else %}
-            <form method="POST" action="{{ url_for('solo_mode.setup') }}">
+            <form method="POST" action="{{ url_for('solo_mode.setup') }}" id="setup-form">
                 <div class="form-group">
                     <label for="task_description">Task description</label>
                     <p class="form-help" id="task_description_help">
@@ -135,16 +135,41 @@
 
                 <div class="solo-nav">
                     <span></span>
-                    <button type="submit" class="btn btn-primary">
-                        Generate prompt
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <button type="submit" class="btn btn-primary" id="setup-submit"
+                            style="display: inline-flex; align-items: center; gap: 8px;">
+                        <span class="loading-spinner" id="setup-spinner"
+                              style="width: 14px; height: 14px; border-width: 2px; display: none;"></span>
+                        <span id="setup-submit-label">Generate prompt</span>
+                        <svg id="setup-submit-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M5 12h14M13 6l6 6-6 6"
                                   stroke="currentColor" stroke-width="2"
                                   stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </button>
                 </div>
+                <p class="form-help" id="setup-wait-note" role="status" aria-live="polite"
+                   style="display: none; text-align: right; margin-top: 8px;">
+                    The model is writing your starting prompt. This can take up to a minute.
+                </p>
             </form>
+            <script>
+            // Writing the starting prompt is a real (often 20-60s) LLM call
+            // made during the navigation this submit triggers. Without
+            // feedback the button looks dead and users click it again.
+            (function () {
+                const form = document.getElementById('setup-form');
+                if (!form) return;
+                form.addEventListener('submit', function (e) {
+                    const btn = document.getElementById('setup-submit');
+                    if (btn.disabled) { e.preventDefault(); return; }
+                    btn.disabled = true;
+                    document.getElementById('setup-spinner').style.display = 'inline-block';
+                    document.getElementById('setup-submit-arrow').style.display = 'none';
+                    document.getElementById('setup-submit-label').textContent = 'Writing your starting prompt…';
+                    document.getElementById('setup-wait-note').style.display = 'block';
+                });
+            })();
+            </script>
         {% endif %}
     </section>
 

@@ -50,6 +50,24 @@ def _codebook_tray_flag():
         return {'codebook_ui_enabled': False}
 
 
+@solo_mode_bp.context_processor
+def _visited_phases():
+    """Phases the workflow actually entered, so the stepper can tell a step
+    that was done from one that was skipped (both are 'behind' the current
+    phase). Names use the template's underscore form."""
+    try:
+        manager = get_solo_mode_manager()
+        if manager is None:
+            return {}
+        visited = {'setup', manager.get_current_phase().to_str().replace('-', '_')}
+        for t in manager.phase_controller.get_transition_history():
+            visited.add(t.to_phase.to_str().replace('-', '_'))
+            visited.add(t.from_phase.to_str().replace('-', '_'))
+        return {'visited_solo_phases': visited}
+    except Exception:
+        return {}
+
+
 def solo_mode_required(f):
     """Decorator to ensure Solo Mode is enabled and initialized."""
     @wraps(f)
@@ -514,6 +532,17 @@ def contrast_sets():
         edited_text = request.form.get('edited_text')
         notes = request.form.get('notes', '')
 
+        action = request.form.get('action')
+        if action in ('skip_one', 'skip_all'):
+            # Writing contrast pairs is optional: skip this one, or the rest.
+            # Pairs already written still turn into rule proposals.
+            manager.skip_contrast_pairs(pair_id if action == 'skip_one' else None)
+            if not manager.contrast_set_generator.get_unreviewed_pairs():
+                result = manager.propose_rules_from_contrast_pairs()
+                session['contrast_proposals_created'] = result.get(
+                    'proposals_created', 0)
+            return redirect(url_for('solo_mode.contrast_sets'))
+
         if pair_id and edited_text:
             recorded = manager.record_contrast_edit(
                 pair_id, edited_text, notes=notes)
@@ -687,6 +716,16 @@ def annotate():
             # answer, and whether the answer came from the Accept button. An
             # older page that sends neither leaves the blind/shown split alone.
             visible = request.form.get('suggestion_visible')
+            # Make sure the LLM has labeled this instance before recording
+            # the human's answer, so it is compared now and any disagreement
+            # is surfaced immediately (the page's own prefetch is often still
+            # queued behind background labeling when a fast human submits).
+            # Best-effort: on failure the human label is kept and compared
+            # once a prediction lands (manager.set_llm_prediction).
+            try:
+                manager.get_or_create_llm_suggestion(instance_id)
+            except Exception as e:
+                logger.warning(f"LLM label before compare failed for {instance_id}: {e}")
             manager.record_human_annotation(
                 instance_id, annotation, user_id,
                 suggestion_visible=(None if visible is None else visible == '1'),
@@ -862,6 +901,12 @@ def _resolve_nav_instance(manager, user_id, requested_id):
         # Previously went Back — a plain "next" resumes toward the
         # frontier instead of picking a brand new instance.
         pos += 1
+        instance_id = history[pos]
+    elif (0 <= pos < len(history)
+          and history[pos] not in manager.human_labeled_ids):
+        # At the frontier and the item being shown there was never answered
+        # (the user opened another page and came back, or reloaded): show it
+        # again instead of silently skipping to a new one.
         instance_id = history[pos]
     else:
         instance_id = manager.get_next_instance_for_human(user_id)
@@ -1367,6 +1412,30 @@ def rule_review():
         stats=stats,
         phase=manager.get_current_phase().name.lower(),
     )
+
+
+@solo_mode_bp.route('/')
+@login_required
+@solo_mode_required
+def entry():
+    """Where to land in Solo Mode: the screen for the current phase. Home
+    sends a solo-mode project's annotators here instead of the regular
+    annotation page, so a new user starts at Setup and a returning one
+    resumes where they left off."""
+    manager = get_solo_mode_manager()
+    phase = manager.get_current_phase()
+    by_phase = {
+        SoloPhase.SETUP: 'solo_mode.setup',
+        SoloPhase.PROMPT_REVIEW: 'solo_mode.prompt_editor',
+        SoloPhase.EDGE_CASE_SYNTHESIS: 'solo_mode.edge_cases',
+        SoloPhase.EDGE_CASE_LABELING: 'solo_mode.edge_cases',
+        SoloPhase.CONTRAST_SET_REVIEW: 'solo_mode.contrast_sets',
+        SoloPhase.PROMPT_VALIDATION: 'solo_mode.prompt_editor',
+        SoloPhase.PARALLEL_ANNOTATION: 'solo_mode.annotate',
+        SoloPhase.ACTIVE_ANNOTATION: 'solo_mode.annotate',
+        SoloPhase.DISAGREEMENT_RESOLUTION: 'solo_mode.disagreements',
+    }
+    return redirect(url_for(by_phase.get(phase, 'solo_mode.status')))
 
 
 @solo_mode_bp.route('/status')

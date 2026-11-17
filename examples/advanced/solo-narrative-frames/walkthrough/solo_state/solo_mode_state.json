@@ -1,0 +1,829 @@
+{
+  "task_description": "Decide whether each immigration-related tweet uses an episodic or a thematic narrative frame.",
+  "current_prompt_version": 1,
+  "prompt_versions": [
+    {
+      "version": 1,
+      "prompt_text": "Label each immigration-related tweet as either 'Episodic' or 'Thematic' based on its narrative frame. An 'Episodic' narrative frame tells a story with a clear beginning, middle, and end, often focusing on a specific event or sequence of events. An 'Thematic' narrative frame, on the other hand, conveys a general idea or message without a specific storyline. Consider the following criteria when making your decision:\n\n* Episodic: The tweet describes a specific incident, event, or sequence of events related to immigration. The narrative has a clear structure and progression.\n\n* Thematic: The tweet conveys a general opinion, message, or idea about immigration without describing a specific event or sequence of events. The narrative may focus on emotions, opinions, or abstract concepts.\n\nFor edge cases, consider the following:\n\n* If the tweet describes a general trend or statistic related to immigration, label it as 'Thematic'.\n\n* If the tweet tells a story about a personal experience or anecdote, label it as 'Episodic'.\n\nIf you're unsure, try to identify the main focus of the tweet. If it's focused on conveying a general message or idea, label it as 'Thematic'. If it's focused on telling a specific story or describing a sequence of events, label it as 'Episodic'.\n\nExample: 'Just witnessed a family being deported at the airport. Heartbreaking!' (Episodic) vs. 'Immigration policies are causing unnecessary suffering.' (Thematic)\n\nRespond with the label 'Episodic' or 'Thematic' for each tweet.",
+      "created_at": "2026-11-17T14:57:54.089481",
+      "created_by": "llm_synthesis",
+      "source_description": "Written by the revision model from the task description. This prompt clearly defines the two narrative frames and provides decision criteria for edge cases. The use of concise examples helps illustrate the difference between episodic and thematic narrative frames. The prompt also specifies what to do when uncertain, making it easy for an LLM to follow.",
+      "parent_version": null,
+      "validation_accuracy": null
+    }
+  ],
+  "predictions": {
+    "1107856142938587136": {
+      "narrative_frame": {
+        "instance_id": "1107856142938587136",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 0,
+        "timestamp": "2026-11-17T14:57:32.772554",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a broader message about the speaker's criticism of the person in question, focusing on their views and actions rather than a specific event or experience.",
+        "human_label": "Thematic",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1042995092443680769": {
+      "narrative_frame": {
+        "instance_id": "1042995092443680769",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:03:05.705916",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet describes a specific incident where ICE arrested immigrants who tried to take in children, indicating a clear sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1159982029062037504": {
+      "narrative_frame": {
+        "instance_id": "1159982029062037504",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:03:19.508687",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about calling on ICE to raid Trump's properties, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1095344151149858816": {
+      "narrative_frame": {
+        "instance_id": "1095344151149858816",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:03:41.037251",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about California's problems, citing various statistics and rankings, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1141211529209139201": {
+      "narrative_frame": {
+        "instance_id": "1141211529209139201",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:03:44.959431",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the president's behavior and its consequences, without describing a specific event or sequence of events.",
+        "human_label": "Thematic",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1021896150742380545": {
+      "narrative_frame": {
+        "instance_id": "1021896150742380545",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:03:53.686575",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the GOP's actions against undocumented immigrants, using emotive language to describe the situation. It does not describe a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1125470649827430401": {
+      "narrative_frame": {
+        "instance_id": "1125470649827430401",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:04:02.258286",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet describes a specific incident involving a migrant paying to 'rent' a boy to cross the border, which has a clear beginning, middle, and end.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1008778197796904960": {
+      "narrative_frame": {
+        "instance_id": "1008778197796904960",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:04:19.929627",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about Jesus being an illegal immigrant and criticizing American Christians for ignoring the teachings of Jesus. It does not describe a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1062346250048045056": {
+      "narrative_frame": {
+        "instance_id": "1062346250048045056",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:04:28.146189",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general opinion and message about the left's stance on illegals voting, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "966594674881454081": {
+      "narrative_frame": {
+        "instance_id": "966594674881454081",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:04:36.534073",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet describes a specific incident involving a migrant firing shots at a queue for food handouts in Calais.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1172817766996422656": {
+      "narrative_frame": {
+        "instance_id": "1172817766996422656",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:04:46.943533",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the similarities between current events and 1930s Germany, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1032618131406180352": {
+      "narrative_frame": {
+        "instance_id": "1032618131406180352",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:04:55.062479",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general opinion about the relationship between immigration and crime, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1079180098769543169": {
+      "narrative_frame": {
+        "instance_id": "1079180098769543169",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:05:08.709632",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the speaker's opinion on how to handle illegal immigrants, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1081346230729490432": {
+      "narrative_frame": {
+        "instance_id": "1081346230729490432",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:05:16.497439",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general opinion about immigrants coming to the US to mass shoot, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1015655613164994560": {
+      "narrative_frame": {
+        "instance_id": "1015655613164994560",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:05:25.402815",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the similarity between Democrats and Republicans, and how large numbers of immigrants were arrested under Obama, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1042945509474951168": {
+      "narrative_frame": {
+        "instance_id": "1042945509474951168",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:05:34.363205",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet describes a specific incident (a head-on crash in Arizona that killed eight people, including four illegal immigrants) with a clear structure and progression.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1084504496351465472": {
+      "narrative_frame": {
+        "instance_id": "1084504496351465472",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:05:50.175915",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general idea about migrants coming to Germany, focusing on a demographic group and proposing a solution without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1024020333760786434": {
+      "narrative_frame": {
+        "instance_id": "1024020333760786434",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:06:00.674094",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message of frustration and criticism towards California's policies and conditions, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1050682913589788672": {
+      "narrative_frame": {
+        "instance_id": "1050682913589788672",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:06:08.430096",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general opinion about Western women's reactions to rape and migrants, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1015570357640749057": {
+      "narrative_frame": {
+        "instance_id": "1015570357640749057",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:06:24.057473",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the reasons why asylum claims from the US are not legal, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1093002393221058561": {
+      "narrative_frame": {
+        "instance_id": "1093002393221058561",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:06:32.669748",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general message about the number of 'illegals' voting Democratic, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "967319310489276416": {
+      "narrative_frame": {
+        "instance_id": "967319310489276416",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:07:24.760251",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general opinion about 'post-instance policing' on immigration and smuggling, without describing a specific event or sequence of events.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "966777449609613318": {
+      "narrative_frame": {
+        "instance_id": "966777449609613318",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:07:29.779638",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "983689995251838976": {
+      "narrative_frame": {
+        "instance_id": "983689995251838976",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:07:29.779686",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 3 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1040039507733577729": {
+      "narrative_frame": {
+        "instance_id": "1040039507733577729",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:07:33.206716",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet conveys a general opinion about the behavior of Democrats and Republicans, without describing a specific event or sequence of events.",
+        "human_label": "Thematic",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1009559325696720896": {
+      "narrative_frame": {
+        "instance_id": "1009559325696720896",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:07:47.005651",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet describes a specific incident (mass graves of immigrants found in Texas) with a clear structure and progression.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1021508369700593664": {
+      "narrative_frame": {
+        "instance_id": "1021508369700593664",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-17T15:07:52.212651",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet describes a general trend or statistic related to immigration, focusing on the idea that Swedes are saying 'enough' to immigrants, without describing a specific event or sequence of events.",
+        "human_label": "Thematic",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    }
+  },
+  "human_labeled_ids": [
+    "1141211529209139201",
+    "1040039507733577729",
+    "1107856142938587136",
+    "1021508369700593664"
+  ],
+  "human_label_values": {
+    "1107856142938587136": {
+      "narrative_frame": "Thematic"
+    },
+    "1141211529209139201": {
+      "narrative_frame": "Thematic"
+    },
+    "1040039507733577729": {
+      "narrative_frame": "Thematic"
+    },
+    "1021508369700593664": {
+      "narrative_frame": "Thematic"
+    }
+  },
+  "uncompared_human_labels": {},
+  "labeled_by_user": {
+    "lina1": [
+      "1141211529209139201",
+      "1040039507733577729",
+      "1107856142938587136",
+      "1021508369700593664"
+    ]
+  },
+  "llm_labeled_ids": [
+    "1015655613164994560",
+    "967319310489276416",
+    "966594674881454081",
+    "1172817766996422656",
+    "1032618131406180352",
+    "966777449609613318",
+    "1095344151149858816",
+    "1009559325696720896",
+    "1125470649827430401",
+    "1107856142938587136",
+    "1093002393221058561",
+    "1024020333760786434",
+    "1008778197796904960",
+    "1050682913589788672",
+    "1084504496351465472",
+    "1021896150742380545",
+    "1021508369700593664",
+    "1159982029062037504",
+    "1141211529209139201",
+    "1062346250048045056",
+    "1081346230729490432",
+    "983689995251838976",
+    "1042995092443680769",
+    "1040039507733577729",
+    "1079180098769543169",
+    "1042945509474951168",
+    "1015570357640749057"
+  ],
+  "disagreement_ids": [],
+  "reviewed_disagreements": [],
+  "validation_sample_ids": [],
+  "validated_instance_ids": [],
+  "pending_relabel_ids": [],
+  "relabel_wave_size": 0,
+  "pending_codebook_relabel_ids": [],
+  "codebook_relabel_wave_size": 0,
+  "codebook_changes_since_relabel": 0,
+  "codebook_part_pending_changes": {},
+  "codebook_part_relabel_log": [],
+  "codebook_version_history": {},
+  "needs_final_override_choice": false,
+  "edge_case_ids": [],
+  "edge_case_labels": {},
+  "agreement_metrics": {
+    "total_compared": 4,
+    "agreements": 4,
+    "disagreements": 0,
+    "agreement_rate": 1.0,
+    "stale": false,
+    "pending_codebook_changes": 0,
+    "stale_parts": {}
+  },
+  "confidence_history": {
+    "1107856142938587136": [
+      [
+        0,
+        0.5
+      ]
+    ],
+    "1042995092443680769": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1159982029062037504": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1095344151149858816": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1141211529209139201": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1021896150742380545": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1125470649827430401": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1008778197796904960": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1062346250048045056": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "966594674881454081": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1172817766996422656": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1032618131406180352": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1079180098769543169": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1081346230729490432": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1015655613164994560": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1042945509474951168": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1084504496351465472": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1024020333760786434": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1050682913589788672": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1015570357640749057": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1093002393221058561": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "967319310489276416": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "966777449609613318": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "983689995251838976": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "1040039507733577729": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1009559325696720896": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1021508369700593664": [
+      [
+        1,
+        0.9
+      ]
+    ]
+  },
+  "reannotation_counts": {},
+  "per_version_agreement": {
+    "0": {
+      "compared": 1,
+      "agreements": 1
+    },
+    "1": {
+      "compared": 3,
+      "agreements": 3
+    }
+  },
+  "anchoring": {
+    "buckets": {
+      "shown": {
+        "compared": 0,
+        "agreements": 0
+      },
+      "blind": {
+        "compared": 5,
+        "agreements": 4
+      }
+    },
+    "filed": {
+      "1021910519983292416:narrative_frame": "blind",
+      "1107856142938587136:narrative_frame": "blind",
+      "1141211529209139201:narrative_frame": "blind",
+      "1040039507733577729:narrative_frame": "blind",
+      "1021508369700593664:narrative_frame": "blind"
+    },
+    "shown_instances": [],
+    "accepted": 0
+  },
+  "routing_min_confidence": {},
+  "gold_results": {},
+  "refinement_consecutive_failures": 0,
+  "pending_refinements": [],
+  "refinement_log": [],
+  "icl_library": null,
+  "last_review_revision": null,
+  "edge_case_rule_data": {
+    "rules": {},
+    "categories": {}
+  },
+  "edge_case_synthesis_data": {
+    "edge_cases": {},
+    "synthesis_rounds": [
+      {
+        "timestamp": "2026-11-17T15:02:57.229610",
+        "num_requested": 5,
+        "num_generated": 0,
+        "case_ids": []
+      }
+    ],
+    "tested_aspects": [],
+    "id_counter": 0
+  },
+  "validation_tracker": {
+    "metrics": {
+      "total_compared": 4,
+      "agreements": 4,
+      "disagreements": 0,
+      "agreement_rate": 1.0,
+      "label_agreements": {
+        "Thematic": 4
+      },
+      "label_disagreements": {},
+      "confusion_matrix": {},
+      "recent_agreement_rate": 1.0,
+      "trend": "stable"
+    },
+    "comparison_history": [
+      {
+        "instance_id": "1107856142938587136",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-17T15:03:22.252815"
+      },
+      {
+        "instance_id": "1141211529209139201",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-17T15:06:45.157000"
+      },
+      {
+        "instance_id": "1040039507733577729",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-17T15:07:33.207071"
+      },
+      {
+        "instance_id": "1021508369700593664",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-17T15:07:52.212965"
+      }
+    ],
+    "validation_samples": {},
+    "llm_labels_since_review": 21
+  }
+}

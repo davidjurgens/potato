@@ -361,7 +361,9 @@
 <div class="flow-guidance" role="note">
     <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
     <span>
-        Pick a label below, or accept the LLM's suggestion. Curious what
+        Label each item yourself &mdash; the model labels it too, without
+        showing you its answer. If the two of you disagree, you'll be asked
+        whether to keep your label or accept the model's. Curious what
         the model is seeing? Open <strong>"Prompt the LLM sees"</strong>
         underneath the form. Need to add, edit, or delete a code? Use the
         floating <strong>Codebook</strong> button &mdash; changes there
@@ -380,7 +382,13 @@
         <h1>Annotate</h1>
         {% if stats %}
             <span class="annotate-counter" aria-live="polite">
+                {% if existing_label %}
+                {# Revisiting an already-labeled item via Back/Forward: the
+                   "next instance number" would be wrong here. #}
+                Revisiting &middot; {{ stats.my_labeled or 0 }} of {{ stats.total }} labeled
+                {% else %}
                 Instance {{ (stats.my_labeled or 0) + 1 }} of {{ stats.total }}
+                {% endif %}
             </span>
         {% endif %}
     </div>
@@ -890,6 +898,10 @@
             submitting = true;
             if (submitBtn) submitBtn.disabled = true;
             if (acceptBtn) acceptBtn.disabled = true;
+            // The server makes sure the model has labeled this item before
+            // comparing, which can take a few seconds — say so.
+            const lbl = document.getElementById('submit-label');
+            if (lbl) lbl.textContent = 'Comparing with the model…';
         });
     }
 

@@ -1,0 +1,92 @@
+# Solo Mode, from scratch: Episodic vs. Thematic narrative framing of
+# immigration tweets about Crime and Punishment (NAACL 2021, Mendelsohn
+# et al.). The "human" is simulated with gold labels by simulate.py; the
+# prompt the LLM sees is snapshotted after every label so each version can
+# be re-scored with reference models (evaluate.py).
+#
+#   python examples/advanced/solo-narrative-frames/build_data.py
+#   python examples/advanced/solo-narrative-frames/simulate.py
+#   python examples/advanced/solo-narrative-frames/evaluate.py
+#   python examples/advanced/solo-narrative-frames/plot.py
+
+task_dir: .
+port: 8012
+verbose: false
+debug: true
+
+annotation_task_name: "solo-walkthrough"
+
+# Deliberately minimal: the starting point is "from scratch", so the only
+# thing the LLM knows at time step 0 is this sentence and the label names.
+task_description: >-
+  Decide whether each immigration-related tweet uses an episodic or a
+  thematic narrative frame.
+
+output_annotation_dir: "walkthrough/annotations"
+
+authentication:
+  method: in_memory
+  user_config_path: walkthrough/user_config.json
+
+solo_mode:
+  enabled: true
+
+  # Labeler/reviser is NOT one of the reference models, so no reference
+  # model is scored on prompts that were tuned against its own outputs.
+  labeling_models:
+    - endpoint_type: "ollama"
+      model: "llama3.1:8b"
+      endpoint_url: "http://localhost:11434"
+      max_tokens: 512
+      temperature: 0.1
+  revision_models:
+    - endpoint_type: "ollama"
+      model: "llama3.1:8b"
+      endpoint_url: "http://localhost:11434"
+      max_tokens: 2048
+      temperature: 0.3
+
+  uncertainty:
+    strategy: "direct_confidence"
+
+  thresholds:
+    # Never hand off to autonomous labeling: all 100 items get a human label.
+    end_human_annotation_agreement: 1.0
+    minimum_validation_sample: 20
+    confidence_low: 0.5
+    periodic_review_interval: 50
+
+  # Revise the prompt every 10 human labels, without waiting for approval,
+  # and never stop early, so 100 labels give up to 10 revisions.
+  refinement_loop:
+    enabled: true
+    trigger_interval: 10
+    max_cycles: 20
+    patience: 20
+    auto_apply_suggestions: true
+    refinement_strategy: "focused_edit"
+
+  batches:
+    llm_labeling_batch: 10
+    max_parallel_labels: 100
+
+  state_dir: "walkthrough/solo_state"
+
+data_files:
+  - "data/train.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+annotation_schemes:
+  - name: "narrative_frame"
+    annotation_type: "radio"
+    description: "Is the tweet's narrative frame episodic or thematic?"
+    labels:
+      - name: "Episodic"
+        key_value: "1"
+      - name: "Thematic"
+        key_value: "2"
+
+session_lifetime_days: 7
