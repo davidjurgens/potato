@@ -129,8 +129,10 @@ array and the format was import-only. Agreement between annotators uses **OKS**
 
 `cuboid_2d` stores a 3D box **projected into the image** as two quadrilaterals,
 `{front: [4 points], back: [4 points]}` — the KITTI convention. This is not true
-3D: it has no depth in sensor coordinates and no calibration. Genuine 3D cuboids
-in a point cloud are a separate schema (planned, not built).
+3D: it has no depth in sensor coordinates and no calibration. For 3D boxes in a
+point cloud, use the `cuboid_3d` tool of `spatial_annotation`
+([Point clouds](../spatial/point_cloud.md)), which exports as KITTI 3D labels
+([`kitti_3d`](../../data-export/export_formats.md#kitti-3d-kitti_3d)).
 
 The reported `area` is the **front face**, not the 8-vertex hull, because that is
 the visible extent a detector would be scored against.
