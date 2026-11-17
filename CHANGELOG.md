@@ -11,7 +11,9 @@ All notable changes to the Potato annotation platform are documented in this fil
   prestudy and show it back, in a box the annotator opens with a click, while
   they label. The answer comes from the participant's saved state, so it
   follows them to another browser or device. Answers are escaped as HTML.
-  Pocket Mode shows the same boxes above its cards.
+  Pocket Mode shows the same boxes above its cards. A likert answer shows its
+  place on the scale with the end labels, as in `4 of 7 (1 = No trust,
+  7 = Full trust)`, instead of the bare point.
   See `docs/workflow/prior_answers.md` and `examples/advanced/prior-answers/`.
 
 - Painting points for `segment_3d` in the point cloud viewer. A brush labels

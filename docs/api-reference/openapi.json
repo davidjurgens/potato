@@ -12230,7 +12230,8 @@
           "pocket"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -12255,7 +12256,7 @@
             "description": "Success"
           }
         },
-        "summary": "Serve the service worker from /pocket so its scope covers the shell.",
+        "summary": "Serve the service worker for the /pocket page.",
         "tags": [
           "pocket"
         ]
