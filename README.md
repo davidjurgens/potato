@@ -284,7 +284,7 @@ Login options: simple usernames for quick studies, passwords stored in a file or
 
 **Live demos.** The [flagship demo](https://huggingface.co/spaces/Blablablab/potato) runs agent trace evaluation, and the [demo catalog](docs/data-export/potato_on_huggingface.md) has a HuggingFace Space for every annotation type. [Deploy your own](deployment/huggingface-spaces/deploy_spaces.md) from a single manifest.
 
-**Research showcase.** The [Potato Showcase](https://github.com/davidjurgens/potato-showcase/) collects annotation projects from published research, including sentiment analysis, dialogue evaluation and summarization.
+**Research showcase.** The [Potato Showcase](https://www.potatoannotator.com/showcase) has 500+ worked task designs from many domains, including projects from published research on sentiment analysis, dialogue evaluation and summarization.
 
 ---
 
