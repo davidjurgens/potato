@@ -15,7 +15,7 @@
 [![Paper (Potato 1.0)](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 [![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/potato)
 
-**Potato** is a free, open-source platform for collecting human annotations and judgments, which you host yourself. Researchers use it to label NLP and machine-learning datasets, evaluate AI agents and LLMs, run online experiments and surveys, code interviews for qualitative analysis, and review scientific and medical data. The same tool handles text, audio, video, images, documents, agent traces, 3D scans and more.
+**Potato** is a free, open-source platform for collecting human annotations and judgments that you can run on your own machine or deploy to the cloud with one command. Researchers use it to label NLP and machine-learning datasets, evaluate AI agents and LLMs, run online experiments and surveys, code interviews for qualitative analysis, and review scientific and medical data. The same tool handles text, audio, video, images, documents, agent traces, 3D scans and more.
 
 A Potato task is a single settings file plus your data. You can design it in the browser, have a coding agent build it, or write it by hand. Because the whole task lives in one file, you can share it, reuse it, keep it under version control, and publish it next to a paper so others can run the same study.
 
