@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/readme/logo-dark.jpg">
+    <img src="docs/img/readme/logo-light.jpg" alt="Potato annotation tool logo: a potato in glasses holding a pen" width="200">
+  </picture>
+</p>
+
 # Potato: The Portable Annotation Tool
 
 [![Docs & Guides](https://img.shields.io/badge/docs%20%26%20guides-potatoannotator.com-brightgreen)](https://www.potatoannotator.com/docs)
@@ -6,410 +13,314 @@
 [![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Paper (Potato 2.0)](https://img.shields.io/badge/paper-ACL%202026-red)](https://aclanthology.org/2026.acl-demo.37/)
 [![Paper (Potato 1.0)](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
-[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
-[![Website](https://img.shields.io/badge/website-potatoannotator.com-brightgreen)](https://www.potatoannotator.com)
+[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/potato)
 
-**Potato** is a free, self-hosted annotation platform for NLP, Agentic, GenAI, and qualitative research. Annotate text, audio, video, images, documents, agent traces, and more — or run a full qualitative data analysis (QDA) workflow with a living codebook, memos, and cases. Configured entirely through YAML. No coding required.
+**Potato** is a free, open-source platform for collecting human annotations and judgments, which you host yourself. Researchers use it to label NLP and machine-learning datasets, evaluate AI agents and LLMs, run online experiments and surveys, code interviews for qualitative analysis, and review scientific and medical data. The same tool handles text, audio, video, images, documents, agent traces, 3D scans and more.
 
-**[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)** — no installation needed. More at **[www.potatoannotator.com](https://www.potatoannotator.com)**.
+A Potato task is a single settings file plus your data. You can design it in the browser, have a coding agent build it, or write it by hand. Because the whole task lives in one file, you can share it, reuse it, keep it under version control, and publish it next to a paper so others can run the same study.
+
+**[Try the live demo](https://huggingface.co/spaces/Blablablab/potato)** (no installation) · **[potatoannotator.com](https://www.potatoannotator.com)**
+
+<p align="center">
+  <a href="https://www.potatoannotator.com">
+    <img src="docs/img/readme/potato-tour.webp" alt="A tour of Potato annotation screens: named entities highlighted in a news paragraph, a web agent's trace, a fluorescence microscopy image with cells classified, a coded interview transcript, bird calls boxed on a spectrogram, a supernova candidate with its light curve, two model replies rated for helpfulness, a sleep recording with events marked, a protein structure with binding-site residues selected, a glossed Turkish sentence, a lidar street scene with 3D boxes, a picked and integrated NMR spectrum, and an aerial image with land cover outlined" width="840">
+  </a>
+  <br>
+  <sub>Entities · web agents · microscopy · interviews · bird calls · astronomy · model replies · sleep studies · proteins · glossing · lidar · NMR spectra · land cover. Potato 2.14.0 running on sample data.</sub>
+</p>
 
 ---
 
-## Quick Start
+## Who uses Potato
+
+| If you are... | Potato gives you | Start here |
+|---|---|---|
+| **Building NLP or ML datasets** | Classification, span and entity labeling, pairwise preference, multi-annotator agreement, adjudication, and AI pre-labeling for annotators to correct | [Schema gallery](docs/annotation-types/schemas_and_templates.md) |
+| **Evaluating AI agents and LLMs** | Step-by-step trace review for 15+ agent frameworks, web-agent replays, RAG checks, LLM-judge calibration, and CI gating | [Agent evaluation](docs/agent-evaluation/agent_traces.md) |
+| **Running experiments and surveys** | Condition assignment, counterbalancing, jsPsych timelines, validated questionnaires, survey import from Qualtrics and REDCap, and recruiting through Prolific and other panels | [Experiment flow](docs/workflow/experiment_flow.md) |
+| **Doing qualitative research** | A living codebook, in-vivo coding, memos and cases: the NVivo / ATLAS.ti / MAXQDA workflow, self-hosted and free | [QDA mode](docs/advanced/qda.md) |
+| **Reviewing scientific or medical data** | Viewers for microscopy, whole slides, CT/MR volumes, EEG, protein structures, genome loci, spectra and astronomy cutouts | [Science viewers](docs/annotation-types/science/microscopy.md) |
+
+---
+
+## Build a task three ways
+
+- **In the browser.** The [Potato Designer](https://www.potatoannotator.com/designer) lets you design an annotation study or a Solo Mode project in a visual form: pick annotation types, set up AI support, and download a config that runs with `potato start`.
+- **With a coding agent.** Install the [Potato skill](https://github.com/davidjurgens/potato-skill) in Claude Code, Codex or Cursor. Describe the study, and the agent writes the task, runs it, checks the interface and exports the annotations. Potato also ships an [MCP server](docs/tools/mcp_server.md) (`potato mcp`).
+- **By hand.** Copy one of the 200+ projects in [`examples/`](examples/) and edit its `config.yaml`. Editors check the file as you type against the published [config schema](docs/api-reference/machine_readable.md).
+
+```
+# Claude Code
+/plugin marketplace add davidjurgens/potato-skill
+/plugin install potato-skill@potato
+
+# Codex or Cursor
+npx skills add davidjurgens/potato-skill --agent codex cursor
+```
+
+---
+
+## Quick start
 
 ```bash
 pip install potato-annotation
-# The examples/ folder ships with the source repo (see "run from source" below).
-# After a PyPI install, clone the repo for the examples, or point `potato start`
-# at your own config (see docs/quick-start.md).
-potato start examples/classification/single-choice/config.yaml -p 8000
+potato start path/to/config.yaml -p 8000
 ```
 
-Or run from source (recommended to get the `examples/`):
+Then open [http://localhost:8000](http://localhost:8000). To try a ready-made task first, run one from a source checkout, which includes `examples/`:
 
 ```bash
 git clone https://github.com/davidjurgens/potato.git
-cd potato && pip install -r requirements.txt && pip install -e .
-python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
+cd potato && pip install -e .
+potato start examples/classification/single-choice/config.yaml -p 8000
 ```
 
-Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse the [`examples/`](examples/) directory for ready-to-use templates.
-
-**Using Claude Code, Codex, or Cursor?** Install the
-[Potato skill](https://github.com/davidjurgens/potato-skill) first. It shows the
-agent how to design a task, build and run it, check the interface, and export
-the annotations.
-
-```
-/plugin marketplace add davidjurgens/potato-skill
-/plugin install potato-skill@potato
-```
-
-For Codex or Cursor: `npx skills add davidjurgens/potato-skill --agent codex cursor`
+To show a pilot to a few people, `potato share config.yaml` serves it on a temporary public URL. For anything longer-lived, see [Deploy and share](#deploy-and-share).
 
 ---
 
-## What Can You Annotate?
+## What you can annotate
 
-Potato covers traditional NLP labeling, AI agent evaluation, and interpretive qualitative analysis.
+The tables below are a **representative sample, not a complete list.** Annotation schemes and data types can be combined freely, [custom layouts](examples/custom-layouts/) and raw HTML cover interfaces not listed here, and [plugins](docs/advanced/plugins.md) add new schema and display types. If your task isn't listed, Potato can probably still do it.
 
-The tables below are a **representative sample, not a complete list.** Schemes and data types compose freely, [custom layouts](examples/custom-layouts/) and raw HTML let you build interfaces beyond these, and [new schema types](docs/annotation-types/schemas_and_templates.md) can be added. If you don't see your task here, it's likely still possible.
-
-### Data Types
+### Data types
 
 | Modality | Capabilities |
 |----------|-------------|
-| **Text** | Classification, span labeling, entity linking, coreference, pairwise comparison ([docs](docs/annotation-types/schemas_and_templates.md)) |
-| **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
-| **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
-| **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
-| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF. No transcript? Potato runs Whisper and speaker diarization locally ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
-| **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
-| **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
-| **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation, and diarized transcripts synced to their audio ([docs](docs/annotation-types/multimedia/audio_dialogue.md)) |
-| **Documents** | PDF, Word, Markdown, code, and spreadsheets with coordinate mapping ([docs](docs/annotation-types/format_support.md)) |
-| **3D & Volumes** | Lidar and photogrammetry point clouds with 3D boxes and per-point segments; CT and MR volumes (DICOM, NIfTI) with label masks painted in linked axial, coronal and sagittal views ([point clouds](docs/annotation-types/spatial/point_cloud.md), [volumes](docs/annotation-types/multimedia/volume_annotation.md)) |
-| **Maps** | Labelled points, lines and polygons drawn on a map, pinned places, and labelled regions of an outline map ([docs](docs/annotation-types/spatial/geo_annotation.md)) |
-| **Science viewers** | Protein structures with residue selection, genome loci in igv.js for variant review, and spectrograms with time-frequency boxes for bioacoustics ([proteins](docs/annotation-types/science/protein_structures.md), [genomes](docs/annotation-types/science/genome_loci.md), [spectrograms](docs/annotation-types/multimedia/spectrogram_annotation.md)) |
-| **Signals** | Multi-channel EEG, ECG and sensor recordings (EDF/BDF, WFDB, CSV/Parquet) with interval, event and sleep-epoch labels, exported as BIDS events ([docs](docs/annotation-types/science/time_series.md)) |
-| **Chemistry and spectra** | Draw or correct chemical structures, mark atoms in a molecule, and pick and integrate peaks in NMR, IR and MS spectra ([structures](docs/annotation-types/science/chemical_structures.md), [spectra](docs/annotation-types/science/spectra.md)) |
-| **Microscopy and pathology** | Multichannel OME-Zarr and OME-TIFF images with regions and cell classes; whole-slide regions from and to QuPath and ASAP; DICOM SEG and SR export ([microscopy](docs/annotation-types/science/microscopy.md), [clinical formats](docs/annotation-types/science/clinical_formats.md)) |
+| **Text** | Classification, span labeling, entity linking, coreference, relations, events, pairwise comparison ([docs](docs/annotation-types/schemas_and_templates.md)) |
+| **Agent traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
+| **Web agents** | Screenshot replays with click and scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
+| **RAG pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination marking |
+| **Dialogue** | Turn-level annotation, conversation trees, live chat evaluation, and diarized transcripts synced to audio ([docs](docs/annotation-types/multimedia/audio_dialogue.md)) |
+| **Audio** | Waveforms, segment labels, ELAN-style tiers, and 21 transcript and subtitle formats read directly, including Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid and EAF. Without a transcript, Potato runs Whisper and speaker diarization locally ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
+| **Video** | Frame-by-frame labeling, temporal segments, object tracking ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
+| **Images** | Bounding boxes, polygons, brush masks, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
+| **Documents** | PDF, Word, Markdown, code and spreadsheets, with coordinate mapping ([docs](docs/annotation-types/format_support.md)) |
+| **3D and volumes** | Lidar and photogrammetry point clouds with 3D boxes and per-point segments; CT and MR volumes (DICOM, NIfTI) painted in linked axial, coronal and sagittal views ([point clouds](docs/annotation-types/spatial/point_cloud.md), [volumes](docs/annotation-types/multimedia/volume_annotation.md)) |
+| **Maps** | Points, lines and polygons on a map, pinned places, and regions of an outline map ([docs](docs/annotation-types/spatial/geo_annotation.md)) |
+| **Microscopy and pathology** | Multichannel OME-Zarr and OME-TIFF with regions and cell classes; whole-slide regions to and from QuPath and ASAP; DICOM SEG and SR export ([microscopy](docs/annotation-types/science/microscopy.md), [clinical formats](docs/annotation-types/science/clinical_formats.md)) |
+| **Signals** | Multi-channel EEG, ECG and sensor recordings (EDF/BDF, WFDB, CSV/Parquet) with interval, event and sleep-stage labels, exported as BIDS events ([docs](docs/annotation-types/science/time_series.md)) |
+| **Biology** | Protein structures with residue selection; genome loci in igv.js for variant review ([proteins](docs/annotation-types/science/protein_structures.md), [genomes](docs/annotation-types/science/genome_loci.md)) |
+| **Chemistry and spectra** | Draw or correct chemical structures, mark atoms, and pick and integrate peaks in NMR, IR and MS spectra ([structures](docs/annotation-types/science/chemical_structures.md), [spectra](docs/annotation-types/science/spectra.md)) |
+| **Bioacoustics** | Spectrograms with time-frequency boxes ([docs](docs/annotation-types/multimedia/spectrogram_annotation.md)) |
 | **Astronomy** | FITS cutouts as science/reference/difference triplets with light curves, for real/bogus vetting and morphology ([docs](docs/annotation-types/science/astronomy.md)) |
 
-### Annotation Schemes
+### Annotation schemes
 
-| Scheme | Use Case |
+| Scheme | Use case |
 |--------|----------|
-| Radio / Checkbox / Likert | Classification, multi-label, rating scales |
+| Radio / checkbox / Likert / slider | Classification, multi-label, rating scales |
 | Span annotation | NER, highlighting, hallucination marking |
-| Pairwise comparison | A/B testing, best-worst scaling |
-| Per-step ratings | Evaluate individual agent actions or dialogue turns |
+| Pairwise and best-worst | A/B preference, ranking, best-worst scaling |
+| Per-step ratings | Rate each agent action or dialogue turn |
 | Free text | Open-ended responses with validation |
-| Triage | Rapid accept/reject/skip curation ([docs](docs/annotation-types/triage.md)) |
-| Conditional logic | Adaptive forms that respond to prior answers ([docs](docs/configuration/conditional_logic.md)) |
-| Interlinear glossing | Morpheme segmentation, glosses and a free translation for each sentence ([docs](docs/annotation-types/text/interlinear_gloss.md)) |
+| Triage | Fast accept / reject / skip for data curation ([docs](docs/annotation-types/triage.md)) |
+| Conditional logic | Questions that appear based on earlier answers ([docs](docs/configuration/conditional_logic.md)) |
+| Interlinear glossing | Morpheme segmentation, glosses and a free translation per sentence ([docs](docs/annotation-types/text/interlinear_gloss.md)) |
 | Ego networks | A respondent names people, answers questions about each, links who knows whom, and places them on a map ([docs](docs/annotation-types/structured/ego_network.md)) |
-| Listening tests | MUSHRA, BS.1116, ACR, DCR, CCR, P.835 and ABX audio tests ([docs](docs/annotation-types/multimedia/listening_tests.md)) |
-| Measurement | Visual analogue scales, semantic differentials, constant-sum, price lists, belief elicitation and other survey measures ([docs](docs/annotation-types/measurement/vas.md)) |
+| Listening tests | MUSHRA, BS.1116, ACR, DCR, CCR, P.835 and ABX ([docs](docs/annotation-types/multimedia/listening_tests.md)) |
+| Survey measures | Visual analogue scales, semantic differentials, constant-sum, price lists, belief elicitation ([docs](docs/annotation-types/measurement/vas.md)) |
 
 ---
 
-## Agent & LLM Evaluation
+## Agent and LLM evaluation
 
-Potato reads traces from the major agent frameworks and evaluates them at the trajectory, step, span, or comparison level.
-
-### Trace Formats
-
-Import traces from any major agent framework with the built-in converter:
+Potato reads traces from the major agent frameworks and lets people evaluate them for a whole trajectory, for each step, for spans of text inside a step, or side by side.
 
 ```bash
-python -m potato.trace_converter --input traces.json --input-format openai --output data.jsonl
+python -m potato.trace_converter --input traces.json --auto-detect --output data.jsonl
 ```
 
-Supported formats: **OpenAI**, **Anthropic/Claude**, **ReAct**, **LangChain**, **LangFuse**, **WebArena**, **SWE-bench**, **OpenTelemetry**, **CrewAI/AutoGen/LangGraph**, **MCP**, **Aider**, **Claude Code**, **ATIF**, **SWE-Agent**, and **Web Agent**. Auto-detection is available with `--auto-detect`.
+Supported formats: **OpenAI**, **Anthropic/Claude**, **ReAct**, **LangChain**, **LangFuse**, **WebArena**, **SWE-bench**, **SWE-Agent**, **OpenTelemetry**, **CrewAI / AutoGen / LangGraph**, **MCP**, **Aider**, **Claude Code**, **ATIF** and **Web Agent**.
 
-### Evaluation Levels
-
-| Level | What You Annotate | Example |
+| Level | What you annotate | Example |
 |-------|------------------|---------|
-| **Trajectory** | Overall task success, efficiency, safety | "Did the agent complete the task?" |
-| **Step** | Individual action correctness, reasoning quality | Per-turn Likert ratings on each agent step |
-| **Span** | Specific text segments within agent output | Highlight hallucinated claims, factual errors |
-| **Comparison** | Side-by-side A/B agent evaluation | "Which agent performed better?" |
+| **Trajectory** | Task success, efficiency, safety | "Did the agent complete the task?" |
+| **Step** | Whether each action was correct and well reasoned | A Likert rating on every agent step |
+| **Span** | Specific text inside agent output | Highlight hallucinated claims |
+| **Comparison** | Two agents side by side | "Which agent did better?" |
 
-### Web Agent Viewer
+### From production traces to a CI gate
 
-A viewer for GUI agent traces. You step through the screenshots one action at a time, with SVG overlays for clicks, bounding boxes, mouse paths, and scrolls. Annotators rate each step with inline controls, and a filmstrip bar jumps between steps.
+| Stage | What Potato provides |
+|-------|----------------------|
+| **Capture** | The `@traceable` [tracing SDK](docs/integrations/tracing_sdk.md), or POST traces to the ingestion webhook |
+| **Route** | [Automation rules](docs/agent-evaluation/automation_rules.md) (`filter → sample → actions`) send incoming traces to queues, datasets, evaluators or webhooks |
+| **Curate** | Versioned [datasets and experiments](docs/agent-evaluation/datasets_and_experiments.md), plus [semantic search and slices](docs/agent-evaluation/semantic_curation.md) |
+| **Evaluate** | [Programmatic evaluators](docs/agent-evaluation/evaluators.md) (trajectory match, tool use, LLM judge, heuristics) and a side-by-side [model arena](docs/agent-evaluation/model_arena.md) |
+| **Calibrate** | [Align LLM judges with human labels](docs/agent-evaluation/judge_alignment.md) for categorical, span and free-text outputs |
+| **Gate** | [Run evals in pytest](docs/agent-evaluation/ci_evaluation.md) and fail CI when scores regress |
 
-### Ready-to-Use Agent Examples
+<details>
+<summary><b>Ready-to-run agent evaluation examples</b></summary>
 
-| Example | What It Evaluates |
+| Example | What it evaluates |
 |---------|-------------------|
-| [agent-trace-evaluation](examples/agent-traces/agent-trace-evaluation/) | Text agent traces with MAST error taxonomy + hallucination spans |
-| [visual-agent-evaluation](examples/agent-traces/visual-agent-evaluation/) | GUI agents with screenshot grounding accuracy |
-| [agent-comparison](examples/agent-traces/agent-comparison/) | Side-by-side A/B agent comparison |
+| [agent-trace-evaluation](examples/agent-traces/agent-trace-evaluation/) | Text agent traces with the MAST error taxonomy and hallucination spans |
+| [visual-agent-evaluation](examples/agent-traces/visual-agent-evaluation/) | GUI agents, with screenshot grounding accuracy |
+| [agent-comparison](examples/agent-traces/agent-comparison/) | Two agents side by side |
 | [rag-evaluation](examples/agent-traces/rag-evaluation/) | RAG retrieval relevance and citation accuracy |
 | [openai-evaluation](examples/agent-traces/openai-evaluation/) | OpenAI Chat API traces with tool calls |
 | [anthropic-evaluation](examples/agent-traces/anthropic-evaluation/) | Claude messages with tool_use blocks |
-| [swebench-evaluation](examples/agent-traces/swebench-evaluation/) | Coding agents with patch correctness ratings |
+| [swebench-evaluation](examples/agent-traces/swebench-evaluation/) | Coding agents, with patch correctness ratings |
 | [multi-agent-evaluation](examples/agent-traces/multi-agent-evaluation/) | Multi-agent coordination (CrewAI, AutoGen, LangGraph) |
-| [web-agent-review](examples/agent-traces/web-agent-review/) | Pre-recorded web traces with step-by-step overlay viewer |
+| [web-agent-review](examples/agent-traces/web-agent-review/) | Recorded web traces in the step-by-step overlay viewer |
 | [web-agent-creation](examples/agent-traces/web-agent-creation/) | Live web browsing with automatic trace recording |
+| [agent-testing](examples/agent-testing/) | Chat with a live agent, or a coding agent in a subprocess or Docker, then rate it |
+
+</details>
 
 ---
 
-## Qualitative Data Analysis (QDA)
+## AI in the loop
 
-Potato also supports interpretive qualitative research, the kind of work done in NVivo, ATLAS.ti, or MAXQDA, self-hosted and free.
+- **LLM label suggestions.** Any LLM can pre-annotate items so annotators correct a draft instead of starting from nothing. Backends: OpenAI, Anthropic, Gemini, Ollama, vLLM, HuggingFace and OpenRouter ([docs](docs/ai-intelligence/ai_support.md)). Decision models (`systemone` for Jev, OpenJev or laya-serve, and in-process `laya`) pick one label without writing text; Solo Mode and the labeling engine use them, but `ai_support` does not accept them.
+- **Labeling engine.** Models label the dataset and people label a blind random sample. Potato tests the machine labels against that sample under limits you set (for example, at most 5% wrong at 90% confidence), accepts the labels that pass, sends the rest to people, and writes a certificate saying what was tested on how many human labels. Run it from the annotation server or with `potato label run|status|certify|certificate|export` ([docs](docs/labeling-engine/overview.md)).
+- **Active learning.** Puts the items a model is least sure about at the front of the queue, with uncertainty, BADGE, BALD, diversity and hybrid strategies ([docs](docs/ai-intelligence/active_learning_guide.md)).
+- **Model training.** Train a model on the study's own annotations from the admin page, on the annotation server, on a GPU machine over ssh, on a SLURM cluster, or on a machine that polls for jobs. Each run is scored on held-out items, and its predictions can go back into the study as pre-labels to correct ([docs](docs/ai-intelligence/model_training.md)).
+- **Solo Mode.** One person works with an LLM, and the LLM takes over more of the labeling as its agreement with that person improves ([docs](docs/solo-mode/solo_mode.md)).
+- **Chat assistant.** A sidebar where annotators ask about hard items. It answers from your guidelines and never writes a label itself ([docs](docs/ai-intelligence/chat_support.md)).
+
+<details>
+<summary><b>What you can train</b> (38 trainers)</summary>
+
+- Text, span and image classifiers, including training on annotators' vote splits and private training with DP-SGD; a scikit-learn classifier that needs no extra install
+- Box and outline detectors, including on whole slides, microscopy planes, map rasters and spectrograms; Cellpose cell segmentation; SAM box-to-outline refinement
+- 3D volume segmentation, point-cloud detection through your own detector, and video object tracking
+- LayoutLMv3 document layout; vision-language fine-tuning for image questions, captions, grounding and GUI clicks
+- An audio segment tagger, Whisper fine-tuning on corrected transcripts, and speaker diarization
+- LLM fine-tuning on free-text answers, pairwise preferences and corrected agent traces; reward models from pairwise, ranking and best-worst answers; process reward models for agent steps
+- Relation, event, coreference and dependency models; conversation-tree and interlinear-gloss models
+- Molecular property models, spectrum peak picking, signal and sleep-stage labeling, and robot-episode phase, outcome and reward models
+- Bridges that score a model running elsewhere: a Label Studio ML backend, a vision-language model behind an OpenAI-compatible API, a Hugging Face Inference Endpoint, Roboflow and CVAT serverless functions
+
+</details>
+
+---
+
+## Qualitative data analysis (QDA)
+
+Potato supports interpretive qualitative research of the kind done in NVivo, ATLAS.ti or MAXQDA. Turn it on with `qda_mode` ([guide](docs/advanced/qda.md), [example](examples/advanced/qda-mode-example/)).
 
 | Capability | Description |
 |------------|-------------|
-| **Living codebook** | The codebook is an evolving markdown document of rules, definitions, examples, and rationales rather than a list of labels. Edit it in a full-page document view or inline while coding, with versioning, diff, and restore; semantic edits can re-flag affected excerpts for review ([docs](docs/advanced/codebook.md)) |
-| **In-vivo coding** | Create codes directly from a highlighted passage, in the participant's own words ([example](examples/advanced/codebook-invivo-example/)) |
-| **Memos** | Attach analytic notes to excerpts, codes, or the whole project as your interpretation develops ([docs](docs/advanced/memos.md)) |
-| **Cases** | Group instances into units of analysis — participants, interviews, documents, sites — for case-based comparison ([docs](docs/advanced/cases.md)) |
-| **Search** | Full-text search across your corpus and annotations to find, revisit, and code recurring patterns ([docs](docs/advanced/search.md)) |
-| **Codebook distillation** | Turn the human-authored codebook into an LLM prompt for AI-assisted coding |
-
-Enable it with `qda_mode`, which turns these features on together; see the [QDA Mode guide](docs/advanced/qda.md) and the runnable [`qda-mode-example`](examples/advanced/qda-mode-example/).
+| **Living codebook** | The codebook is a markdown document of rules, definitions, examples and rationales, not just a list of labels. Edit it full-page or inline while coding, with versions, diffs and restore; changing a definition can flag affected excerpts for another look ([docs](docs/advanced/codebook.md)) |
+| **In-vivo coding** | Make a code from a highlighted passage, in the participant's own words ([example](examples/advanced/codebook-invivo-example/)) |
+| **Memos** | Notes on excerpts, codes or the whole project ([docs](docs/advanced/memos.md)) |
+| **Cases** | Group items into participants, interviews, documents or sites to compare cases ([docs](docs/advanced/cases.md)) |
+| **Search** | Full-text search across the corpus and its annotations ([docs](docs/advanced/search.md)) |
+| **Codebook distillation** | Turn the codebook into an LLM prompt for AI-assisted coding |
 
 ---
 
-## Experiments & Surveys
+## Experiments and surveys
 
 | Capability | Description |
 |------------|-------------|
 | **Experiment flow** | Assign participants to conditions, show or skip pages by condition, screen participants out, counterbalance page order, and randomize questions ([docs](docs/workflow/experiment_flow.md)) |
-| **Runtime phases** | Run a jsPsych timeline, a headphone check, or a task on another server (oTree, Empirica, a hosted survey) as a page of the study ([docs](docs/workflow/runtime_phases.md)) |
-| **Survey import** | `potato import` turns a Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe or Network Canvas questionnaire into Potato survey pages, with their show/hide logic ([docs](docs/tools/survey_import.md)) |
-| **Survey instruments** | A library of validated questionnaires (personality, mental health, affect, demographics) to drop into pre- and post-study pages ([docs](docs/advanced/survey_instruments.md)) |
+| **Runtime phases** | Run a jsPsych timeline, a headphone check, or a task hosted elsewhere (oTree, Empirica, a survey platform) as one page of the study ([docs](docs/workflow/runtime_phases.md)) |
+| **Survey import** | `potato import` converts Qualtrics, SurveyJS, LimeSurvey, XLSForm, REDCap, Beiwe and Network Canvas questionnaires, including their show/hide logic ([docs](docs/tools/survey_import.md)) |
+| **Survey instruments** | A library of validated questionnaires (personality, mental health, affect, demographics) for pre- and post-study pages ([docs](docs/advanced/survey_instruments.md)) |
 | **Self-paced reading** | Self-paced reading and the Maze task, with a reading time for each region ([docs](docs/workflow/self_paced_reading.md)) |
-| **Scheduled sessions** | Follow-up waves, experience-sampling prompts and Delphi rounds, with email, SMS or Prolific reminders ([docs](docs/workflow/scheduling.md)) |
+| **Scheduled sessions** | Follow-up waves, experience sampling and Delphi rounds, with email, SMS or Prolific reminders ([docs](docs/workflow/scheduling.md)) |
+| **Writing process** | Content-blind keystroke timing that tells typed answers from pasted or transcribed ones ([docs](docs/advanced/keystroke_logging.md)) |
 
 ---
 
-## AI-Powered Annotation
-
-### LLM Label Suggestions
-
-Connect any LLM provider to pre-annotate instances and suggest labels. Annotators then review and correct rather than labeling from scratch, which is the point: correcting a draft is faster than producing one.
-
-Supported backends: **OpenAI**, **Anthropic**, **Ollama**, **vLLM**, **Gemini**, **HuggingFace**, **OpenRouter**
-
-Decision models, new in 2.11.0, pick one label from the options and write no text: `systemone` reaches Jev, OpenJev or laya-serve over HTTP, and `laya` runs in process. Solo Mode and the labeling engine use them; `ai_support` does not accept them.
-
-### Labeling Engine
-
-Models label the dataset, and people supply labels for a blind random sample. The engine tests the machine labels against that sample under the contracts you declare (for example, at most 5% of accepted machine labels wrong, with 90% confidence), accepts the labels the test supports, sends the rest to people, and writes a certificate saying what was tested on how many human labels. Run it from the annotation server or with `potato label run|status|certify|certificate|export` ([docs](docs/labeling-engine/overview.md)).
-
-### Active Learning
-
-Potato reorders your annotation queue based on model uncertainty so annotators label the most informative instances first. Supports uncertainty sampling, BADGE, BALD, diversity, and hybrid strategies ([docs](docs/ai-intelligence/active_learning_guide.md)).
-
-### Model Training
-
-Train a model on the study's own annotations from the admin Training page, on the annotation server, on a GPU machine over ssh, on a SLURM cluster, or on a machine that polls for jobs. There are 38 trainers: a scikit-learn classifier that needs no extra install, transformer classifiers for text, spans and images (which can also train on annotators' vote splits, or privately with DP-SGD), box and outline detectors (on whole slides, microscopy planes, map rasters and spectrograms too), Cellpose cell segmentation, 3D volume segmentation, point-cloud detection through your own detector, video object tracking, SAM box-to-outline refinement, LayoutLMv3 document layout, vision-language fine-tuning for image questions, captions, grounding and GUI clicks, an audio segment tagger, Whisper fine-tuning on corrected transcripts, speaker diarization, LLM fine-tuning on free-text answers, pairwise preferences and corrected agent traces, a reward model from pairwise, ranking and best-worst answers, a process reward model for agent steps, relation, event, coreference and dependency models, conversation-tree and interlinear-gloss models, calibration or fine-tuning of the decision models, molecular property models, peak picking on spectra, signal and sleep-stage labelling, robot-episode phase, outcome and reward models, and five bridges that score a model running elsewhere instead of training one (a Label Studio ML backend, a vision-language model behind an OpenAI-compatible API, a Hugging Face Inference Endpoint, Roboflow, and a CVAT serverless function). Each run is scored on held-out items, and its predictions can go back into the study as prelabels for annotators to correct ([docs](docs/ai-intelligence/model_training.md)).
-
-### Solo Mode
-
-A human-LLM collaborative workflow where the system learns from annotator feedback and progressively transitions to autonomous LLM labeling as agreement improves ([docs](docs/solo-mode/solo_mode.md)).
-
-### Chat Assistant
-
-An LLM-powered sidebar where annotators can ask questions about difficult instances. It answers from your task description and annotation guidelines, and never writes a label itself ([docs](docs/ai-intelligence/chat_support.md)).
-
----
-
-## Quality Control & Workflows
-
-### Quality Assurance
+## Quality and agreement
 
 | Feature | Description |
 |---------|-------------|
-| Attention checks | Automatically inserted known-answer items to verify engagement |
-| Gold standards | Track annotator accuracy against expert labels |
-| Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
-| Training phase | Practice annotations with feedback before the real task |
-| Behavioral tracking | Timing, click patterns, and annotation change history |
-| **Psychometrics** | Live IRT (multiclass GLAD, Whitehill et al. 2009) fit as annotations arrive: per-item label posteriors, annotator ability with standard errors, item difficulty, and discrimination flags for codebook bugs — no gold labels, no LLM ([docs](docs/advanced/psychometrics.md)) |
-| **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
-| **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
-| **Paper Mode** | `python -m potato.paper config.yaml` emits a compilable LaTeX dataset report — methods paragraphs, booktabs tables, IAA, limitations — ready to cut-paste ([docs](docs/advanced/paper_mode.md)) |
-| **Think-Aloud Mode** | Speak while you annotate: fully-local speech-to-text, verbatim rationale streams, labels committed by voice via rule-based phrase detection — no LLM ([docs](docs/advanced/think_aloud.md)) |
+| Training phase | Practice items with feedback before the real task |
+| Attention checks and gold items | Known-answer items to check engagement and track accuracy ([docs](docs/workflow/quality_control.md)) |
+| Inter-annotator agreement | Krippendorff's alpha, Cohen's kappa, and per-step agreement for agent evaluation |
+| Behavioral tracking | Timing, clicks and the history of changes to each answer ([docs](docs/advanced/behavioral_tracking.md)) |
+| **Psychometrics** | Item response theory (multiclass GLAD, Whitehill et al. 2009) fit live as answers arrive: label estimates per item, annotator ability with standard errors, item difficulty, and discrimination flags that point at codebook bugs. No gold labels or LLM needed ([docs](docs/advanced/psychometrics.md)) |
+| **Truth Serum** | Surprisingly-popular scoring (Prelec et al., *Nature* 2017): verdicts without gold labels that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
+| **Boundary probing** | Counterfactual probes map where each annotator's decision changes, and paraphrase checks flag inconsistency ([docs](docs/advanced/boundary_lab.md)) |
 
-### Annotation Workflows
+---
+
+## Running a study
 
 | Workflow | Description |
 |----------|-------------|
-| **Multi-annotator** | Multiple annotators per item with overlap control and agreement metrics |
-| **Adjudication** | Expert review of annotator disagreements to produce gold labels ([docs](docs/administration/adjudication.md)) |
-| **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
-| **Crowdsourcing** | Nine crowd providers: Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, a generic provider for any panel that passes a participant ID in the URL, the legacy `url_direct` login, and MTurk for archived studies (MTurk closed on September 30, 2026) ([docs](docs/deployment/crowdsourcing.md), [choosing a platform](docs/deployment/crowdsourcing-platforms.md)) |
-| **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
-| **Multiplayer Rooms** | Live shared sessions: norming (blind vote → reveal → discuss, with blind vs. post-discussion α), huddle (walk current disagreements together), and shadow (trainees watch the host annotate) ([docs](docs/advanced/multiplayer_rooms.md)) |
-| **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
-
-### Continuous Evaluation Loop
-
-Close the loop from production traces to graded, regression-gated evaluation:
-
-| Capability | Description |
-|------------|-------------|
-| **Capture** | Instrument any agent with the `@traceable` [tracing SDK](docs/integrations/tracing_sdk.md), or POST traces to the ingestion webhook |
-| **Automate** | [Rules](docs/agent-evaluation/automation_rules.md) (`filter → sample → actions`) route incoming traces to queues, datasets, evaluators, or webhooks |
-| **Curate** | Versioned [datasets & experiments](docs/agent-evaluation/datasets_and_experiments.md) + [semantic search/slices](docs/agent-evaluation/semantic_curation.md) to find what to review |
-| **Evaluate** | [Programmatic evaluators](docs/agent-evaluation/evaluators.md) (trajectory match, tool-use, LLM-judge, heuristics) + a side-by-side [model arena](docs/agent-evaluation/model_arena.md) |
-| **Gate** | [Run evals in pytest](docs/agent-evaluation/ci_evaluation.md) and fail CI on score-threshold regressions |
-| **Calibrate** | [LLM-judge ↔ human alignment](docs/agent-evaluation/judge_alignment.md) with auto-calibration from human corrections; judges categorical, span, and free-text outputs |
+| **Multiple annotators** | Several people per item, with overlap control and agreement metrics ([docs](docs/advanced/task_assignment.md)) |
+| **Adjudication** | An expert resolves disagreements to produce final labels ([docs](docs/administration/adjudication.md)) |
+| **Live collaborative sessions** | A team annotates the same items at once and keeps one shared answer per item ([docs](docs/advanced/collaborative_sessions.md)) |
+| **Multiplayer rooms** | Norming (blind vote, reveal, discuss), disagreement huddles, and shadowing for trainees ([docs](docs/advanced/multiplayer_rooms.md)) |
+| **Pocket Mode** | Annotate on a phone: an installable app with one-tap labels that works offline and syncs later ([docs](docs/advanced/pocket_mode.md)) |
+| **Crowdsourcing** | Prolific, CloudResearch Connect, SONA, Microworkers, Clickworker, invite links for hired experts, and any panel that passes a participant ID in the URL ([docs](docs/deployment/crowdsourcing.md), [choosing a platform](docs/deployment/crowdsourcing-platforms.md)) |
+| **Admin dashboard** | Progress, agreement, annotator timing and exports in one place ([docs](docs/administration/admin_dashboard.md)) |
+| **Paper Mode** | `python -m potato.paper config.yaml` writes a compilable LaTeX dataset report with methods paragraphs, booktabs tables, agreement and limitations ([docs](docs/advanced/paper_mode.md)) |
+| **Think-aloud** | Annotators speak while they work. Speech is transcribed locally and kept as a rationale, and spoken phrases can commit a label, with no LLM involved ([docs](docs/advanced/think_aloud.md)) |
 
 ---
 
-## Authentication & Deployment
+## Deploy and share
 
-Potato supports six authentication methods:
+`potato deploy up config.yaml --provider <target>` creates a server, gets an HTTPS certificate and starts the task. Targets include AWS, Jetstream2 and other OpenStack clouds, Hetzner, Vultr, Linode, DigitalOcean, Fly.io, Railway, Render, Heroku and HuggingFace Spaces. On hosts whose disk doesn't survive a restart, `--backup hf|s3` keeps the annotations in a dataset or bucket and restores them when the server starts. `potato deploy button` writes Deploy to Heroku, Deploy to Render and AWS Launch Stack buttons for a task's repository. Start with [Installing and running Potato](docs/deployment/installation.md).
 
-| Method | Use Case |
-|--------|----------|
-| **In-memory** | Local development, quick studies |
-| **Password + file persistence** | Team annotation with shared credential files ([docs](docs/auth-users/password_management.md)) |
-| **Database** | Production deployments with SQLite or PostgreSQL ([docs](docs/auth-users/password_management.md#database-authentication-backend)) |
-| **OAuth / SSO** | Google, GitHub, or institutional OIDC login ([docs](docs/auth-users/sso_authentication.md)) |
-| **Clerk** | Managed authentication via Clerk.com ([docs](docs/auth-users/sso_authentication.md)) |
-| **Passwordless** | Low-stakes tasks where ease of access matters ([docs](docs/auth-users/passwordless_login.md)) |
-
-Passwords are hashed with per-user PBKDF2-SHA256 salts. Admins can reset passwords via CLI (`potato reset-password`) or REST API. Self-service token-based reset is also available.
-
-To put a task online, `potato deploy up config.yaml --provider <target>` creates
-the server, gets an HTTPS certificate and starts the task. The targets are AWS
-(Lightsail, EC2, ECS Express), Jetstream2 and other OpenStack clouds, Hetzner,
-Vultr, Linode, DigitalOcean, Fly.io, Railway, Render, Heroku and HuggingFace
-Spaces. Where the host's disk does not survive a restart, `--backup hf|s3` keeps
-the annotations in a dataset or bucket and restores them when the server
-starts. `potato deploy button` writes Deploy to Heroku, Deploy to Render and
-AWS Launch Stack buttons for a task's repository. Start with
-[Installing and running Potato](docs/deployment/installation.md).
+Login options: simple usernames for quick studies, passwords stored in a file or in SQLite / PostgreSQL, Google, GitHub or institutional single sign-on, Clerk, and passwordless links ([docs](docs/auth-users/sso_authentication.md)). Passwords are hashed with PBKDF2-SHA256 and a salt per user, and can be reset by an admin (`potato reset-password` or the REST API), who can also issue a single-use reset link. `potato snapshot` freezes a project under an ID you can cite ([docs](docs/tools/snapshots.md)).
 
 ---
 
-## Example Projects
+## Examples and live demos
 
-Ready-to-use templates organized by type in [`examples/`](examples/):
+[`examples/`](examples/) holds ready-to-run projects, each a folder with a `config.yaml` and its data:
 
 | Category | Examples |
 |----------|----------|
 | [Classification](examples/classification/) | Radio, checkbox, Likert, slider, pairwise comparison |
 | [Span](examples/span/) | NER, span linking, coreference, entity linking |
-| [Agent Traces](examples/agent-traces/) | LLM agents, web agents, RAG, multi-agent, code agents |
-| [Audio](examples/audio/) | Waveform annotation, classification, ELAN-style tiered |
-| [Video](examples/video/) | Frame-level labeling, temporal segments |
-| [Image](examples/image/) | Bounding boxes, PDF/document annotation |
-| [Advanced](examples/advanced/) | Solo mode, adjudication, quality control, conditional logic |
-| [QDA](examples/advanced/qda-mode-example/) | Qualitative analysis: living codebook, in-vivo coding, memos, cases |
-| [AI-Assisted](examples/ai-assisted/) | LLM suggestions, Ollama integration |
-| [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA, medical review |
-| [Text](examples/text/) | Correcting handwritten-text recognition, line by line |
+| [Agent traces](examples/agent-traces/) | LLM agents, web agents, RAG, multi-agent, coding agents |
+| [Audio](examples/audio/) / [Video](examples/video/) / [Image](examples/image/) | Waveforms, tiers, temporal segments, boxes, PDF and document annotation |
 | [Conversation](examples/conversation/) | ConvoKit corpora, threaded forums, conversation trees |
-| [Spatial](examples/spatial/) | Lidar cuboids (KITTI), lidar sequences, depth-map evaluation |
-| [Embodied](examples/embodied/) | Robot episodes in LeRobot format |
-| [Labeling Engine](examples/labeling-engine/) | Certified machine labels for text, images and agent traces |
-| [Crowdsourcing](examples/crowdsourcing/) | Prolific, CloudResearch Connect, SONA, Microworkers, expert invites, generic panels |
-| [Agent Testing](examples/agent-testing/) | Chat with a live agent, or a coding agent in a subprocess or Docker, then rate it |
+| [Spatial](examples/spatial/) / [Embodied](examples/embodied/) | Lidar (KITTI), depth maps, robot episodes in LeRobot format |
+| [Advanced](examples/advanced/) | QDA, Solo Mode, adjudication, collaborative sessions, Pocket Mode |
+| [Crowdsourcing](examples/crowdsourcing/) | Prolific, CloudResearch Connect, SONA, Microworkers, expert invites |
+| [Labeling engine](examples/labeling-engine/) | Certified machine labels for text, images and agent traces |
 | [Plugins](examples/plugins/) | A minimal plugin package that adds a display type |
 
-### Live Demos on HuggingFace
+**Live demos.** The [flagship demo](https://huggingface.co/spaces/Blablablab/potato) runs agent trace evaluation, and the [demo catalog](docs/data-export/potato_on_huggingface.md) has a HuggingFace Space for every annotation type. [Deploy your own](deployment/huggingface-spaces/deploy_spaces.md) from a single manifest.
 
-Try Potato in your browser — no installation. A growing catalog of one-click demo Spaces
-covers classification, span/NER, agent-trace evaluation, multimodal, QDA, and more:
-
-- **[Flagship demo](https://huggingface.co/spaces/Blablablab/potato)** — agent trace evaluation
-- **[Full demo catalog & collection](docs/data-export/potato_on_huggingface.md)** — every annotation type as a live Space
-- **[Deploy your own](deployment/huggingface-spaces/deploy_spaces.md)** — `build_space.py` + `deploy_space.py` from a single manifest
-
-### Research Showcase
-
-The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains annotation projects from published research — sentiment analysis, dialogue evaluation, summarization, and more.
+**Research showcase.** The [Potato Showcase](https://github.com/davidjurgens/potato-showcase/) collects annotation projects from published research, including sentiment analysis, dialogue evaluation and summarization.
 
 ---
 
 ## Documentation
 
-Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www.potatoannotator.com/docs)** for guides, tutorials, and higher-level walkthroughs, and **[Read the Docs](https://potatoannotator.readthedocs.io/)** for the complete, version-matched technical reference (every config option, the full HTTP API, and internals). The links below point to the guide pages.
+**[potatoannotator.com/docs](https://www.potatoannotator.com/docs)** has guides and tutorials. **[Read the Docs](https://potatoannotator.readthedocs.io/)** has the version-matched reference: every config option, the HTTP API and internals.
 
-| Topic | Link |
-|-------|------|
-| Quick Start | [docs/quick-start.md](docs/quick-start.md) |
-| Configuration Reference | [docs/configuration/configuration.md](docs/configuration/configuration.md) |
-| Schema Gallery | [docs/annotation-types/schemas_and_templates.md](docs/annotation-types/schemas_and_templates.md) |
-| Agent Trace Evaluation | [docs/agent-evaluation/agent_traces.md](docs/agent-evaluation/agent_traces.md) |
-| Web Agent Annotation | [docs/agent-evaluation/web_agent_annotation.md](docs/agent-evaluation/web_agent_annotation.md) |
-| Datasets & Experiments | [docs/agent-evaluation/datasets_and_experiments.md](docs/agent-evaluation/datasets_and_experiments.md) |
-| Programmatic Evaluators | [docs/agent-evaluation/evaluators.md](docs/agent-evaluation/evaluators.md) |
-| Automation Rules | [docs/agent-evaluation/automation_rules.md](docs/agent-evaluation/automation_rules.md) |
-| CI Evaluation (pytest gating) | [docs/agent-evaluation/ci_evaluation.md](docs/agent-evaluation/ci_evaluation.md) |
-| Model Arena | [docs/agent-evaluation/model_arena.md](docs/agent-evaluation/model_arena.md) |
-| Semantic Curation (Catalog) | [docs/agent-evaluation/semantic_curation.md](docs/agent-evaluation/semantic_curation.md) |
-| Tracing SDK (potato_trace) | [docs/integrations/tracing_sdk.md](docs/integrations/tracing_sdk.md) |
-| AI Support | [docs/ai-intelligence/ai_support.md](docs/ai-intelligence/ai_support.md) |
-| Using HuggingFace Models | [docs/ai-intelligence/huggingface_models.md](docs/ai-intelligence/huggingface_models.md) |
-| Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |
-| Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
-| Model Training | [docs/ai-intelligence/model_training.md](docs/ai-intelligence/model_training.md) |
-| Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
-| Labeling Engine | [docs/labeling-engine/overview.md](docs/labeling-engine/overview.md) |
-| Qualitative Data Analysis (QDA) | [docs/advanced/qda.md](docs/advanced/qda.md) |
-| Quality Control | [docs/workflow/quality_control.md](docs/workflow/quality_control.md) |
-| Password Management | [docs/auth-users/password_management.md](docs/auth-users/password_management.md) |
-| SSO & OAuth | [docs/auth-users/sso_authentication.md](docs/auth-users/sso_authentication.md) |
-| Admin Dashboard | [docs/administration/admin_dashboard.md](docs/administration/admin_dashboard.md) |
-| Crowdsourcing | [docs/deployment/crowdsourcing.md](docs/deployment/crowdsourcing.md) |
-| Installing and Deploying | [docs/deployment/installation.md](docs/deployment/installation.md) |
-| Export Formats | [docs/data-export/export_formats.md](docs/data-export/export_formats.md) |
-| Full Documentation Index | [docs/index.md](docs/index.md) |
+[Quick start](docs/quick-start.md) · [Configuration](docs/configuration/configuration.md) · [Schema gallery](docs/annotation-types/schemas_and_templates.md) · [Agent evaluation](docs/agent-evaluation/agent_traces.md) · [AI support](docs/ai-intelligence/ai_support.md) · [Quality control](docs/workflow/quality_control.md) · [Crowdsourcing](docs/deployment/crowdsourcing.md) · [Export formats](docs/data-export/export_formats.md) · [Comparison with other tools](docs/comparison.md) · [FAQ](docs/faq.md) · [Full index](docs/index.md)
 
 ### For coding agents
 
-Install the [Potato skill](https://github.com/davidjurgens/potato-skill) first.
-[Agent Instructions](docs/tools/authoring-agents.md) has the install commands
-for each agent.
+Start with the [Potato skill](https://github.com/davidjurgens/potato-skill) ([install commands per agent](docs/tools/authoring-agents.md)) or the [MCP server](docs/tools/mcp_server.md). Without either, an agent can work from these specs. The config schema and OpenAPI spec are generated from the code, so they match what the server accepts:
 
-Without the skill, an agent can still work from these specs. The config schema
-and the OpenAPI spec are generated from the code, so they match what the server
-accepts. `llms-full.txt` is generated from the docs pages, and `llms.txt` is
-curated by hand:
-
-| Artifact | What it gives you |
-|----------|-------------------|
+| File | What it gives you |
+|------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 185 config keys, 80 annotation types, 31 display types — validates a `config.yaml` before the server runs |
-| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 589 HTTP paths, with per-operation auth and config gating |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | Every config key, annotation type and display type; validates a `config.yaml` before the server runs |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | Every HTTP path, with its auth and config requirements |
 
-Every config in `examples/` carries a `# yaml-language-server: $schema=…`
-modeline, so editors validate it live. See
-[Machine-Readable Specs](docs/api-reference/machine_readable.md) for editor
-setup, CI validation, and `jq` recipes.
+See [Machine-readable specs](docs/api-reference/machine_readable.md) for editor setup, CI validation and `jq` recipes.
 
 ---
-
-## Development
-
-```bash
-# Run tests
-pytest tests/ -v
-
-# By category
-pytest tests/unit/ -v        # Unit tests (fast)
-pytest tests/server/ -v      # Integration tests
-pytest tests/selenium/ -v    # Browser tests
-
-# With coverage
-pytest --cov=potato --cov-report=html
-```
-
-See the **[Testing guide](docs/guides/testing.md)** for which tier to write in,
-the test-file security rules, the annotation-persistence testing pattern, and
-the drift tests that keep the generated specs honest.
 
 ## Contributing
 
-Bug fixes, new annotation types, documentation corrections and example projects
-are welcome. **[CONTRIBUTING.md](CONTRIBUTING.md)** covers setup and what to run
-before opening a PR; the **[full contributor guide](docs/guides/contributing.md)**
-covers the checklist for adding an annotation type and what reviewers look at.
-
----
+Bug fixes, new annotation types, documentation fixes and example projects are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers setup and what to run before opening a PR, and the [contributor guide](docs/guides/contributing.md) and [testing guide](docs/guides/testing.md) cover adding an annotation type and which test tier to write in.
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/davidjurgens/potato/issues)
 - **Questions**: jurgens@umich.edu
-- **Docs**: [potatoannotator.readthedocs.io](https://potatoannotator.readthedocs.io/)
-
----
 
 ## License
 
-Potato is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE) (GPLv3+). You are free to use, study, modify, and redistribute it — including for commercial purposes — provided that any distributed derivative works are also licensed under the GPLv3+ and made available with their source code. See the [LICENSE](LICENSE) file for the full terms.
+Potato is free software under the [GNU General Public License v3.0 or later](LICENSE). You may use, study, modify and redistribute it, including commercially, provided that derivative works you distribute are also licensed under GPLv3+ and shipped with their source code.
 
 ---
 
