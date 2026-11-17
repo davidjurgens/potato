@@ -47,7 +47,7 @@ A Potato task is a single settings file plus your data. You can [design it in th
 
 - **In the browser.** The [Potato Designer](https://www.potatoannotator.com/designer) lets you design an annotation study or a Solo Mode project in a visual form: pick annotation types, set up AI support, and download a config that runs with `potato start`.
 - **With a coding agent.** Install the [Potato skill](https://github.com/davidjurgens/potato-skill) in Claude Code, Codex or Cursor. Describe the study, and the agent writes the task, runs it, checks the interface and exports the annotations. Potato also ships an [MCP server](docs/tools/mcp_server.md) (`potato mcp`).
-- **By hand.** Copy one of the 200+ projects in [`examples/`](examples/) and edit its `config.yaml`. Editors check the file as you type against the published [config schema](docs/api-reference/machine_readable.md).
+- **By hand.** Copy one of the 200+ projects in [`examples/`](examples/), or a worked design from the [Potato Showcase](https://www.potatoannotator.com/showcase), and edit its `config.yaml`. Editors check the file as you type against the published [config schema](docs/api-reference/machine_readable.md).
 
 ```
 # Claude Code
