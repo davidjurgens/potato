@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prompt Trajectory</title>
+<style>
+:root{--bg:#fcfcfb;--fg:#0b0b0b;--muted:#52514e;--rule:#e4e3df;--tip:#0b0b0b;--tipfg:#fcfcfb}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a19;--fg:#f0efec;--muted:#c3c2b7;--rule:#34332f;--tip:#f0efec;--tipfg:#1a1a19}}
+:root[data-theme="dark"]{--bg:#1a1a19;--fg:#f0efec;--muted:#c3c2b7;--rule:#34332f;--tip:#f0efec;--tipfg:#1a1a19}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif;margin:0;padding:24px 16px}
+main{max-width:760px;margin:0 auto} h1{font-size:20px;margin:0 0 4px} p{color:var(--muted);margin:0 0 16px}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin:0 0 8px;color:var(--fg)} .key{display:inline-flex;gap:6px;align-items:center}
+svg.viz-root{width:100%;height:auto;display:block} .mk{cursor:default}
+#tip{position:fixed;pointer-events:none;background:var(--tip);color:var(--tipfg);padding:4px 8px;border-radius:4px;font-size:12px;display:none}
+table{border-collapse:collapse;width:100%;margin-top:20px;font-variant-numeric:tabular-nums}
+td,th{text-align:left;padding:4px 8px;border-bottom:1px solid var(--rule)} th{color:var(--muted);font-weight:600}
+details summary{cursor:pointer;color:var(--muted);margin-top:16px}
+</style></head><body><main>
+<h1>Reference-model performance across solo-mode prompt versions</h1>
+<p>Episodic vs. Thematic framing, immigration tweets on Crime and Punishment (NAACL 2021).
+Each point is the prompt in effect after <i>k</i> simulated human labels, scored on 136 held-out dev+test tweets.</p>
+<div class="legend"><span class="key"><svg width="14" height="14" viewBox="0 0 14 14"><circle class="" cx="7.0" cy="7.0" r="4.5" style=fill:var(--s1)/></svg>Laya</span><span class="key"><svg width="14" height="14" viewBox="0 0 14 14"><rect class="" x="2.5" y="2.5" width="9.0" height="9.0" rx="1" style=fill:var(--s2)/></svg>Gemma4-E2B</span></div>
+<svg class="viz-root" viewBox="0 0 720 420" role="img" aria-label="Macro-F1 by time step per reference model">
+<style>
+  .viz-root{--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--grid:#e4e3df;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;}
+  @media (prefers-color-scheme: dark){:root:where(:not([data-theme="light"])) .viz-root{--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#34332f;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;}}
+  :root[data-theme="dark"] .viz-root{--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#34332f;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;}
+  .bg{fill:var(--surface-1)} .grid{stroke:var(--grid);stroke-width:1}
+  .ax{fill:var(--text-secondary);font:12px system-ui,sans-serif}
+  .ttl{fill:var(--text-primary);font:600 13px system-ui,sans-serif}
+  .lbl{fill:var(--text-primary);font:12px system-ui,sans-serif}
+  .line{fill:none;stroke-width:2;stroke-linejoin:round}
+  .mk{stroke:var(--surface-1);stroke-width:2}
+</style>
+<rect class="bg" width="720" height="420"/>
+<line class="grid" x1="56" x2="530" y1="372.0" y2="372.0"/>
+<text class="ax" x="48" y="376.0" text-anchor="end">0.4</text>
+<line class="grid" x1="56" x2="530" y1="286.0" y2="286.0"/>
+<text class="ax" x="48" y="290.0" text-anchor="end">0.5</text>
+<line class="grid" x1="56" x2="530" y1="200.0" y2="200.0"/>
+<text class="ax" x="48" y="204.0" text-anchor="end">0.6</text>
+<line class="grid" x1="56" x2="530" y1="114.0" y2="114.0"/>
+<text class="ax" x="48" y="118.0" text-anchor="end">0.7</text>
+<line class="grid" x1="56" x2="530" y1="28.0" y2="28.0"/>
+<text class="ax" x="48" y="32.0" text-anchor="end">0.8</text>
+<text class="ax" x="56.0" y="390" text-anchor="middle">0</text>
+<text class="ax" x="293.0" y="390" text-anchor="middle">5</text>
+<text class="ax" x="530.0" y="390" text-anchor="middle">10</text>
+<text class="ax" x="293.0" y="412" text-anchor="middle">Time step (human labels in solo mode)</text>
+<text class="ax" transform="translate(14,200.0) rotate(-90)" text-anchor="middle">Macro-F1 on held-out set</text>
+<text class="lbl" x="542" y="81.5">Gemma4-E2B</text>
+<text class="lbl" x="542" y="375.2">Laya</text>
+<polyline class="line" style="stroke:var(--s1)" points="56.0,285.5 293.0,371.2 530.0,371.2"/>
+<circle class="mk" cx="56.0" cy="285.5" r="4.5" style="fill:var(--s1)" data-tip="Laya · step 0 · prompt v1 · acc 0.669 · macro-F1 0.501 · unparsed 0"/>
+<circle class="mk" cx="293.0" cy="371.2" r="4.5" style="fill:var(--s1)" data-tip="Laya · step 5 · prompt v1 · acc 0.669 · macro-F1 0.401 · unparsed 0"/>
+<circle class="mk" cx="530.0" cy="371.2" r="4.5" style="fill:var(--s1)" data-tip="Laya · step 10 · prompt v1 · acc 0.669 · macro-F1 0.401 · unparsed 0"/>
+<polyline class="line" style="stroke:var(--s2)" points="56.0,77.5"/>
+<rect class="mk" x="51.5" y="73.0" width="9.0" height="9.0" rx="1" style="fill:var(--s2)" data-tip="Gemma4-E2B · step 0 · prompt v1 · acc 0.765 · macro-F1 0.742 · unparsed 0"/>
+</svg>
+<details><summary>Data table</summary><table><tr><th>Model</th><th>Step</th><th>Prompt</th><th>Accuracy</th><th>Macro-F1</th><th>Unparsed</th></tr><tr><td>Laya</td><td>0</td><td>v1</td><td>0.669</td><td>0.501</td><td>0</td></tr><tr><td>Laya</td><td>5</td><td>v1</td><td>0.669</td><td>0.401</td><td>0</td></tr><tr><td>Laya</td><td>10</td><td>v1</td><td>0.669</td><td>0.401</td><td>0</td></tr><tr><td>Gemma4-E2B</td><td>0</td><td>v1</td><td>0.765</td><td>0.742</td><td>0</td></tr></table></details>
+</main><div id="tip"></div>
+<script>
+const tip=document.getElementById('tip');
+document.querySelectorAll('[data-tip]').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{tip.textContent=el.dataset.tip;tip.style.display='block'});
+  el.addEventListener('mousemove',e=>{tip.style.left=Math.min(e.clientX+12,innerWidth-tip.offsetWidth-8)+'px';tip.style.top=(e.clientY+12)+'px'});
+  el.addEventListener('mouseleave',()=>{tip.style.display='none'});
+});
+</script></body></html>

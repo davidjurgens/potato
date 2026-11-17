@@ -1,0 +1,533 @@
+{
+  "task_description": "Classify product review sentiment",
+  "current_prompt_version": 2,
+  "prompt_versions": [
+    {
+      "version": 1,
+      "prompt_text": "Label the following text according to this task: Classify product review sentiment",
+      "created_at": "2026-11-13T15:42:38.963468",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": null,
+      "validation_accuracy": null
+    },
+    {
+      "version": 2,
+      "prompt_text": "Updated prompt text v2",
+      "created_at": "2026-11-13T15:42:39.026439",
+      "created_by": "manual_edit",
+      "source_description": "",
+      "parent_version": 1,
+      "validation_accuracy": null
+    }
+  ],
+  "predictions": {
+    "int_000": {
+      "sentiment": {
+        "instance_id": "int_000",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.85,
+        "uncertainty_score": 0.15000000000000002,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.054779",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_001": {
+      "sentiment": {
+        "instance_id": "int_001",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.85,
+        "uncertainty_score": 0.15000000000000002,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.054790",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_002": {
+      "sentiment": {
+        "instance_id": "int_002",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.85,
+        "uncertainty_score": 0.15000000000000002,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.054797",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_003": {
+      "sentiment": {
+        "instance_id": "int_003",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.85,
+        "uncertainty_score": 0.15000000000000002,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.054800",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_004": {
+      "sentiment": {
+        "instance_id": "int_004",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.85,
+        "uncertainty_score": 0.15000000000000002,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.054804",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "positive",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_010": {
+      "sentiment": {
+        "instance_id": "int_010",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.152325",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "negative",
+        "agrees_with_human": false,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_011": {
+      "sentiment": {
+        "instance_id": "int_011",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.226353",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "negative",
+        "agrees_with_human": false,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_012": {
+      "sentiment": {
+        "instance_id": "int_012",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.227635",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "negative",
+        "agrees_with_human": false,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_013": {
+      "sentiment": {
+        "instance_id": "int_013",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.228560",
+        "model_name": "test-model",
+        "reasoning": "Predicted positive",
+        "human_label": "negative",
+        "agrees_with_human": false,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_015": {
+      "sentiment": {
+        "instance_id": "int_015",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.349768",
+        "model_name": "test-model",
+        "reasoning": "Clearly positive sentiment",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_016": {
+      "sentiment": {
+        "instance_id": "int_016",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.349784",
+        "model_name": "test-model",
+        "reasoning": "Clearly positive sentiment",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_017": {
+      "sentiment": {
+        "instance_id": "int_017",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.349792",
+        "model_name": "test-model",
+        "reasoning": "Clearly positive sentiment",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_018": {
+      "sentiment": {
+        "instance_id": "int_018",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.349797",
+        "model_name": "test-model",
+        "reasoning": "Clearly positive sentiment",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "int_019": {
+      "sentiment": {
+        "instance_id": "int_019",
+        "schema_name": "sentiment",
+        "predicted_label": "positive",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T15:42:39.349802",
+        "model_name": "test-model",
+        "reasoning": "Clearly positive sentiment",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    }
+  },
+  "human_labeled_ids": [
+    "int_003",
+    "int_010",
+    "int_001",
+    "int_013",
+    "int_000",
+    "int_002",
+    "int_004",
+    "int_012",
+    "int_011"
+  ],
+  "labeled_by_user": {
+    "integ_user_1794602559.036869": [
+      "int_003",
+      "int_001",
+      "int_000",
+      "int_002",
+      "int_004"
+    ],
+    "integ_user_1794602559.137131": [
+      "int_010"
+    ],
+    "test_user": [
+      "int_013",
+      "int_012",
+      "int_011"
+    ]
+  },
+  "llm_labeled_ids": [
+    "int_003",
+    "int_010",
+    "int_001",
+    "int_016",
+    "int_013",
+    "int_000",
+    "int_015",
+    "int_002",
+    "int_019",
+    "int_017",
+    "int_004",
+    "int_012",
+    "int_018",
+    "int_011"
+  ],
+  "disagreement_ids": [
+    "int_013",
+    "int_012",
+    "int_010",
+    "int_011"
+  ],
+  "validation_sample_ids": [],
+  "validated_instance_ids": [],
+  "pending_relabel_ids": [],
+  "relabel_wave_size": 0,
+  "pending_codebook_relabel_ids": [],
+  "codebook_relabel_wave_size": 0,
+  "codebook_changes_since_relabel": 0,
+  "codebook_part_pending_changes": {},
+  "codebook_part_relabel_log": [],
+  "codebook_version_history": {},
+  "needs_final_override_choice": false,
+  "edge_case_ids": [],
+  "edge_case_labels": {},
+  "agreement_metrics": {
+    "total_compared": 5,
+    "agreements": 2,
+    "disagreements": 3,
+    "agreement_rate": 0.4,
+    "stale": false,
+    "pending_codebook_changes": 0,
+    "stale_parts": {}
+  },
+  "confidence_history": {
+    "int_000": [
+      [
+        1,
+        0.85
+      ]
+    ],
+    "int_001": [
+      [
+        1,
+        0.85
+      ]
+    ],
+    "int_002": [
+      [
+        1,
+        0.85
+      ]
+    ],
+    "int_003": [
+      [
+        1,
+        0.85
+      ]
+    ],
+    "int_004": [
+      [
+        1,
+        0.85
+      ]
+    ],
+    "int_010": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "int_011": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "int_012": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "int_013": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "int_015": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "int_016": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "int_017": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "int_018": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "int_019": [
+      [
+        1,
+        0.95
+      ]
+    ]
+  },
+  "reannotation_counts": {},
+  "per_version_agreement": {
+    "1": {
+      "compared": 9,
+      "agreements": 5
+    }
+  },
+  "refinement_consecutive_failures": 0,
+  "pending_refinements": [],
+  "refinement_log": [],
+  "icl_library": null,
+  "last_review_revision": null,
+  "edge_case_rule_data": {
+    "rules": {},
+    "categories": {}
+  },
+  "validation_tracker": {
+    "metrics": {
+      "total_compared": 9,
+      "agreements": 5,
+      "disagreements": 4,
+      "agreement_rate": 0.5555555555555556,
+      "label_agreements": {
+        "positive": 5
+      },
+      "label_disagreements": {
+        "negative": 4
+      },
+      "confusion_matrix": {
+        "positive|negative": 4
+      },
+      "recent_agreement_rate": 0.5555555555555556,
+      "trend": "stable"
+    },
+    "comparison_history": [
+      {
+        "instance_id": "int_000",
+        "human_label": "positive",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": true,
+        "timestamp": "2026-11-13T15:42:39.056758"
+      },
+      {
+        "instance_id": "int_001",
+        "human_label": "positive",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": true,
+        "timestamp": "2026-11-13T15:42:39.107912"
+      },
+      {
+        "instance_id": "int_002",
+        "human_label": "positive",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": true,
+        "timestamp": "2026-11-13T15:42:39.115763"
+      },
+      {
+        "instance_id": "int_003",
+        "human_label": "positive",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": true,
+        "timestamp": "2026-11-13T15:42:39.122425"
+      },
+      {
+        "instance_id": "int_004",
+        "human_label": "positive",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": true,
+        "timestamp": "2026-11-13T15:42:39.128912"
+      },
+      {
+        "instance_id": "int_010",
+        "human_label": "negative",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": false,
+        "timestamp": "2026-11-13T15:42:39.154322"
+      },
+      {
+        "instance_id": "int_011",
+        "human_label": "negative",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": false,
+        "timestamp": "2026-11-13T15:42:39.226379"
+      },
+      {
+        "instance_id": "int_012",
+        "human_label": "negative",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": false,
+        "timestamp": "2026-11-13T15:42:39.227675"
+      },
+      {
+        "instance_id": "int_013",
+        "human_label": "negative",
+        "llm_label": "positive",
+        "schema_name": "sentiment",
+        "agrees": false,
+        "timestamp": "2026-11-13T15:42:39.228580"
+      }
+    ],
+    "validation_samples": {},
+    "llm_labels_since_review": 0
+  }
+}

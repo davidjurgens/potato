@@ -1,0 +1,212 @@
+{
+  "variant_id": "v02_specialize_one_label",
+  "origin": "llm:specialize_one_label",
+  "notes": "Improved the definition, clarification, negative clarification, positive examples, and exclusion rules for the 'Capacity and Resources' label while leaving other labels mostly as-is.",
+  "codes": [
+    {
+      "name": "Capacity and Resources",
+      "definition": "The availability or lack of physical, geographical, spatial, human, or financial resources required to address a specific issue.",
+      "clarification": "Include tweets mentioning equipment, infrastructure, personnel, funding, or other tangible assets. Exclude tweets discussing abstract concepts or intangible benefits.",
+      "negative_clarification": "Exclude tweets that mention crime rates, punishment, or immigration policies.",
+      "positive_examples": [
+        {
+          "text": "@BBCNews The new hospital in London will provide 1000 more beds for refugees.",
+          "why": "Annotated with Capacity and Resources because it discusses the availability of physical resources (hospital beds) to address a specific issue (refugee care)."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@TheGuardian Britain's immigration policies are too lenient, leading to overcrowding in our prisons.",
+          "why": "Not annotated with Capacity and Resources because it discusses crime rates and punishment."
+        }
+      ],
+      "exclusion_rules": [
+        "crime",
+        "punishment",
+        "immigration"
+      ]
+    },
+    {
+      "name": "Crime and Punishment",
+      "definition": "The violation of laws, rules, or regulations, including the enforcement of these violations and their consequences.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@NPRNews A new study finds that immigration policies are leading to an increase in crime rates.",
+          "why": "Annotated with Crime and Punishment because it discusses the violation of laws (crime rates) related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Cultural Identity",
+      "definition": "The social norms, trends, values, and customs that make up a culture, as they relate to the issue.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@TheNewYorker A new article explores how immigration is changing cultural identity in America.",
+          "why": "Annotated with Cultural Identity because it discusses social norms and customs related to immigration."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Economic",
+      "definition": "The costs, benefits, or monetary implications of the issue for an individual, a family, a community, or the economy as a whole.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@CNBCNews A new report finds that immigration policies are having a positive impact on the US economy.",
+          "why": "Annotated with Economic because it discusses monetary implications related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "External Regulation and Reputation",
+      "definition": "A country's external relations with other nations, or relations between states or groups: treaties, trade agreements, and how a country is perceived internationally.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@BBCNews The UK's reputation abroad has been damaged by its handling of the migrant crisis.",
+          "why": "Annotated with External Regulation and Reputation because it discusses international relations and perceptions."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Fairness and Equality",
+      "definition": "Equality or inequality in how laws, punishment, rewards, and resources are applied or distributed among individuals or groups; the balance between one group's rights or interests and another's.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@TheGuardian Britain's immigration policies are unfair to refugees, leading to inequality in access to resources.",
+          "why": "Annotated with Fairness and Equality because it discusses the unequal distribution of resources related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Health and Safety",
+      "definition": "Health care access and effectiveness, illness, disease, sanitation, mental health, and physical safety of people, infrastructure, and buildings.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@WHO The migrant crisis is putting a strain on healthcare systems worldwide.",
+          "why": "Annotated with Health and Safety because it discusses the impact on physical safety related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Legality, Constitutionality, Jurisdiction",
+      "definition": "The legal, constitutional, or jurisdictional aspects of the issue: court cases, existing laws, rights and freedoms, and which body or level of government has authority.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@SupremeCourt A new ruling on immigration policies raises questions about jurisdiction and constitutionality.",
+          "why": "Annotated with Legality, Constitutionality, Jurisdiction because it discusses court cases related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Morality and Ethics",
+      "definition": "Any perspective compelled by religious doctrine, duty, honor, righteousness, or another sense of ethics or social responsibility.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@TheNewYorker A new article explores the moral implications of immigration policies on refugees.",
+          "why": "Annotated with Morality and Ethics because it discusses the impact on social responsibility related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Policy Prescription and Evaluation",
+      "definition": "Particular policies proposed for addressing a problem, and whether proposed or existing policies will work or are effective.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@NPRNews A new study evaluates the effectiveness of different immigration policies on refugee integration.",
+          "why": "Annotated with Policy Prescription and Evaluation because it discusses proposed policies related to immigration."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Political Factors and Implications",
+      "definition": "The political considerations around the issue: the efforts, stances, and maneuvering of politicians, parties, and advocacy groups, elections, and attempts to sway voters.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@BBCNews The migrant crisis is a major issue in the upcoming election, with all parties taking a stance on immigration policies.",
+          "why": "Annotated with Political Factors and Implications because it discusses political considerations related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Public Sentiment",
+      "definition": "General social attitudes, protests, polling, and demographic information, and the consequences of diverging from public opinion.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@TheGuardian A new poll finds that most Americans support stricter immigration policies.",
+          "why": "Annotated with Public Sentiment because it discusses general social attitudes related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Quality of Life",
+      "definition": "The effects of the issue on people's wealth, mobility, access to resources, happiness, social structures, ease of day-to-day life, and quality of community life.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@WHO The migrant crisis is putting a strain on healthcare systems worldwide, affecting quality of life for refugees and host communities alike.",
+          "why": "Annotated with Quality of Life because it discusses the impact on social structures related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "Security and Defense",
+      "definition": "Security, threats to security, and protection of one's person, family, in-group, or nation, including border security and terrorism.",
+      "clarification": "",
+      "negative_clarification": "",
+      "positive_examples": [
+        {
+          "text": "@NPRNews The migrant crisis is raising concerns about national security and border control.",
+          "why": "Annotated with Security and Defense because it discusses threats to security related to immigration policies."
+        }
+      ],
+      "negative_examples": [],
+      "exclusion_rules": []
+    }
+  ]
+}

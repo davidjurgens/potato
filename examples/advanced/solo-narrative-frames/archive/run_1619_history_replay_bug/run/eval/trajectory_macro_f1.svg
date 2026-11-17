@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="viz-root" viewBox="0 0 720 420" width="720" height="420" font-family="system-ui,sans-serif">
+<style>
+  .viz-root{--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--grid:#e4e3df;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;}
+  @media (prefers-color-scheme: dark){:root:where(:not([data-theme="light"])) .viz-root{--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#34332f;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;}}
+  :root[data-theme="dark"] .viz-root{--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#34332f;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;}
+  .bg{fill:var(--surface-1)} .grid{stroke:var(--grid);stroke-width:1}
+  .ax{fill:var(--text-secondary);font:12px system-ui,sans-serif}
+  .ttl{fill:var(--text-primary);font:600 13px system-ui,sans-serif}
+  .lbl{fill:var(--text-primary);font:12px system-ui,sans-serif}
+  .line{fill:none;stroke-width:2;stroke-linejoin:round}
+  .mk{stroke:var(--surface-1);stroke-width:2}
+</style>
+<rect class="bg" width="720" height="420"/>
+<line class="grid" x1="56" x2="530" y1="372.0" y2="372.0"/>
+<text class="ax" x="48" y="376.0" text-anchor="end">0.4</text>
+<line class="grid" x1="56" x2="530" y1="286.0" y2="286.0"/>
+<text class="ax" x="48" y="290.0" text-anchor="end">0.5</text>
+<line class="grid" x1="56" x2="530" y1="200.0" y2="200.0"/>
+<text class="ax" x="48" y="204.0" text-anchor="end">0.6</text>
+<line class="grid" x1="56" x2="530" y1="114.0" y2="114.0"/>
+<text class="ax" x="48" y="118.0" text-anchor="end">0.7</text>
+<line class="grid" x1="56" x2="530" y1="28.0" y2="28.0"/>
+<text class="ax" x="48" y="32.0" text-anchor="end">0.8</text>
+<text class="ax" x="56.0" y="390" text-anchor="middle">0</text>
+<text class="ax" x="293.0" y="390" text-anchor="middle">5</text>
+<text class="ax" x="530.0" y="390" text-anchor="middle">10</text>
+<text class="ax" x="293.0" y="412" text-anchor="middle">Time step (human labels in solo mode)</text>
+<text class="ax" transform="translate(14,200.0) rotate(-90)" text-anchor="middle">Macro-F1 on held-out set</text>
+<text class="lbl" x="542" y="81.5">Gemma4-E2B</text>
+<text class="lbl" x="542" y="375.2">Laya</text>
+<polyline class="line" style="stroke:var(--s1)" points="56.0,285.5 293.0,371.2 530.0,371.2"/>
+<circle class="mk" cx="56.0" cy="285.5" r="4.5" style="fill:var(--s1)" data-tip="Laya · step 0 · prompt v1 · acc 0.669 · macro-F1 0.501 · unparsed 0"/>
+<circle class="mk" cx="293.0" cy="371.2" r="4.5" style="fill:var(--s1)" data-tip="Laya · step 5 · prompt v1 · acc 0.669 · macro-F1 0.401 · unparsed 0"/>
+<circle class="mk" cx="530.0" cy="371.2" r="4.5" style="fill:var(--s1)" data-tip="Laya · step 10 · prompt v1 · acc 0.669 · macro-F1 0.401 · unparsed 0"/>
+<polyline class="line" style="stroke:var(--s2)" points="56.0,77.5"/>
+<rect class="mk" x="51.5" y="73.0" width="9.0" height="9.0" rx="1" style="fill:var(--s2)" data-tip="Gemma4-E2B · step 0 · prompt v1 · acc 0.765 · macro-F1 0.742 · unparsed 0"/>
+</svg>

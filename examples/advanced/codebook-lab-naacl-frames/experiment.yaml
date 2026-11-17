@@ -1,0 +1,38 @@
+# codebook_lab experiment on the NAACL 2021 immigration-framing tweets
+# (Mendelsohn, Budak & Jurgens), 14 issue-generic frames, multi-label,
+# scored with Laya (a local non-generative classifier) instead of an LLM.
+#
+#   python examples/advanced/codebook-lab-naacl-frames/build_dataset.py
+#   python examples/advanced/codebook-lab-naacl-frames/generate.py
+#   ~/laya-venv/bin/python examples/advanced/codebook-lab-naacl-frames/laya_server.py &
+#   python examples/advanced/codebook-lab-naacl-frames/run_laya.py
+#
+# Paths are relative to this file's directory.
+
+seed_codebook: seed_codebook.yaml
+# The hybrid picks each label's winner on dev; everything is compared on test.
+dev_examples: dev.yaml
+test_examples: test.yaml
+output_dir: run
+
+task_description: >-
+  This tweet is about immigration.
+
+num_variants: 4
+
+generation_model:
+  endpoint_type: "ollama"
+  model: "llama3.1:8b"
+  base_url: "http://localhost:11434"
+  max_tokens: 6000
+  num_ctx: 12288
+  temperature: 0.7
+  timeout: 600
+
+laya:
+  base_url: "http://127.0.0.1:8770"
+  # Each label is one yes/no question whose text is that label's rendered
+  # codebook block. Laya's default 192-token head would cut long entries;
+  # tweets are short, so give the question most of the 512-token window.
+  head_max_len: 400
+  threshold: 0.5

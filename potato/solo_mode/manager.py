@@ -3419,7 +3419,14 @@ class SoloModeManager:
             for instance_id in self.disagreement_ids:
                 if instance_id in self.predictions:
                     for prediction in self.predictions[instance_id].values():
-                        if not prediction.disagreement_resolved:
+                        # Same condition get_disagreement() uses to show one.
+                        # A re-labeling pass (e.g. after a refinement cycle)
+                        # can swap in a fresh prediction that is unresolved
+                        # but no longer disagrees; counting it as pending
+                        # while get_disagreement() returns None bounced
+                        # /solo/annotate <-> /solo/disagreements forever.
+                        if (prediction.agrees_with_human is False
+                                and not prediction.disagreement_resolved):
                             pending.append(instance_id)
                             break
             return pending

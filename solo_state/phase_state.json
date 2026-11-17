@@ -1,0 +1,78 @@
+{
+  "current_phase": "parallel-annotation",
+  "transition_history": [
+    {
+      "from_phase": "setup",
+      "to_phase": "prompt-review",
+      "timestamp": "2026-11-13T15:42:38.963817",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "prompt-review",
+      "timestamp": "2026-11-13T15:42:39.030839",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-11-13T15:42:39.031214",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-11-13T15:42:39.054124",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "setup",
+      "timestamp": "2026-11-13T15:42:39.174267",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "setup",
+      "to_phase": "prompt-review",
+      "timestamp": "2026-11-13T15:42:39.174794",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "prompt-review",
+      "timestamp": "2026-11-13T15:42:39.175757",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-11-13T15:42:39.176138",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-11-13T15:42:39.177402",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-11-13T15:42:39.225188",
+      "reason": "",
+      "metadata": {}
+    }
+  ],
+  "phase_data": {},
+  "started_at": "2026-11-13T15:42:38.963822",
+  "completed_at": null
+}

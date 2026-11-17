@@ -1,0 +1,1202 @@
+{
+  "task_description": "Decide whether each immigration-related tweet uses an episodic or a thematic narrative frame.",
+  "current_prompt_version": 2,
+  "prompt_versions": [
+    {
+      "version": 1,
+      "prompt_text": "Label the following text according to this task: Decide whether each immigration-related tweet uses an episodic or a thematic narrative frame.",
+      "created_at": "2026-11-13T16:19:26.199424",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": null,
+      "validation_accuracy": null
+    },
+    {
+      "version": 2,
+      "prompt_text": "Label the following text according to this task: Decide whether each immigration-related tweet uses an episodic or a thematic narrative frame.\n\n## Annotation Guidelines\n\nWhen distinguishing between similar labels, follow these rules:\n- When the text describes a general attitude or stereotype about immigrants, classify as Thematic.\n",
+      "created_at": "2026-11-13T17:51:16.078993",
+      "created_by": "refinement_loop",
+      "source_description": "Refinement cycle: 1 guideline suggestions",
+      "parent_version": 1,
+      "validation_accuracy": null
+    }
+  ],
+  "predictions": {
+    "1042995092443680769": {
+      "narrative_frame": {
+        "instance_id": "1042995092443680769",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:20:30.508867",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1159982029062037504": {
+      "narrative_frame": {
+        "instance_id": "1159982029062037504",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:21:41.932526",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1095344151149858816": {
+      "narrative_frame": {
+        "instance_id": "1095344151149858816",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:23:15.981843",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1125470649827430401": {
+      "narrative_frame": {
+        "instance_id": "1125470649827430401",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:25:30.240619",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1008778197796904960": {
+      "narrative_frame": {
+        "instance_id": "1008778197796904960",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:26:30.507486",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1062346250048045056": {
+      "narrative_frame": {
+        "instance_id": "1062346250048045056",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:27:47.991442",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "966594674881454081": {
+      "narrative_frame": {
+        "instance_id": "966594674881454081",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:28:40.352777",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet reports a specific event (an Afghan man firing shots at a queue for food handouts) without providing a broader context or theme. It appears to be a factual news report rather than a call to action or a statement about a general issue related to immigration or human rights, which would be thematic in nature. The use of a link to a news article also suggests a focus on a specific event rather than a general theme or issue. However, the tweet does not provide enough context to clearly identify the motivations or implications of the event, which might make it slightly ambiguous. If the tweet had provided more context or explicitly linked the event to a broader issue or theme, it would be more clearly thematic. This is an edge case because it is a borderline example where the distinction between episodic and thematic is not clear-cut, and the tweet could be interpreted in either way depending on the reader's perspective. When a tweet reports a specific event without providing a clear connection to a broader theme or issue, it may be difficult to determine whether it is episodic or thematic, and the reader's interpretation may depend on their prior knowledge or assumptions about the context and implications of the event. In such cases, it may be helpful to consider additional context or information to clarify the intended meaning or purpose of the tweet. ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1172817766996422656": {
+      "narrative_frame": {
+        "instance_id": "1172817766996422656",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.95,
+        "uncertainty_score": 0.050000000000000044,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:29:26.184983",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1021896150742380545": {
+      "narrative_frame": {
+        "instance_id": "1021896150742380545",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T16:34:50.087143",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet uses a thematic narrative frame by highlighting a broader issue (the GOP's 'jihad against undocumented immigrants') and its impact on people, rather than focusing on a specific event or incident. The use of words like 'sick' and 'jihad' also suggests a thematic approach, as they convey a sense of outrage and moral indignation at the systemic treatment of undocumented immigrants. The mention of specific actions (ripping children from families, not reunifying them, targeting families for deportation) supports this thematic frame by illustrating the consequences of this systemic treatment. The tone and language used are also consistent with a thematic narrative, as they aim to raise awareness and spark outrage about the issue rather than simply reporting on a specific event or incident. However, the mention of specific actions and the use of words like 'LOL' in the example tweet could lead to ambiguity in some cases, making it an edge case. When the tone and language used are more neutral or the focus is on a specific event or incident, the narrative frame may shift towards episodic. For example, if the tweet only mentioned the specific actions taken by the GOP without providing context or highlighting the broader issue, it could be classified as episodic. This is an edge case because it requires careful consideration of the tone, language, and focus of the tweet to determine whether it is thematic or episodic. When [the tone and language used are neutral or the focus is on a specific event or incident] -> [the narrative frame may shift towards episodic].",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1042945509474951168": {
+      "narrative_frame": {
+        "instance_id": "1042945509474951168",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:45:10.451649",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet reports a specific incident (a car crash in Arizona that killed eight people, including four illegal immigrants) and does not express a general opinion or theme about immigration. It appears to be a factual report of a news event, which is characteristic of an episodic narrative frame. The use of hashtags like #soynadie (which translates to 'they die' in Spanish) suggests a sensational or attention-grabbing tone, but the overall focus is on the specific incident rather than a broader theme or issue related to immigration. The tone is more informative than argumentative or persuasive, which further supports the episodic label. However, the tone is somewhat sensational, which could be seen as a thematic element, but the primary focus is on the incident itself rather than a general theme or issue related to immigration. This is a borderline case, but the episodic label is more fitting based on the primary focus on the incident and the lack of explicit thematic language or argumentation. If the tone were more explicitly sensational or attention-grabbing, and the focus were more on the broader implications or themes related to immigration, the thematic label might be more appropriate. This is an edge case because it requires careful consideration of the tone and focus of the tweet to determine whether it is primarily episodic or thematic. When the tone is sensational and the focus is on a specific incident, but the language also implies a broader theme or issue, it can be difficult to determine whether the narrative frame is primarily episodic or thematic. In such cases, it may be necessary to consider additional context or information to make a more confident determination. ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1024020333760786434": {
+      "narrative_frame": {
+        "instance_id": "1024020333760786434",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:46:11.695033",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet uses a generalizing and emotive tone to describe a broader issue with California's policies and environment, rather than focusing on a specific incident or event. The use of phrases like 'citywide minefield' and 'illegals' also suggests a thematic narrative frame, which is concerned with the underlying conditions and values that shape the issue at hand, rather than the specific events or instances that illustrate them. The tone is also highly emotive and critical, which is consistent with thematic narrative frames, which often aim to persuade or mobilize public opinion on a particular issue. The use of rhetorical language, such as 'Fuck you, California', also suggests a thematic narrative frame, as it is a way of expressing outrage and indignation at the broader issue, rather than a specific incident or event. However, the tone is also somewhat ambiguous, as it could be seen as a personal attack rather than a thematic critique, which is why the confidence is not 100% and an edge case rule is identified below. The edge case rule is: When a tweet uses emotive language and rhetorical devices to express outrage and indignation at a broader issue, but also contains personal attacks or insults, it may be difficult to determine whether the narrative frame is thematic or episodic, as the tone and language can be ambiguous and open to multiple interpretations. In such cases, it may be necessary to consider the context and intent behind the tweet, as well as the specific language and rhetorical devices used, in order to make a more informed judgment about the narrative frame. This is an edge case because it requires a nuanced understanding of the language and tone used in the tweet, as well as the ability to distinguish between thematic and episodic narrative frames in complex and ambiguous cases. The confidence is 90% because the tweet does contain some thematic elements, such as the use of generalizing language and rhetorical devices, but the tone and language are also somewhat ambiguous and open to multiple interpretations, which is why the confidence is not 100% and an edge case rule is identified. ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1050682913589788672": {
+      "narrative_frame": {
+        "instance_id": "1050682913589788672",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:47:07.453386",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet uses a general statement to make a point about the relationship between migrants and multiculturalism, without referencing a specific incident or event. This is characteristic of a thematic narrative frame, which focuses on a broader idea or theme rather than a specific event or story. The tone is also more abstract and less focused on a particular instance, which further supports the thematic label. The use of the phrase 'but say nothing' also implies a generalization about a group, which is consistent with thematic framing. However, the tone is somewhat inflammatory and the language is emotive, which might suggest a lower confidence level. Nonetheless, the overall structure and content of the tweet align more closely with thematic framing than episodic framing, so the label is assigned with a confidence level of 90. The edge case rule for this type of ambiguity is: When a tweet uses a general statement to make a point, but the tone is highly emotive or inflammatory, and the language is somewhat abstract, then the confidence level should be lower (e.g., 70-80) and the label should be assigned with caution. This is because the tweet may be using a thematic frame to make a point, but the tone and language may also be indicative of an episodic frame, depending on the context and intent of the author. In this case, the confidence level is 90, indicating a strong assignment of the thematic label, but the edge case rule is provided to highlight the potential for ambiguity in similar cases.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1015570357640749057": {
+      "narrative_frame": {
+        "instance_id": "1015570357640749057",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:48:32.421240",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1093002393221058561": {
+      "narrative_frame": {
+        "instance_id": "1093002393221058561",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:49:48.257748",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet mentions a specific event (the last election) and makes a claim about the number of illegals who voted Democratic, which is a specific instance of a larger issue. This is characteristic of an episodic narrative frame, which focuses on specific events or instances rather than general themes or principles. The use of the phrase 'Quiet a few' also implies a sense of surprise or shock, which is typical of episodic narratives that highlight unusual or unexpected events or outcomes. The tone of the tweet is also sensationalistic, which is consistent with the episodic frame's focus on dramatic or attention-grabbing events. However, the tweet's language and tone are somewhat ambiguous, and it's possible to interpret the tweet as making a more general claim about the voting habits of undocumented immigrants, which would be more characteristic of a thematic narrative frame. This ambiguity suggests that the tweet may be an edge case, and the edge case rule could be: 'When a tweet makes a claim about a specific event or instance, but also uses language that implies a more general principle or theme, then it may be difficult to classify as either episodic or thematic.'",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1009559325696720896": {
+      "narrative_frame": {
+        "instance_id": "1009559325696720896",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:50:46.517664",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet is focused on a broader issue of human rights and immigration, rather than a specific event or incident. It uses rhetorical questions and calls to action, which is typical of thematic narrative frames. The use of hashtags such as #HumanRights, #equity, and #justice also suggests a thematic focus on the underlying principles and values at stake, rather than a specific event or incident. However, the tweet does not provide a clear narrative arc or causal chain, which is a key characteristic of thematic narrative frames. This is a common ambiguity in thematic narrative frames, as they often rely on implicit connections and shared knowledge between the author and the audience. When this type of ambiguity occurs, it is often because the author is trying to convey a sense of urgency or importance, rather than providing a detailed account of events. In this case, the edge case rule is: When an author uses rhetorical questions and calls to action to convey a sense of urgency or importance, and the tweet relies on implicit connections and shared knowledge between the author and the audience, then the narrative frame is likely thematic, but the confidence level may be lower due to the ambiguity of the narrative structure. This edge case rule is relevant when the author is trying to persuade or mobilize the audience, rather than simply reporting on a specific event or incident. The is_edge_case flag is true because the narrative frame is not clearly episodic or thematic, and the author is relying on implicit connections and shared knowledge between the author and the audience. The edge_case_rule is provided to describe when this type of ambiguity occurs, and how it can be resolved by considering the author's intent and the narrative structure of the tweet.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1015655613164994560": {
+      "narrative_frame": {
+        "instance_id": "1015655613164994560",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959874",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1144049792093437952": {
+      "narrative_frame": {
+        "instance_id": "1144049792093437952",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959888",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1010991386882203649": {
+      "narrative_frame": {
+        "instance_id": "1010991386882203649",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959893",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1141211529209139201": {
+      "narrative_frame": {
+        "instance_id": "1141211529209139201",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:50:51.523496",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 1 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1026509739608424448": {
+      "narrative_frame": {
+        "instance_id": "1026509739608424448",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959897",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "985886725477040128": {
+      "narrative_frame": {
+        "instance_id": "985886725477040128",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Episodic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:50:51.523504",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 1 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "983689995251838976": {
+      "narrative_frame": {
+        "instance_id": "983689995251838976",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:50:51.523507",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1146048443770687488": {
+      "narrative_frame": {
+        "instance_id": "1146048443770687488",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:50:51.523511",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 1 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1009859923465908224": {
+      "narrative_frame": {
+        "instance_id": "1009859923465908224",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 1,
+        "timestamp": "2026-11-13T17:50:51.523515",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "994759001752702976": {
+      "narrative_frame": {
+        "instance_id": "994759001752702976",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:48.951416",
+        "model_name": "llama3.1:8b",
+        "reasoning": "The tweet makes a general statement about undocumented people committing few crimes, without referencing a specific event or incident. This is characteristic of a thematic narrative frame, which focuses on a broader idea or theme rather than a specific event or story. The tone is also more abstract and less focused on a particular incident, which further supports the thematic label. The comparison to white men is also a generalization, which is typical of thematic narratives that aim to make a broader point rather than tell a specific story. The only reason for a lower confidence is that the tweet could be seen as making a general statement about a specific issue (crime rates), but the language and tone used are more typical of thematic narratives than episodic ones. However, this is a common ambiguity in narrative frames, and the edge case rule for this type of ambiguity is: When a tweet makes a general statement about a specific issue, but the language and tone used are more typical of thematic narratives than episodic ones, then the narrative frame is likely thematic, but the confidence should be lower (e.g., 80-89).",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1032618131406180352": {
+      "narrative_frame": {
+        "instance_id": "1032618131406180352",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959847",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1079180098769543169": {
+      "narrative_frame": {
+        "instance_id": "1079180098769543169",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959864",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1081346230729490432": {
+      "narrative_frame": {
+        "instance_id": "1081346230729490432",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959869",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1084504496351465472": {
+      "narrative_frame": {
+        "instance_id": "1084504496351465472",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.5011547344110855,
+        "uncertainty_score": 0.4988452655889145,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959880",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 2 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "967319310489276416": {
+      "narrative_frame": {
+        "instance_id": "967319310489276416",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959884",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 1 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "966777449609613318": {
+      "narrative_frame": {
+        "instance_id": "966777449609613318",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:53.959901",
+        "model_name": "labeling_function",
+        "reasoning": "Labeled by 1 labeling functions",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1080402722476777474": {
+      "narrative_frame": {
+        "instance_id": "1080402722476777474",
+        "schema_name": "narrative_frame",
+        "predicted_label": "Thematic",
+        "confidence_score": 0.8,
+        "uncertainty_score": 0.19999999999999996,
+        "prompt_version": 2,
+        "timestamp": "2026-11-13T17:51:56.143021",
+        "model_name": "llama3.1:8b",
+        "reasoning": "",
+        "human_label": "Episodic",
+        "agrees_with_human": false,
+        "disagreement_resolved": true,
+        "resolution_label": "Episodic"
+      }
+    }
+  },
+  "human_labeled_ids": [
+    "1080402722476777474"
+  ],
+  "labeled_by_user": {
+    "sim": [
+      "1080402722476777474"
+    ]
+  },
+  "llm_labeled_ids": [
+    "1032618131406180352",
+    "1081346230729490432",
+    "1042945509474951168",
+    "1010991386882203649",
+    "1080402722476777474",
+    "1095344151149858816",
+    "1050682913589788672",
+    "966777449609613318",
+    "1141211529209139201",
+    "994759001752702976",
+    "1021896150742380545",
+    "1042995092443680769",
+    "1125470649827430401",
+    "1026509739608424448",
+    "1009559325696720896",
+    "966594674881454081",
+    "1159982029062037504",
+    "1146048443770687488",
+    "967319310489276416",
+    "1093002393221058561",
+    "1015655613164994560",
+    "1084504496351465472",
+    "985886725477040128",
+    "1062346250048045056",
+    "1024020333760786434",
+    "1144049792093437952",
+    "1079180098769543169",
+    "1015570357640749057",
+    "1172817766996422656",
+    "1008778197796904960"
+  ],
+  "disagreement_ids": [
+    "1151856413985202177",
+    "1080402722476777474",
+    "1151829805299617792",
+    "1079180098769543169",
+    "980564634368430080",
+    "1128946509372895232",
+    "1205776699230699523",
+    "1011782935941386240"
+  ],
+  "validation_sample_ids": [],
+  "validated_instance_ids": [],
+  "pending_relabel_ids": [
+    "1032618131406180352",
+    "1083852908280668160",
+    "1081346230729490432",
+    "1034186609028227073",
+    "1145288714396098566",
+    "967319310489276416",
+    "1084504496351465472",
+    "1075032756722286592",
+    "1151856413985202177",
+    "1151829805299617792",
+    "966777449609613318",
+    "1008288304335376384",
+    "1089718277960392706",
+    "1080252826859663360",
+    "980564634368430080",
+    "1079180098769543169",
+    "1128946509372895232",
+    "1085682434312626177",
+    "1205776699230699523",
+    "1011782935941386240"
+  ],
+  "relabel_wave_size": 20,
+  "pending_codebook_relabel_ids": [],
+  "codebook_relabel_wave_size": 0,
+  "codebook_changes_since_relabel": 0,
+  "codebook_part_pending_changes": {},
+  "codebook_part_relabel_log": [],
+  "codebook_version_history": {},
+  "needs_final_override_choice": false,
+  "edge_case_ids": [],
+  "edge_case_labels": {},
+  "agreement_metrics": {
+    "total_compared": 21,
+    "agreements": 13,
+    "disagreements": 8,
+    "agreement_rate": 0.6190476190476191,
+    "stale": false,
+    "pending_codebook_changes": 0,
+    "stale_parts": {}
+  },
+  "confidence_history": {
+    "1042995092443680769": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "980564634368430080": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "1159982029062037504": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "966777449609613318": [
+      [
+        1,
+        0.9
+      ],
+      [
+        2,
+        1.0
+      ]
+    ],
+    "1095344151149858816": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1075032756722286592": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1125470649827430401": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1084504496351465472": [
+      [
+        1,
+        0.9
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1008778197796904960": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1151829805299617792": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1062346250048045056": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1145288714396098566": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "966594674881454081": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "967319310489276416": [
+      [
+        1,
+        0.9
+      ],
+      [
+        2,
+        1.0
+      ]
+    ],
+    "1172817766996422656": [
+      [
+        1,
+        0.95
+      ]
+    ],
+    "1032618131406180352": [
+      [
+        1,
+        0.9
+      ],
+      [
+        1,
+        0.9
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1085682434312626177": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "1021896150742380545": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1089718277960392706": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1079180098769543169": [
+      [
+        1,
+        0.9
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1008288304335376384": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "1081346230729490432": [
+      [
+        1,
+        0.9
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1128946509372895232": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1042945509474951168": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1205776699230699523": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1024020333760786434": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1080252826859663360": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1050682913589788672": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1034186609028227073": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1015570357640749057": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1083852908280668160": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1093002393221058561": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "1151856413985202177": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "1009559325696720896": [
+      [
+        1,
+        0.8
+      ]
+    ],
+    "1015655613164994560": [
+      [
+        1,
+        0.5011547344110855
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1144049792093437952": [
+      [
+        1,
+        0.5011547344110855
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1010991386882203649": [
+      [
+        1,
+        0.5011547344110855
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "1141211529209139201": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "1026509739608424448": [
+      [
+        1,
+        0.5011547344110855
+      ],
+      [
+        2,
+        0.5011547344110855
+      ]
+    ],
+    "985886725477040128": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "983689995251838976": [
+      [
+        1,
+        0.5011547344110855
+      ]
+    ],
+    "1146048443770687488": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "1009859923465908224": [
+      [
+        1,
+        0.5011547344110855
+      ]
+    ],
+    "1011782935941386240": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "994759001752702976": [
+      [
+        2,
+        0.9
+      ]
+    ],
+    "1080402722476777474": [
+      [
+        2,
+        0.8
+      ]
+    ]
+  },
+  "reannotation_counts": {
+    "1015655613164994560": 1,
+    "1144049792093437952": 1,
+    "1010991386882203649": 1,
+    "1026509739608424448": 1,
+    "983689995251838976": 1,
+    "1009859923465908224": 1
+  },
+  "per_version_agreement": {
+    "1": {
+      "compared": 20,
+      "agreements": 13
+    },
+    "2": {
+      "compared": 1,
+      "agreements": 0
+    }
+  },
+  "refinement_consecutive_failures": 0,
+  "pending_refinements": [],
+  "refinement_log": [],
+  "icl_library": null,
+  "last_review_revision": null,
+  "validation_tracker": {
+    "metrics": {
+      "total_compared": 21,
+      "agreements": 13,
+      "disagreements": 8,
+      "agreement_rate": 0.6190476190476191,
+      "label_agreements": {
+        "Thematic": 10,
+        "Episodic": 3
+      },
+      "label_disagreements": {
+        "Episodic": 7,
+        "Thematic": 1
+      },
+      "confusion_matrix": {
+        "Thematic|Episodic": 7,
+        "Episodic|Thematic": 1
+      },
+      "recent_agreement_rate": 0.6190476190476191,
+      "trend": "stable"
+    },
+    "comparison_history": [
+      {
+        "instance_id": "980564634368430080",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T16:21:27.767145"
+      },
+      {
+        "instance_id": "966777449609613318",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:22:44.849062"
+      },
+      {
+        "instance_id": "1075032756722286592",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:25:20.570469"
+      },
+      {
+        "instance_id": "1084504496351465472",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:26:19.329752"
+      },
+      {
+        "instance_id": "1151829805299617792",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T16:27:30.457016"
+      },
+      {
+        "instance_id": "1145288714396098566",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:28:35.097242"
+      },
+      {
+        "instance_id": "967319310489276416",
+        "human_label": "Episodic",
+        "llm_label": "Episodic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:29:21.608660"
+      },
+      {
+        "instance_id": "1032618131406180352",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:30:17.867918"
+      },
+      {
+        "instance_id": "1085682434312626177",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:34:43.248413"
+      },
+      {
+        "instance_id": "1089718277960392706",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:36:26.703067"
+      },
+      {
+        "instance_id": "1008288304335376384",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T16:41:29.010132"
+      },
+      {
+        "instance_id": "1128946509372895232",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T17:14:06.748900"
+      },
+      {
+        "instance_id": "1081346230729490432",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T17:14:07.777587"
+      },
+      {
+        "instance_id": "1079180098769543169",
+        "human_label": "Thematic",
+        "llm_label": "Episodic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T17:14:08.800766"
+      },
+      {
+        "instance_id": "1205776699230699523",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T17:45:14.748012"
+      },
+      {
+        "instance_id": "1080252826859663360",
+        "human_label": "Thematic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T17:46:16.279249"
+      },
+      {
+        "instance_id": "1034186609028227073",
+        "human_label": "Episodic",
+        "llm_label": "Episodic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T17:47:36.528285"
+      },
+      {
+        "instance_id": "1083852908280668160",
+        "human_label": "Episodic",
+        "llm_label": "Episodic",
+        "schema_name": "narrative_frame",
+        "agrees": true,
+        "timestamp": "2026-11-13T17:48:58.665374"
+      },
+      {
+        "instance_id": "1151856413985202177",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T17:49:54.420014"
+      },
+      {
+        "instance_id": "1011782935941386240",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T17:50:54.084310"
+      },
+      {
+        "instance_id": "1080402722476777474",
+        "human_label": "Episodic",
+        "llm_label": "Thematic",
+        "schema_name": "narrative_frame",
+        "agrees": false,
+        "timestamp": "2026-11-13T17:51:56.156228"
+      }
+    ],
+    "validation_samples": {},
+    "llm_labels_since_review": 0
+  }
+}

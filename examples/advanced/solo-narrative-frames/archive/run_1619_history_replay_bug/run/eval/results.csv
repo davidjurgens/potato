@@ -1,0 +1,2 @@
+model,step,prompt_version,n,accuracy,macro_f1,f1_episodic,f1_thematic,n_unparsed
+gemma4:e2b,0,1,136,0.7647,0.7424,0.6667,0.8182,0

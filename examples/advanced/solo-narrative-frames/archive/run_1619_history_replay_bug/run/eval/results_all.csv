@@ -1,0 +1,5 @@
+model,step,prompt_version,n,accuracy,macro_f1,f1_episodic,f1_thematic,n_unparsed
+laya,0,1,136,0.6691,0.5006,0.2105,0.7907,0
+laya,5,1,136,0.6691,0.4009,0.0000,0.8018,0
+laya,10,1,136,0.6691,0.4009,0.0000,0.8018,0
+gemma4:e2b,0,1,136,0.7647,0.7424,0.6667,0.8182,0

@@ -1,0 +1,22 @@
+{
+  "current_phase": "parallel-annotation",
+  "transition_history": [
+    {
+      "from_phase": "setup",
+      "to_phase": "prompt-review",
+      "timestamp": "2026-11-13T15:43:09.136519",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-11-13T15:43:09.145945",
+      "reason": "",
+      "metadata": {}
+    }
+  ],
+  "phase_data": {},
+  "started_at": "2026-11-13T15:43:09.136525",
+  "completed_at": null
+}

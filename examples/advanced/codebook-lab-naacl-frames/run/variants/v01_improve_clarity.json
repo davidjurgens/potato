@@ -1,0 +1,315 @@
+{
+  "variant_id": "v01_improve_clarity",
+  "origin": "llm:improve_clarity",
+  "notes": "This updated codebook includes tightened definitions, exclusion rules to resolve ambiguity between adjacent labels, and worked examples with more concrete text. Each label has a distinct definition, clarification, and negative clarification to ensure clear annotation.",
+  "codes": [
+    {
+      "name": "Capacity and Resources",
+      "definition": "Availability or lack of physical, financial, human, or spatial resources.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or economic implications.",
+      "positive_examples": [
+        {
+          "text": "@Adventure_Ost @ErikMarquardt Leben diese Migranten in Hotels mit all-you-can-eat?  #Vollpfosten",
+          "why": "Annotated with Capacity and Resources because the tweet discusses migrants' living conditions, which relates to resource availability."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@WhiteHouse Illegals pick our fruits and veggies!  And work at his golf courses!",
+          "why": "Not annotated with Capacity and Resources because it focuses on economic implications rather than resource availability."
+        }
+      ],
+      "exclusion_rules": [
+        "Economic",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Crime and Punishment",
+      "definition": "Violations of laws, including crimes, policing, punishment, and enforcement.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or judicial processes.",
+      "positive_examples": [
+        {
+          "text": "@RedXantusiidae @SenSanders The study is looking at the crime rates of 100,000 people in each subpopulation...",
+          "why": "Annotated with Crime and Punishment because it discusses crime rates and law enforcement."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@notreallyme76 @upuouo @carbonsaveruk @HayOnDemocracy @AOC @jeremycorbyn He is not pro-brexit...",
+          "why": "Not annotated with Crime and Punishment because it discusses policy stances rather than crime or punishment."
+        }
+      ],
+      "exclusion_rules": [
+        "Legality, Constitutionality, Jurisdiction",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Cultural Identity",
+      "definition": "Social norms, customs, values, and trends that define a culture.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or cultural exchange programs.",
+      "positive_examples": [
+        {
+          "text": "@Alwin_Tompkins @NoLore you'd have to be about 150 years old for your grandmother (Yes one word no capitals) to he considered a settler...",
+          "why": "Annotated with Cultural Identity because it discusses cultural norms and values."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@too_many_twits @dafyddmihangel @JonnyValleyBoy Obviously not all English are that way but the English Tweet that set me off was very aggressive.",
+          "why": "Not annotated with Cultural Identity because it discusses a specific incident rather than cultural norms."
+        }
+      ],
+      "exclusion_rules": [
+        "Policy Prescription and Evaluation",
+        "Public Sentiment"
+      ]
+    },
+    {
+      "name": "Economic",
+      "definition": "Monetary and financial implications of the issue for individuals, families, or communities.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about resource availability or policy solutions.",
+      "positive_examples": [
+        {
+          "text": "@WhiteHouse Illegals pick our fruits and veggies!  And work at his golf courses!",
+          "why": "Annotated with Economic because it discusses the economic implications of immigration."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@Adventure_Ost @ErikMarquardt Leben diese Migranten in Hotels mit all-you-can-eat?  #Vollpfosten",
+          "why": "Not annotated with Economic because it focuses on resource availability rather than economic implications."
+        }
+      ],
+      "exclusion_rules": [
+        "Capacity and Resources",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "External Regulation and Reputation",
+      "definition": "A country's external relations with other nations, including treaties, trade agreements, and international perception.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or diplomatic efforts.",
+      "positive_examples": [
+        {
+          "text": "@too_many_twits @dafyddmihangel @JonnyValleyBoy Obviously not all English are that way but the English Tweet that set me off was very aggressive.",
+          "why": "Annotated with External Regulation and Reputation because it discusses a country's international relations."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@RedXantusiidae @SenSanders The study is looking at the crime rates of 100,000 people in each subpopulation...",
+          "why": "Not annotated with External Regulation and Reputation because it discusses domestic law enforcement rather than international relations."
+        }
+      ],
+      "exclusion_rules": [
+        "Legality, Constitutionality, Jurisdiction",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Fairness and Equality",
+      "definition": "Equality or inequality in how laws, punishment, rewards, and resources are applied or distributed among individuals or groups.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or judicial processes.",
+      "positive_examples": [
+        {
+          "text": "@nberlat I mean.... Glenn has demonstrated pretty clearly throughout his career that he hates immigrants.",
+          "why": "Annotated with Fairness and Equality because it discusses unequal treatment of individuals."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@RedXantusiidae @SenSanders The study is looking at the crime rates of 100,000 people in each subpopulation...",
+          "why": "Not annotated with Fairness and Equality because it discusses law enforcement rather than equal treatment."
+        }
+      ],
+      "exclusion_rules": [
+        "Legality, Constitutionality, Jurisdiction",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Health and Safety",
+      "definition": "Health care access and effectiveness, illness, disease, sanitation, mental health, and physical safety of people, infrastructure, and buildings.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or healthcare systems.",
+      "positive_examples": [
+        {
+          "text": "@TheGloriousLion There are many arguments against mass immigration, but claiming that it creates an \"environmental disaster\" is so incredibly out of touch",
+          "why": "Annotated with Health and Safety because it discusses the impact of immigration on environmental health."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@too_many_twits @dafyddmihangel @JonnyValleyBoy Obviously not all English are that way but the English Tweet that set me off was very aggressive.",
+          "why": "Not annotated with Health and Safety because it discusses a specific incident rather than health or safety."
+        }
+      ],
+      "exclusion_rules": [
+        "Policy Prescription and Evaluation",
+        "Public Sentiment"
+      ]
+    },
+    {
+      "name": "Legality, Constitutionality, Jurisdiction",
+      "definition": "The legal, constitutional, or jurisdictional aspects of the issue.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or judicial processes.",
+      "positive_examples": [
+        {
+          "text": "I've learned this from @LDNIrishCentre, increasingly with @irishmigrants and @ichhdublin and other services - the best tips come from other migrants who have gone through the system.  https://t.co/YY59RYhTeA an invaluable resource.",
+          "why": "Annotated with Legality, Constitutionality, Jurisdiction because it discusses legal aspects of immigration."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@too_many_twits @dafyddmihangel @JonnyValleyBoy Obviously not all English are that way but the English Tweet that set me off was very aggressive.",
+          "why": "Not annotated with Legality, Constitutionality, Jurisdiction because it discusses a specific incident rather than legal aspects."
+        }
+      ],
+      "exclusion_rules": [
+        "Policy Prescription and Evaluation",
+        "Public Sentiment"
+      ]
+    },
+    {
+      "name": "Morality and Ethics",
+      "definition": "Perspectives compelled by religious doctrine, duty, honor, righteousness, or another sense of ethics or social responsibility.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or cultural norms.",
+      "positive_examples": [
+        {
+          "text": "We now have the task to ensure that this window of opportunity, with the dissolving of Salafism and progression from immigrant/colonial era Islam, that we bring the faith back to Purity, ease and Abrahamic Godliness",
+          "why": "Annotated with Morality and Ethics because it discusses religious doctrine and ethics."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@nberlat I mean.... Glenn has demonstrated pretty clearly throughout his career that he hates immigrants.",
+          "why": "Not annotated with Morality and Ethics because it discusses personal opinions rather than moral or ethical perspectives."
+        }
+      ],
+      "exclusion_rules": [
+        "Policy Prescription and Evaluation",
+        "Cultural Identity"
+      ]
+    },
+    {
+      "name": "Policy Prescription and Evaluation",
+      "definition": "Particular policies proposed for addressing a problem, and whether proposed or existing policies will work.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy implementation or evaluation criteria.",
+      "positive_examples": [
+        {
+          "text": "@notreallyme76 @upuouo @carbonsaveruk @HayOnDemocracy @AOC @jeremycorbyn He is not pro-brexit and he is pro-immigrant.",
+          "why": "Annotated with Policy Prescription and Evaluation because it discusses a policy stance."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@too_many_twits @dafyddmihangel @JonnyValleyBoy Obviously not all English are that way but the English Tweet that set me off was very aggressive.",
+          "why": "Not annotated with Policy Prescription and Evaluation because it discusses a specific incident rather than policy stances."
+        }
+      ],
+      "exclusion_rules": [
+        "Legality, Constitutionality, Jurisdiction",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Political Factors and Implications",
+      "definition": "The political considerations around the issue, including efforts, stances, and maneuvering of politicians and advocacy groups.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or diplomatic efforts.",
+      "positive_examples": [
+        {
+          "text": "Andrew Sullivan: Democratic Candidates Are in a Bubble on Immigration via @intelligencer",
+          "why": "Annotated with Political Factors and Implications because it discusses political considerations around immigration."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@RedXantusiidae @SenSanders The study is looking at the crime rates of 100,000 people in each subpopulation...",
+          "why": "Not annotated with Political Factors and Implications because it discusses domestic law enforcement rather than political considerations."
+        }
+      ],
+      "exclusion_rules": [
+        "Legality, Constitutionality, Jurisdiction",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Public Sentiment",
+      "definition": "General social attitudes, protests, polling, demographic information, and the consequences of diverging from public opinion.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or cultural norms.",
+      "positive_examples": [
+        {
+          "text": "“People who don’t interact with migrants, have more fears and more worries. about them” - Eva Degler #Room4Discussion",
+          "why": "Annotated with Public Sentiment because it discusses general social attitudes."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@Alwin_Tompkins @NoLore you'd have to be about 150 years old for your grandmother (Yes one word no capitals) to he considered a settler...",
+          "why": "Not annotated with Public Sentiment because it discusses cultural norms rather than general social attitudes."
+        }
+      ],
+      "exclusion_rules": [
+        "Policy Prescription and Evaluation",
+        "Cultural Identity"
+      ]
+    },
+    {
+      "name": "Quality of Life",
+      "definition": "The effects of the issue on people's wealth, mobility, access to resources, happiness, social structures, ease of day-to-day life, and quality of community life.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or economic implications.",
+      "positive_examples": [
+        {
+          "text": "I think that’s how immigrants being granted royal status are kept in very cold conditions, it happens in my apartment, then set free in wilderness. https://t.co/hmmBMlm7vO",
+          "why": "Annotated with Quality of Life because it discusses the impact of immigration on people's lives."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@WhiteHouse Illegals pick our fruits and veggies!  And work at his golf courses!",
+          "why": "Not annotated with Quality of Life because it focuses on economic implications rather than quality of life."
+        }
+      ],
+      "exclusion_rules": [
+        "Economic",
+        "Policy Prescription and Evaluation"
+      ]
+    },
+    {
+      "name": "Security and Defense",
+      "definition": "Security, threats to security, and protection of one's person, family, in-group, or nation.",
+      "clarification": "",
+      "negative_clarification": "Excludes discussions about policy solutions or border control measures.",
+      "positive_examples": [
+        {
+          "text": "Razor wire now covers border wall where 'vanguard' of migrant caravan taunted U․S. https://t.co/ajMBZLV1Wf via @washtimes",
+          "why": "Annotated with Security and Defense because it discusses border security."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "@RedXantusiidae @SenSanders The study is looking at the crime rates of 100,000 people in each subpopulation...",
+          "why": "Not annotated with Security and Defense because it discusses domestic law enforcement rather than border security."
+        }
+      ],
+      "exclusion_rules": [
+        "Legality, Constitutionality, Jurisdiction",
+        "Policy Prescription and Evaluation"
+      ]
+    }
+  ]
+}
