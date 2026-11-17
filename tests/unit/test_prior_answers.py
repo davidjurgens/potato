@@ -78,6 +78,25 @@ def test_radio_shows_the_chosen_label():
     assert block["answer_html"] == "Left"
 
 
+LIKERT = {"name": "trust", "annotation_type": "likert", "size": 7,
+          "min_label": "No trust", "max_label": "Full trust",
+          "bad_text_label": "Cannot say"}
+
+
+@pytest.mark.parametrize("scheme, stored, shown", [
+    (LIKERT, "4", "4 of 7 (1 = No trust, 7 = Full trust)"),
+    (LIKERT, "bad_text", "Cannot say"),
+    ({"name": "trust", "annotation_type": "likert", "size": 5}, "2", "2 of 5"),
+    ({"name": "trust", "annotation_type": "likert", "labels": ["Low", "High"]},
+     "High", "High"),
+])
+def test_likert_shows_where_the_point_sits_on_the_scale(scheme, stored, shown):
+    state = _State({("prestudy", "pre"): {("trust", stored): stored}})
+    config = {"prior_answers": [{"schema": "trust"}], "_surveyflow_schemes": [scheme]}
+    [block] = render_prior_answer_blocks(config, state)
+    assert block["lines"] == [shown]
+
+
 def test_multiselect_shows_every_chosen_label():
     [block] = render_prior_answer_blocks(_config([{"schema": "media"}]), _state())
     assert block["answer_html"] == "TV<br>Web"

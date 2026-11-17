@@ -29699,7 +29699,8 @@ Each entry in `prior_answers` accepts these keys:
 |---|---|
 | `text` with one field | The text that the participant wrote. Line breaks stay. |
 | `text` with more than one field | One line for each field, in the form `field: answer`. |
-| `radio`, `likert` | The name of the selected label. |
+| `radio` | The name of the selected label. |
+| `likert` | The point and the size of the scale, with the end labels: `4 of 7 (1 = No trust, 7 = Full trust)`. A `likert` with a `labels` list shows the name of the selected label. |
 | `select` | The selected option. |
 | `multiselect` | The name of each selected label, one on each line. |
 | An "Other" free-response field | The free text, on a line after the selected label. |
