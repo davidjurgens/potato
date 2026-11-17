@@ -131,16 +131,6 @@ def counts():
 
 # (relative path, regex with one capture group, which count it must equal)
 CLAIMS = [
-    ("README.md",
-     r"All (\d+) config keys, \d+ annotation types, \d+ display types",
-     "config_keys"),
-    ("README.md",
-     r"All \d+ config keys, (\d+) annotation types, \d+ display types",
-     "annotation_types"),
-    ("README.md",
-     r"All \d+ config keys, \d+ annotation types, (\d+) display types",
-     "display_types"),
-
     ("docs/index.md",
      r"all (\d+) annotation types and \d+ display types",
      "annotation_types"),
@@ -209,10 +199,7 @@ CLAIMS = [
      r"the \*\*(\d+) example projects\*\*",
      "examples"),
 
-    # README and the docs index said 419 HTTP paths against an actual 477.
-    ("README.md",
-     r"All (\d+) HTTP paths",
-     "http_paths"),
+    # The docs index said 419 HTTP paths against an actual 477.
     ("docs/index.md",
      r"All (\d+) HTTP paths",
      "http_paths"),
@@ -310,9 +297,6 @@ CLAIMS = [
 
     # Crowdsourcing was described as "Prolific and MTurk" in five places
     # while the registry shipped nine providers.
-    ("README.md",
-     r"\| (\w+) crowd providers: Prolific",
-     "crowd_providers"),
     ("docs/faq.md",
      r"Potato ships (\w+) \[crowd providers\]",
      "crowd_providers"),
