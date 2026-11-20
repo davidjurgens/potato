@@ -216,6 +216,72 @@ class TestTokenEntropyEstimator:
         assert estimate.uncertainty_score == 0.5
         assert 'error' in estimate.metadata
 
+    @staticmethod
+    def _openai_endpoint(response):
+        """An OpenAI-style endpoint whose chat call returns ``response``."""
+        from types import SimpleNamespace
+
+        class OpenAIEndpoint:
+            model = 'gpt-4o-mini'
+            max_tokens = 16
+            temperature = 0.0
+            client = SimpleNamespace(chat=SimpleNamespace(
+                completions=SimpleNamespace(create=lambda **kwargs: response)))
+
+        return OpenAIEndpoint()
+
+    @staticmethod
+    def _chat_logprobs_response():
+        """Chat Completions logprobs: a sure first token, an unsure second."""
+        from types import SimpleNamespace as NS
+
+        def tok(token, logprob, alts):
+            return NS(token=token, logprob=logprob, bytes=None,
+                      top_logprobs=[NS(token=t, logprob=lp) for t, lp in alts])
+
+        content = [
+            tok('positive', -0.01, [('positive', -0.01), ('negative', -5.0)]),
+            tok(' sarcasm', -1.2, [(' sarcasm', -1.2), (' irony', -0.9),
+                                   (' joke', -1.6)]),
+        ]
+        return NS(choices=[NS(index=0, logprobs=NS(content=content))])
+
+    def test_openai_logprobs_scored(self, estimator):
+        """Entropy of the first answer token comes from the OpenAI response."""
+        import math
+
+        endpoint = self._openai_endpoint(self._chat_logprobs_response())
+        estimate = estimator.estimate_uncertainty(
+            instance_id='t1', text='Great, another Monday.', prompt='Label it',
+            predicted_label='positive', endpoint=endpoint,
+        )
+
+        assert 'error' not in estimate.metadata
+        assert estimate.metadata['num_tokens_analyzed'] == 2
+        expected = estimator._calculate_entropy(
+            [{'positive': -0.01, 'negative': -5.0}])
+        assert estimate.metadata['raw_entropy'] == pytest.approx(expected)
+        assert estimate.uncertainty_score == pytest.approx(
+            expected / math.log(5))
+
+    def test_openai_logprobs_heatmap(self, estimator):
+        """The estimate carries a token heatmap that marks the unsure token."""
+        pytest.importorskip('every_other_token')
+
+        endpoint = self._openai_endpoint(self._chat_logprobs_response())
+        estimate = estimator.estimate_uncertainty(
+            instance_id='t1', text='Great, another Monday.', prompt='Label it',
+            predicted_label='positive', endpoint=endpoint,
+        )
+
+        heatmap = estimate.metadata['token_heatmap_html']
+        # exp(-0.01) = 99% sure: high band. exp(-1.2) = 30% sure: low band,
+        # with the alternatives the model weighed shown on hover.
+        assert 'class="eot-tok eot-high"' in heatmap
+        assert 'class="eot-tok eot-low" data-confidence="0.3012"' in heatmap
+        assert '&#x27; irony&#x27;' in heatmap
+        assert '>positive</span>' in heatmap and '> sarcasm</span>' in heatmap
+
 
 class TestSamplingDiversityEstimator:
     """Tests for SamplingDiversityEstimator."""

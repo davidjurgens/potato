@@ -7,9 +7,20 @@ in the model's response. Requires endpoints that support logprobs.
 
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import UncertaintyEstimator, UncertaintyEstimate
+
+# every-other-token is pure Python with no dependencies. It parses OpenAI and
+# OpenAI-compatible (vLLM, llama.cpp) logprobs responses, joins characters that
+# arrive split into byte fragments, and renders a per-token confidence heatmap
+# that shows annotators where the model was unsure.
+try:
+    from every_other_token import parse as _parse_logprobs
+    from every_other_token import render_tokens as _render_heatmap
+except ImportError:  # optional (the `ai` extra); scores are computed either way
+    _parse_logprobs = None
+    _render_heatmap = None
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +84,7 @@ class TokenEntropyEstimator(UncertaintyEstimator):
 
         try:
             # Query with logprobs enabled
-            logprobs_data = self._query_with_logprobs(prompt, endpoint)
+            logprobs_data, heatmap_html = self._query_logprobs(prompt, endpoint)
 
             if not logprobs_data:
                 return UncertaintyEstimate(
@@ -91,15 +102,21 @@ class TokenEntropyEstimator(UncertaintyEstimator):
             uncertainty_score = min(1.0, entropy / self.max_entropy)
             confidence_score = 1.0 - uncertainty_score
 
+            metadata = {
+                'raw_entropy': entropy,
+                'max_entropy': self.max_entropy,
+                'num_tokens_analyzed': len(logprobs_data),
+            }
+            if heatmap_html:
+                # Per-token confidence heatmap of the model's answer (HTML
+                # fragment), for showing annotators which tokens were unsure.
+                metadata['token_heatmap_html'] = heatmap_html
+
             return UncertaintyEstimate(
                 uncertainty_score=uncertainty_score,
                 confidence_score=confidence_score,
                 method='token_entropy',
-                metadata={
-                    'raw_entropy': entropy,
-                    'max_entropy': self.max_entropy,
-                    'num_tokens_analyzed': len(logprobs_data),
-                }
+                metadata=metadata
             )
 
         except Exception as e:
@@ -124,6 +141,21 @@ class TokenEntropyEstimator(UncertaintyEstimator):
 
         Returns a list of dictionaries mapping tokens to log probabilities.
         """
+        return self._query_logprobs(prompt, endpoint)[0]
+
+    def _query_logprobs(
+        self,
+        prompt: str,
+        endpoint: Any
+    ) -> Tuple[Optional[List[Dict[str, float]]], Optional[str]]:
+        """
+        Query the endpoint with logprobs enabled.
+
+        Returns ``(logprobs_data, heatmap_html)``: the per-position top
+        logprobs (as returned by :meth:`_query_with_logprobs`) and, when
+        every-other-token is installed, an HTML confidence heatmap of the
+        response tokens (otherwise ``None``).
+        """
         # This is endpoint-specific. Currently supports OpenAI-style endpoints.
         try:
             # Check if endpoint has OpenAI-style logprobs support
@@ -138,7 +170,15 @@ class TokenEntropyEstimator(UncertaintyEstimator):
                     top_logprobs=self.top_logprobs,
                 )
 
-                if response.choices and response.choices[0].logprobs:
+                if _parse_logprobs is not None:
+                    tokens = _parse_logprobs(response)
+                    if tokens:
+                        logprobs_data = [
+                            {alt.text: alt.logprob for alt in tok.alternatives}
+                            for tok in tokens
+                        ]
+                        return logprobs_data, str(_render_heatmap(tokens))
+                elif response.choices and response.choices[0].logprobs:
                     content_logprobs = response.choices[0].logprobs.content
                     if content_logprobs:
                         return [
@@ -147,16 +187,16 @@ class TokenEntropyEstimator(UncertaintyEstimator):
                                 for lp in token_info.top_logprobs
                             }
                             for token_info in content_logprobs
-                        ]
+                        ], None
 
             # vLLM endpoint
             elif hasattr(endpoint, 'query_with_logprobs'):
-                return endpoint.query_with_logprobs(prompt, self.top_logprobs)
+                return endpoint.query_with_logprobs(prompt, self.top_logprobs), None
 
         except Exception as e:
             logger.debug(f"Error querying with logprobs: {e}")
 
-        return None
+        return None, None
 
     def _calculate_entropy(
         self,

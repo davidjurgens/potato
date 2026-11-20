@@ -30,6 +30,7 @@ ollama>=0.6.0
 openai>=1.0.0
 anthropic>=0.30.0
 google-genai>=1.0.0
+every-other-token>=0.1.0   # token confidence heatmap (solo mode token_entropy)
 
 # Embedding Visualization (optional - for admin dashboard UMAP visualization)
 umap-learn>=0.5.0       # UMAP dimensionality reduction

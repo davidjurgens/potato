@@ -41,6 +41,8 @@ _AI_DEPS = [
     "openai>=1.0.0",
     "anthropic>=0.30.0",
     "google-genai>=1.0.0",
+    # Token-level confidence heatmap for solo mode's token_entropy strategy.
+    "every-other-token>=0.1.0",
 ]
 _FORMAT_DEPS = [
     "pdfplumber>=0.10.0",
