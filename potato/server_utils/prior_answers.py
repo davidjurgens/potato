@@ -57,6 +57,26 @@ def surveyflow_scheme_index(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
             if isinstance(s, dict) and s.get("name")}
 
 
+def _likert_text(point: str, scheme: Dict[str, Any]) -> str:
+    """A likert point with its place on the scale: "4 of 7 (1 = Disagree, 7 = Agree)".
+
+    A bare "4" does not say how big the scale was or which end is which. A
+    likert with its own ``labels`` list stores the label name, which already
+    reads well, so only the numbered scale gets the context.
+    """
+    from potato.server_utils.schemas.identifier_utils import bad_text_label_content
+
+    if point == "bad_text":
+        return bad_text_label_content(scheme) or point
+    size = scheme.get("size")
+    if scheme.get("labels") or not isinstance(size, int) or not point.isdigit():
+        return point
+    text = f"{point} of {size}"
+    ends = [f"{n} = {scheme[key]}" for n, key in ((1, "min_label"), (size, "max_label"))
+            if scheme.get(key)]
+    return f"{text} ({', '.join(ends)})" if ends else text
+
+
 def _answer_lines(labels: Dict[str, Any], scheme: Dict[str, Any]) -> List[str]:
     """The answer as one or more lines of display text, or ``[]`` when empty."""
     from potato.server_utils.answer_collapse import collapse_entries
@@ -79,6 +99,8 @@ def _answer_lines(labels: Dict[str, Any], scheme: Dict[str, Any]) -> List[str]:
         return []
     if isinstance(value, (list, tuple)):
         lines = [str(v) for v in value if v not in (None, "")]
+    elif annotation_type == "likert":
+        lines = [_likert_text(str(value), scheme)]
     else:
         lines = [str(value)]
 
