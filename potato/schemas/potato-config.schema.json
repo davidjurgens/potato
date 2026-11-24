@@ -8096,6 +8096,11 @@
         "admin_th_worker_id": {},
         "admin_th_working_time": {},
         "admin_th_worst_count": {},
+        "all_items_annotated": {
+          "default": "All items have been annotated!",
+          "description": "Message when the jump buttons find no item without an answer",
+          "type": "string"
+        },
         "arena_empty": {},
         "arena_enter_prompt": {},
         "arena_error_prefix": {},
@@ -8153,6 +8158,11 @@
         "automation_rules_fired": {},
         "automation_snapshot_title": {},
         "automation_yes": {},
+        "budget_allocated": {
+          "default": "{sum} of {total} allocated",
+          "description": "Reason in the required-question error when a budget question does not add up. {sum} is the allocated amount and {total} is the declared total",
+          "type": "string"
+        },
         "catalog_all_placeholder": {},
         "catalog_anchor_label": {},
         "catalog_anchor_placeholder": {},
@@ -8242,6 +8252,16 @@
         "catalog_topk_label": {},
         "catalog_traces_suffix": {},
         "catalog_unlabeled": {},
+        "char_count": {
+          "default": "{count} characters",
+          "description": "Character counter of a text question without min_chars. {count} is the live count",
+          "type": "string"
+        },
+        "char_count_min": {
+          "default": "{count}/{n} min characters",
+          "description": "Character counter of a text question with min_chars. {count} is the live count and {n} is min_chars",
+          "type": "string"
+        },
         "choose_username_placeholder": {},
         "cite_us": {},
         "codebook": {},
@@ -8323,6 +8343,86 @@
         "datasets_status_unavailable": {},
         "datasets_version_label": {},
         "datasets_versions_label": {},
+        "done_click_to_copy": {
+          "default": "Click to copy",
+          "description": "Tooltip of the completion code box",
+          "type": "string"
+        },
+        "done_copied": {
+          "default": "Copied!",
+          "description": "Text in the code box after the participant copies the code",
+          "type": "string"
+        },
+        "done_copy_code_hint": {
+          "default": "Click to copy your code",
+          "description": "Hint below the code box for a participant who ended early",
+          "type": "string"
+        },
+        "done_copy_completion_code_hint": {
+          "default": "Click to copy your completion code",
+          "description": "Hint below the completion code box",
+          "type": "string"
+        },
+        "done_copy_failed": {
+          "default": "Failed to copy. Please select and copy manually.",
+          "description": "Alert when the browser cannot copy the code",
+          "type": "string"
+        },
+        "done_heading": {
+          "default": "Thank You!",
+          "description": "Heading of the completion page",
+          "type": "string"
+        },
+        "done_message": {
+          "default": "You have completed the annotation task and your responses are saved.",
+          "description": "Text below the heading of the completion page",
+          "type": "string"
+        },
+        "done_not_eligible": {
+          "default": "You are not eligible for this study. Thank you for your time.",
+          "description": "Completion page text for a participant that the screener stopped, when the screener gives no message",
+          "type": "string"
+        },
+        "done_page_title": {
+          "default": "Complete",
+          "description": "Second part of the completion page title, after the task name",
+          "type": "string"
+        },
+        "done_paste_code": {
+          "default": "Copy the code above and paste it in your crowdsourcing platform to receive credit.",
+          "description": "Instruction to paste the completion code into the platform",
+          "type": "string"
+        },
+        "done_paste_code_ended": {
+          "default": "Copy the code above and paste it in your crowdsourcing platform.",
+          "description": "Instruction to paste the code into the platform, for a participant who ended early",
+          "type": "string"
+        },
+        "done_return_to": {
+          "default": "Return to {platform}",
+          "description": "Link back to the crowdsourcing platform. {platform} is the platform name",
+          "type": "string"
+        },
+        "done_saved_close": {
+          "default": "Your annotations have been saved. You may close this window.",
+          "description": "Completion page text when the study has no completion code",
+          "type": "string"
+        },
+        "done_stored_on_server": {
+          "default": "Your responses are stored on this study's own server.",
+          "description": "Note at the bottom of the completion page about where the answers are stored",
+          "type": "string"
+        },
+        "done_submit_hit": {
+          "default": "Submit HIT to {platform}",
+          "description": "Button that sends the HIT to the platform. {platform} is the platform name",
+          "type": "string"
+        },
+        "done_training_failed": {
+          "default": "You did not pass the qualification questions, so the task did not start. Thank you for your time.",
+          "description": "Completion page text for a participant who failed the training questions",
+          "type": "string"
+        },
         "dsdetail_back_link": {},
         "dsdetail_col_created": {},
         "dsdetail_col_examples": {},
@@ -8483,6 +8583,11 @@
           "type": "string"
         },
         "in_progress_badge": {},
+        "instance_label": {
+          "default": "Instance",
+          "description": "Label before the item number in the annotation page header",
+          "type": "string"
+        },
         "instructions_heading": {},
         "integrity_annotators_suffix": {},
         "integrity_col_annotator": {},
@@ -8557,6 +8662,11 @@
         "login_subtitle_username": {},
         "login_title": {},
         "logout": {},
+        "navigation_failed": {
+          "default": "Navigation failed. Please try again.",
+          "description": "Message when navigation to another item fails",
+          "type": "string"
+        },
         "next_button": {},
         "not_labeled_badge": {},
         "or_divider": {},
@@ -8566,7 +8676,42 @@
         "progress_label": {},
         "register_button": {},
         "register_tab": {},
+        "required_not_completed": {
+          "default": "Required annotation(s) not completed: {schemas}",
+          "description": "Message when the server refuses navigation for missing required answers. {schemas} is the list of questions",
+          "type": "string"
+        },
+        "required_question_many": {
+          "default": "Please answer the required questions:",
+          "description": "Start of the error when two or more required questions have no answer",
+          "type": "string"
+        },
+        "required_question_one": {
+          "default": "Please answer the required question:",
+          "description": "Start of the error when one required question has no answer",
+          "type": "string"
+        },
         "retry_button": {},
+        "save_failed": {
+          "default": "Failed to save annotations. Please try again.",
+          "description": "Message when the page cannot save the annotations before navigation",
+          "type": "string"
+        },
+        "save_refused": {
+          "default": "The server did not save that change{detail}. Your work is still on screen.",
+          "description": "Message when the server refuses a change. {detail} is empty or the server message in parentheses",
+          "type": "string"
+        },
+        "save_retry_later": {
+          "default": "Could not save just now \u2014 your work is still here and will be sent again.",
+          "description": "Message when a background save fails and the page will send the work again",
+          "type": "string"
+        },
+        "select_placeholder": {
+          "default": "-- select one --",
+          "description": "Empty first option of a select question",
+          "type": "string"
+        },
         "sign_in_button": {},
         "sign_in_opens_new_tab": {
           "default": "Sign-in opens in a new tab.",
@@ -8575,6 +8720,11 @@
         },
         "sign_in_tab": {},
         "sign_in_with": {},
+        "signed_out_unsaved": {
+          "default": "You are signed out, so nothing on this page is being saved. Sign in again in another tab, then come back and edit anything here to save it \u2014 do not reload or navigate away first.",
+          "description": "Message when the session ended and the page cannot save",
+          "type": "string"
+        },
         "submit_button": {},
         "text_to_annotate": {},
         "triage_col_annotations": {},

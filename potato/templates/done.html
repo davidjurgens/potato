@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - Complete</title>
+    <title>{{ title }} - {{ ui_lang.done_page_title }}</title>
     {% include '_theme_head.html' %}
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
@@ -65,20 +65,20 @@
             <i class="fas fa-check"></i>
         </div>
 
-        <h1 class="potato-page-title">Thank You!</h1>
+        <h1 class="potato-page-title">{{ ui_lang.done_heading }}</h1>
         <p class="potato-page-subtitle" id="done-message">
-            {% if ended_early %}{{ ended_early }}{% else %}You have completed the annotation task and your responses are saved.{% endif %}
+            {% if ended_early %}{{ ended_early }}{% else %}{{ ui_lang.done_message }}{% endif %}
         </p>
 
         {% set has_platform_action = action and action.kind in ['redirect', 'post_form'] %}
         {% if completion_code or has_platform_action %}
         {% if completion_code %}
         <div class="mb-3">
-            <div class="code-box" id="completion-code" onclick="copyCode()" title="Click to copy">
+            <div class="code-box" id="completion-code" onclick="copyCode()" title="{{ ui_lang.done_click_to_copy }}">
                 {{ completion_code }}
             </div>
             <p class="code-hint">
-                <i class="fas fa-copy me-1"></i> Click to copy your {% if ended_early %}code{% else %}completion code{% endif %}
+                <i class="fas fa-copy me-1"></i> {% if ended_early %}{{ ui_lang.done_copy_code_hint }}{% else %}{{ ui_lang.done_copy_completion_code_hint }}{% endif %}
             </p>
         </div>
         {% endif %}
@@ -89,12 +89,12 @@
             <input type="hidden" name="{{ field_name }}" value="{{ field_value }}">
             {% endfor %}
             <button type="submit" class="platform-btn platform-btn-{{ 'mturk' if action.platform_label == 'MTurk' else 'generic' }}">
-                <i class="fas fa-external-link-alt me-2"></i> Submit HIT to {{ action.platform_label }}
+                <i class="fas fa-external-link-alt me-2"></i> {{ ui_lang.done_submit_hit|replace('{platform}', action.platform_label|string) }}
             </button>
         </form>
         {% elif action and action.kind == 'redirect' %}
         <a href="{{ action.redirect_url }}" class="platform-btn platform-btn-{{ 'prolific' if action.platform_label == 'Prolific' else 'generic' }}">
-            <i class="fas fa-external-link-alt me-2"></i> Return to {{ action.platform_label }}
+            <i class="fas fa-external-link-alt me-2"></i> {{ ui_lang.done_return_to|replace('{platform}', action.platform_label|string) }}
         </a>
         {% elif not action and mturk_submit_url and mturk_assignment_id %}
         <form id="mturk-form" action="{{ mturk_submit_url }}" method="POST">
@@ -103,28 +103,28 @@
             <input type="hidden" name="completionCode" value="{{ completion_code }}">
             {% endif %}
             <button type="submit" class="platform-btn platform-btn-mturk">
-                <i class="fas fa-external-link-alt me-2"></i> Submit HIT to MTurk
+                <i class="fas fa-external-link-alt me-2"></i> {{ ui_lang.done_submit_hit|replace('{platform}', 'MTurk') }}
             </button>
         </form>
         {% elif not action and prolific_redirect_url %}
         <a href="{{ prolific_redirect_url }}" class="platform-btn platform-btn-prolific">
-            <i class="fas fa-external-link-alt me-2"></i> Return to Prolific
+            <i class="fas fa-external-link-alt me-2"></i> {{ ui_lang.done_return_to|replace('{platform}', 'Prolific') }}
         </a>
         {% else %}
         <div class="potato-alert potato-alert-info" style="text-align: left;">
             <i class="fas fa-info-circle me-2"></i>
-            {% if action and action.message %}{{ action.message }}{% elif ended_early %}Copy the code above and paste it in your crowdsourcing platform.{% else %}Copy the code above and paste it in your crowdsourcing platform to receive credit.{% endif %}
+            {% if action and action.message %}{{ action.message }}{% elif ended_early %}{{ ui_lang.done_paste_code_ended }}{% else %}{{ ui_lang.done_paste_code }}{% endif %}
         </div>
         {% endif %}
         {% else %}
         <div class="potato-alert potato-alert-success" style="text-align: left;">
             <i class="fas fa-check me-2"></i>
-            {% if action and action.message %}{{ action.message }}{% else %}Your annotations have been saved. You may close this window.{% endif %}
+            {% if action and action.message %}{{ action.message }}{% else %}{{ ui_lang.done_saved_close }}{% endif %}
         </div>
         {% endif %}
 
         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted-foreground);">
-            <i class="fas fa-shield-alt me-1"></i> Your responses are stored on this study's own server.
+            <i class="fas fa-shield-alt me-1"></i> {{ ui_lang.done_stored_on_server }}
         </div>
     </div>
 
@@ -134,7 +134,8 @@
             navigator.clipboard.writeText(code).then(function() {
                 var codeBox = document.getElementById('completion-code');
                 var originalText = codeBox.innerText;
-                codeBox.innerHTML = '<i class="fas fa-check me-2"></i>Copied!';
+                codeBox.innerHTML = '<i class="fas fa-check me-2"></i>';
+                codeBox.appendChild(document.createTextNode({{ ui_lang.done_copied|tojson }}));
                 codeBox.style.borderColor = 'var(--success-color)';
                 codeBox.style.background = 'rgba(16, 185, 129, 0.08)';
                 codeBox.style.color = 'var(--success-text)';
@@ -146,7 +147,7 @@
                 }, 2000);
             }).catch(function(err) {
                 console.error('Failed to copy: ', err);
-                alert('Failed to copy. Please select and copy manually.');
+                alert({{ ui_lang.done_copy_failed|tojson }});
             });
         }
 

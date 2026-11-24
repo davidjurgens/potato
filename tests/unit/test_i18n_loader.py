@@ -33,6 +33,13 @@ PLACEHOLDER_KEYS = {
     "dash_items_started_pct": {"started", "total", "pct"},
     "admin_opt_per_page": {"n"},
     "judge_over_versions": {"n"},
+    "char_count": {"count"},
+    "char_count_min": {"count", "n"},
+    "budget_allocated": {"sum", "total"},
+    "required_not_completed": {"schemas"},
+    "save_refused": {"detail"},
+    "done_submit_hit": {"platform"},
+    "done_return_to": {"platform"},
 }
 
 

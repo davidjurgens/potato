@@ -6356,7 +6356,7 @@ def create_app(config_file=None):
         from potato.server_utils.i18n import UI_LANG_DEFAULTS as ui_lang_defaults
         # Resolve ui_lang from English defaults + an optional bundled language
         # catalog (e.g. ui_language: es) + optional inline per-key overrides.
-        from potato.server_utils.i18n import resolve_ui_language
+        from potato.server_utils.i18n import resolve_ui_language, ANNOTATION_JS_KEYS
         ui_lang = resolve_ui_language(config.get('ui_language'), ui_lang_defaults)
         from potato.server_utils.theme import resolve_ui_theme
 
@@ -6381,6 +6381,8 @@ def create_app(config_file=None):
             'annotation_codebook_url': _sanitize_codebook_url(config.get('annotation_codebook_url', '')),
             # Multilingual UI strings
             'ui_lang': ui_lang,
+            # The subset that annotation.js reads (window.UI_LANG).
+            'ui_lang_js': {k: ui_lang[k] for k in ANNOTATION_JS_KEYS},
             # auto | light | dark (server_utils/theme.py); read by
             # _theme_head.html and _theme_toggle.html on annotator pages.
             'ui_theme': resolve_ui_theme(config),

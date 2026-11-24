@@ -1915,7 +1915,7 @@ async function saveAnnotations({ background = false } = {}) {
             // Keep the work on screen. The next edit reschedules a save, and
             // the unload flush is still there as a backstop.
             showNotification(
-                'Could not save just now — your work is still here and will be sent again.',
+                uiText('save_retry_later'),
                 'error');
         } else {
             showError(true, 'Failed to save annotations: ' + error.message);
@@ -1976,16 +1976,11 @@ function reportSaveRefused(message, httpStatus) {
     const sessionLost = httpStatus === 401 ||
         /no active session|user state not found/i.test(String(message || ''));
     if (sessionLost) {
-        showError(true,
-            'You are signed out, so nothing on this page is being saved. ' +
-            'Sign in again in another tab, then come back and edit anything ' +
-            'here to save it — do not reload or navigate away first.');
+        showError(true, uiText('signed_out_unsaved'));
         return;
     }
     showNotification(
-        'The server did not save that change' +
-        (message ? ' (' + message + ')' : '') +
-        '. Your work is still on screen.',
+        uiText('save_refused', { detail: message ? ' (' + message + ')' : '' }),
         'error');
 }
 
@@ -2023,7 +2018,7 @@ async function navigateToPrevious() {
         debugLog('[DEEP DEBUG NAV] navigateToPrevious - Saving annotations before navigation');
         const saveSucceeded = await saveAnnotations();
         if (saveSucceeded === false) {
-            showNotification('Failed to save annotations. Please try again.', 'error');
+            showNotification(uiText('save_failed'), 'error');
             setLoading(false);
             return;
         }
@@ -2117,8 +2112,11 @@ async function handleNavigationResponseError(response) {
         try {
             const data = await response.json();
             if (data.status === 'validation_error') {
+                // The server message is English; build the localized one from
+                // the schema list when there is one.
                 const schemas = (data.unsatisfied_schemas || []).join(', ');
-                showNotification(data.message || `Required annotations not completed: ${schemas}`, 'error');
+                showNotification(schemas ? uiText('required_not_completed', { schemas: schemas })
+                                         : (data.message || uiText('required_not_completed', { schemas: '' })), 'error');
                 // Re-run validation to highlight unfilled fields
                 hasAttemptedForwardValidation = true;
                 validateRequiredFields({ showErrors: true });
@@ -2128,7 +2126,7 @@ async function handleNavigationResponseError(response) {
             // Not JSON, fall through
         }
     }
-    showNotification('Navigation failed. Please try again.', 'error');
+    showNotification(uiText('navigation_failed'), 'error');
 }
 
 async function navigateToNext(options = {}) {
@@ -2177,7 +2175,7 @@ async function navigateToNext(options = {}) {
         debugLog('[DEEP DEBUG NAV] navigateToNext - Saving annotations before navigation');
         const saveSucceeded = await saveAnnotations();
         if (saveSucceeded === false) {
-            showNotification('Failed to save annotations. Please try again.', 'error');
+            showNotification(uiText('save_failed'), 'error');
             setLoading(false);
             return;
         }
@@ -2288,7 +2286,7 @@ async function navigateToInstance(instanceIndex) {
         debugLog('[DEEP DEBUG NAV] navigateToInstance - Saving annotations before navigation');
         const saveSucceeded = await saveAnnotations();
         if (saveSucceeded === false) {
-            showNotification('Failed to save annotations. Please try again.', 'error');
+            showNotification(uiText('save_failed'), 'error');
             setLoading(false);
             return;
         }
@@ -2511,7 +2509,7 @@ function validateRequiredFields(options) {
             const shortfall = budgetShortfall(group.form);
             if (shortfall) {
                 schemaFilled = false;
-                reason = `${shortfall.sum} of ${shortfall.total} allocated`;
+                reason = uiText('budget_allocated', { sum: shortfall.sum, total: shortfall.total });
             }
         }
 
@@ -2552,6 +2550,39 @@ function validateRequiredFields(options) {
     return allRequiredFilled;
 }
 
+/**
+ * A UI string in the configured `ui_language`.
+ *
+ * The page template puts the resolved strings in `window.UI_LANG`
+ * (server_utils/i18n.py holds the English defaults and the catalogs). The
+ * English text here is used only when a page has no `UI_LANG`, for example
+ * a unit test. `values` fill the `{name}` placeholders.
+ */
+const UI_TEXT_FALLBACK = {
+    required_question_one: 'Please answer the required question:',
+    required_question_many: 'Please answer the required questions:',
+    budget_allocated: '{sum} of {total} allocated',
+    required_not_completed: 'Required annotation(s) not completed: {schemas}',
+    save_failed: 'Failed to save annotations. Please try again.',
+    save_retry_later: 'Could not save just now — your work is still here and will be sent again.',
+    save_refused: 'The server did not save that change{detail}. Your work is still on screen.',
+    signed_out_unsaved: 'You are signed out, so nothing on this page is being saved. ' +
+        'Sign in again in another tab, then come back and edit anything ' +
+        'here to save it — do not reload or navigate away first.',
+    navigation_failed: 'Navigation failed. Please try again.',
+    all_items_annotated: 'All items have been annotated!',
+};
+
+function uiText(key, values) {
+    const lang = (typeof window !== 'undefined' && window.UI_LANG) || {};
+    let text = typeof lang[key] === 'string' ? lang[key] : (UI_TEXT_FALLBACK[key] || key);
+    if (values) {
+        text = text.replace(/\{(\w+)\}/g, (match, name) =>
+            Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match);
+    }
+    return text;
+}
+
 function updateRequiredFieldsError(unfilledSchemas) {
     let errorDiv = document.getElementById('required-fields-error');
 
@@ -2580,8 +2611,8 @@ function updateRequiredFieldsError(unfilledSchemas) {
 
     const labels = unfilledSchemas.map(
         s => `<strong>${s.label}</strong>${s.reason ? ` (${s.reason})` : ''}`).join(', ');
-    const plural = unfilledSchemas.length > 1;
-    errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> Please answer the required question${plural ? 's' : ''}: ${labels}`;
+    const heading = uiText(unfilledSchemas.length > 1 ? 'required_question_many' : 'required_question_one');
+    errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${escapeHtml(heading)} ${labels}`;
     errorDiv.style.display = 'block';
 }
 
@@ -5542,7 +5573,7 @@ async function jumpToUnannotatedPrev() {
                 const result = await response.json();
                 if (result.status === 'no_unannotated') {
                     debugLog('[NAV] jumpToUnannotatedPrev - All items annotated');
-                    showNotification('All items have been annotated!', 'info');
+                    showNotification(uiText('all_items_annotated'), 'info');
                     setLoading(false);
                     return;
                 }
@@ -5610,7 +5641,7 @@ async function jumpToUnannotated() {
                 const result = await response.json();
                 if (result.status === 'no_unannotated') {
                     debugLog('[NAV] jumpToUnannotated - All items annotated');
-                    showNotification('All items have been annotated!', 'info');
+                    showNotification(uiText('all_items_annotated'), 'info');
                     setLoading(false);
                     return;
                 }
