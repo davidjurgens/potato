@@ -8,6 +8,9 @@
 
 html_lang: "ja"
 html_dir: "ltr"
+text_char_count: "{count} 文字"
+text_char_count_min: "{count}/{min} 文字(最低)"
+text_too_short: "{min} 文字中 {count} 文字"
 next_button: "次へ"
 previous_button: "前へ"
 submit_button: "送信"

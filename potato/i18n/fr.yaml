@@ -8,6 +8,9 @@
 
 html_lang: "fr"
 html_dir: "ltr"
+text_char_count: "{count} caractères"
+text_char_count_min: "{count}/{min} caractères min."
+text_too_short: "{count} caractères sur {min}"
 next_button: "Suivant"
 previous_button: "Précédent"
 submit_button: "Envoyer"

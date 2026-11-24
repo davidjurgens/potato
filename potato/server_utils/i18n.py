@@ -601,6 +601,12 @@ UI_LANG_DEFAULTS = {
     'expcompare_not_significant': 'n.s.',
     'expcompare_ci_label': '95% CI',
     'expcompare_row_examples': 'Examples',
+    # Text scheme character counter and min_chars check. {count} is the
+    # current number of characters (trimmed), {min} the scheme's min_chars.
+    'text_char_count': '{count} characters',
+    'text_char_count_min': '{count}/{min} min characters',
+    # Shown after the question name in the required-fields error.
+    'text_too_short': '{count} of {min} characters',
     # Language / direction
     'html_lang': 'en',
     'html_dir': 'ltr',

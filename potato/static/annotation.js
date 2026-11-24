@@ -667,6 +667,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         setLoading(false);
         setupInputEventListeners();
+        // Text questions with min_chars / show_char_count: show the count and
+        // keep it current while the participant types.
+        updateAllCharCounters();
         // Initialize display logic so SurveyFlow phase questions (consent,
         // prestudy, poststudy) can conditionally show/hide based on earlier
         // answers on the same page. The engine is generic — it scans the DOM
@@ -2436,6 +2439,42 @@ function compositeShortfall(form) {
     return reason && reason.trim() ? reason.trim() : null;
 }
 
+/**
+ * Length of a text box's answer as min_chars counts it: the trimmed text.
+ */
+function textAnswerLength(input) {
+    return (input.value || '').trim().length;
+}
+
+/**
+ * What a text scheme with `min_chars` is still missing, if anything.
+ *
+ * The form carries `data-min-chars` and the localized reason template
+ * `data-too-short-text` ("{count} of {min} characters"). A box is short when
+ * its trimmed text is below the minimum. An empty box is short only when the
+ * scheme is required: an optional question can stay empty, but text that the
+ * annotator writes must be long enough. The server applies the same rule
+ * (short_text_labels in schemas/textbox.py).
+ */
+function textShortfall(form) {
+    if (!form) return null;
+    const minChars = parseInt(form.getAttribute('data-min-chars') || '0', 10);
+    if (!(minChars > 0)) return null;
+    const template = form.getAttribute('data-too-short-text') || '{count} of {min} characters';
+    const boxes = form.querySelectorAll('input.shadcn-textbox-input, textarea.shadcn-textbox-input');
+    const bits = [];
+    boxes.forEach(box => {
+        const len = textAnswerLength(box);
+        const required = box.getAttribute('validation') === 'required';
+        if (len >= minChars || (len === 0 && !required)) return;
+        const text = template.split('{count}').join(String(len))
+                             .split('{min}').join(String(minChars));
+        const label = box.id ? form.querySelector(`label[for="${(window.CSS && CSS.escape) ? CSS.escape(box.id) : box.id}"]`) : null;
+        bits.push(label && boxes.length > 1 ? `${label.textContent.trim()}: ${text}` : text);
+    });
+    return bits.length ? bits.join('; ') : null;
+}
+
 function validateRequiredFields(options) {
     // If user has already attempted forward validation, always show errors
     // so they get real-time feedback as they fill in fields
@@ -2470,6 +2509,15 @@ function validateRequiredFields(options) {
         } else {
             formGroups[schemaName].others.push(input);
         }
+    });
+
+    // A text scheme with min_chars is checked even when it is not required:
+    // text below the minimum is not a complete answer.
+    document.querySelectorAll('.annotation-form[data-min-chars]').forEach(form => {
+        const schemaName = form.getAttribute('data-schema-name') || form.id;
+        if (!schemaName || formGroups[schemaName]) return;
+        if (isSchemaHiddenByDisplayLogic(schemaName, form)) return;
+        formGroups[schemaName] = { form: form, radios: {}, others: [] };
     });
 
     // Check each schema's required inputs
@@ -2528,6 +2576,15 @@ function validateRequiredFields(options) {
             if (declared) {
                 schemaFilled = false;
                 reason = declared;
+            }
+        }
+
+        // A text scheme with min_chars: text below the minimum is incomplete.
+        if (schemaFilled) {
+            const tooShort = textShortfall(group.form);
+            if (tooShort) {
+                schemaFilled = false;
+                reason = tooShort;
             }
         }
 
@@ -3952,6 +4009,10 @@ function restoreTrajectoryEditAnnotations() {
 
 /**
  * Update all character counters for text schemas with min_chars/show_char_count.
+ *
+ * The count is the trimmed length, the same length the min_chars check uses.
+ * Runs on annotation pages and on phase pages, and binds one `input` listener
+ * per box so the count and the required-fields state follow the typing.
  */
 function updateAllCharCounters() {
     const counters = document.querySelectorAll('.shadcn-textbox-char-counter');
@@ -3960,26 +4021,24 @@ function updateAllCharCounters() {
         const minChars = parseInt(counter.dataset.minChars || '0', 10);
         const input = document.getElementById(inputId);
         if (!input) return;
-
-        const len = (input.value || input.textContent || '').length;
         const countSpan = counter.querySelector('.shadcn-textbox-char-count');
-        if (countSpan) countSpan.textContent = len;
 
-        if (minChars > 0) {
-            counter.classList.toggle('char-count-met', len >= minChars);
-            counter.classList.toggle('char-count-unmet', len < minChars);
-        }
+        const refresh = () => {
+            const len = textAnswerLength(input);
+            if (countSpan) countSpan.textContent = len;
+            if (minChars > 0) {
+                counter.classList.toggle('char-count-met', len >= minChars);
+                counter.classList.toggle('char-count-unmet', len < minChars);
+            }
+        };
+        refresh();
 
         // Set up live updating if not already done
         if (!input.dataset.charCounterBound) {
             input.dataset.charCounterBound = 'true';
             input.addEventListener('input', function() {
-                const l = (input.value || input.textContent || '').length;
-                if (countSpan) countSpan.textContent = l;
-                if (minChars > 0) {
-                    counter.classList.toggle('char-count-met', l >= minChars);
-                    counter.classList.toggle('char-count-unmet', l < minChars);
-                }
+                refresh();
+                if (minChars > 0) validateRequiredFields();
             });
         }
     });

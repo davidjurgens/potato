@@ -8,6 +8,9 @@
 
 html_lang: "hi"
 html_dir: "ltr"
+text_char_count: "{count} अक्षर"
+text_char_count_min: "{count}/{min} अक्षर (न्यूनतम)"
+text_too_short: "{min} में से {count} अक्षर"
 next_button: "अगला"
 previous_button: "पिछला"
 submit_button: "जमा करें"

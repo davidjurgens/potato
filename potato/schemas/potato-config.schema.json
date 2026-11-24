@@ -8576,7 +8576,22 @@
         "sign_in_tab": {},
         "sign_in_with": {},
         "submit_button": {},
+        "text_char_count": {
+          "default": "{count} characters",
+          "description": "Counter below a text box with show_char_count. {count} is the number of characters, without spaces at the start and at the end",
+          "type": "string"
+        },
+        "text_char_count_min": {
+          "default": "{count}/{min} min characters",
+          "description": "Counter below a text box with min_chars. {count} is the number of characters, {min} is min_chars",
+          "type": "string"
+        },
         "text_to_annotate": {},
+        "text_too_short": {
+          "default": "{count} of {min} characters",
+          "description": "Reason in the required-fields error when a text box has fewer characters than min_chars. {count} and {min} as in text_char_count_min",
+          "type": "string"
+        },
         "triage_col_annotations": {},
         "triage_col_assigned": {},
         "triage_col_instance": {},

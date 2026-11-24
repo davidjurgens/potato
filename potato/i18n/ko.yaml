@@ -8,6 +8,9 @@
 
 html_lang: "ko"
 html_dir: "ltr"
+text_char_count: "{count}자"
+text_char_count_min: "{count}/{min}자 (최소)"
+text_too_short: "{min}자 중 {count}자"
 next_button: "다음"
 previous_button: "이전"
 submit_button: "제출"

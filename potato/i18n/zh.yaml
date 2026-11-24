@@ -8,6 +8,9 @@
 
 html_lang: "zh"
 html_dir: "ltr"
+text_char_count: "{count} 个字符"
+text_char_count_min: "{count}/{min} 个字符(最少)"
+text_too_short: "{count}/{min} 个字符"
 next_button: "下一个"
 previous_button: "上一个"
 submit_button: "提交"

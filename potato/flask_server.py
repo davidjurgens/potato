@@ -3664,7 +3664,29 @@ def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> l
             continue
         if _scheme_is_required(scheme) and not _scheme_has_required_annotation(user_state, instance_id, scheme):
             unsatisfied.append(name)
+        elif _text_scheme_too_short(user_state, instance_id, scheme):
+            unsatisfied.append(name)
     return unsatisfied
+
+
+def _text_scheme_too_short(user_state, instance_id: str, scheme: dict) -> bool:
+    """Whether a text scheme holds text shorter than its ``min_chars``.
+
+    The page blocks Next on this, so a direct POST must not get past it.
+    An optional scheme with no text is not short (see short_text_labels).
+    """
+    if scheme.get("annotation_type") != "text":
+        return False
+    from potato.server_utils.schemas.textbox import short_text_labels, text_min_chars
+    if not text_min_chars(scheme):
+        return False
+    schema_name = scheme.get("name", "")
+    given = {
+        k.get_name(): v
+        for k, v in (user_state.instance_id_to_label_to_value.get(instance_id, {}) or {}).items()
+        if hasattr(k, "get_schema") and k.get_schema() == schema_name
+    }
+    return bool(short_text_labels(scheme, given, _scheme_is_required(scheme)))
 
 
 def _is_user_adjudicator(username: str) -> bool:

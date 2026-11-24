@@ -8,6 +8,9 @@
 
 html_lang: "de"
 html_dir: "ltr"
+text_char_count: "{count} Zeichen"
+text_char_count_min: "{count} / mind. {min} Zeichen"
+text_too_short: "{count} von {min} Zeichen"
 next_button: "Weiter"
 previous_button: "Zurück"
 submit_button: "Absenden"

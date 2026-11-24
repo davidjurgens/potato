@@ -1202,6 +1202,22 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "timeline",
         type="string", category=UI,
     ),
+    "ui_language.text_char_count": _D(
+        "Counter below a text box with show_char_count. {count} is the "
+        "number of characters, without spaces at the start and at the end",
+        type="string", default="{count} characters", category=UI,
+    ),
+    "ui_language.text_char_count_min": _D(
+        "Counter below a text box with min_chars. {count} is the number of "
+        "characters, {min} is min_chars",
+        type="string", default="{count}/{min} min characters", category=UI,
+    ),
+    "ui_language.text_too_short": _D(
+        "Reason in the required-fields error when a text box has fewer "
+        "characters than min_chars. {count} and {min} as in "
+        "text_char_count_min",
+        type="string", default="{count} of {min} characters", category=UI,
+    ),
     "layout": _D(
         "How the annotation questions are arranged on the page: a grid, "
         "collapsible groups, an explicit order, and responsive breakpoints. "
