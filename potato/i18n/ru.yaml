@@ -8,6 +8,9 @@
 
 html_lang: "ru"
 html_dir: "ltr"
+text_char_count: "Символов: {count}"
+text_char_count_min: "{count}/{min} символов (минимум)"
+text_too_short: "{count} из {min} символов"
 next_button: "Далее"
 previous_button: "Назад"
 submit_button: "Отправить"

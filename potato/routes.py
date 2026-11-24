@@ -244,7 +244,18 @@ def _unmet_required_labels(user_state) -> list:
                 unmet.append(name)
         elif _scheme_is_required(scheme) and not selected.get(name):
             unmet.append(name)
+        elif scheme.get("annotation_type") == "text" and _phase_text_too_short(
+                scheme, stored, name):
+            unmet.append(name)
     return unmet
+
+
+def _phase_text_too_short(scheme, stored, name) -> bool:
+    """Whether a text question on a phase page holds text below ``min_chars``."""
+    from potato.server_utils.schemas.textbox import short_text_labels
+    given = {label.get_name(): value for label, value in stored.items()
+             if label.get_schema() == name}
+    return bool(short_text_labels(scheme, given, _scheme_is_required(scheme)))
 
 
 def _drop_hidden_phase_answers(user_state) -> None:

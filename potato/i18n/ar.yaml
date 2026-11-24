@@ -10,6 +10,9 @@
 # read {{ ui_lang.html_dir }}.
 html_lang: "ar"
 html_dir: "rtl"
+text_char_count: "{count} حرفًا"
+text_char_count_min: "{count}/{min} حرفًا كحد أدنى"
+text_too_short: "{count} من {min} حرفًا"
 
 # Navigation & controls
 next_button: "التالي"
