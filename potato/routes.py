@@ -76,6 +76,7 @@ from potato.admin import admin_dashboard
 from potato.ai.ai_help_wrapper import generate_ai_help_html
 from potato.ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color, set_span_color, SPAN_COLOR_PALETTE
+from potato.server_utils.i18n import UI_LANG_DEFAULTS, resolve_ui_language, ui_text
 from potato.server_utils.annotation_keys import (
     split_annotation_key, is_selection_marker)
 
@@ -8676,14 +8677,15 @@ def done():
     ended_early = None
     if provider is not None and screen_out:
         ended_early = (screen_out.get("message")
-                       or "You are not eligible for this study. Thank you for your time.")
+                       or ui_text("done_not_eligible"))
     elif provider is not None and training_failed:
-        ended_early = ("You did not pass the qualification questions, so the task did "
-                       "not start. Thank you for your time.")
+        ended_early = ui_text("done_training_failed")
 
     # Show the completion page
     return render_template("done.html",
                           title=config.get("annotation_task_name", "Annotation Platform"),
+                          # Explicit, so the page is never without its strings.
+                          ui_lang=resolve_ui_language(config.get("ui_language"), UI_LANG_DEFAULTS),
                           ended_early=ended_early,
                           action=action,
                           completion_code=completion_code,

@@ -87,6 +87,20 @@ Potato localizes five areas of the interface:
 | `video_to_annotate` | Video to Annotate: | Content heading for video instances |
 | `audio_to_annotate` | Audio to Annotate: | Content heading for audio instances |
 | `image_to_annotate` | Image to Annotate: | Content heading when the item's text embeds an image |
+| `instance_label` | Instance | Header label before the item number |
+| `select_placeholder` | -- select one -- | Empty first option of a `select` question |
+| `char_count` | `{count} characters` | Counter of a `text` question without `min_chars` |
+| `char_count_min` | `{count}/{n} min characters` | Counter of a `text` question with `min_chars` (`{n}`) |
+| `required_question_one` | Please answer the required question: | Error when one required question has no answer |
+| `required_question_many` | Please answer the required questions: | Error when two or more required questions have no answer |
+| `budget_allocated` | `{sum} of {total} allocated` | Reason in that error for a budget question |
+| `required_not_completed` | `Required annotation(s) not completed: {schemas}` | Message when the server refuses navigation |
+| `save_failed` | Failed to save annotations. Please try again. | Message when a save before navigation fails |
+| `save_retry_later` | Could not save just now — ... | Message when a background save fails |
+| `save_refused` | `The server did not save that change{detail}. ...` | Message when the server refuses a change |
+| `signed_out_unsaved` | You are signed out, ... | Message when the session ended |
+| `navigation_failed` | Navigation failed. Please try again. | Message when navigation fails |
+| `all_items_annotated` | All items have been annotated! | Message when no item without an answer is left |
 
 ### 2. Login & Registration Page
 
@@ -117,6 +131,29 @@ Potato localizes five areas of the interface:
 | `cite_us` | Cite Us | Citation link text |
 | `html_lang` | en | HTML `lang` attribute (affects browser behavior, accessibility) |
 | `html_dir` | ltr | HTML `dir` attribute (`ltr` or `rtl`) |
+
+### Completion Page
+
+The page that shows after the last phase. `{platform}` is the platform name, for example `Prolific`.
+
+| Key | Default | Where It Appears |
+|-----|---------|-----------------|
+| `done_page_title` | Complete | Page title, after the task name |
+| `done_heading` | Thank You! | Heading |
+| `done_message` | You have completed the annotation task and your responses are saved. | Text below the heading |
+| `done_click_to_copy` | Click to copy | Tooltip of the code box |
+| `done_copy_completion_code_hint` | Click to copy your completion code | Hint below the code box |
+| `done_copy_code_hint` | Click to copy your code | Hint below the code box, for a participant who ended early |
+| `done_copied` | Copied! | Code box text after a copy |
+| `done_copy_failed` | Failed to copy. Please select and copy manually. | Alert when the copy fails |
+| `done_return_to` | `Return to {platform}` | Link back to the platform |
+| `done_submit_hit` | `Submit HIT to {platform}` | Button that sends the HIT |
+| `done_paste_code` | Copy the code above and paste it ... to receive credit. | Instruction with a completion code |
+| `done_paste_code_ended` | Copy the code above and paste it ... | Same instruction, for a participant who ended early |
+| `done_saved_close` | Your annotations have been saved. You may close this window. | Text when the study has no code |
+| `done_stored_on_server` | Your responses are stored on this study's own server. | Note at the bottom |
+| `done_not_eligible` | You are not eligible for this study. ... | Text for a screened-out participant, when the screener gives no message |
+| `done_training_failed` | You did not pass the qualification questions, ... | Text for a participant who failed training |
 
 ### 4. Annotator Progress Dashboard
 

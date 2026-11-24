@@ -601,10 +601,59 @@ UI_LANG_DEFAULTS = {
     'expcompare_not_significant': 'n.s.',
     'expcompare_ci_label': '95% CI',
     'expcompare_row_examples': 'Examples',
+    # Annotation page: header label before the item number ("Instance #3").
+    'instance_label': 'Instance',
+    # Annotation page: schema widgets (rendered server-side through ui_text).
+    # {count} is the live character-count element; {n} is min_chars.
+    'select_placeholder': '-- select one --',
+    'char_count': '{count} characters',
+    'char_count_min': '{count}/{n} min characters',
+    # Annotation page: messages from annotation.js (read from window.UI_LANG).
+    'required_question_one': 'Please answer the required question:',
+    'required_question_many': 'Please answer the required questions:',
+    'budget_allocated': '{sum} of {total} allocated',
+    'required_not_completed': 'Required annotation(s) not completed: {schemas}',
+    'save_failed': 'Failed to save annotations. Please try again.',
+    'save_retry_later': 'Could not save just now — your work is still here and will be sent again.',
+    # {detail} is empty or " (<server message>)".
+    'save_refused': 'The server did not save that change{detail}. Your work is still on screen.',
+    'signed_out_unsaved': (
+        'You are signed out, so nothing on this page is being saved. '
+        'Sign in again in another tab, then come back and edit anything '
+        'here to save it — do not reload or navigate away first.'),
+    'navigation_failed': 'Navigation failed. Please try again.',
+    'all_items_annotated': 'All items have been annotated!',
+    # Completion page (done.html). {platform} is e.g. "Prolific" or "MTurk".
+    'done_page_title': 'Complete',
+    'done_heading': 'Thank You!',
+    'done_message': 'You have completed the annotation task and your responses are saved.',
+    'done_click_to_copy': 'Click to copy',
+    'done_copy_code_hint': 'Click to copy your code',
+    'done_copy_completion_code_hint': 'Click to copy your completion code',
+    'done_submit_hit': 'Submit HIT to {platform}',
+    'done_return_to': 'Return to {platform}',
+    'done_paste_code': 'Copy the code above and paste it in your crowdsourcing platform to receive credit.',
+    'done_paste_code_ended': 'Copy the code above and paste it in your crowdsourcing platform.',
+    'done_saved_close': 'Your annotations have been saved. You may close this window.',
+    'done_stored_on_server': "Your responses are stored on this study's own server.",
+    'done_copied': 'Copied!',
+    'done_copy_failed': 'Failed to copy. Please select and copy manually.',
+    'done_not_eligible': 'You are not eligible for this study. Thank you for your time.',
+    'done_training_failed': (
+        'You did not pass the qualification questions, so the task did '
+        'not start. Thank you for your time.'),
     # Language / direction
     'html_lang': 'en',
     'html_dir': 'ltr',
 }
+
+#: The keys that annotation.js reads with ``uiText()``. Only these go to the
+#: annotation page as ``window.UI_LANG``, not the full dict of every UI string.
+ANNOTATION_JS_KEYS = (
+    'required_question_one', 'required_question_many', 'budget_allocated',
+    'required_not_completed', 'save_failed', 'save_retry_later', 'save_refused',
+    'signed_out_unsaved', 'navigation_failed', 'all_items_annotated',
+)
 
 # Catalogs live in potato/i18n/<code>.yaml. This file is potato/server_utils/,
 # so the package root is one directory up.
@@ -785,3 +834,28 @@ def resolve_ui_language(ui_lang_config, defaults):
 
     merged.update(overrides)
     return merged
+
+
+def ui_text(key, **values):
+    """One UI string in the configured ``ui_language``, for server-side HTML.
+
+    Templates get the whole ``ui_lang`` dict from the context processor. Code
+    that builds HTML in Python (the schema layouts) has no template context,
+    so it reads the string here, from the same loaded config. ``values`` fill
+    the ``{name}`` placeholders. A translation that names a placeholder the
+    caller did not give falls back to the English default, so a bad catalog
+    or override cannot break the page.
+    """
+    from potato.server_utils.config_module import config
+
+    text = resolve_ui_language(config.get('ui_language'), UI_LANG_DEFAULTS).get(key)
+    default = UI_LANG_DEFAULTS[key]
+    if not isinstance(text, str):
+        text = default
+    if not values:
+        return text
+    try:
+        return text.format(**values)
+    except (KeyError, IndexError, ValueError):
+        logger.warning("ui_language %r: bad placeholder in %r; using English.", key, text)
+        return default.format(**values)

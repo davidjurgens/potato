@@ -5,6 +5,7 @@ Select Layout
 import os
 from pathlib import Path
 
+from potato.server_utils.i18n import ui_text
 from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 from .identifier_utils import (
     safe_generate_layout,
@@ -15,8 +16,10 @@ from .identifier_utils import (
 )
 
 
-#: The empty first option. Matches the wording the country/ethnicity/religion
-#: lists in `static/survey_assets/` already use, so both paths read alike.
+#: The English text of the empty first option. Matches the wording the
+#: country/ethnicity/religion lists in `static/survey_assets/` use, so both
+#: paths read alike. The page shows the `select_placeholder` UI string, which
+#: is this text unless `ui_language` changes it.
 SELECT_PLACEHOLDER = "-- select one --"
 
 
@@ -75,7 +78,8 @@ def _generate_select_layout_internal(annotation_scheme):
         and annotation_scheme["use_predefined_labels"] in predefined_labels_dict
     ):
         with open(predefined_labels_dict[annotation_scheme["use_predefined_labels"]], encoding="utf-8") as r:
-            schematic += r.read()
+            schematic += r.read().replace(
+                SELECT_PLACEHOLDER, escape_html_content(ui_text("select_placeholder")), 1)
 
     else:
         labels = annotation_scheme["labels"]
@@ -98,7 +102,7 @@ def _generate_select_layout_internal(annotation_scheme):
         # the label-list path was the one that did not.
         schematic += (
             f'<option class="{escape_html_content(annotation_scheme["name"])}" '
-            f'value="" selected disabled>{escape_html_content(SELECT_PLACEHOLDER)}</option>'
+            f'value="" selected disabled>{escape_html_content(ui_text("select_placeholder"))}</option>'
         )
 
         for i, label_data in enumerate(labels, 1):

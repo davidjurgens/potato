@@ -12,6 +12,7 @@ Supports enhanced rationale/justification features:
 import logging
 
 from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
+from potato.server_utils.i18n import ui_text
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
@@ -196,10 +197,18 @@ def _generate_textbox_layout_internal(annotation_scheme):
 
         # Character counter
         if show_char_count or min_chars:
-            min_label = f"/{min_chars} min" if min_chars else ""
+            # The count is a live element inside a translated sentence, so a
+            # marker holds its place until the text is escaped.
+            count_marker = "\x00"
+            if min_chars:
+                counter_text = ui_text("char_count_min", count=count_marker, n=min_chars)
+            else:
+                counter_text = ui_text("char_count", count=count_marker)
+            counter_html = escape_html_content(counter_text).replace(
+                count_marker, '<span class="shadcn-textbox-char-count">0</span>')
             schematic += f"""
                 <div class="shadcn-textbox-char-counter" data-input-id="{identifiers['id']}" data-min-chars="{min_chars}">
-                    <span class="shadcn-textbox-char-count">0</span>{min_label} characters
+                    {counter_html}
                 </div>
             """
 

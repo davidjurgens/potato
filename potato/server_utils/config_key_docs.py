@@ -1202,6 +1202,127 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "timeline",
         type="string", category=UI,
     ),
+    # Participant strings on the annotation page and the completion page.
+    "ui_language.instance_label": _D(
+        'Label before the item number in the annotation page header',
+        type="string", default='Instance', category=UI,
+    ),
+    "ui_language.select_placeholder": _D(
+        'Empty first option of a select question',
+        type="string", default='-- select one --', category=UI,
+    ),
+    "ui_language.char_count": _D(
+        'Character counter of a text question without min_chars. {count} is the live count',
+        type="string", default='{count} characters', category=UI,
+    ),
+    "ui_language.char_count_min": _D(
+        'Character counter of a text question with min_chars. {count} is the live count and {n} is min_chars',
+        type="string", default='{count}/{n} min characters', category=UI,
+    ),
+    "ui_language.required_question_one": _D(
+        'Start of the error when one required question has no answer',
+        type="string", default='Please answer the required question:', category=UI,
+    ),
+    "ui_language.required_question_many": _D(
+        'Start of the error when two or more required questions have no answer',
+        type="string", default='Please answer the required questions:', category=UI,
+    ),
+    "ui_language.budget_allocated": _D(
+        'Reason in the required-question error when a budget question does not add up. {sum} is the allocated amount and {total} is the declared total',
+        type="string", default='{sum} of {total} allocated', category=UI,
+    ),
+    "ui_language.required_not_completed": _D(
+        'Message when the server refuses navigation for missing required answers. {schemas} is the list of questions',
+        type="string", default='Required annotation(s) not completed: {schemas}', category=UI,
+    ),
+    "ui_language.save_failed": _D(
+        'Message when the page cannot save the annotations before navigation',
+        type="string", default='Failed to save annotations. Please try again.', category=UI,
+    ),
+    "ui_language.save_retry_later": _D(
+        'Message when a background save fails and the page will send the work again',
+        type="string", default='Could not save just now — your work is still here and will be sent again.', category=UI,
+    ),
+    "ui_language.save_refused": _D(
+        'Message when the server refuses a change. {detail} is empty or the server message in parentheses',
+        type="string", default='The server did not save that change{detail}. Your work is still on screen.', category=UI,
+    ),
+    "ui_language.signed_out_unsaved": _D(
+        'Message when the session ended and the page cannot save',
+        type="string", default='You are signed out, so nothing on this page is being saved. Sign in again in another tab, then come back and edit anything here to save it — do not reload or navigate away first.', category=UI,
+    ),
+    "ui_language.navigation_failed": _D(
+        'Message when navigation to another item fails',
+        type="string", default='Navigation failed. Please try again.', category=UI,
+    ),
+    "ui_language.all_items_annotated": _D(
+        'Message when the jump buttons find no item without an answer',
+        type="string", default='All items have been annotated!', category=UI,
+    ),
+    "ui_language.done_page_title": _D(
+        'Second part of the completion page title, after the task name',
+        type="string", default='Complete', category=UI,
+    ),
+    "ui_language.done_heading": _D(
+        'Heading of the completion page',
+        type="string", default='Thank You!', category=UI,
+    ),
+    "ui_language.done_message": _D(
+        'Text below the heading of the completion page',
+        type="string", default='You have completed the annotation task and your responses are saved.', category=UI,
+    ),
+    "ui_language.done_click_to_copy": _D(
+        'Tooltip of the completion code box',
+        type="string", default='Click to copy', category=UI,
+    ),
+    "ui_language.done_copy_code_hint": _D(
+        'Hint below the code box for a participant who ended early',
+        type="string", default='Click to copy your code', category=UI,
+    ),
+    "ui_language.done_copy_completion_code_hint": _D(
+        'Hint below the completion code box',
+        type="string", default='Click to copy your completion code', category=UI,
+    ),
+    "ui_language.done_submit_hit": _D(
+        'Button that sends the HIT to the platform. {platform} is the platform name',
+        type="string", default='Submit HIT to {platform}', category=UI,
+    ),
+    "ui_language.done_return_to": _D(
+        'Link back to the crowdsourcing platform. {platform} is the platform name',
+        type="string", default='Return to {platform}', category=UI,
+    ),
+    "ui_language.done_paste_code": _D(
+        'Instruction to paste the completion code into the platform',
+        type="string", default='Copy the code above and paste it in your crowdsourcing platform to receive credit.', category=UI,
+    ),
+    "ui_language.done_paste_code_ended": _D(
+        'Instruction to paste the code into the platform, for a participant who ended early',
+        type="string", default='Copy the code above and paste it in your crowdsourcing platform.', category=UI,
+    ),
+    "ui_language.done_saved_close": _D(
+        'Completion page text when the study has no completion code',
+        type="string", default='Your annotations have been saved. You may close this window.', category=UI,
+    ),
+    "ui_language.done_stored_on_server": _D(
+        'Note at the bottom of the completion page about where the answers are stored',
+        type="string", default="Your responses are stored on this study's own server.", category=UI,
+    ),
+    "ui_language.done_copied": _D(
+        'Text in the code box after the participant copies the code',
+        type="string", default='Copied!', category=UI,
+    ),
+    "ui_language.done_copy_failed": _D(
+        'Alert when the browser cannot copy the code',
+        type="string", default='Failed to copy. Please select and copy manually.', category=UI,
+    ),
+    "ui_language.done_not_eligible": _D(
+        'Completion page text for a participant that the screener stopped, when the screener gives no message',
+        type="string", default='You are not eligible for this study. Thank you for your time.', category=UI,
+    ),
+    "ui_language.done_training_failed": _D(
+        'Completion page text for a participant who failed the training questions',
+        type="string", default='You did not pass the qualification questions, so the task did not start. Thank you for your time.', category=UI,
+    ),
     "layout": _D(
         "How the annotation questions are arranged on the page: a grid, "
         "collapsible groups, an explicit order, and responsive breakpoints. "

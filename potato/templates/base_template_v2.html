@@ -348,7 +348,7 @@
 
                 {% if instance_index is defined %}
                 <div class="instance-number-section">
-                    <span class="instance-number-label">Instance</span>
+                    <span class="instance-number-label">{{ ui_lang.instance_label|default('Instance') }}</span>
                     <span class="fw-medium" id="instance-number">#{{ instance_index|int + 1 }}</span>
                 </div>
                 {% endif %}
@@ -831,6 +831,8 @@
             }
         };
     </script>
+    {# Resolved ui_language strings for messages that annotation.js builds (uiText). #}
+    <script>window.UI_LANG = {{ ui_lang_js|default({})|tojson }};</script>
     <script id="ui-config" type="application/json">{% if ui_config %}{{ ui_config | tojson | safe }}{% else %}{}{% endif %}</script>
     <script>
         (function(){
@@ -901,7 +903,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=6"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=63"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=64"></script>
     {% if trial_timing_client_config %}
     <!-- Timed trials: fixation, stimulus duration, deadline, key-to-label RT.
          After annotation.js, whose navigation and save it drives. -->
