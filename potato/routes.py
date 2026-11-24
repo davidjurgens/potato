@@ -1414,10 +1414,12 @@ def _saml_single_logout(saml_session):
     Called after the Potato session is cleared, so an IdP that never answers
     still leaves the annotator signed out of Potato.
     """
-    from potato.auth_backends.saml_backend import request_data_from_flask
     backend = UserAuthenticator.get_instance().get_saml_backend()
     if backend is None or not saml_session or not backend.slo_enabled():
         return None
+    # Import only after the check: the import loads potato.auth_backends,
+    # and a task without SAML can have none of the optional SSO packages.
+    from potato.auth_backends.saml_backend import request_data_from_flask
     data, base = request_data_from_flask(request, backend.saml_config.get("sp_base_url"))
     try:
         target, request_id = backend.logout_redirect(data, base, saml_session)

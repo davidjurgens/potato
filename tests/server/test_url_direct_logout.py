@@ -8,6 +8,8 @@ The fix renders a standalone logged-out page instead.
 
 import json
 import os
+import sys
+
 import pytest
 import requests
 import yaml
@@ -127,6 +129,26 @@ class TestUrlDirectLogout:
 
         # Directly access logout without logging in first
         resp = session.get(f"{server.base_url}/logout", allow_redirects=True, timeout=5)
+        assert resp.status_code == 200
+        assert "Logged Out" in resp.text
+
+    def test_logout_without_authlib(self, url_direct_server, monkeypatch):
+        """Logout must not need authlib, the optional OAuth package.
+
+        /logout once imported the SAML backend before it checked for SAML,
+        and that import loaded the OAuth backend, so a task without SSO
+        gave a 500 on every logout when authlib was not installed.
+        """
+        monkeypatch.setitem(sys.modules, "authlib", None)
+        for name in list(sys.modules):
+            if name == "potato.auth_backends" or name.startswith("potato.auth_backends."):
+                monkeypatch.delitem(sys.modules, name)
+
+        server = url_direct_server
+        session = requests.Session()
+        session.get(f"{server.base_url}/?PROLIFIC_PID=test_worker_4", allow_redirects=True, timeout=5)
+        resp = session.get(f"{server.base_url}/logout", allow_redirects=True, timeout=5)
+
         assert resp.status_code == 200
         assert "Logged Out" in resp.text
 
