@@ -2802,7 +2802,8 @@ class ItemStateManager:
             if item_id not in self.remaining_instance_ids:
                 continue
             if self._item_is_saturated(item_id):
-                if item_id in self.remaining_instance_ids:
+                # A hold can be relaxed on a later pass. Retire only submissions.
+                if self._item_is_complete(item_id) and item_id in self.remaining_instance_ids:
                     self.remaining_instance_ids.remove(item_id)
                 continue
             if item_id in already_assigned:
