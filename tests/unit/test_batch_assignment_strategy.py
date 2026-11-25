@@ -138,6 +138,24 @@ def test_batch_assignment_with_unlimited_user_quota_assigns_whole_batch():
     assert alice.instance_id_ordering == ["a1", "a2"]
 
 
+def test_batch_assignment_can_revisit_a_held_item_after_other_work_is_finished():
+    ism = _manager(_config(max_annotations_per_item=1))
+    holder = _user("alice", max_assignments=1)
+    assert ism.assign_instances_to_user(holder) == 1
+    assert holder.instance_id_ordering == ["a1"]
+
+    # Bob should get the free item before another participant's pending one.
+    second = _user("bob", max_assignments=1)
+    assert ism.assign_instances_to_user(second) == 1
+    assert second.instance_id_ordering == ["a2"]
+    ism.register_annotator("a2", "bob")
+
+    # Only the first item is still unfinished in this cohort.
+    third = _user("chris", max_assignments=1)
+    assert ism.assign_instances_to_user(third) == 1
+    assert third.instance_id_ordering == ["a1"]
+
+
 def test_batch_assignment_blocks_users_outside_any_cohort():
     ism = _manager()
     outsider = _user("outsider")
