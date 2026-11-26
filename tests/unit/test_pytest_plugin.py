@@ -69,6 +69,13 @@ def test_compute_violations():
 
 # ---- end-to-end via pytester ----
 
+# pytest-playwright wraps every test call in a module-global soft-assertion
+# scope. runpytest() runs in this process, inside the outer test's scope, so
+# the inner run's test would fail with "nested soft assertion scopes are not
+# supported". The inner run needs no browser.
+NO_PLAYWRIGHT = ("-p", "no:playwright")
+
+
 def test_plugin_gates_build_on_threshold(pytester):
     pytester.makepyfile("""
         import pytest
@@ -82,7 +89,7 @@ def test_plugin_gates_build_on_threshold(pytester):
     # so passing "-p potato.testing.pytest_plugin" would register the same
     # module under a second name and raise a pluggy ValueError. Rely on the
     # entry point instead.
-    result = pytester.runpytest("--potato-threshold", "correct=0.8")
+    result = pytester.runpytest(*NO_PLAYWRIGHT, "--potato-threshold", "correct=0.8")
     assert result.ret != 0
     result.stdout.fnmatch_lines(["*THRESHOLD FAILED: correct*"])
 
@@ -94,5 +101,5 @@ def test_plugin_passes_when_threshold_met(pytester):
         def test_ok(potato_eval):
             potato_eval.log_feedback("correct", 1.0)
     """)
-    result = pytester.runpytest("--potato-threshold", "correct=0.8")
+    result = pytester.runpytest(*NO_PLAYWRIGHT, "--potato-threshold", "correct=0.8")
     assert result.ret == 0

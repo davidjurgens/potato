@@ -231,15 +231,16 @@ class TestTrainingPhaseUI(unittest.TestCase):
         self.assertTrue(has_progress, "Training page should show question progress")
 
     def test_training_progress_display(self):
-        """Progress should show 'Question 1 of 3' initially."""
-        page_source = self.driver.page_source
-
-        has_q1 = "Question 1" in page_source
-        has_of_3 = "of 3" in page_source
-
-        self.assertTrue(
-            has_q1 and has_of_3,
-            f"Should show 'Question 1 of 3' on training page",
+        """Progress should show 'Question 1 / 3' initially."""
+        label = WebDriverWait(self.driver, 10).until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".training-progress-label")
+            )
+        )
+        self.assertEqual(
+            " ".join(label.text.split()),
+            "Question 1 / 3",
+            "Should show 'Question 1 / 3' on training page",
         )
 
     def test_correct_answer_shows_success_feedback(self):

@@ -24,16 +24,14 @@ import pytest
 import requests
 
 from tests.helpers.flask_test_setup import FlaskTestServer
+from tests.helpers.port_manager import find_free_port
 from tests.helpers.test_utils import TestConfigManager
-
-RECEIVER_PORT = 9651
-SERVER_PORT = 9650
 
 
 class _Receiver:
     """Tiny threaded HTTP server that records received webhook payloads."""
 
-    def __init__(self, port):
+    def __init__(self):
         self.events = []
         self._lock = threading.Lock()
         parent = self
@@ -59,7 +57,10 @@ class _Receiver:
             def log_message(self, *a):
                 pass
 
-        self._httpd = HTTPServer(("127.0.0.1", port), Handler)
+        # Port 0: the OS picks a free port, so no fixed number can collide
+        # with another test on the same xdist worker.
+        self._httpd = HTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
 
     def start(self):
@@ -85,13 +86,13 @@ class _Receiver:
 class TestWebhookSavePathIntegration:
     @pytest.fixture(scope="class", autouse=True)
     def receiver(self):
-        rec = _Receiver(RECEIVER_PORT)
+        rec = _Receiver()
         rec.start()
         yield rec
         rec.stop()
 
     @pytest.fixture(scope="class", autouse=True)
-    def flask_server(self, request):
+    def flask_server(self, request, receiver):
         schemes = [{
             "annotation_type": "radio",
             "name": "sentiment",
@@ -103,7 +104,7 @@ class TestWebhookSavePathIntegration:
                 "enabled": True,
                 "endpoints": [{
                     "name": "test_receiver",
-                    "url": f"http://127.0.0.1:{RECEIVER_PORT}/hook",
+                    "url": f"http://127.0.0.1:{receiver.port}/hook",
                     "secret": "s3cret",
                     "events": ["*"],
                     "active": True,
@@ -116,7 +117,7 @@ class TestWebhookSavePathIntegration:
             "webhook_integration", schemes, num_instances=3,
             additional_config=webhook_cfg,
         ) as cfg:
-            server = FlaskTestServer(port=SERVER_PORT, config_file=cfg.config_path)
+            server = FlaskTestServer(port=find_free_port(), config_file=cfg.config_path)
             if not server.start():
                 pytest.fail("Failed to start server")
 

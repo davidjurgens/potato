@@ -5,6 +5,7 @@ Tests backend functionality for each annotation type.
 
 import pytest
 import json
+import importlib.util
 import os
 import tempfile
 import shutil
@@ -213,6 +214,11 @@ class TestAnnotationTypes:
                 'training-test.yaml',  # Requires training data file
             ]
             if config_file in skip_configs:
+                continue
+            # The MySQL backend's driver is an optional extra
+            # (potato-annotation[mysql]); config validation requires it.
+            if (config_file == 'database-test.yaml'
+                    and importlib.util.find_spec("mysql") is None):
                 continue
 
             config_path = self._setup_config(config_file)

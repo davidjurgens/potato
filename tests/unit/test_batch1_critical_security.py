@@ -116,6 +116,7 @@ class TestSQLInjectionPrevention:
 
     def test_get_total_count_validates_table_name(self):
         """Test that get_total_count validates the table name."""
+        pytest.importorskip("sqlalchemy")
         from potato.data_sources.sources.database_source import DatabaseSource
         from potato.data_sources.base import SourceConfig
 

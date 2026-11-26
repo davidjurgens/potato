@@ -23,8 +23,15 @@ from potato_trace.run_tree import Run
 
 
 def is_available() -> bool:
-    """True if ``opentelemetry`` can be imported (no import performed)."""
-    return find_spec("opentelemetry") is not None
+    """True if ``opentelemetry-sdk`` can be imported (the SDK is not imported).
+
+    The API package alone also provides ``opentelemetry`` and is often pulled
+    in by other libraries, but the exporter is built on the SDK.
+    """
+    try:
+        return find_spec("opentelemetry.sdk") is not None
+    except ImportError:  # no ``opentelemetry`` package at all
+        return False
 
 
 def _hex(n: Optional[int]) -> Optional[str]:

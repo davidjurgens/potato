@@ -14,6 +14,7 @@ import json
 import os
 import pytest
 import requests
+import tempfile
 import time
 import yaml
 
@@ -98,8 +99,12 @@ def _create_solo_mode_test_config(test_dir):
 def solo_server():
     """Start a single Flask server with Solo Mode for all tests in the module."""
     tests_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    test_dir = os.path.join(tests_dir, "output", "solo_mode_api_test")
-    os.makedirs(test_dir, exist_ok=True)
+    # A fresh directory per fixture: under xdist every worker that gets one of
+    # this module's classes starts this server and chdirs into its directory,
+    # so a shared one is deleted under the others when the first finishes.
+    os.makedirs(os.path.join(tests_dir, "output"), exist_ok=True)
+    test_dir = tempfile.mkdtemp(prefix="solo_mode_api_test_",
+                                dir=os.path.join(tests_dir, "output"))
 
     config_file = _create_solo_mode_test_config(test_dir)
     port = find_free_port(preferred_port=9200)

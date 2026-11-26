@@ -205,7 +205,7 @@ class TestJsonIsValid:
     """NaN is not valid JSON, and an undefined metric here is routine."""
 
     def test_response_parses_with_a_strict_json_parser(self, server):
-        import simplejson
+        simplejson = pytest.importorskip("simplejson")
 
         r = requests.get(f"{server.base_url}/admin/iaa",
                          headers={"X-API-Key": ADMIN_KEY})

@@ -395,7 +395,21 @@ class TestAnnotationSchemeValidation:
 class TestDatabaseConfigValidation:
     """Test database configuration validation."""
 
-    def test_valid_mysql_config(self):
+    @pytest.fixture
+    def mysql_driver_installed(self, monkeypatch):
+        """The validator refuses mysql when the driver is absent, before it
+        looks at the port; pretend it is installed."""
+        import importlib.util
+        real_find_spec = importlib.util.find_spec
+
+        def find_spec(name, *args, **kwargs):
+            if name in ("mysql", "mysql.connector"):
+                return object()
+            return real_find_spec(name, *args, **kwargs)
+
+        monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+
+    def test_valid_mysql_config(self, mysql_driver_installed):
         """Test validation of valid MySQL configuration."""
         db_config = {
             "type": "mysql",
@@ -456,7 +470,7 @@ class TestDatabaseConfigValidation:
         with pytest.raises(ConfigValidationError, match="MySQL database requires password"):
             validate_database_config(db_config)
 
-    def test_invalid_port_number(self):
+    def test_invalid_port_number(self, mysql_driver_installed):
         """Test that invalid port numbers are rejected."""
         db_config = {
             "type": "mysql",

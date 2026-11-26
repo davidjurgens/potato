@@ -9,6 +9,8 @@ experience with the demo config.
 
 import os
 import shutil
+import subprocess
+import sys
 import time
 import unittest
 
@@ -40,10 +42,13 @@ class TestAdjudicationDemoUI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Start Flask server with the real demo config."""
-        # Clean adjudication decisions
+        # The pre-loaded user_state.json files are gitignored, so generate
+        # them (and clear old adjudication decisions) the way the demo does.
         cls.adj_output = os.path.join(DEMO_DIR, "annotation_output", "adjudication")
-        if os.path.exists(cls.adj_output):
-            shutil.rmtree(cls.adj_output)
+        subprocess.run(
+            [sys.executable, os.path.join(DEMO_DIR, "setup_demo.py"), "--clean"],
+            check=True, capture_output=True,
+        )
 
         cls.server = FlaskTestServer(
             port=find_free_port(),

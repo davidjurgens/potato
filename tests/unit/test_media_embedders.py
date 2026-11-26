@@ -74,8 +74,13 @@ class TestBackendDeclarations:
         assert "install librosa to resample" in source
 
     def test_missing_ffmpeg_is_explained_not_crashed(self, monkeypatch):
+        from potato.embedders.image import ImageEmbeddingBackend
         from potato.embedders.video import VideoEmbeddingBackend
         import potato.media.video as media_video
+        # Frames go through the image backend, which is probed first; make it
+        # present so the ffmpeg check is the one that answers.
+        monkeypatch.setattr(ImageEmbeddingBackend, "available",
+                            lambda self: (True, None))
         monkeypatch.setattr(media_video, "ffmpeg_available", lambda: False)
         ok, reason = VideoEmbeddingBackend().available()
         assert ok is False
@@ -92,7 +97,12 @@ class TestDetectionPicksThem:
         embedder = resolve({}, samples=[{"id": "v", "video_url": "x.mp4"}])
         assert embedder.spec.backend == "video"
 
-    def test_frames_per_clip_is_configurable(self):
+    def test_frames_per_clip_is_configurable(self, monkeypatch):
+        from potato.embedders.video import VideoEmbeddingBackend
+        # resolve() drops an unavailable backend; this is about the option,
+        # not about whether CLIP and ffmpeg are installed.
+        monkeypatch.setattr(VideoEmbeddingBackend, "available",
+                            lambda self: (True, None))
         embedder = resolve({"embeddings": {"backend": "video", "frames": 8,
                                            "source_field": "video_url"}},
                            samples=[{"id": "v", "video_url": "x.mp4"}])

@@ -4,7 +4,9 @@ surveyflow phases (consent, instructions, etc.).
 
 Verifies that:
 1. window.config.is_annotation_page is false on survey pages
-2. No /updateinstance XHR requests are sent on non-annotation pages
+2. /updateinstance requests sent on non-annotation pages carry the
+   '__phase_page__' sentinel, never an empty instance_id (phase answers
+   are saved on purpose since 582282d8, #130)
 3. Users can advance through all survey phases via the browser
 4. Annotation phase still works normally after survey phases
 """
@@ -232,6 +234,21 @@ class TestSurveyflowNoAutosave(unittest.TestCase):
             "return window.__updateInstanceCalls || [];"
         )
 
+    def _assert_phase_page_saves(self, page):
+        """Phase answers are saved (#130), always under the phase-page sentinel."""
+        calls = WebDriverWait(self.driver, 10).until(
+            lambda d: self._get_updateinstance_calls(),
+            f"Answers on the {page} page should be saved via /updateinstance",
+        )
+        for call in calls:
+            body = json.loads(call.get("body") or "{}")
+            self.assertEqual(
+                body.get("instance_id"),
+                "__phase_page__",
+                f"/updateinstance on the {page} page must not carry an empty "
+                f"or real instance_id: {call}",
+            )
+
     def test_consent_page_is_not_annotation_page(self):
         """window.config.is_annotation_page should be false on consent page."""
         self._login()
@@ -274,7 +291,7 @@ class TestSurveyflowNoAutosave(unittest.TestCase):
     def test_no_updateinstance_on_consent_page(self):
         """
         Issue #126: interacting with survey form inputs on consent page
-        must NOT trigger /updateinstance requests.
+        must NOT send /updateinstance with an empty instance_id.
         """
         self._login()
         self._install_xhr_interceptor()
@@ -287,20 +304,12 @@ class TestSurveyflowNoAutosave(unittest.TestCase):
             });
         """)
 
-        # Wait for any debounced autosave to fire (annotation.js debounce is ~1s)
-        time.sleep(2)
-
-        calls = self._get_updateinstance_calls()
-        self.assertEqual(
-            len(calls),
-            0,
-            f"No /updateinstance calls should be made on consent page, got {len(calls)}: {calls}",
-        )
+        self._assert_phase_page_saves("consent")
 
     def test_no_updateinstance_on_instructions_page(self):
         """
         Issue #126: interacting with survey form inputs on instructions page
-        must NOT trigger /updateinstance requests.
+        must NOT send /updateinstance with an empty instance_id.
         """
         self._login()
         self._advance_phase("consent")
@@ -313,14 +322,7 @@ class TestSurveyflowNoAutosave(unittest.TestCase):
             });
         """)
 
-        time.sleep(2)
-
-        calls = self._get_updateinstance_calls()
-        self.assertEqual(
-            len(calls),
-            0,
-            f"No /updateinstance calls should be made on instructions page, got {len(calls)}: {calls}",
-        )
+        self._assert_phase_page_saves("instructions")
 
     def test_full_surveyflow_advancement(self):
         """

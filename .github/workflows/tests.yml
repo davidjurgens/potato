@@ -1,0 +1,136 @@
+name: Tests
+
+# A middle tier between the drift guards in docs-specs.yml and the full suite.
+#
+# On every pull request: the JS unit tests, the Python unit tests, and the
+# server tests. None of them needs a browser. The server tests start a real
+# Flask server per test class, so they run in shards: each shard is its own
+# pytest process, which also keeps every xdist worker inside the 200 ports
+# tests/helpers/port_manager.py gives it.
+#
+# Browser tests run only on the schedule and on demand: the Selenium tests the
+# maintainers marked `core` every night, and everything on workflow_dispatch.
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Also run every Selenium and Playwright test'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: '1'
+
+jobs:
+  jest:
+    name: JS unit tests (jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      # Several jest files render a schema's HTML by calling `python -c`, so
+      # the package must import.
+      - run: |
+          pip install -r requirements.txt
+          pip install -e .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npx jest --ci
+
+  unit:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          pip install -r requirements.txt -r requirements-test.txt pytest-xdist
+          pip install -e ".[deploy-aws,huggingface]"
+      # The two deselected groups take minutes per test: an O(n^2) reference
+      # scan and an SSH launcher round trip. Together they are ~75% of the
+      # unit tests' run time.
+      - run: >
+          pytest tests/unit -n 4 -q
+          --deselect tests/unit/test_detection_ap_index.py
+          --deselect tests/unit/test_training_backends.py::TestSshLauncherEndToEnd
+
+  server:
+    name: Server tests (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          pip install -r requirements.txt -r requirements-test.txt pytest-xdist
+          pip install -e .
+      - name: Run this shard's files
+        run: |
+          files=$(find tests/server -name 'test_*.py' | sort | awk -v s=${{ matrix.shard }} 'NR % 4 == s')
+          pytest $files -n 4 --dist loadfile -q
+
+  selenium-core:
+    name: Selenium core regression tests
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          pip install -r requirements.txt -r requirements-test.txt pytest-xdist
+          pip install -e .
+      # ubuntu-latest ships Chrome and chromedriver.
+      - run: pytest tests/selenium -m core -n 4 -q
+
+  browser-full:
+    name: All browser tests
+    if: github.event_name == 'workflow_dispatch' && inputs.full
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          pip install -r requirements.txt -r requirements-test.txt pytest-xdist
+          pip install -e .
+          playwright install --with-deps chromium
+      - run: pytest tests/selenium tests/playwright tests/integration tests/simulator -n 4 -q

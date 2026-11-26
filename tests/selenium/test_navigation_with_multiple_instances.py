@@ -17,7 +17,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.test_utils import create_test_config, create_test_data_file
 from tests.helpers.port_manager import find_free_port
@@ -141,13 +145,16 @@ def test_navigation_with_multiple_instances(flask_server, browser):
 
     print("   ✅ User registered and on annotation page")
 
-    # Test navigation buttons exist
+    # Test navigation buttons exist. The first instance has nowhere to go
+    # back to, so Back is replaced by a placeholder there (#144, ccc8cc56).
     try:
         next_btn = browser.find_element(By.ID, "next-btn")
-        prev_btn = browser.find_element(By.ID, "prev-btn")
+        browser.find_element(By.ID, "prev-btn-placeholder")
         print("   ✅ Navigation buttons found")
     except NoSuchElementException:
         pytest.fail("Navigation buttons not found")
+    assert not browser.find_elements(By.ID, "prev-btn"), \
+        "Back button should be hidden on the first instance"
 
     # Check progress counter
     try:
@@ -165,19 +172,29 @@ def test_navigation_with_multiple_instances(flask_server, browser):
             sentiment_radios[0].click()
             time.sleep(0.1)
 
-        # Click next
-        next_btn = browser.find_element(By.ID, "next-btn")
-        next_btn.click()
-        time.sleep(0.1)
+        # Click next and wait for the next instance to load
+        instance_id = browser.find_element(By.ID, "instance_id").get_attribute("value")
+        browser.find_element(By.ID, "next-btn").click()
+        WebDriverWait(
+            browser, 10, ignored_exceptions=(StaleElementReferenceException,)
+        ).until(
+            lambda d: d.find_element(By.ID, "instance_id").get_attribute("value") != instance_id
+        )
 
         print(f"   Navigated to instance {i+2}")
 
     print("   ✅ Forward navigation works")
 
     # Test navigating backward
-    prev_btn = browser.find_element(By.ID, "prev-btn")
-    prev_btn.click()
-    time.sleep(0.1)
+    instance_id = browser.find_element(By.ID, "instance_id").get_attribute("value")
+    WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.ID, "prev-btn"))
+    ).click()
+    WebDriverWait(
+        browser, 10, ignored_exceptions=(StaleElementReferenceException,)
+    ).until(
+        lambda d: d.find_element(By.ID, "instance_id").get_attribute("value") != instance_id
+    )
 
     print("   ✅ Backward navigation works")
 

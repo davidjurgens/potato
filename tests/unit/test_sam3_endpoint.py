@@ -134,10 +134,16 @@ class TestHonestRefusals:
         assert "redistributes no" in message
         assert "SAM License" in message
 
-    def test_local_inference_points_at_what_does_work(self, tmp_path):
+    def test_local_inference_points_at_what_does_work(self, tmp_path,
+                                                      monkeypatch):
         """Unimplemented on purpose, and it says where to go instead."""
+        import types
         from potato.ai.sam3_endpoint import SAM3Endpoint
 
+        # Without onnxruntime the refusal is about the install instead; a stub
+        # gets past the import to the missing graphs, where nothing is loaded.
+        monkeypatch.setitem(sys.modules, "onnxruntime",
+                            types.ModuleType("onnxruntime"))
         endpoint = SAM3Endpoint({"mode": "onnx", "model_dir": str(tmp_path)})
         with pytest.raises((NotImplementedError, RuntimeError)) as raised:
             endpoint.detect(object(), ["cone"])

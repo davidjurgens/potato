@@ -81,10 +81,26 @@ class TestSourceVersionInBothInvocationModes:
              "from potato import __version__; print(__version__)"],
             capture_output=True, text=True, timeout=60,
             cwd=os.path.join(REPO_ROOT, "potato"))
+        if probe.returncode == 0:
+            # Only an install (`pip install -e .`, as CI does) makes `potato`
+            # importable from inside potato/, and then the subprocess tests
+            # take the import route. test_the_file_route_is_the_fallback
+            # covers the fallback directly, so nothing goes untested.
+            pytest.skip("potato is installed, so the import route works here")
         assert probe.returncode != 0, (
             "`from potato import __version__` now succeeds with potato/ on "
             "sys.path, so the subprocess tests here no longer reach the file "
             "fallback in source_version(). Cover it directly.")
+
+    def test_the_file_route_is_the_fallback(self, monkeypatch):
+        """source_version() when `from potato import __version__` fails, as it
+        does in a namespace-package `potato`, wherever this suite runs."""
+        import potato
+        from potato.version_info import (UNKNOWN_VERSION, source_version,
+                                         version_from_init_file)
+
+        monkeypatch.delattr(potato, "__version__", raising=False)
+        assert source_version() == version_from_init_file() != UNKNOWN_VERSION
 
     def test_the_module_run_reports_the_same_version_as_the_import(self):
         from potato.version_info import source_version

@@ -251,6 +251,10 @@ class TestAgainstRealExamples:
             if not isinstance(cfg, dict):
                 continue
             missing = collect_config_paths(cfg, config_path).missing_required
+            if os.path.exists(os.path.join(os.path.dirname(config_path), "setup_data.sh")):
+                # This example fetches its data on demand, so its data files
+                # are absent until someone runs setup_data.sh.
+                missing = [m for m in missing if m.config_key != "data_files"]
             if missing:
                 broken[config_path] = [(m.config_key, m.raw) for m in missing]
         assert not broken, f"examples with unresolvable required paths: {broken}"

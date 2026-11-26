@@ -113,6 +113,11 @@ def _validate_examples(failures):
                 config, project_dir=directory, config_file_dir=directory
             )
         except Exception as exc:
+            # A config that needs an optional extra (astropy for FITS, ...) is
+            # not broken; the validator says which extra to install, and CI
+            # does not install every one.
+            if "pip install 'potato-annotation[" in str(exc):
+                continue
             failures.append(f"{os.path.relpath(path, REPO_ROOT)}: {type(exc).__name__}: {exc}")
 
 

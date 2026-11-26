@@ -39,7 +39,7 @@ _CORE_DEPS = [
 _AI_DEPS = [
     "ollama>=0.6.0",
     "openai>=1.0.0",
-    "anthropic>=0.30.0",
+    "anthropic>=0.30.0,<1",  # 1.x drops `temperature`; see requirements.txt
     "google-genai>=1.0.0",
 ]
 _FORMAT_DEPS = [

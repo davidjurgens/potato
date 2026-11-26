@@ -17,6 +17,7 @@ Run with:
 import json
 import os
 import shutil
+import tempfile
 import time
 
 import pytest
@@ -138,8 +139,11 @@ def _create_integration_test_config(test_dir):
 def solo_integration_server():
     """Start a single Flask server for all integration tests."""
     tests_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    test_dir = os.path.join(tests_dir, "output", "solo_integration_test")
-    os.makedirs(test_dir, exist_ok=True)
+    # A fresh directory per fixture: under xdist every worker starts this
+    # server, and a shared one would load another worker's solo_state.
+    os.makedirs(os.path.join(tests_dir, "output"), exist_ok=True)
+    test_dir = tempfile.mkdtemp(prefix="solo_integration_test_",
+                                dir=os.path.join(tests_dir, "output"))
 
     config_file = _create_integration_test_config(test_dir)
     port = find_free_port(preferred_port=9210)
@@ -581,11 +585,16 @@ class TestReviewPhaseWiring:
     the real HTTP routes (these phases were previously unreachable)."""
 
     def _reset_to_parallel(self, manager):
+        from potato.solo_mode.manager import AgreementMetrics
         from potato.solo_mode.phase_controller import SoloPhase
         # The manager singleton is shared across the module's tests; clear the
         # review-relevant state so each case starts from a known baseline
         # (prior tests populate human_labeled_ids, which would otherwise exclude
-        # our injected instances from the review pool).
+        # our injected instances from the review pool). Agreement too: matching
+        # labels from TestEndToEndWorkflow, or the 90% set by
+        # test_high_agreement_triggers_should_end, would make the annotate POST
+        # hand off to autonomous labelling (/solo/status) before any review.
+        manager.agreement_metrics = AgreementMetrics()
         manager.predictions.clear()
         manager.human_labeled_ids.clear()
         manager.disagreement_ids.clear()

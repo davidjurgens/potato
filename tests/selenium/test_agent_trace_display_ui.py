@@ -18,7 +18,11 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
@@ -252,14 +256,22 @@ class TestAgentTraceDisplayUI(unittest.TestCase):
         self.driver.execute_script("arguments[0].click()", radios[0])
         time.sleep(1.5)  # Wait for debounce
 
-        # Navigate to next instance
-        body = self.driver.find_element(By.TAG_NAME, "body")
-        body.send_keys(Keys.ARROW_RIGHT)
-        time.sleep(1.0)
-
-        # Navigate back
-        body.send_keys(Keys.ARROW_LEFT)
-        time.sleep(1.0)
+        # Navigate to next instance and back. Navigation reloads the page, so
+        # re-locate <body> each time and wait for the instance to change.
+        for key in (Keys.ARROW_RIGHT, Keys.ARROW_LEFT):
+            instance_id = self.driver.find_element(
+                By.ID, "instance_id").get_attribute("value")
+            self.driver.find_element(By.TAG_NAME, "body").send_keys(key)
+            WebDriverWait(
+                self.driver, 10,
+                ignored_exceptions=(StaleElementReferenceException,),
+            ).until(
+                lambda d: d.find_element(By.ID, "instance_id")
+                .get_attribute("value") != instance_id
+            )
+        WebDriverWait(self.driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".agent-trace-step"))
+        )
 
         # Verify annotation persisted
         radios = self.driver.find_elements(

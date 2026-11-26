@@ -359,10 +359,14 @@ def test_identity_metrics_at_kitti_scale_are_quick():
                                  "size": [4.0, 1.8, 1.5], "rotation": [0, 0, 0, 1]}}
                 for t in range(40) for f in (0, 99)]
 
-    started = time.perf_counter()
+    # CPU time, not wall time: under xdist the other workers share the
+    # runner's cores, and this pure-Python report runs on one thread.
+    started = time.process_time()
     report = spatial_report({"s": {"a": json.dumps(annotator(0.0)),
                                    "b": json.dumps(annotator(0.2))}})
-    elapsed = time.perf_counter() - started
+    elapsed = time.process_time() - started
     assert report["identity"]["n_object_frames"] == 8000
     assert report["identity"]["mota"] == 1.0
-    assert elapsed < 2.5, f"{elapsed:.2f} s"
+    # 2.5 s left no headroom on GitHub's runners (2.52 s CPU seen); the
+    # regression this guards against was well above 4 s.
+    assert elapsed < 3.5, f"{elapsed:.2f} s"

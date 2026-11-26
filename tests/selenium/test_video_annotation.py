@@ -15,6 +15,7 @@ import json
 import os
 import tempfile
 import shutil
+import uuid
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -148,7 +149,9 @@ site_dir: default
             username_input = self.wait.until(
                 EC.presence_of_element_located((By.ID, "login-email"))
             )
-            username_input.send_keys("test_user")
+            # A user per test: the server is shared by the class, and segments
+            # saved by one test would otherwise show up in the next.
+            username_input.send_keys(f"test_user_{uuid.uuid4().hex[:8]}")
 
             # Submit login
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
@@ -277,9 +280,10 @@ site_dir: default
         )
         label_btn.click()
 
-        # Focus on container for keyboard events
-        container = self.driver.find_element(By.CLASS_NAME, "video-annotation-container")
-        container.click()
+        # Send the shortcuts to the page itself. Clicking the container lands
+        # on the native <video controls>, and keys typed while that element
+        # has focus never reach the document-level shortcut handler.
+        self.driver.execute_script("document.activeElement.blur();")
 
         # Set video to start time
         self.driver.execute_script("arguments[0].currentTime = 2.0;", video)
@@ -455,19 +459,26 @@ site_dir: default
         label_btn = self.driver.find_element(By.CSS_SELECTOR, ".label-btn[data-label='intro']")
         label_btn.click()
 
-        self.driver.execute_script("arguments[0].currentTime = 1.0;", video)
-        self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
-        time.sleep(0.05)
+        # Setting currentTime starts an asynchronous seek; the set-start and
+        # set-end buttons read currentTime, so wait for the seek to land.
+        def seek(seconds):
+            self.driver.execute_script("arguments[0].currentTime = arguments[1];", video, seconds)
+            WebDriverWait(self.driver, 10).until(lambda d: d.execute_script(
+                "return !arguments[0].seeking && Math.abs(arguments[0].currentTime - arguments[1]) < 0.05;",
+                video, seconds))
 
-        self.driver.execute_script("arguments[0].currentTime = 2.5;", video)
+        seek(1.0)
+        self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-start']").click()
+
+        seek(2.5)
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='set-end']").click()
-        time.sleep(0.05)
 
         self.driver.find_element(By.CSS_SELECTOR, ".segment-btn[data-action='create-segment']").click()
-        time.sleep(0.1)
 
         # Check hidden input has data
         hidden_input = self.driver.find_element(By.CSS_SELECTOR, ".annotation-data-input")
+        WebDriverWait(self.driver, 10).until(
+            lambda d: '"segments":[{' in (hidden_input.get_attribute("value") or "").replace(" ", ""))
         input_value = hidden_input.get_attribute("value")
 
         assert input_value and len(input_value) > 0, "Hidden input should have annotation data"
@@ -631,7 +642,9 @@ site_dir: default
             username_input = self.wait.until(
                 EC.presence_of_element_located((By.ID, "login-email"))
             )
-            username_input.send_keys("test_user")
+            # A user per test: the server is shared by the class, and segments
+            # saved by one test would otherwise show up in the next.
+            username_input.send_keys(f"test_user_{uuid.uuid4().hex[:8]}")
             submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_btn.click()
             time.sleep(0.05)
