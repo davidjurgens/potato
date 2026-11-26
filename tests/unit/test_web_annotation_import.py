@@ -223,8 +223,7 @@ class TestRegions:
                                       "selector": {"type": "SvgSelector", "value": svg}}, "stamp")])
         obj = result.items[0].predictions["regions"][0]
         assert obj["type"] == "polygon"
-        assert [(p["x"], p["y"]) for p in obj["coordinates"]] == pytest.approx(
-            [(0.1, 0.2), (0.9, 0.2), (0.9, 0.8)])
+        assert [v for p in obj["coordinates"] for v in (p["x"], p["y"])] ==             pytest.approx([0.1, 0.2, 0.9, 0.2, 0.9, 0.8])
         assert result.items[0].fields["image_width"] == 100
 
     def test_local_image_is_copied_and_measured(self, out):

@@ -181,15 +181,19 @@ class TestDialogueSpanAnnotationUI(BaseSeleniumTest):
         )
         assert len(text_content) > 0, "text-content-conversation element not found"
 
-    def test_text_content_has_data_original_text(self):
-        """Verify the text-content element has a data-original-text attribute."""
+    def test_text_content_has_no_data_original_text(self):
+        """Verify the dialogue text-content element omits data-original-text.
+
+        Since 3812bb1a the dialogue wrapper deliberately leaves the attribute
+        out, so getCanonicalText() falls back to the rendered DOM text and
+        selection offsets and canonical text share one basis.
+        """
         self.navigate_to_annotation()
         el = self.wait_for_element(By.ID, "text-content-conversation")
-        original_text = el.get_attribute("data-original-text")
-        assert original_text is not None, "data-original-text attribute missing"
-        assert len(original_text) > 0, "data-original-text is empty"
-        # Should contain concatenated dialogue
-        assert "Agent:" in original_text
+        assert el.get_attribute("data-original-text") is None, \
+            "dialogue span target should not carry data-original-text"
+        # The rendered dialogue is the canonical text
+        assert "Agent:" in el.text
 
     def test_dialogue_turns_visible(self):
         """Verify dialogue turns are rendered and visible."""

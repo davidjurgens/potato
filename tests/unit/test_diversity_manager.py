@@ -200,6 +200,14 @@ class TestSingletonManagement:
 class TestDiversityManagerWithMocks:
     """Tests for DiversityManager using mocks for sentence-transformers."""
 
+    @pytest.fixture(autouse=True)
+    def _ml_stack_probe_passes(self, monkeypatch):
+        # The custom embedding function stands in for sentence-transformers,
+        # but the manager still gates on the import probe. scikit-learn (the
+        # k-means) is a core dependency, so only the probe needs faking.
+        monkeypatch.setattr(
+            "potato.diversity_manager._SENTENCE_TRANSFORMERS_AVAILABLE", True)
+
     def setup_method(self):
         """Set up test fixtures."""
         from potato.diversity_manager import clear_diversity_manager
@@ -546,6 +554,14 @@ class TestDiversityManagerWithMocks:
 
 class TestDiversityManagerThreadSafety:
     """Tests for thread-safety of DiversityManager."""
+
+    @pytest.fixture(autouse=True)
+    def _ml_stack_probe_passes(self, monkeypatch):
+        # The custom embedding function stands in for sentence-transformers,
+        # but the manager still gates on the import probe. scikit-learn (the
+        # k-means) is a core dependency, so only the probe needs faking.
+        monkeypatch.setattr(
+            "potato.diversity_manager._SENTENCE_TRANSFORMERS_AVAILABLE", True)
 
     def setup_method(self):
         """Set up test fixtures."""

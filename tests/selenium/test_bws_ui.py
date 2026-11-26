@@ -133,8 +133,13 @@ class TestBwsUI(unittest.TestCase):
         submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
         submit_btn.click()
 
-        # Wait for annotation page or consent page
-        time.sleep(1)
+        # Wait for the login page to go away (annotation or consent page). A
+        # fixed sleep let a slow login still be in flight when the test then
+        # loaded /annotate, which cancelled it and left the user logged out.
+        WebDriverWait(self.driver, 10).until(EC.staleness_of(submit_btn))
+        WebDriverWait(self.driver, 10).until(
+            EC.invisibility_of_element_located((By.ID, "login-email"))
+        )
 
         # Skip through any consent/instruction pages
         for _ in range(5):
@@ -259,9 +264,13 @@ class TestBwsUI(unittest.TestCase):
         best_tiles[0].click()
         time.sleep(0.2)
 
-        # Select A as worst (same position)
-        worst_tiles[0].click()
-        time.sleep(0.5)
+        # A is now disabled as worst (pointer-events: none since 0e73d938),
+        # so a real click cannot reach it; dispatch one in JS to exercise the
+        # selectBwsTile() guard as a keyboard selection would.
+        WebDriverWait(self.driver, 5).until(
+            lambda d: "bws-disabled" in worst_tiles[0].get_attribute("class")
+        )
+        self.driver.execute_script("arguments[0].click();", worst_tiles[0])
 
         # Worst should be cleared (validation prevents same selection)
         worst_input = self.driver.find_element(
@@ -323,25 +332,24 @@ class TestBwsUI(unittest.TestCase):
         worst_tiles[3].click()  # D
         time.sleep(1)  # Wait for debounced save (500ms) to complete
 
-        # Navigate to next instance via the Next button (calls saveAnnotations)
-        next_btn = self.driver.find_element(By.ID, "next-btn")
-        next_btn.click()
-
-        # Wait for new page to load
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".annotation-form.bws"))
-        )
-        time.sleep(1)
-
-        # Navigate back to previous instance via the Previous button
-        prev_btn = self.driver.find_element(By.ID, "prev-btn")
-        prev_btn.click()
-
-        # Wait for page to load
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".annotation-form.bws"))
-        )
-        time.sleep(1)
+        # Navigate to next instance via the Next button (calls saveAnnotations),
+        # then back via Previous. Each navigation reloads the page, so wait for
+        # the old form to go stale before looking at the new one.
+        for btn_id in ("next-btn", "prev-btn"):
+            old_form = self.driver.find_element(By.CSS_SELECTOR, ".annotation-form.bws")
+            WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.ID, btn_id))
+            ).click()
+            WebDriverWait(self.driver, 10).until(EC.staleness_of(old_form))
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".annotation-form.bws"))
+            )
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: len(d.find_elements(By.CSS_SELECTOR, ".bws-tile.selected")) >= 2
+            )
+        except TimeoutException:
+            pass  # the assertions below report what was restored
 
         # Verify tiles are visually highlighted (not just hidden input values)
         selected_best = self.driver.find_elements(

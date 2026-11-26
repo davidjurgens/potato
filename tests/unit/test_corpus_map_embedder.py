@@ -155,6 +155,12 @@ class TestItWorksWithoutDiversityOrdering:
 class TestItRefusesRatherThanPlottingNonsense:
     def test_an_id_only_corpus_reports_why(self, monkeypatch, backend):
         from potato import embedding_visualization as ev
+        from potato.embedders.text import TextEmbeddingBackend
+
+        # Detection falls back to the text backend; without this, a missing
+        # sentence-transformers is reported instead of the missing field.
+        monkeypatch.setattr(TextEmbeddingBackend, "available",
+                            lambda self: (True, None))
 
         manager = ev.EmbeddingVisualizationManager(
             ev.EmbeddingVizConfig(enabled=True), {"item_properties": {}})

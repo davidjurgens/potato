@@ -30,7 +30,6 @@ LEGACY = os.path.join(FIXTURES, "mini-legacy")
 BIN = os.path.join(FIXTURES, "mini-bin")
 BROKEN = os.path.join(FIXTURES, "mini-broken")
 UNDERSCORE = os.path.join(FIXTURES, "mini-underscore")
-MODERN_ZIP = os.path.join(FIXTURES, "mini-modern.zip")
 
 
 # Stand-ins for the numpy types real corpora store in their pickle sidecars.
@@ -356,7 +355,13 @@ class TestResolveCorpusDir:
             resolve_corpus_dir(str(tmp_path / "nope"))
 
     def test_zip_input(self, tmp_path):
-        corpus = read_corpus(MODERN_ZIP, name="mini-modern")
+        # The repo ignores *.zip, so build the archive here, the way
+        # generate_fixtures.build_zip does: one top-level directory.
+        archive = tmp_path / "mini-modern.zip"
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name in sorted(os.listdir(MODERN)):
+                zf.write(os.path.join(MODERN, name), arcname=f"mini-modern/{name}")
+        corpus = read_corpus(str(archive), name="mini-modern")
         assert len(corpus.utterances) == 6
         assert corpus.name == "mini-modern"
 

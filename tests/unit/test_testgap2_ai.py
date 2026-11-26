@@ -12,6 +12,7 @@ key's shape instead of what a changed model or label set should do to it.
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
 import logging
@@ -62,18 +63,23 @@ def _openai(recorder):
 def _anthropic(recorder):
     anthropic = pytest.importorskip("anthropic")
     from potato.ai.anthropic_endpoint import AnthropicEndpoint
+    # anthropic 2.x moved to the httpx2 fork and rejects an httpx.Client; use
+    # whichever package this SDK build's own client class comes from.
+    sdk_httpx = importlib.import_module(
+        anthropic.DefaultHttpxClient.__mro__[1].__module__.split(".")[0])
 
     def handler(req):
         recorder.calls.append(json.loads(req.content))
-        return httpx.Response(200, json={
+        return sdk_httpx.Response(200, json={
             "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-x",
             "content": [{"type": "text", "text": recorder.content}],
             "stop_reason": "end_turn", "stop_sequence": None,
             "usage": {"input_tokens": 1, "output_tokens": 1}})
 
     ep = AnthropicEndpoint({"ai_config": {"model": "claude-x", "api_key": "k"}})
-    ep.client = anthropic.Anthropic(api_key="k", max_retries=0,
-                                    http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    ep.client = anthropic.Anthropic(
+        api_key="k", max_retries=0,
+        http_client=sdk_httpx.Client(transport=sdk_httpx.MockTransport(handler)))
     return ep
 
 

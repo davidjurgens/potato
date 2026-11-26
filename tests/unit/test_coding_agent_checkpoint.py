@@ -140,8 +140,14 @@ class TestCheckpointManager:
         )
         assert "potato-agent-test" not in result.stdout
 
-    def test_non_git_dir(self):
+    def test_non_git_dir(self, monkeypatch):
         """CheckpointManager should handle non-git directories."""
+        # init() commits in the new repo, which needs an identity; a CI runner
+        # has none configured. git_workspace sets one per repo for the same reason.
+        for var in ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
+            monkeypatch.setenv(var, "Test")
+        for var in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+            monkeypatch.setenv(var, "test@test.com")
         with tempfile.TemporaryDirectory() as td:
             cm = CheckpointManager(td, "test")
             # Should init a new git repo

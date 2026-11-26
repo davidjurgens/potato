@@ -318,6 +318,10 @@ def fake_wev(monkeypatch, tmp_path):
     for name in [m for m in _sys.modules if m == "wev" or m.startswith("wev.")]:
         monkeypatch.delitem(_sys.modules, name)
     importlib.invalidate_caches()
+    # The fake `wev train` is a stdlib script; torch, peft and transformers are
+    # needed only by the real one, so the dependency check asks for wev alone.
+    from potato.training.trainers import openjev_finetune
+    monkeypatch.setattr(openjev_finetune, "_NEEDS", ("wev",))
     earlier = tmp_path / "earlier_run"
     earlier.mkdir()
     (earlier / "head.pt").write_text("fake")

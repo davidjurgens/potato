@@ -146,6 +146,7 @@ class TestBundleTargets:
         assert row["text"] == "\n\n".join(item["responses"])
 
     def test_audio_segments_become_timed_targets(self, tmp_path):
+        pytest.importorskip("soundfile")  # beep_recordings writes the WAVs
         _, context, recordings = audio_project(tmp_path, n=4)
         bundle, _, _ = build_bundle(context, str(tmp_path / "b"), ["calls"],
                                     split_spec={"train": 1.0})

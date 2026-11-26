@@ -192,6 +192,7 @@ class TestPartialLoading:
 # ---------------------------------------------------------------------------
 
 def _live_worker(d, rows, **live):
+    pytest.importorskip("sqlalchemy")
     from sqlalchemy import create_engine, text
     from potato.data_sources.base import SourceConfig
     from potato.data_sources.live_ingestion import LiveCursorStore, LiveIngestionWorker

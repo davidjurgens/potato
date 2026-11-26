@@ -66,7 +66,13 @@ class TestExampleConfig:
 
     def test_passes_validation(self, config_path):
         report = validate_config_file(config_path)
-        assert report.ok, report.errors
+        errors = report.errors
+        if os.path.exists(os.path.join(os.path.dirname(config_path), "setup_data.sh")):
+            # The data is fetched on demand (see the module docstring), so a
+            # data file that is not there yet is expected; everything else
+            # the validator reports still fails the test.
+            errors = [e for e in errors if not e.startswith("Data file not found:")]
+        assert not errors, errors
 
     def test_every_scheme_generates_without_an_error_block(self, config_path):
         config = load(config_path)

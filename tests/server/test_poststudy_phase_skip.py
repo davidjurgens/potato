@@ -150,7 +150,9 @@ class SimpleTestServer:
                 static_folder = os.path.abspath(
                     os.path.join(os.path.dirname(__file__), "../../potato/static")
                 )
-                generated_templates_dir = os.path.join(real_templates_dir, "generated")
+                # The directory the generator writes to (honours POTATO_GENERATED_TEMPLATES_DIR).
+                from potato.server_utils.generated_templates import resolve_generated_templates_dir
+                generated_templates_dir = resolve_generated_templates_dir(real_templates_dir)
                 os.makedirs(generated_templates_dir, exist_ok=True)
 
                 from potato.user_state_management import init_user_state_manager

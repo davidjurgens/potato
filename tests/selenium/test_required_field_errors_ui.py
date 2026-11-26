@@ -1,8 +1,10 @@
 """
 Selenium tests for Issue #101: Required question error messages.
 
-Verifies that when required annotation fields are not filled:
-1. The Next button is disabled
+Verifies that when required annotation fields are not filled and the
+annotator tries to go forward (Next stays clickable since d8b59365, errors
+are deferred until the first forward attempt):
+1. Navigation is blocked
 2. A visible error message appears listing unfilled questions
 3. Unfilled annotation forms get a red highlight
 4. Error clears when all required fields are filled
@@ -140,34 +142,46 @@ class TestRequiredFieldErrorsUI(unittest.TestCase):
             EC.visibility_of_element_located((By.ID, "main-content"))
         )
 
-    def test_next_button_disabled_when_required_fields_empty(self):
-        """Next button should be disabled when no required fields are filled."""
-        self._login()
-        time.sleep(0.5)
+    def _attempt_next(self):
+        """Click Next with required fields empty and wait for the errors to show."""
+        # navigateToNext() ignores clicks while the instance is still loading
+        WebDriverWait(self.driver, 10).until(
+            lambda d: d.execute_script(
+                "return typeof isLoading !== 'undefined' && !isLoading;")
+        )
+        WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "next-btn"))
+        ).click()
+        WebDriverWait(self.driver, 10).until(
+            EC.visibility_of_element_located((By.ID, "required-fields-error"))
+        )
 
-        next_btn = self.driver.find_element(By.ID, "next-btn")
-        self.assertTrue(next_btn.get_attribute("disabled"),
-                        "Next button should be disabled when required fields are empty")
+    def test_next_blocked_when_required_fields_empty(self):
+        """Clicking Next with required fields empty should not navigate."""
+        self._login()
+        instance_id = self.driver.find_element(By.ID, "instance_id").get_attribute("value")
+
+        self._attempt_next()
+
+        self.assertEqual(
+            self.driver.find_element(By.ID, "instance_id").get_attribute("value"),
+            instance_id,
+            "Next should not navigate while required fields are empty")
 
     def test_error_message_appears_when_required_fields_empty(self):
         """An error message div should be visible listing unfilled required questions."""
         self._login()
-        time.sleep(0.5)
+        self._attempt_next()
 
-        # The error message div should exist and be visible
-        error_div = self.driver.find_elements(By.ID, "required-fields-error")
-        if error_div:
-            self.assertTrue(error_div[0].is_displayed(),
-                            "Error message should be visible when required fields are empty")
-            error_text = error_div[0].text
-            # Should mention the question descriptions
-            self.assertIn("sentiment", error_text.lower(),
-                          "Error should mention the unfilled sentiment question")
+        error_text = self.driver.find_element(By.ID, "required-fields-error").text
+        # Should mention the question descriptions
+        self.assertIn("sentiment", error_text.lower(),
+                      "Error should mention the unfilled sentiment question")
 
     def test_unfilled_forms_have_red_highlight(self):
         """Unfilled required annotation forms should have the 'required-unfilled' CSS class."""
         self._login()
-        time.sleep(0.5)
+        self._attempt_next()
 
         unfilled_forms = self.driver.find_elements(By.CSS_SELECTOR, ".annotation-form.required-unfilled")
         self.assertEqual(len(unfilled_forms), 2,
@@ -176,7 +190,7 @@ class TestRequiredFieldErrorsUI(unittest.TestCase):
     def test_filling_one_field_still_shows_error_for_other(self):
         """Filling one required field should remove its highlight but keep the other's."""
         self._login()
-        time.sleep(0.5)
+        self._attempt_next()
 
         # Click a radio button in the sentiment scheme
         radios = self.driver.find_elements(By.CSS_SELECTOR, "input[type='radio'][schema='sentiment']")
@@ -185,22 +199,21 @@ class TestRequiredFieldErrorsUI(unittest.TestCase):
         radio_id = radios[0].get_attribute("id")
         label = self.driver.find_element(By.CSS_SELECTOR, f"label[for='{radio_id}']")
         label.click()
-        time.sleep(0.5)
 
         # Sentiment form should no longer have required-unfilled
         sentiment_form = self.driver.find_element(By.CSS_SELECTOR, "form[data-schema-name='sentiment']")
-        self.assertNotIn("required-unfilled", sentiment_form.get_attribute("class") or "",
-                         "Filled sentiment form should not have required-unfilled class")
+        WebDriverWait(self.driver, 10).until(
+            lambda d: "required-unfilled" not in (sentiment_form.get_attribute("class") or ""),
+            "Filled sentiment form should not have required-unfilled class")
 
         # Topic form should still have required-unfilled
         topic_form = self.driver.find_element(By.CSS_SELECTOR, "form[data-schema-name='topic']")
         self.assertIn("required-unfilled", topic_form.get_attribute("class") or "",
                        "Unfilled topic form should still have required-unfilled class")
 
-        # Next button should still be disabled
-        next_btn = self.driver.find_element(By.ID, "next-btn")
-        self.assertTrue(next_btn.get_attribute("disabled"),
-                        "Next button should remain disabled with one unfilled required field")
+        # The error should still be listed for the unfilled topic question
+        self.assertTrue(self.driver.find_element(By.ID, "required-fields-error").is_displayed(),
+                        "Error should remain visible with one unfilled required field")
 
     def test_filling_all_fields_enables_next_and_clears_error(self):
         """Filling all required fields should enable Next and hide the error message."""

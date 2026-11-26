@@ -937,7 +937,9 @@ class FlaskTestServer:
                 app = Flask(__name__, template_folder=real_templates_dir, static_folder=static_folder)
 
                 # Configure Jinja2 to also look in the generated templates directory
-                generated_templates_dir = os.path.join(real_templates_dir, 'generated')
+                # The directory the generator writes to (honours POTATO_GENERATED_TEMPLATES_DIR).
+                from potato.server_utils.generated_templates import resolve_generated_templates_dir
+                generated_templates_dir = resolve_generated_templates_dir(real_templates_dir)
                 if not os.path.exists(generated_templates_dir):
                     os.makedirs(generated_templates_dir, exist_ok=True)
 

@@ -151,10 +151,11 @@ def test_annotation_ui_loads_after_login(flask_server, browser):
     else:
         print("   ⚠️ No sentiment radio buttons found")
 
-    # Check for navigation buttons
+    # Check for navigation buttons. On the first instance Back is replaced by a
+    # placeholder, since there is nowhere to go back to (#144, ccc8cc56).
     try:
         next_btn = browser.find_element(By.ID, "next-btn")
-        prev_btn = browser.find_element(By.ID, "prev-btn")
+        browser.find_element(By.ID, "prev-btn-placeholder")
         print("   ✅ Navigation buttons found")
     except:
         print("   ❌ Navigation buttons not found")

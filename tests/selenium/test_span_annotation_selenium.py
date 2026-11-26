@@ -770,7 +770,10 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
                 const node = textContent.childNodes[i];
                 structure.push({
                     index: i,
-                    nodeType: node.nodeType,
+                    // Not `nodeType`: chromedriver reads a returned object
+                    // with nodeType 1 as an element reference and raises
+                    // StaleElementReferenceException.
+                    type: node.nodeType,
                     text: node.textContent,
                     length: node.textContent ? node.textContent.length : 0
                 });
@@ -1386,6 +1389,29 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
         print("Span deletion persistence test completed")
 
+    def _wait_for_overlay_snapshot(self, expected, timeout=10):
+        """Return the span overlays' attributes once `expected` of them exist.
+
+        Saving a span posts /updateinstance and then loadAnnotations() removes
+        and re-creates every overlay, so WebElements found in between go stale.
+        Read the attributes in one script instead, and wait for the re-render
+        to settle on the expected count (the assertion reports any shortfall).
+        """
+        snapshot_js = """
+            return Array.from(document.querySelectorAll('.span-overlay-pure')).map(o => ({
+                start: o.getAttribute('data-start'),
+                end: o.getAttribute('data-end'),
+                label: o.getAttribute('data-label')
+            }));
+        """
+        try:
+            return WebDriverWait(self.driver, timeout).until(
+                lambda d: (lambda snap: snap if len(snap) == expected else False)(
+                    d.execute_script(snapshot_js))
+            )
+        except TimeoutException:
+            return self.driver.execute_script(snapshot_js)
+
     def test_span_selection_with_partial_and_full_overlap(self):
         """Test that text selection and span creation works for partial, full, and non-overlapping cases."""
         self.driver.get(f"{self.server.base_url}/annotate")
@@ -1416,16 +1442,12 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
 
         # Reload annotations
         self.execute_script_safe("""if (window.spanManager) return window.spanManager.loadAnnotations('1');""")
-        time.sleep(0.3)
 
         # Debug: Print initial overlay count and details
-        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        overlays = self._wait_for_overlay_snapshot(1)
         print(f"DEBUG: Initial overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
-            start = overlay.get_attribute("data-start")
-            end = overlay.get_attribute("data-end")
-            label = overlay.get_attribute("data-label")
-            print(f"DEBUG: Overlay {i}: start={start}, end={end}, label={label}")
+            print(f"DEBUG: Overlay {i}: start={overlay['start']}, end={overlay['end']}, label={overlay['label']}")
 
         # Try to select a region that partially overlaps (e.g., 5-15)
         # First check if text-content element exists and what it contains
@@ -1500,16 +1522,11 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
             }
         """)
         print(f"DEBUG: handleTextSelection result: {result}")
-        time.sleep(0.05)
-
-        # Debug: Print overlay count and details after partial overlap
-        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        # Debug: Print overlay count and details after partial overlap selection
+        overlays = self._wait_for_overlay_snapshot(2)
         print(f"DEBUG: After partial overlap selection - overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
-            start = overlay.get_attribute("data-start")
-            end = overlay.get_attribute("data-end")
-            label = overlay.get_attribute("data-label")
-            print(f"DEBUG: Overlay {i}: start={start}, end={end}, label={label}")
+            print(f"DEBUG: Overlay {i}: start={overlay['start']}, end={overlay['end']}, label={overlay['label']}")
 
         assert len(overlays) == 2, f"Expected 2 overlays after partial overlap selection, found {len(overlays)}"
 
@@ -1527,16 +1544,11 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.execute_script_safe(script_full)
         label_btn.click()
         self.execute_script_safe("window.spanManager.handleTextSelection()")
-        time.sleep(0.05)
-
-        # Debug: Print overlay count and details after full containment
-        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        # Debug: Print overlay count and details after full containment selection
+        overlays = self._wait_for_overlay_snapshot(3)
         print(f"DEBUG: After full containment selection - overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
-            start = overlay.get_attribute("data-start")
-            end = overlay.get_attribute("data-end")
-            label = overlay.get_attribute("data-label")
-            print(f"DEBUG: Overlay {i}: start={start}, end={end}, label={label}")
+            print(f"DEBUG: Overlay {i}: start={overlay['start']}, end={overlay['end']}, label={overlay['label']}")
 
         assert len(overlays) == 3, f"Expected 3 overlays after full containment selection, found {len(overlays)}"
 
@@ -1554,16 +1566,11 @@ class TestSpanAnnotationSelenium(BaseSeleniumTest):
         self.execute_script_safe(script_non)
         label_btn.click()
         self.execute_script_safe("window.spanManager.handleTextSelection()")
-        time.sleep(0.05)
-
-        # Debug: Print overlay count and details after non-overlapping
-        overlays = self.driver.find_elements(By.CSS_SELECTOR, ".span-overlay-pure")
+        # Debug: Print overlay count and details after non-overlapping selection
+        overlays = self._wait_for_overlay_snapshot(4)
         print(f"DEBUG: After non-overlapping selection - overlays count: {len(overlays)}")
         for i, overlay in enumerate(overlays):
-            start = overlay.get_attribute("data-start")
-            end = overlay.get_attribute("data-end")
-            label = overlay.get_attribute("data-label")
-            print(f"DEBUG: Overlay {i}: start={start}, end={end}, label={label}")
+            print(f"DEBUG: Overlay {i}: start={overlay['start']}, end={overlay['end']}, label={overlay['label']}")
 
         assert len(overlays) == 4, f"Expected 4 overlays after non-overlapping selection, found {len(overlays)}"
         print("✅ Span selection works for partial, full, and non-overlapping cases.")

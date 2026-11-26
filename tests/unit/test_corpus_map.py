@@ -39,7 +39,11 @@ DOCS = {
 
 
 @pytest.fixture
-def mgr(tmp_path):
+def mgr(tmp_path, monkeypatch):
+    # _hash_embed stands in for sentence-transformers, but DiversityManager
+    # still gates on the import probe (scikit-learn is a core dependency).
+    monkeypatch.setattr(
+        "potato.diversity_manager._SENTENCE_TRANSFORMERS_AVAILABLE", True)
     cfg = {
         "output_annotation_dir": str(tmp_path),
         "item_properties": {"text_key": "text"},
